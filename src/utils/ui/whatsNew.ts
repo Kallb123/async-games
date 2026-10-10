@@ -82,8 +82,8 @@ export const WHATS_NEW: WhatsNewGroup[] = [
         icon: "✨",
         items: [
             {
-                title: "Realm Arena rebalanced: tougher Hold Out defenders, melee can miss, long shots harder, a longer-reaching Mage",
-                detail: "In Hold Out your characters now have 50% more HP, and against the Renegades every hit on them does 1 less. The enemy warbands muster one step smaller. In every battle a blow in melee hits 80% of the time rather than always, an Archer's or Spitter's shot at a target further than two thirds of its range is 20% less likely to hit, the Mage's Bolt becomes the Mage Bolt (90% to hit, 15 squares), a Cleric can Heal every turn (once a turn, no waiting), and Raise can be used again four turns after the last one instead of once a battle. Battles already under way keep the rules they started with.",
+                title: "Realm Arena rebalanced: tougher Hold Out defenders, melee can miss, cover matters more at range, a longer-reaching Mage",
+                detail: "In Hold Out your characters now have 50% more HP, and against the Renegades every hit on them does 1 less. The enemy warbands muster one step smaller. In every battle a blow in melee hits 80% of the time rather than always, a target's cover counts double against a shot from further than 10 squares (so those in cover are much safer at a distance, and those in the open no safer), the Mage's Bolt becomes the Mage Bolt (80% to hit, 12 squares), a Cleric can Heal every turn (once a turn, no waiting), and Raise can be used again four turns after the last one instead of once a battle. Battles already under way keep the rules they started with.",
                 game: "realmarena",
             },
             {

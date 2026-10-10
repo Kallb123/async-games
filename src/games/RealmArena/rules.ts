@@ -60,8 +60,8 @@ export const ROLL_SIDES = 100;
 
 /**
  * The command version whose rules this file's balance changes are: a melee
- * strike rolls to hit (`MELEE_ACCURACY`), a long shot is harder
- * (`LONG_RANGE_PENALTY`), a Cleric's Heal is once a turn and its Raise on a
+ * strike rolls to hit (`MELEE_ACCURACY`), cover counts double against a
+ * far shot (`FAR_SHOT_DISTANCE`), a Cleric's Heal is once a turn and its Raise on a
  * cooldown (`abilityRules`), and in Hold Out the team has more HP
  * (`TEAM_HP_FACTOR`) against smaller warbands (`HOLD_OUT_ENEMY_STEPS`). A
  * battle is stamped with the version it was created under
@@ -75,11 +75,13 @@ export const isBalanced = (rulesVersion: number | undefined): boolean => (rulesV
 
 /** A melee strike's chance to hit, before what's on its target (`strikeChance`): it hits four times in five (§13.3). */
 export const MELEE_ACCURACY = 80;
-/** A ranged shot at a target further than this share of its weapon's range is a long shot (`isLongShot`): two thirds, as a fraction (so a test of "exactly two thirds" is exact). */
-export const LONG_RANGE_NUMERATOR = 2;
-export const LONG_RANGE_DENOMINATOR = 3;
-/** What a long shot takes off its chance to hit (§13.3). */
-export const LONG_RANGE_PENALTY = 20;
+/**
+ * A ranged shot from further than this many squares away (measured as the
+ * range is) is a far shot: the target's cover counts double against it
+ * (§13.3), so those in cover are much safer at a distance and those in the
+ * open no safer at all.
+ */
+export const FAR_SHOT_DISTANCE = 10;
 /** Hold Out's team characters have this many times their table HP, rounded up (`teamHp`). */
 export const TEAM_HP_FACTOR = 1.5;
 /** What the Realm's hits take off a hit on Hold Out's team, never leaving less than 1 (`damageTo`, `BattleState.armoured`). */
@@ -535,8 +537,8 @@ export function reachOf(state: BattleState, fighter: Fighter, sneaking = false, 
 export interface ShotOdds {
     /** Percent to hit, 0–100. */
     chance: number;
-    /** Whether the target is further than a long shot's reach (`isLongShot`), which cost `LONG_RANGE_PENALTY`. */
-    longShot: boolean;
+    /** Whether the shot is a far one (`FAR_SHOT_DISTANCE`) whose target's cover it doubled: false at close range, with no cover, and when a hunkered target's cover was doubled already. */
+    farCover: boolean;
     /** Percent to graze, on top of the chance to hit. */
     grazeChance: number;
     damage: number;
@@ -595,13 +597,6 @@ function effectsHitBonus(target: Fighter): number {
 }
 
 /**
- * Whether a target `away` squares from a ranged weapon of this `range` is a
- * long shot: further than `LONG_RANGE_NUMERATOR` of every `LONG_RANGE_DENOMINATOR` squares of it. Worked
- * in whole numbers, so a target exactly two thirds out isn't one.
- */
-export const isLongShot = (away: number, range: number): boolean => away * LONG_RANGE_DENOMINATOR > range * LONG_RANGE_NUMERATOR;
-
-/**
  * What a melee strike's chance to hit is (§13.3): `MELEE_ACCURACY` plus what
  * the effects on the target add to every attack at it (Marked, Corroded), and
  * always when the battle predates `BALANCE_VERSION`. Cover, height and smoke
@@ -616,17 +611,17 @@ export function shotOdds(state: BattleState, attacker: Fighter, target: Fighter,
     const weapon = weaponOf(state, attacker);
     if (weapon.kind !== "ranged") return undefined;
     if (!inRange(field, attacker.square, target.square, weapon.range)) return undefined;
-    // Measured as the range is, so a shot is long exactly when it is near the end of it.
-    const longShot = !!state.balanced && !!weapon.longShotPenalty && isLongShot(distance(field, attacker.square, target.square), weapon.range);
+    // Measured as the range is. A hunkered target's cover is doubled already, and the two don't stack.
+    const far = !!state.balanced && distance(field, attacker.square, target.square) > FAR_SHOT_DISTANCE;
 
     const sideCover = coverAgainst(field, target.square, attacker.square);
     const cover = sideCover === "none" && shielded(state, target) ? "half" : sideCover;
     const highGround = riseOf(field, attacker.square, target.square) >= HIGH_GROUND_RISE;
+    const hunkered = hasEffect(target, "hunkered");
     const raw = weapon.accuracy
-        - COVER_PENALTY[cover] * (hasEffect(target, "hunkered") ? 2 : 1)
+        - COVER_PENALTY[cover] * (hunkered || far ? 2 : 1)
         + (highGround ? HIGH_GROUND_BONUS : 0)
         + effectsHitBonus(target)
-        - (longShot ? LONG_RANGE_PENALTY : 0)
         - (smokeSquares(state).has(target.square) ? ITEMS.smokePot.hitPenalty : 0)
         + (kind === "aimedShot" ? ABILITIES.aimedShot.hitBonus : 0)
         - (kind === "overwatch" ? OVERWATCH_PENALTY : 0);
@@ -638,7 +633,7 @@ export function shotOdds(state: BattleState, attacker: Fighter, target: Fighter,
     const damage = damageTo(state, attacker, target, struck);
     // Grazes are the rolls that miss by `GRAZE_BAND` or less, counted from the
     // raw chance: a shot at −10% can't so much as graze.
-    return { chance, longShot, grazeChance: clamp(raw + GRAZE_BAND) - chance, damage, grazeDamage: damageTo(state, attacker, target, Math.ceil(struck / 2)), cover, flanked };
+    return { chance, farCover: far && !hunkered && cover !== "none", grazeChance: clamp(raw + GRAZE_BAND) - chance, damage, grazeDamage: damageTo(state, attacker, target, Math.ceil(struck / 2)), cover, flanked };
 }
 
 /** A roll of 1–100 against a shot's odds: at or under the chance to hit hits, the graze band above it grazes, and anything more misses. */

@@ -11,7 +11,7 @@ import { FULL_HEIGHT } from "@/utils/games/battlefield/terrain";
 import { pluralize } from "@/utils/ui/text";
 import { ABILITIES, CHARACTERS, EFFECTS, FACTIONS, ITEM_IDS, ITEMS, OPTIONS, STRIKING_ABILITIES, type Ability, type AbilityId, type Affliction, type CharacterId, type Item, type ItemId, type OptionId, type Weapon } from "./characters";
 import { CHARACTER_IDS, optionsFor } from "./roster";
-import { ACTION_POINTS, ARMOUR, ATTACK_AP, FLANK_BONUS, GRAZE_BAND, LONG_RANGE_DENOMINATOR, LONG_RANGE_NUMERATOR, LONG_RANGE_PENALTY, MELEE_ACCURACY, ROLL_SIDES, sightOf, TEAM_HP_FACTOR } from "./rules";
+import { ACTION_POINTS, ARMOUR, ATTACK_AP, FLANK_BONUS, GRAZE_BAND, FAR_SHOT_DISTANCE, MELEE_ACCURACY, ROLL_SIDES, sightOf, TEAM_HP_FACTOR } from "./rules";
 
 /** One thing a character can do, or an item it can use, as a row of the stats table. */
 export interface ActionStats {
@@ -224,6 +224,6 @@ export const ALL_UNITS: readonly UnitRef[] = [
 /** The fine print under a stats table: what the hit chances leave out, and what every shot shares. */
 export const STATS_FOOTNOTE = `Each character has ${ACTION_POINTS} AP a turn. Hit chances are before cover, height, marks and smoke. `
     + `A shot that misses by ${GRAZE_BAND}% or less grazes for half damage, and one at a target with no cover does ${FLANK_BONUS} more. `
-    + `A bow's or acid spit's shot at a target further than ${LONG_RANGE_NUMERATOR}/${LONG_RANGE_DENOMINATOR} of its range is −${LONG_RANGE_PENALTY}%; a Mage's bolts have no such penalty. A strike next to the target hits ${MELEE_ACCURACY}% of the time, with no graze. `
+    + `A shot from further than ${FAR_SHOT_DISTANCE} squares counts the target's cover double (hunkering down doubles it too, but never twice over). A strike next to the target hits ${MELEE_ACCURACY}% of the time, with no graze. `
     + `In Hold Out, the team's characters have ${Math.round((TEAM_HP_FACTOR - 1) * 100)}% more HP than the table says, and against ${FACTIONS.realm.enemyName} every hit on them does ${ARMOUR} less (never under 1). `
     + `Range is in squares. CD is the cooldown: used on one of the character's turns, it can be used again that many of its turns later. Once means once a battle, and 1/turn once a turn.`;

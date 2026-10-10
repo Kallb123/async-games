@@ -7,7 +7,7 @@ import { cloneRealmArenaState, nextWaveOf, warbandBudgetOf, waveOf, type IRealmA
 import { buildInitialRealmArenaState, gameStateToModel, settingsOf, stepOutcomeToModel, type RealmArenaSettings } from "./RealmArenaModels";
 import { meta } from "./meta";
 import {
-    abilityRules, ACTION_POINTS, act, ARMOUR, armouredTeam, damageTo, weaponOf, weaponReaches, BALANCE_VERSION, battleFrom, check, fixedRolls, isBalanced, isLongShot, LONG_RANGE_DENOMINATOR, LONG_RANGE_NUMERATOR, LONG_RANGE_PENALTY, maxHpOf, MELEE_ACCURACY,
+    abilityRules, ACTION_POINTS, act, ARMOUR, armouredTeam, damageTo, weaponOf, weaponReaches, BALANCE_VERSION, battleFrom, check, fixedRolls, isBalanced, FAR_SHOT_DISTANCE, maxHpOf, MELEE_ACCURACY,
     musterHp, newFighter, shotOdds, startTurn, stoutTeam, strikeChance, teamHp, TEAM_HP_FACTOR, viewOf, warbandOwner,
     type Action, type BattleState, type Fighter,
 } from "./rules";
@@ -28,6 +28,7 @@ const fieldOf = (rows: string[]): Battlefield => buildBattlefield({ name: "Test 
 const OPEN = fieldOf(["..........", "..........", "..........", "..........", ".........."]);
 /** A single row long enough for the longest shot. */
 const ROW = fieldOf(["......................"]);
+const OPEN_LONG = fieldOf([".".repeat(24), ".".repeat(24), ".".repeat(24)]);
 
 /** A character ready to act: full AP, as at the start of its owner's turn. */
 function fighter(id: number, owner: string, character: CharacterId, square: number, extra: Partial<Fighter> = {}): Fighter {
@@ -218,65 +219,83 @@ describe("melee rolls to hit (§13.3)", () => {
     });
 });
 
-describe("long shots (§13.3)", () => {
-    it("measures a long shot as more than two thirds of the weapon's range, in whole numbers", () => {
-        expect([LONG_RANGE_NUMERATOR, LONG_RANGE_DENOMINATOR]).toEqual([2, 3]);
-        expect(LONG_RANGE_PENALTY).toBe(20);
-        // 12 squares of range: 8 is exactly two thirds, 9 is over.
-        expect([8, 9].map(away => isLongShot(away, 12))).toEqual([false, true]);
-        expect([13, 14].map(away => isLongShot(away, 20))).toEqual([false, true]);
-        expect([6, 7].map(away => isLongShot(away, 10))).toEqual([false, true]);
+describe("far shots, cover counts double (§13.3)", () => {
+    // A target behind low cover (half) on a long field, and one behind a wall (full) on a tall one.
+    const HALF = fieldOf([".".repeat(24), ".".repeat(24).replace(/^(.{13})./, "$1,"), ".".repeat(24)]);
+    const FULL = buildBattlefield({
+        name: "Wall", rows: Array.from({ length: 16 }, (_, row) => Array.from({ length: 20 }, (_, col) => row === 2 && col === 9 ? "#" : ".").join("")), deployments: [], objectives: {},
     });
-
-    const odds = (shooter: CharacterId, away: number, kind?: "attack" | "aimedShot" | "overwatch" | "cripplingShot", state = balanced) => {
-        const from = fighter(1, "a", shooter, at(ROW, 0, 0));
-        const target = fighter(2, "b", "knight", at(ROW, away, 0));
-        return shotOdds(state(ROW, [from, target]), from, target, kind);
+    const odds = (field: Battlefield, shooter: CharacterId, from: number, to: number, extra: Partial<Fighter> = {}, kind?: "attack" | "aimedShot" | "overwatch" | "cripplingShot", state = balanced) => {
+        const attacker = fighter(1, "a", shooter, from);
+        const target = fighter(2, "b", "knight", to, extra);
+        return shotOdds(state(field, [attacker, target]), attacker, target, kind);
     };
+    const row = (col: number) => at(HALF, col, 1);
+    const target = row(14);
 
-    it("takes 20 off an Archer's bow past 13 squares, and shows that it did", () => {
-        expect(odds("archer", 13)).toMatchObject({ chance: 80, longShot: false });
-        expect(odds("archer", 14)).toMatchObject({ chance: 60, longShot: true });
-        expect(odds("archer", 20)).toMatchObject({ chance: 60, longShot: true });
-        expect(odds("archer", 21)).toBeUndefined();
+    it("is further than 10 squares, measured as the range is, and exactly 10 is not", () => {
+        expect(FAR_SHOT_DISTANCE).toBe(10);
+        // Half cover, 80% bow: 80 − 20 up close, 80 − 40 from further than 10.
+        expect(odds(HALF, "archer", row(5), target)).toMatchObject({ chance: 60, cover: "half", farCover: false });
+        expect(odds(HALF, "archer", row(4), target)).toMatchObject({ chance: 60, cover: "half", farCover: false });
+        expect(odds(HALF, "archer", row(3), target)).toMatchObject({ chance: 40, cover: "half", farCover: true });
+        expect(odds(HALF, "archer", row(0), target)).toMatchObject({ chance: 40, farCover: true });
     });
 
-    it("takes 20 off a Spitter's acid past 8 squares, as it does the bow", () => {
-        expect(odds("spitter", 8)).toMatchObject({ chance: 70, longShot: false });
-        expect(odds("spitter", 9)).toMatchObject({ chance: 50, longShot: true });
+    it("doubles full cover too: 40 becomes 80", () => {
+        const behind = at(FULL, 10, 2);
+        // From the far corner, an aimed shot (+20): 100 − 80 against 100 − 40 from a nearer square the wall still covers.
+        const far = odds(FULL, "archer", at(FULL, 2, 10), behind, {}, "aimedShot");
+        const near = odds(FULL, "archer", at(FULL, 3, 9), behind, {}, "aimedShot");
+        expect(near).toMatchObject({ cover: "full", chance: 60, farCover: false });
+        expect(far).toMatchObject({ cover: "full", chance: 20, farCover: true });
     });
 
-    it("is for the bow and the acid alone: a Mage's Bolt and Frost bolt are never long shots", () => {
-        expect(CHARACTERS.archer.weapon).toMatchObject({ longShotPenalty: true });
-        expect(CHARACTERS.spitter.weapon).toMatchObject({ longShotPenalty: true });
-        expect(CHARACTERS.mage.weapon).not.toHaveProperty("longShotPenalty");
-        // The Mage Bolt reaches 15, so 10 is two thirds and 15 the end of it: 90% all the way.
-        expect([5, 10, 11, 15].map(away => odds("mage", away))).toMatchObject(Array(4).fill({ chance: 90, longShot: false }));
-        expect(odds("mage", 16)).toBeUndefined();
-        const frost = fighter(1, "a", "mage", at(ROW, 0, 0), { option: "frostBolt" });
-        const far = fighter(2, "b", "knight", at(ROW, 9, 0));
-        expect(shotOdds(balanced(ROW, [frost, far]), frost, far)).toMatchObject({ chance: 70, longShot: false });
-        // A bow of the same range would be.
-        expect(odds("archer", 15)).toMatchObject({ chance: 60, longShot: true });
+    it("changes nothing for a target in the open, at any distance", () => {
+        const open = odds(HALF, "archer", row(0), at(HALF, 18, 2));
+        expect(open).toMatchObject({ cover: "none", flanked: true, chance: 80, farCover: false });
+        expect(odds(HALF, "archer", row(20), at(HALF, 3, 0))).toMatchObject({ chance: 80, farCover: false });
     });
 
-    it("applies to an aimed shot, a crippling shot and overwatch, on top of everything else", () => {
-        expect(odds("archer", 14, "aimedShot")?.chance).toBe(80 + 20 - 20);
-        expect(odds("archer", 14, "cripplingShot")?.chance).toBe(60);
-        expect(odds("archer", 14, "overwatch")?.chance).toBe(80 - 15 - 20);
+    it("doesn't stack with hunkering down: doubled once, never four times", () => {
+        const hunkered = { effects: { hunkered: 1 } };
+        expect(odds(HALF, "archer", row(5), target, hunkered)).toMatchObject({ chance: 40, farCover: false });
+        // From afar it is still ×2, and the far rule added nothing to say.
+        expect(odds(HALF, "archer", row(0), target, hunkered)).toMatchObject({ chance: 40, farCover: false });
+    });
+
+    it("counts a shield wall's half cover like any other", () => {
+        const wall = fighter(3, "b", "knight", row(13), { effects: { shieldWall: 1 } });
+        const from = (col: number) => {
+            const attacker = fighter(1, "a", "archer", at(OPEN_LONG, col, 1));
+            const ally = fighter(2, "b", "mage", at(OPEN_LONG, 14, 1));
+            return shotOdds(balanced(OPEN_LONG, [attacker, ally, { ...wall, square: at(OPEN_LONG, 13, 1) }]), attacker, ally);
+        };
+        expect(from(5)).toMatchObject({ cover: "half", chance: 60, farCover: false });
+        expect(from(0)).toMatchObject({ cover: "half", chance: 40, farCover: true });
+    });
+
+    it("is every ranged shot's: the Mage Bolt, the acid, an aimed shot, a crippling shot and overwatch", () => {
+        // 11+ squares: only an 80%-or-better weapon is still worth a shot behind half cover.
+        expect(odds(HALF, "mage", row(2), target)).toMatchObject({ chance: 80 - 40, farCover: true });
+        expect(odds(HALF, "spitter", row(2), target)).toMatchObject({ chance: 70 - 40, farCover: true });
+        expect(odds(HALF, "spitter", row(1), target)).toBeUndefined();
+        expect(odds(HALF, "archer", row(0), target, {}, "aimedShot")?.chance).toBe(80 + 20 - 40);
+        expect(odds(HALF, "archer", row(0), target, {}, "cripplingShot")?.chance).toBe(40);
+        expect(odds(HALF, "archer", row(0), target, {}, "overwatch")?.chance).toBe(80 - 15 - 40);
         // It moves the graze band with it, like any other penalty.
-        expect(odds("archer", 14)).toMatchObject({ chance: 60, grazeChance: 10 });
+        expect(odds(HALF, "archer", row(0), target)).toMatchObject({ chance: 40, grazeChance: 10 });
     });
 
-    it("is a shot's, so a strike has none, and a battle from before it has none either", () => {
-        expect(odds("archer", 20, "attack", legacy)).toMatchObject({ chance: 80, longShot: false });
-        expect(odds("mage", 10, "attack", legacy)?.chance).toBe(70);
+    it("is a shot's, and a battle from before it has none", () => {
+        expect(odds(HALF, "archer", row(0), target, {}, "attack", legacy)).toMatchObject({ chance: 60, farCover: false });
+        expect(odds(FULL, "archer", at(FULL, 2, 10), at(FULL, 10, 2), {}, "aimedShot", legacy)).toMatchObject({ chance: 60, farCover: false });
     });
 
     it("reaches the board's list of targets and the planner's odds", () => {
-        const from = fighter(1, "a", "archer", at(ROW, 0, 0));
-        const target = fighter(2, "b", "knight", at(ROW, 15, 0));
-        expect(hitChance(balanced(ROW, [from, target]), from, target)).toBe(60);
+        const from = fighter(1, "a", "archer", row(0));
+        const to = fighter(2, "b", "knight", target);
+        expect(hitChance(balanced(HALF, [from, to]), from, to)).toBe(40);
     });
 });
 
@@ -526,16 +545,16 @@ describe("the Mage Bolt", () => {
     const mage = fighter(1, "a", "mage", at(ROW, 0, 0));
     const target = (away: number) => fighter(2, "b", "knight", at(ROW, away, 0));
 
-    it("hits 90% of the time out to 15 squares, in a battle under the rebalance", () => {
-        expect(CHARACTERS.mage.weapon).toMatchObject({ name: "Mage Bolt", accuracy: 90, range: 15 });
-        expect(weaponOf({ balanced: true }, mage)).toMatchObject({ name: "Mage Bolt", accuracy: 90, range: 15 });
-        const state = balanced(ROW, [mage, target(15)]);
-        expect(shotOdds(state, mage, target(15))).toMatchObject({ chance: 90, longShot: false });
-        expect(shotOdds(balanced(ROW, [mage, target(16)]), mage, target(16))).toBeUndefined();
-        expect(weaponReaches(state, mage, at(ROW, 15, 0))).toBe(true);
-        expect(weaponReaches(state, mage, at(ROW, 16, 0))).toBe(false);
-        expect(rangeSquares(state, mage, "weapon").has(at(ROW, 15, 0))).toBe(true);
-        expect(check({ ...state, fighters: [mage, target(15)] }, "a", { kind: "attack", fighter: 1, target: 2 })).toEqual({ ap: 2 });
+    it("hits 80% of the time out to 12 squares, in the open, in a battle under the rebalance", () => {
+        expect(CHARACTERS.mage.weapon).toMatchObject({ name: "Mage Bolt", accuracy: 80, range: 12 });
+        expect(weaponOf({ balanced: true }, mage)).toMatchObject({ name: "Mage Bolt", accuracy: 80, range: 12 });
+        const state = balanced(ROW, [mage, target(12)]);
+        expect(shotOdds(state, mage, target(12))).toMatchObject({ chance: 80, farCover: false });
+        expect(shotOdds(balanced(ROW, [mage, target(13)]), mage, target(13))).toBeUndefined();
+        expect(weaponReaches(state, mage, at(ROW, 12, 0))).toBe(true);
+        expect(weaponReaches(state, mage, at(ROW, 13, 0))).toBe(false);
+        expect(rangeSquares(state, mage, "weapon").has(at(ROW, 12, 0))).toBe(true);
+        expect(check({ ...state, fighters: [mage, target(12)] }, "a", { kind: "attack", fighter: 1, target: 2 })).toEqual({ ap: 2 });
     });
 
     it("was a Bolt at 70% to a range of 10 in a battle from before it, and its option never changed", () => {
@@ -552,7 +571,7 @@ describe("the Mage Bolt", () => {
 
     it("is on the stats sheet as the current rules say", () => {
         const row = characterStats("mage").actions.find(one => one.name === "Mage Bolt");
-        expect(row).toMatchObject({ hit: "90%", range: "15", damage: "3" });
+        expect(row).toMatchObject({ hit: "80%", range: "12", damage: "3" });
         expect(characterStats("mage").actions.some(one => one.name === "Bolt")).toBe(false);
     });
 });

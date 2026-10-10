@@ -116,7 +116,7 @@ export interface IRealmArenaSpecificGameState {
     /**
      * The command version the battle was created under (`GameMeta.commandVersion`),
      * which decides which of the rules that have changed it plays by: from
-     * `BALANCE_VERSION` on, melee rolls to hit, long shots are harder, Heal and
+     * `BALANCE_VERSION` on, melee rolls to hit, cover counts double at range, Heal and
      * Raise are limited differently, and Hold Out's team is tougher against
      * smaller warbands. Fixed when the battle is created, so one in progress
      * keeps its rules through a deploy and a replay plays it the same way;

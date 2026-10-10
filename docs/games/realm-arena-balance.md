@@ -3,8 +3,7 @@
 A record of what was tried to make *Hold Out* (docs/games/realm-arena.md
 §30.3, §30.9–§30.11) winnable, and what each change did to the team's chances
 in simulation. Team HP ×1.5, the enemy −1 step and 1 armour against the Realm
-shipped for Hold Out, with melee at 80%, the Archer's and Spitter's long shots
-at −20%, the Mage Bolt at 90% to a range of 15 and the Cleric's new Heal and
+shipped for Hold Out, with melee at 80%, cover counted double against a shot from beyond 10 squares, the Mage Bolt at 80% to a range of 12 and the Cleric's new Heal and
 Raise for every mode (see *Where this points*); restore, armour against the
 Swarm, 3 AP attacks and 13 rounds did not. This file holds the numbers
 and how each lever was built, so the next person tuning the mode doesn't start
@@ -270,14 +269,14 @@ changes that slow the killing in every mode: in Hold Out, **team HP ×1.5**
 wave refill muster one rung down the budget ladder) and **armour 1 for the
 team against the Realm only** (the faction-shaped version the cells above
 found most even; the Swarm's hits are not armoured, and burning is not
-reduced); and everywhere, **melee hits 80%** instead of always, **an Archer's
-or Spitter's shot at over two thirds of its range is −20%** (the Mage's bolts
-aren't), the **Mage Bolt is 90% to a range of 15**, a Cleric's **Heal is once a
+reduced); and everywhere, **melee hits 80%** instead of always, **cover counts
+double against a shot from over 10 squares** (hunkering down is the same
+doubling, not stacked), the **Mage Bolt is 80% to a range of 12**, a Cleric's **Heal is once a
 turn** with no cooldown, and its **Raise is on a four-turn cooldown** instead
 of once a battle. The rest of this section, and the cells above, are what
 pointed there and what was left over: restore, armour against the Swarm and
 attack 3 AP, 13 rounds for two players. A
-first look at the combined set, 8 battles a cell on seeds 1–8 (so ±30 points,
+first look at an earlier form of the combined set (a long-shot penalty and a 90%, range-15 Mage Bolt instead of the cover rule and the 80%, range-12 one), 8 battles a cell on seeds 1–8 (so ±30 points,
 and only a check that it is neither hopeless nor trivial), gave the team 50%
 against the Realm and 50% against the Swarm at 2 players, and 88% and 88% at
 3 players. Before the armour and the Mage Bolt the Realm cells were 0% and 38%;

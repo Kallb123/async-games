@@ -77,13 +77,11 @@ export const AFFLICTIONS = EFFECT_IDS.filter((effect): effect is Affliction => !
  * (`MELEE_ACCURACY`, §13.3) — it either lands or it doesn't, with no graze; a
  * ranged one rolls against its own accuracy, and may leave an effect on
  * whoever it hits — only on a hit, not a graze (§20.2), and on overwatch as
- * much as on the owner's turn. A ranged weapon with `longShotPenalty` (the
- * Archer's bow, the Spitter's acid) is harder to hit with past two thirds of
- * its range (`isLongShot`); the Mage's bolts are not.
+ * much as on the owner's turn.
  */
 export type Weapon =
     | { name: string; kind: "melee"; damage: number }
-    | { name: string; kind: "ranged"; damage: number; accuracy: number; range: number; effect?: Affliction; longShotPenalty?: true };
+    | { name: string; kind: "ranged"; damage: number; accuracy: number; range: number; effect?: Affliction };
 
 export interface Ability {
     name: string;
@@ -171,7 +169,7 @@ export const CHARACTERS: Readonly<Record<CharacterId, Character>> = {
     },
     archer: {
         name: "Archer", plural: "Archers", role: "Long range; the overwatch specialist", movement: 6, sight: 25, hp: 6,
-        weapon: { name: "Bow", kind: "ranged", damage: 3, accuracy: 80, range: 20, longShotPenalty: true }, abilities: ["aimedShot"], points: 20,
+        weapon: { name: "Bow", kind: "ranged", damage: 3, accuracy: 80, range: 20 }, abilities: ["aimedShot"], points: 20,
     },
     scout: {
         name: "Scout", plural: "Scouts", role: "Fastest and fragile; the flanker", movement: 8, climb: FULL_HEIGHT, sight: 25, hp: 6,
@@ -179,7 +177,7 @@ export const CHARACTERS: Readonly<Record<CharacterId, Character>> = {
     },
     mage: {
         name: "Mage", plural: "Mages", role: "Fragile; hits an area", movement: 6, hp: 5,
-        weapon: { name: "Mage Bolt", kind: "ranged", damage: 3, accuracy: 90, range: 15 }, abilities: ["fireball"], points: 30,
+        weapon: { name: "Mage Bolt", kind: "ranged", damage: 3, accuracy: 80, range: 12 }, abilities: ["fireball"], points: 30,
     },
     cleric: {
         name: "Cleric", plural: "Clerics", role: "Support", movement: 6, hp: 7,
@@ -196,7 +194,7 @@ export const CHARACTERS: Readonly<Record<CharacterId, Character>> = {
     },
     spitter: {
         name: "Spitter", plural: "Spitters", role: "Spits acid from its raised tail", movement: 5, hp: 5,
-        weapon: { name: "Acid spit", kind: "ranged", damage: 2, accuracy: 70, range: 12, effect: "corroded", longShotPenalty: true }, abilities: [], points: 15,
+        weapon: { name: "Acid spit", kind: "ranged", damage: 2, accuracy: 70, range: 12, effect: "corroded" }, abilities: [], points: 15,
     },
     bloater: {
         name: "Bloater", plural: "Bloaters", role: "Slow sac of acid; bursts among the enemy", movement: 4, hp: 6,

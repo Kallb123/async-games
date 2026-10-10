@@ -804,7 +804,10 @@ describe("a review's parts of an End turn that held the enemy's (§29.9)", () =>
         let dropped = 0;
         for (const viewer of ["a", "b", null]) {
             const { game, steps } = await review({ fog: true, coop: { enemy: "realm" } }, viewer);
-            for (const { outcome, raw } of endTurns(steps)) {
+            for (const step of endTurns(steps)) {
+                const { outcome, raw } = step;
+                // The fog lifts as the battle ends (§27.1), so the End turn that ends it draws everything.
+                const lifted = game.complete && step === steps.at(-1);
                 // What the log told them of each part, as it was recorded.
                 const { enemy } = raw.recap!;
                 const told = (list: Record<string, BattleEvent[]> | undefined): BattleEvent[] => viewer === null ? [] : list?.[viewer] ?? [];
@@ -834,7 +837,7 @@ describe("a review's parts of an End turn that held the enemy's (§29.9)", () =>
                     // Anyone on it who isn't theirs is on a square their side sees.
                     const battle = battleOfState({ ...game.specificGameState, fighters: state.fighters, blasted: state.blasted });
                     const seen = squadSight(battle, viewer);
-                    for (const fighter of state.fighters) expect(isWarband(fighter.owner) ? seen(fighter.square) : true).toBe(true);
+                    if (!lifted) for (const fighter of state.fighters) expect(isWarband(fighter.owner) ? seen(fighter.square) : true).toBe(true);
                     expect(JSON.stringify(state)).not.toMatch(/sightings|woundedBy|undoStack/);
                 }
             }

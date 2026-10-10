@@ -30,7 +30,7 @@ export const meta: GameMeta = {
     // Version 6 rallies the team as each Hold Out wave lands (§30.11): an End
     // turn from before it lands a wave that heals nobody, on a replay too.
     // Version 7 rebalances the game (`BALANCE_VERSION`, rules.ts): melee strikes
-    // roll to hit, long shots are harder, a Cleric heals every turn but raises
+    // roll to hit, cover counts double at range, a Cleric heals every turn but raises
     // on a cooldown, and Hold Out's team is tougher against smaller warbands.
     // It is stamped on each battle as it's created (`rulesVersion`), so one
     // begun before it keeps its rules, on a replay too.
