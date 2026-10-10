@@ -324,6 +324,8 @@ export type Difficulty = "easy" | "normal" | "hard";
 
 export const BATTLE_SIZE_NAMES: Readonly<Record<BattleSize, string>> = { small: "Small", normal: "Normal", large: "Large" };
 export const DIFFICULTY_NAMES: Readonly<Record<Difficulty, string>> = { easy: "Easy", normal: "Normal", hard: "Hard" };
+/** Every difficulty, easiest first. */
+export const DIFFICULTY_IDS = Object.keys(DIFFICULTY_NAMES) as Difficulty[];
 
 /** Each player's points to muster with in a normal-sized battle, which shrinks as players are added (§13.6). */
 const NORMAL_BUDGET: Readonly<Record<PlayerCount, Budget>> = { 2: 100, 3: 80, 4: 70 };

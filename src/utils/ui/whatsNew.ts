@@ -134,6 +134,11 @@ export const WHATS_NEW: WhatsNewGroup[] = [
         icon: "🔧",
         items: [
             {
+                title: "Realm Arena's setup screen shows how big each difficulty's warbands are",
+                detail: "The co-op Difficulty choices said a Normal warband musters as many points as each of you, but in Hold Out the warbands now muster a step smaller than that. Each difficulty now names the points its warbands and your squads muster, for the mission and battle size you've picked.",
+                game: "realmarena",
+            },
+            {
                 title: "Coming back home starts you at the top of the page",
                 detail: "Leaving a game for the home page could land you partway down your games — or right at the bottom, on the notifications warning — instead of at the top. Home now always opens at the top.",
             },
@@ -173,11 +178,6 @@ export const WHATS_NEW: WhatsNewGroup[] = [
             {
                 title: "Turn recaps leave out moves that were taken back",
                 detail: "Undoing a move now removes both the move and the Undo from the recap and your next-turn notification. Plain passes stay quiet too, while a turn that pays out a card still tells you about the card.",
-            },
-            {
-                title: "Banned Islet's water meter climbs at the right pace",
-                detail: "The flood rate on the water meter ran too steep, so the island went under faster than it should: from level 4 up it flooded one tile too many every turn, and the last two levels flooded six. The meter now reads 2, 2, 3, 3, 3, 4, 4, 5, 5 and then the skull, so Legendary opens on three tiles a turn rather than four. Games already under way switch to the new rates on their next flood.",
-                game: "bannedislet",
             },
         ],
     },
