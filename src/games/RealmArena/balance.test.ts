@@ -42,9 +42,8 @@ function run(state: BattleState, player: string, action: Action, rolls: number[]
 }
 
 describe("the rules version a battle plays by", () => {
-    it("ships as command version 7, and a battle is balanced from that version on", () => {
-        expect(BALANCE_VERSION).toBe(7);
-        expect(meta.commandVersion).toBe(BALANCE_VERSION);
+    it("is stamped on every new battle, and a battle is balanced from that version on", () => {
+        expect(meta.commandVersion).toBeGreaterThanOrEqual(BALANCE_VERSION);
         expect([undefined, 0, 6].map(isBalanced)).toEqual([false, false, false]);
         expect([7, 8].map(isBalanced)).toEqual([true, true]);
         expect(stoutTeam("holdOut", 7)).toBe(true);

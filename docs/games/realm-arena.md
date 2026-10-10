@@ -1,6 +1,6 @@
 # Realm Arena — Game Design Document
 
-**Status:** v1.48. Split out of Defender of the Realm in its third round of
+**Status:** v1.53. Split out of Defender of the Realm in its third round of
 design, when one concept became two games
 ([`defender-of-the-realm.md`](./defender-of-the-realm.md) §17). It's being
 built first (§10). §11 records every answer. §13 has the battle rules and the

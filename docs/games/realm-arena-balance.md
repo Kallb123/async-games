@@ -2,8 +2,10 @@
 
 A record of what was tried to make *Hold Out* (docs/games/realm-arena.md
 §30.3, §30.9–§30.11) winnable, and what each change did to the team's chances
-in simulation. Only team HP ×1.5 and the enemy −1 step shipped, with the
-other changes in *Where this points*; the rest have not. This file holds the numbers
+in simulation. Team HP ×1.5 and the enemy −1 step shipped for Hold Out, with
+melee at 80%, long shots at −20% and the Cleric's new Heal and Raise for every
+mode (see *Where this points*); restore, armour, 3 AP attacks and 13 rounds
+did not. This file holds the numbers
 and how each lever was built, so the next person tuning the mode doesn't start
 from scratch.
 
