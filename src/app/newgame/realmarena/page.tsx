@@ -14,11 +14,12 @@ import { useAuthGuard } from "@/utils/hooks/useAuthGuard";
 import usePlayerList from "@/utils/hooks/usePlayerList";
 import { useCreateLobbyOrInvite } from "@/utils/hooks/useCreateLobbyOrInvite";
 import { useStartSoloGame } from "@/utils/hooks/useStartSoloGame";
-import { GAME_META, partySizeRange } from "@/utils/ui/games";
+import { GAME_META, gameCommandVersion, partySizeRange } from "@/utils/ui/games";
 import { readRematchFlag, readRematchPlayers, readRematchTurnTimer } from "@/utils/ui/rematch";
 import type { RealmArenaCoopInvite, RealmArenaInvitationRequest } from "@/games/RealmArena/RealmArenaModels";
 import { factionRosterLine } from "@/games/RealmArena/roster";
-import { BATTLE_SIZE_NAMES, COOP_PLAYERS, DIFFICULTY_NAMES, FACTION_IDS, FACTIONS, RA_SOLO_PARAM, RANDOM_ENEMY, type BattleSize, type Difficulty, type FactionId } from "@/games/RealmArena/characters";
+import { warbandSteps } from "@/games/RealmArena/rules";
+import { BATTLE_SIZE_NAMES, COOP_PLAYERS, DIFFICULTY_IDS, DIFFICULTY_NAMES, FACTION_IDS, FACTIONS, musterBudget, RA_SOLO_PARAM, RANDOM_ENEMY, warbandBudget, type BattleSize, type Difficulty, type FactionId } from "@/games/RealmArena/characters";
 
 type Mode = 'freeForAll' | 'coop' | 'solo';
 type Enemy = RealmArenaCoopInvite['enemy'];
@@ -58,12 +59,21 @@ const SIZE_CHOICES: OptionChoice<BattleSize>[] = [
   { id: 'large', label: BATTLE_SIZE_NAMES.large, description: 'More points for every squad: bigger squads and longer turns.' },
 ];
 
-// How strong the computer's warbands are (§30.5): their size against the team's.
-const DIFFICULTY_CHOICES: OptionChoice<Difficulty>[] = [
-  { id: 'easy', label: DIFFICULTY_NAMES.easy, description: 'Each warband musters fewer points than each of you.' },
-  { id: 'normal', label: DIFFICULTY_NAMES.normal, description: 'Each warband musters as many points as each of you.' },
-  { id: 'hard', label: DIFFICULTY_NAMES.hard, description: 'Each warband musters more points than each of you.' },
-];
+// How strong the computer's warbands are (§30.5): their points against each
+// player's, worked out as the battle will muster them — under the rules a
+// new battle is created with, so Hold Out's warbands, a rung below the
+// difficulty (`warbandSteps`), show as the smaller squads they are. A co-op
+// squad's points don't depend on the party's size (§30.5), so any count gives
+// the same figures.
+function difficultyChoices(mission: Mission, size: BattleSize): OptionChoice<Difficulty>[] {
+  const yours = musterBudget(COOP_PLAYERS.max, true, size);
+  const steps = warbandSteps(mission, gameCommandVersion(GAME_META.realmarena));
+  return DIFFICULTY_IDS.map(id => {
+    const theirs = warbandBudget(COOP_PLAYERS.max, size, id, steps);
+    const against = theirs < yours ? 'fewer than' : theirs > yours ? 'more than' : 'as many as';
+    return { id, label: DIFFICULTY_NAMES[id], description: `Each warband musters ${theirs} points, ${against} each of you (${yours}).` };
+  });
+}
 
 // docs/games/realm-arena.md §17.3 PR 4. The party's size picks the map
 // (§17.4 B2) — but for Hold Out's own battlefield (§30.9) — so the choices are who, how fast, whether the battle is fought
@@ -166,7 +176,7 @@ function NewGameRealmArenaForm() {
         <OptionChoiceSection label="Battlefield" value={battlefield} onChange={setBattlefield} choices={BATTLEFIELD_CHOICES} />
       )}
       {coop && (
-        <OptionChoiceSection label="Difficulty" value={difficulty} onChange={setDifficulty} choices={DIFFICULTY_CHOICES} />
+        <OptionChoiceSection label="Difficulty" value={difficulty} onChange={setDifficulty} choices={difficultyChoices(mission, size)} />
       )}
       <OptionChoiceSection label="Battle size" value={size} onChange={setSize} choices={SIZE_CHOICES} />
       <OptionSection label="Factions" footer={<p className="ag-hint">Each player picks one of these as they muster. At least one stays on.</p>}>

@@ -33,7 +33,7 @@ import { canSee } from "@/utils/games/battlefield/lineOfSight";
 import { DEFAULT_CLIMB, pathCost, pathTo, reachFrom, type MoveRules, type Reach } from "@/utils/games/battlefield/pathfinding";
 import { coordsOf, distance, facingTowards, HALF_HEIGHT, isNeighbour, riseOf, squareAt, type Area, type Battlefield, type Cover, type Facing, type Square } from "@/utils/games/battlefield/terrain";
 import {
-    ABILITIES, AFFLICTIONS, CHARACTERS, EFFECT_IDS, EFFECTS, isCharacterId, isItemId, isOptionId, ITEMS, kitOf, OPTIONS, squadPoints,
+    ABILITIES, AFFLICTIONS, CHARACTERS, EFFECT_IDS, EFFECTS, HOLD_OUT_ENEMY_STEPS, isCharacterId, isItemId, isOptionId, ITEMS, kitOf, OPTIONS, squadPoints,
     type Ability, type AbilityId, type Affliction, type CharacterId, type Effect, type EffectId, type Faction, type FactionId, type Item, type ItemId, type OptionId, type PlayerCount, type Weapon,
 } from "./characters";
 import { addTally, NO_TALLY, type Ranks, type Tally } from "./mastery";
@@ -431,6 +431,9 @@ export const maxHpOf = (fighter: Pick<Fighter, "character" | "maxHp">): number =
  * balance rules. The one test the server, the muster sheet and the tests all use.
  */
 export const stoutTeam = (mission: string | undefined, rulesVersion: number | undefined): boolean => mission === "holdOut" && isBalanced(rulesVersion);
+
+/** How many rungs a co-op battle's warbands muster from the difficulty's (`warbandBudget`): `HOLD_OUT_ENEMY_STEPS` against a stout team, else none. */
+export const warbandSteps = (mission: string | undefined, rulesVersion: number | undefined): number => stoutTeam(mission, rulesVersion) ? HOLD_OUT_ENEMY_STEPS : 0;
 
 /** Whether Hold Out's team wears armour against its enemy: the stout team (`stoutTeam`), against the Realm's warbands alone. */
 export const armouredTeam = (mission: string | undefined, rulesVersion: number | undefined, enemy: FactionId | undefined): boolean => stoutTeam(mission, rulesVersion) && enemy === "realm";

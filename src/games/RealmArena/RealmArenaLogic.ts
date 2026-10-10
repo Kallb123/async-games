@@ -7,7 +7,7 @@ import { recordedRolls } from "@/utils/games/recordedRolls";
 import { isDropped, nextActivePlayer, registerPlayerDropoutAdapter } from "@/utils/games/playerDropout";
 import { v4 as uuidv4, NIL as NIL_UUID } from 'uuid';
 import type { IRealmArenaCoop, IRealmArenaGameData, IRealmArenaSpecificGameState } from "@/games/RealmArena/RealmArenaModels";
-import { ABILITIES, CHARACTERS, DIFFICULTY_NAMES, EFFECTS, enemyNameOf, factionById, FACTIONS, HOLD_OUT_ENEMY_STEPS, ITEMS, musterBudget, readyMadeSquad, REALM_ONLY, warbandBudget, type Budget, type CharacterId, type FactionId } from "@/games/RealmArena/characters";
+import { ABILITIES, CHARACTERS, DIFFICULTY_NAMES, EFFECTS, enemyNameOf, factionById, FACTIONS, ITEMS, musterBudget, readyMadeSquad, REALM_ONLY, warbandBudget, type Budget, type CharacterId, type FactionId } from "@/games/RealmArena/characters";
 import { battlefieldById, battlefieldOf } from "@/games/RealmArena/maps";
 import { addTally, NO_TALLY, type Tally } from "@/games/RealmArena/mastery";
 import {
@@ -45,6 +45,7 @@ import {
     standings,
     startTurn,
     stoutTeam,
+    warbandSteps,
     TEAM_SIDE,
     viewOf,
     storedFighter,
@@ -120,7 +121,7 @@ export function battleRoundsOf(gs: Pick<IRealmArenaSpecificGameState, "seats" | 
 
 /** Each co-op warband's points (§30.5): the players', moved by the difficulty, and in a stout Hold Out (`stoutTeam`) a rung further down. */
 export function warbandBudgetOf(gs: IRealmArenaSpecificGameState): Budget {
-    return warbandBudget(gs.seats.length, gs.size, gs.coop?.difficulty, stoutTeam(gs.coop?.mission, gs.rulesVersion) ? HOLD_OUT_ENEMY_STEPS : 0);
+    return warbandBudget(gs.seats.length, gs.size, gs.coop?.difficulty, warbandSteps(gs.coop?.mission, gs.rulesVersion));
 }
 
 /** The squad every warband musters, and each wave refills it to (§29.7, §30.3): its faction's ready-made squad for its budget. */
