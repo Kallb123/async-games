@@ -9,9 +9,9 @@
 import { DEFAULT_CLIMB } from "@/utils/games/battlefield/pathfinding";
 import { FULL_HEIGHT } from "@/utils/games/battlefield/terrain";
 import { pluralize } from "@/utils/ui/text";
-import { ABILITIES, CHARACTERS, EFFECTS, ITEM_IDS, ITEMS, OPTIONS, type Ability, type AbilityId, type Affliction, type CharacterId, type Item, type ItemId, type OptionId, type Weapon } from "./characters";
+import { ABILITIES, CHARACTERS, EFFECTS, ITEM_IDS, ITEMS, OPTIONS, STRIKING_ABILITIES, type Ability, type AbilityId, type Affliction, type CharacterId, type Item, type ItemId, type OptionId, type Weapon } from "./characters";
 import { CHARACTER_IDS, optionsFor } from "./roster";
-import { ACTION_POINTS, ATTACK_AP, FLANK_BONUS, GRAZE_BAND, LONG_RANGE_PENALTY, MELEE_ACCURACY, ROLL_SIDES, sightOf, TEAM_HP_FACTOR } from "./rules";
+import { ACTION_POINTS, ATTACK_AP, FLANK_BONUS, GRAZE_BAND, LONG_RANGE_DENOMINATOR, LONG_RANGE_NUMERATOR, LONG_RANGE_PENALTY, MELEE_ACCURACY, ROLL_SIDES, sightOf, TEAM_HP_FACTOR } from "./rules";
 
 /** One thing a character can do, or an item it can use, as a row of the stats table. */
 export interface ActionStats {
@@ -56,13 +56,10 @@ export type UnitRef = { kind: "character"; id: CharacterId } | { kind: "item"; i
  * (`weapon`); on the square next door (`next`); on the character itself
  * (`self`); at a square up to its `range` away (`aimed`); or as a way of
  * moving (`move`). `note` is who it lands on, where that's more than one.
- * `strikes` is a blow at one enemy next door, which rolls to hit as a melee
- * weapon's does; the rest of the `next` ones land.
  */
 interface AbilityUse {
     reach: "weapon" | "next" | "self" | "aimed" | "move";
     note?: string;
-    strikes?: true;
 }
 
 /** Who something landing on the 3×3 round a square hits: a fireball, a thunder flask. A smoke pot's cloud hurts nobody, so it's only the 3×3. */
@@ -76,12 +73,12 @@ const ABILITY_USE: Readonly<Record<AbilityId, AbilityUse>> = {
     fireball: { reach: "aimed", note: AREA },
     heal: { reach: "aimed" },
     raise: { reach: "next" },
-    shieldBash: { reach: "next", strikes: true },
+    shieldBash: { reach: "next" },
     demolish: { reach: "next", note: "Everyone beside the cover but the Knight, friend or foe" },
     cripplingShot: { reach: "weapon" },
     huntersMark: { reach: "aimed" },
     purify: { reach: "self", note: "Itself and allies next to it" },
-    rend: { reach: "next", strikes: true },
+    rend: { reach: "next" },
     regrowth: { reach: "aimed" },
     burst: { reach: "self", note: "Everyone next to it, friend or foe; then the Bloater is down" },
 };
@@ -134,7 +131,7 @@ function weaponStats(weapon: Weapon, kind: string, key: string): ActionStats {
 
 function abilityStats(id: AbilityId, weapon: Weapon, kind: string, key: string = id): ActionStats {
     const ability: Ability = ABILITIES[id];
-    const { reach, note, strikes: blow } = ABILITY_USE[id];
+    const { reach, note } = ABILITY_USE[id];
     const strikes = reach === "weapon";
     const range = strikes ? weaponReach(weapon).range
         : reach === "next" ? NEXT_TO
@@ -142,9 +139,8 @@ function abilityStats(id: AbilityId, weapon: Weapon, kind: string, key: string =
         : reach === "move" ? "A move"
         : "Self";
     // A strike or a shot is at the weapon's odds; anything else that lands on
-    // someone — a fireball, a bash, a mark — never rolls.
-    const hit = strikes ? weaponReach(weapon, ability.hitBonus).hit
-        : blow ? `${MELEE_ACCURACY}%`
+    // someone — a fireball, a mark — never rolls.
+    const hit = strikes || STRIKING_ABILITIES.has(id) ? weaponReach(weapon, ability.hitBonus).hit
         : ability.damage !== undefined || ability.effect ? ALWAYS : NONE;
     return {
         key, name: ability.name, kind, ap: `${ability.ap}`,
@@ -228,6 +224,6 @@ export const ALL_UNITS: readonly UnitRef[] = [
 /** The fine print under a stats table: what the hit chances leave out, and what every shot shares. */
 export const STATS_FOOTNOTE = `Each character has ${ACTION_POINTS} AP a turn. Hit chances are before cover, height, marks and smoke. `
     + `A shot that misses by ${GRAZE_BAND}% or less grazes for half damage, and one at a target with no cover does ${FLANK_BONUS} more. `
-    + `A shot at a target further than two thirds of its weapon's range is −${LONG_RANGE_PENALTY}%. A strike next to the target hits ${MELEE_ACCURACY}% of the time, with no graze. `
+    + `A shot at a target further than ${LONG_RANGE_NUMERATOR}/${LONG_RANGE_DENOMINATOR} of its weapon's range is −${LONG_RANGE_PENALTY}%. A strike next to the target hits ${MELEE_ACCURACY}% of the time, with no graze. `
     + `In Hold Out, the team's characters have ${Math.round((TEAM_HP_FACTOR - 1) * 100)}% more HP than the table says. `
     + `Range is in squares. CD is the cooldown: used on one of the character's turns, it can be used again that many of its turns later. Once means once a battle, and 1/turn once a turn.`;

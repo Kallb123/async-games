@@ -8,7 +8,7 @@ import Section from '@/components/ui/Section';
 import { ITEM_ART } from '@/games/RealmArena/art';
 import { CHARACTERS, FACTIONS, ITEM_IDS, ITEMS, OPTIONS, type ItemId, type OptionId } from '@/games/RealmArena/characters';
 import type { Ranks } from '@/games/RealmArena/mastery';
-import { teamHp, type MusterPick } from '@/games/RealmArena/rules';
+import { musterHp, type MusterPick } from '@/games/RealmArena/rules';
 import { CHARACTER_MARK, factionRosterLine, optionsFor, optionView, starterView } from '@/games/RealmArena/roster';
 import type { UnitRef } from '@/games/RealmArena/stats';
 import { numberedName, squadOf } from '@/games/RealmArena/ui';
@@ -128,7 +128,7 @@ function MusterStep({ draft, budget, colour, onPick, onMuster, pending, stout = 
                             mark={CHARACTER_MARK[pick.character]}
                             colour={colour}
                             name={numberedName(picks, index)}
-                            sub={pick.option ? optionView(pick.option).name : `${stout ? teamHp(pick.character) : CHARACTERS[pick.character].hp} HP`}
+                            sub={pick.option ? optionView(pick.option).name : `${musterHp(pick.character, stout)} HP`}
                             selected={index === selected}
                             onClick={() => onPick(index)}
                         >

@@ -134,6 +134,13 @@ export const ABILITIES = {
     burst: { name: "Burst", ap: 1, cooldown: 0, oncePerBattle: true, damage: 3, effect: "corroded", description: "Burst, splashing acid on everyone next to it for 3, friend or foe, and corroding them. The Bloater is downed" },
 } as const satisfies Record<AbilityId, Ability>;
 
+/**
+ * The abilities that strike one enemy (or, a Cleave, two) with the character's
+ * own weapon reach, and so roll to hit as a melee weapon's strike does: the one
+ * list the rules' `rollsToHit` and the stats sheet both read.
+ */
+export const STRIKING_ABILITIES: ReadonlySet<string> = new Set<AbilityId>(["cleave", "shieldBash", "rend"]);
+
 export interface Character {
     name: string;
     /** The name for several: "Men-at-arms", which no "s" makes of "Man-at-arms". */

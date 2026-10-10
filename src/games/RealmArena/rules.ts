@@ -75,8 +75,9 @@ export const isBalanced = (rulesVersion: number | undefined): boolean => (rulesV
 
 /** A melee strike's chance to hit, before what's on its target (`strikeChance`): it hits four times in five (§13.3). */
 export const MELEE_ACCURACY = 80;
-/** A ranged shot at a target further than this many thirds of its weapon's range is a long shot (`isLongShot`): two thirds. */
-export const LONG_RANGE_THIRDS = 2;
+/** A ranged shot at a target further than this share of its weapon's range is a long shot (`isLongShot`): two thirds, as a fraction (so a test of "exactly two thirds" is exact). */
+export const LONG_RANGE_NUMERATOR = 2;
+export const LONG_RANGE_DENOMINATOR = 3;
 /** What a long shot takes off its chance to hit (§13.3). */
 export const LONG_RANGE_PENALTY = 20;
 /** Hold Out's team characters have this many times their table HP, rounded up (`teamHp`). */
@@ -398,6 +399,9 @@ export const stoutTeam = (mission: string | undefined, rulesVersion: number | un
 /** What a character of Hold Out's team is mustered with: its table HP times `TEAM_HP_FACTOR`, rounded up. */
 export const teamHp = (character: CharacterId): number => Math.ceil(CHARACTERS[character].hp * TEAM_HP_FACTOR);
 
+/** The HP a character is mustered with, which the muster sheet shows and `newFighter` gives: the team's bigger HP when `stout`, else its character's. */
+export const musterHp = (character: CharacterId, stout: boolean): number => stout ? teamHp(character) : CHARACTERS[character].hp;
+
 /** The limits on how often an ability can be used. */
 export type AbilityLimits = Pick<Ability, "cooldown" | "oncePerBattle" | "oncePerTurn">;
 
@@ -413,8 +417,7 @@ const UNBALANCED_LIMITS: Readonly<Partial<Record<AbilityId, AbilityLimits>>> = {
  * is the current rules, which a board and a stats sheet read.
  */
 export function abilityRules(state: Pick<BattleState, "balanced">, id: AbilityId): AbilityLimits {
-    const { cooldown, oncePerBattle, oncePerTurn }: AbilityLimits = (!state.balanced && UNBALANCED_LIMITS[id]) || ABILITIES[id];
-    return { cooldown, oncePerBattle, oncePerTurn };
+    return (!state.balanced && UNBALANCED_LIMITS[id]) || ABILITIES[id];
 }
 
 /** Movement points each AP spent on moving buys it: its character's, halved and rounded up while it's slowed (§20.1). */
@@ -544,10 +547,10 @@ function effectsHitBonus(target: Fighter): number {
 
 /**
  * Whether a target `away` squares from a ranged weapon of this `range` is a
- * long shot: further than `LONG_RANGE_THIRDS` of every three squares of it. Worked
+ * long shot: further than `LONG_RANGE_NUMERATOR` of every `LONG_RANGE_DENOMINATOR` squares of it. Worked
  * in whole numbers, so a target exactly two thirds out isn't one.
  */
-export const isLongShot = (away: number, range: number): boolean => away * 3 > range * LONG_RANGE_THIRDS;
+export const isLongShot = (away: number, range: number): boolean => away * LONG_RANGE_DENOMINATOR > range * LONG_RANGE_NUMERATOR;
 
 /**
  * What a melee strike's chance to hit is (§13.3): `MELEE_ACCURACY` plus what
@@ -1584,12 +1587,12 @@ export function musterRefusal(field: Battlefield, seat: number, picks: unknown, 
 
 /**
  * A character as it first stands on the battlefield, at full HP with nothing
- * spent, carrying what it was mustered with. `maxHp` is given where it isn't
- * its character's (`teamHp`).
+ * spent, carrying what it was mustered with. A `stout` one is of Hold Out's
+ * team (`musterHp`) and carries its bigger `maxHp`.
  */
-export function newFighter(id: number, owner: string, character: CharacterId, square: Square, item: ItemId | null = null, option?: OptionId, maxHp?: number): Fighter {
+export function newFighter(id: number, owner: string, character: CharacterId, square: Square, item: ItemId | null = null, option?: OptionId, stout = false): Fighter {
     return {
-        id, owner, character, square, hp: maxHp ?? CHARACTERS[character].hp, ...(maxHp !== undefined ? { maxHp } : {}),
+        id, owner, character, square, hp: musterHp(character, stout), ...(stout ? { maxHp: teamHp(character) } : {}),
         ap: 0, banked: 0, effects: {}, cooldowns: {}, spent: [], item, ...(option ? { option } : {}),
     };
 }

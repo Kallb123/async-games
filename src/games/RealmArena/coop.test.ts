@@ -677,7 +677,7 @@ describe("what a player is told of the enemy's turn in fog of war (§29.8)", () 
         // which leaves out the rolls; nobody seated is told the warband's moves.
         expect((new RealmArenaGameType().outcomeFor(game, outcome, "b") as IRealmArenaOutcome).events).toEqual(told);
         const reviewed = stepOutcomeToModel(outcome, "a", game.specificGameState)?.events ?? [];
-        expect(reviewed).toEqual(told.map(event => event.kind === "shot" ? (({ roll: _roll, ...rest }) => rest)(event) : event));
+        expect(reviewed).toEqual(told.map(event => event.kind === "shot" || event.kind === "struck" ? (({ roll: _roll, ...rest }) => rest)(event) : event));
         const nobody = stepOutcomeToModel(outcome, null, game.specificGameState)?.events ?? [];
         expect(enemyMoves(nobody as BattleEvent[]).every(event => event.kind === "moved" && event.path.length === 0)).toBe(true);
     });

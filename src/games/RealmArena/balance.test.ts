@@ -3,12 +3,12 @@ import { at } from "@/utils/games/battlefield/testFixtures";
 import { buildBattlefield, type Battlefield } from "@/utils/games/battlefield/terrain";
 import { buildTimeline } from "@/utils/games/replay";
 import { ABILITIES, CHARACTERS, HOLD_OUT_ENEMY_STEPS, musterBudget, REALM, warbandBudget, FACTIONS, type CharacterId, type Difficulty } from "./characters";
-import { cloneRealmArenaState, holdsOutStoutly, nextWaveOf, warbandBudgetOf, waveOf } from "./RealmArenaLogic";
-import { buildInitialRealmArenaState, gameStateToModel, settingsOf, type RealmArenaSettings } from "./RealmArenaModels";
+import { cloneRealmArenaState, nextWaveOf, warbandBudgetOf, waveOf, type IRealmArenaOutcome } from "./RealmArenaLogic";
+import { buildInitialRealmArenaState, gameStateToModel, settingsOf, stepOutcomeToModel, type RealmArenaSettings } from "./RealmArenaModels";
 import { meta } from "./meta";
 import {
-    abilityRules, ACTION_POINTS, act, BALANCE_VERSION, battleFrom, check, fixedRolls, isBalanced, isLongShot, LONG_RANGE_PENALTY, LONG_RANGE_THIRDS, maxHpOf, MELEE_ACCURACY,
-    newFighter, shotOdds, startTurn, stoutTeam, strikeChance, teamHp, TEAM_HP_FACTOR, viewOf, warbandOwner,
+    abilityRules, ACTION_POINTS, act, BALANCE_VERSION, battleFrom, check, fixedRolls, isBalanced, isLongShot, LONG_RANGE_DENOMINATOR, LONG_RANGE_NUMERATOR, LONG_RANGE_PENALTY, maxHpOf, MELEE_ACCURACY,
+    musterHp, newFighter, shotOdds, startTurn, stoutTeam, strikeChance, teamHp, TEAM_HP_FACTOR, viewOf, warbandOwner,
     type Action, type BattleState, type Fighter,
 } from "./rules";
 import { hitChance, reactionPreviews, rollsToHit } from "./tactics";
@@ -39,6 +39,18 @@ const legacy = (field: Battlefield, fighters: Fighter[]): BattleState => ({ fiel
 function run(state: BattleState, player: string, action: Action, rolls: number[] = []) {
     const outcome = act(state, player, action, fixedRolls(rolls));
     return { ...outcome, byId: (id: number) => outcome.fighters.find(one => one.id === id)! };
+}
+
+/** A battle on a's first turn with a's Knight standing beside b's, ready to strike. */
+async function knightsBeside(rulesVersion: number) {
+    const game = makeGame(["a", "b"], {}, { rulesVersion });
+    await musterAll(game);
+    const [attacker] = game.specificGameState.fighters.filter(one => one.owner === "a" && one.character === "knight");
+    const [target] = game.specificGameState.fighters.filter(one => one.owner === "b" && one.character === "knight");
+    const { field } = battleOf(game);
+    target.square = field.tiles.findIndex((tile, square) => tile.terrain.standable && square !== attacker.square
+        && !("refused" in check({ field, fighters: [attacker, { ...target, square }] }, "a", { kind: "attack", fighter: attacker.id, target: target.id })));
+    return { game, attacker, target };
 }
 
 describe("the rules version a battle plays by", () => {
@@ -177,6 +189,23 @@ describe("melee rolls to hit (§13.3)", () => {
         expect(previews).toMatchObject([{ kind: "guard", chance: 80, damage: 4 }]);
     });
 
+    it("keeps a strike's roll out of the review a viewer is sent, as it does a shot's", async () => {
+        const { game, attacker, target } = await knightsBeside(meta.commandVersion!);
+        const command = Object.assign(actBy("a", { kind: "attack", fighter: attacker.id, target: target.id }), { recordedRolls: [100] });
+        const { outcome } = await play(game, command);
+        const events = (outcome as IRealmArenaOutcome).events;
+        // The live outcome keeps it for the sender, who may see the roll...
+        expect(events).toContainEqual(expect.objectContaining({ kind: "struck", roll: 100, missed: true }));
+        // ...and a review's step, for anyone, leaves it out.
+        for (const viewer of ["a", "b", null]) {
+            const told = stepOutcomeToModel(outcome, viewer, game.specificGameState)?.events ?? [];
+            const struck = told.filter(event => event.kind === "struck");
+            expect(struck).toHaveLength(1);
+            expect(struck[0]).not.toHaveProperty("roll");
+            expect(struck[0]).toMatchObject({ chance: 80, missed: true });
+        }
+    });
+
     it("is told as a miss in the review's lines, with the odds and the roll while they're known", () => {
         const names = (userId: string) => userId;
         const missed = { kind: "struck", fighter: 1, target: 2, damage: 0, reaction: false, chance: 80, roll: 91, missed: true } as const;
@@ -190,7 +219,7 @@ describe("melee rolls to hit (§13.3)", () => {
 
 describe("long shots (§13.3)", () => {
     it("measures a long shot as more than two thirds of the weapon's range, in whole numbers", () => {
-        expect(LONG_RANGE_THIRDS).toBe(2);
+        expect([LONG_RANGE_NUMERATOR, LONG_RANGE_DENOMINATOR]).toEqual([2, 3]);
         expect(LONG_RANGE_PENALTY).toBe(20);
         // 12 squares of range: 8 is exactly two thirds, 9 is over.
         expect([8, 9].map(away => isLongShot(away, 12))).toEqual([false, true]);
@@ -250,7 +279,7 @@ describe("Heal, once a turn (§13.6)", () => {
     it("has no cooldown but is limited to once a turn", () => {
         expect(ABILITIES.heal.cooldown).toBe(0);
         expect(ABILITIES.heal.oncePerTurn).toBe(true);
-        expect(abilityRules({ balanced: true }, "heal")).toEqual({ cooldown: 0, oncePerBattle: undefined, oncePerTurn: true });
+        expect(abilityRules({ balanced: true }, "heal")).toMatchObject({ cooldown: 0, oncePerTurn: true });
     });
 
     it("can't be used a second time in a turn, on anyone, and is ready at the start of the next", () => {
@@ -269,7 +298,7 @@ describe("Heal, once a turn (§13.6)", () => {
     });
 
     it("kept its two-turn cooldown, and no once-a-turn limit, in a battle from before it", () => {
-        expect(abilityRules({}, "heal")).toEqual({ cooldown: 2, oncePerBattle: undefined, oncePerTurn: undefined });
+        expect(abilityRules({}, "heal")).toEqual({ cooldown: 2 });
         const first = run(legacy(wide, [cleric, hurt(2, 2), hurt(3, 4)]), "a", heal(2));
         expect(first.byId(1)).toMatchObject({ cooldowns: { heal: 2 } });
         expect(first.byId(1)).not.toHaveProperty("usedThisTurn");
@@ -297,7 +326,7 @@ describe("Raise, on a cooldown (§13.6)", () => {
     });
 
     it("stayed once a battle, with no cooldown, in a battle from before it", () => {
-        expect(abilityRules({}, "raise")).toEqual({ cooldown: 0, oncePerBattle: true, oncePerTurn: undefined });
+        expect(abilityRules({}, "raise")).toEqual({ cooldown: 0, oncePerBattle: true });
         const { byId } = run(legacy(OPEN, fighters), "a", { kind: "raise", fighter: 1, target: 2 });
         expect(byId(1)).toMatchObject({ spent: ["raise"], cooldowns: {} });
         const again = legacy(OPEN, [{ ...byId(1), ap: ACTION_POINTS }, { ...byId(2), hp: 0 }]);
@@ -312,7 +341,9 @@ describe("the team's HP in Hold Out", () => {
             .toEqual({ manAtArms: 12, knight: 18, archer: 9, scout: 9, mage: 8, cleric: 11 });
         expect(maxHpOf({ character: "knight" })).toBe(CHARACTERS.knight.hp);
         expect(maxHpOf({ character: "knight", maxHp: 18 })).toBe(18);
-        expect(newFighter(1, "a", "knight", 0, null, undefined, 18)).toMatchObject({ hp: 18, maxHp: 18 });
+        expect(newFighter(1, "a", "knight", 0, null, undefined, true)).toMatchObject({ hp: 18, maxHp: 18 });
+        expect(musterHp("knight", true)).toBe(18);
+        expect(musterHp("knight", false)).toBe(12);
         expect(newFighter(1, "a", "knight", 0)).not.toHaveProperty("maxHp");
     });
 
@@ -367,7 +398,7 @@ describe("the team's HP in Hold Out", () => {
         const game = makeGame(["a", "b"], {}, { coop: { enemy: "realm", mission: "holdOut" } });
         await musterAll(game);
         const gs = game.specificGameState;
-        expect(holdsOutStoutly(gs)).toBe(true);
+        expect(stoutTeam(gs.coop?.mission, gs.rulesVersion)).toBe(true);
         gs.roundsPlayed = 2;
         gs.fighters.forEach(one => { if (one.owner.startsWith("ai:")) one.hp = 0; });
         const [first] = gs.fighters.filter(one => !one.owner.startsWith("ai:"));
@@ -450,20 +481,8 @@ describe("a battle begun before the rebalance", () => {
     }, 60_000);
 
     it("keeps its melee un-rolled through the command, where the same fight rolls in a new one", async () => {
-        const fight = async (rulesVersion: number): Promise<RealmArenaTestGame> => {
-            const game = makeGame(["a", "b"], {}, { rulesVersion });
-            await musterAll(game);
-            const [attacker] = game.specificGameState.fighters.filter(one => one.owner === "a" && one.character === "knight");
-            const [target] = game.specificGameState.fighters.filter(one => one.owner === "b" && one.character === "knight");
-            const { field } = battleOf(game);
-            target.square = field.tiles.findIndex((tile, square) => tile.terrain.standable && square !== attacker.square
-                && !("refused" in check({ field, fighters: [attacker, { ...target, square }] }, "a", { kind: "attack", fighter: attacker.id, target: target.id })));
-            return game;
-        };
         for (const [version, rolls] of [[LEGACY, undefined], [meta.commandVersion!, [100]]] as const) {
-            const game = await fight(version);
-            const [attacker] = game.specificGameState.fighters.filter(one => one.owner === "a" && one.character === "knight");
-            const [target] = game.specificGameState.fighters.filter(one => one.owner === "b" && one.character === "knight");
+            const { game, attacker, target } = await knightsBeside(version);
             const command = Object.assign(actBy("a", { kind: "attack", fighter: attacker.id, target: target.id }), rolls ? { recordedRolls: [...rolls] } : {});
             expect((await play(game, command)).outcome.validMove).toBe(true);
             const fresh = game.specificGameState.fighters.find(one => one.id === target.id)!;

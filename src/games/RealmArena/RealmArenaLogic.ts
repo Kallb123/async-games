@@ -45,7 +45,6 @@ import {
     startTurn,
     stoutTeam,
     TEAM_SIDE,
-    teamHp,
     viewOf,
     storedFighter,
     warbandOwner,
@@ -112,19 +111,9 @@ export function playableFactions(gs: IRealmArenaSpecificGameState): readonly Fac
     return gs.factions ?? REALM_ONLY;
 }
 
-/**
- * Whether the team of a battle is the tougher one `BALANCE_VERSION` gives
- * Hold Out: more HP for its characters (`teamHp`) against warbands a rung
- * smaller (`HOLD_OUT_ENEMY_STEPS`). Every other mission and mode plays as it
- * did, and so does a battle created before it.
- */
-export function holdsOutStoutly(gs: Pick<IRealmArenaSpecificGameState, "coop" | "rulesVersion">): boolean {
-    return stoutTeam(gs.coop?.mission, gs.rulesVersion);
-}
-
-/** Each co-op warband's points (§30.5): the players', moved by the difficulty, and in a stout Hold Out a rung further down (`holdsOutStoutly`). */
+/** Each co-op warband's points (§30.5): the players', moved by the difficulty, and in a stout Hold Out (`stoutTeam`) a rung further down. */
 export function warbandBudgetOf(gs: IRealmArenaSpecificGameState): Budget {
-    return warbandBudget(gs.seats.length, gs.size, gs.coop?.difficulty, holdsOutStoutly(gs) ? HOLD_OUT_ENEMY_STEPS : 0);
+    return warbandBudget(gs.seats.length, gs.size, gs.coop?.difficulty, stoutTeam(gs.coop?.mission, gs.rulesVersion) ? HOLD_OUT_ENEMY_STEPS : 0);
 }
 
 /** The squad every warband musters, and each wave refills it to (§29.7, §30.3): its faction's ready-made squad for its budget. */
@@ -769,7 +758,7 @@ export class RealmArenaGameType implements IGameType {
      * What a command's own sender is told it did: everything, but in a battle
      * fought in fog of war and not yet over, cut to what their side saw
      * (`toldTo`) — which in co-op is the enemy's turn inside their End turn
-     * (§29.8). A shot's roll stays: it's theirs, or one fired at them.
+     * (§29.8). A shot's or a strike's roll stays: it's theirs, or one aimed at them.
      */
     outcomeFor(gameData: IGameData, outcome: ICommandOutcome, viewerId: string): ICommandOutcome {
         const data = gameData as IRealmArenaGameData;
@@ -1061,10 +1050,10 @@ export class RealmArenaMuster implements IGameCommand {
             }
             // Every squad joins the battlefield at once, ids in seat order, the warbands' last.
             // In a stout Hold Out the team's characters have more HP than their
-            // character's (`holdsOutStoutly`); the warbands' keep theirs.
-            const stout = holdsOutStoutly(gs);
+            // character's (`stoutTeam`); the warbands' keep theirs.
+            const stout = stoutTeam(gs.coop?.mission, gs.rulesVersion);
             gs.fighters = musters.flatMap(({ owner, picks }) => picks.map(pick => ({ owner, pick })))
-                .map(({ owner, pick }, id) => newFighter(id, owner, pick.character, pick.square, pick.item ?? null, pick.option, stout && !isWarband(owner) ? teamHp(pick.character) : undefined));
+                .map(({ owner, pick }, id) => newFighter(id, owner, pick.character, pick.square, pick.item ?? null, pick.option, stout && !isWarband(owner)));
             gs.musters = [];
             gs.phase = "battle";
             data.gameState.history.unshift({ text: "The squads take the field, and the battle begins" });

@@ -11,7 +11,7 @@
 // would refuse. Pure and browser-safe, like rules.ts.
 
 import type { Square } from "@/utils/games/battlefield/terrain";
-import { ABILITIES } from "./characters";
+import { ABILITIES, STRIKING_ABILITIES } from "./characters";
 import {
     ACTION_POINTS, check, coverNextTo, fighterById, inRange, itemOf, nextTo, reactionsTo, shotOdds, strikeChance, weaponOf, weaponReaches,
     type Action, type BattleState, type Fighter, type ShotKind, type ShotOdds,
@@ -81,9 +81,6 @@ export function shotOf(kind: ActionKind): Exclude<ShotKind, "overwatch"> | undef
     return aim.at === "enemy" ? aim.shot : undefined;
 }
 
-/** The abilities that strike with the character's own reach rather than shooting: each rolls to hit as a weapon's strike does (`strikeChance`). */
-const STRIKING: ReadonlySet<ActionKind> = new Set(["shieldBash", "rend", "cleave"]);
-
 /**
  * Whether an action rolls to hit what it's aimed at: a shot, a strike with a
  * weapon (an attack or an aimed shot by a melee character falls back to it),
@@ -91,7 +88,7 @@ const STRIKING: ReadonlySet<ActionKind> = new Set(["shieldBash", "rend", "cleave
  * the rest land.
  */
 export function rollsToHit(kind: ActionKind): boolean {
-    return shotOf(kind) !== undefined || STRIKING.has(kind);
+    return shotOf(kind) !== undefined || STRIKING_ABILITIES.has(kind);
 }
 
 /** The `check` kind that says who an action can be aimed at: its own, or — for a cleave — each of its targets'. Undefined for one not aimed at a character. */

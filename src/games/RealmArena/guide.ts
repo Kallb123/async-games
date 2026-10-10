@@ -1,7 +1,7 @@
 import type { GameGuide } from "@/utils/ui/gameGuides";
 import { ABILITIES, CHARACTERS, COOP_PLAYERS, EFFECTS, ITEMS, THROW_RANGE } from "./characters";
 import { RANK_XP } from "./mastery";
-import { ACTION_POINTS, ASSIST_DIVISOR, ATTACK_AP, CENTRE_POINTS, CENTRE_SCORES_FROM_ROUND, COVER_PENALTY, FLANK_BONUS, GRAZE_BAND, HIGH_GROUND_BONUS, HUNKER_AP, KNOCKOUT_DIVISOR, LONG_RANGE_PENALTY, MELEE_ACCURACY, OVERWATCH_PENALTY, REACTION_COST, SIGHT_RANGE, TEAM_HP_FACTOR } from "./rules";
+import { ACTION_POINTS, ASSIST_DIVISOR, ATTACK_AP, CENTRE_POINTS, CENTRE_SCORES_FROM_ROUND, COVER_PENALTY, FLANK_BONUS, GRAZE_BAND, HIGH_GROUND_BONUS, HUNKER_AP, KNOCKOUT_DIVISOR, LONG_RANGE_DENOMINATOR, LONG_RANGE_NUMERATOR, LONG_RANGE_PENALTY, MELEE_ACCURACY, OVERWATCH_PENALTY, REACTION_COST, SIGHT_RANGE, TEAM_HP_FACTOR } from "./rules";
 
 // The how-to-play primer shown from the game-options menu, and the reference
 // text behind the guided tour (tutorial.ts), which takes the guide's place on
@@ -38,7 +38,7 @@ export const guide: GameGuide = {
         },
         {
             heading: "Cover and flanking",
-            body: `A shot has a chance to hit, shown before you take it, which starts from the weapon's own accuracy. Cover comes from the square next to the target on your side: something half a height or more above the target is half cover, −${COVER_PENALTY.half}%; a full height or more, or trees, is full cover, −${COVER_PENALTY.full}%. With nothing there, the target is flanked: no cover at all, and the shot does ${FLANK_BONUS} more damage. Shooting down from half a height or more above is +${HIGH_GROUND_BONUS}%. A miss by ${GRAZE_BAND} or less still grazes for half damage. A shot at a target further than two thirds of its weapon's range is −${LONG_RANGE_PENALTY}%. A strike with a blade or a mace needs you right next to the target and hits ${MELEE_ACCURACY}% of the time: it lands for full damage or misses, with no graze.`,
+            body: `A shot has a chance to hit, shown before you take it, which starts from the weapon's own accuracy. Cover comes from the square next to the target on your side: something half a height or more above the target is half cover, −${COVER_PENALTY.half}%; a full height or more, or trees, is full cover, −${COVER_PENALTY.full}%. With nothing there, the target is flanked: no cover at all, and the shot does ${FLANK_BONUS} more damage. Shooting down from half a height or more above is +${HIGH_GROUND_BONUS}%. A miss by ${GRAZE_BAND} or less still grazes for half damage. A shot at a target further than ${LONG_RANGE_NUMERATOR}/${LONG_RANGE_DENOMINATOR} of its weapon's range is −${LONG_RANGE_PENALTY}%. A strike with a blade or a mace needs you right next to the target and hits ${MELEE_ACCURACY}% of the time: it lands for full damage or misses, with no graze.`,
         },
         {
             heading: "Overwatch and guard",

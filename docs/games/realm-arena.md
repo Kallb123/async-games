@@ -3740,7 +3740,7 @@ changes, the first two for Hold Out alone and the rest for every mode.
   turn sheet, the target list, a guard's preview of a move (`strikeChance`,
   `hitChance`, `reactionPreviews`) and the planner's expected harm.
 - **Long shots, −20%.** A ranged weapon's shot at a target more than two thirds
-  of its range away (`LONG_RANGE_THIRDS`, `isLongShot`, in whole numbers so
+  of its range away (`LONG_RANGE_NUMERATOR`/`LONG_RANGE_DENOMINATOR`, `isLongShot`, in whole numbers so
   exactly two thirds isn't one) takes `LONG_RANGE_PENALTY` (20) off, measured
   by the distance the range check uses. It is every ranged weapon's — the bow,
   the Mage's bolt and Frost bolt, a Spitter's acid — in `shotOdds`, so an aimed

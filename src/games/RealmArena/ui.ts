@@ -531,6 +531,9 @@ function firstMoveOf(events: readonly ToldEvent[]): number {
     return events.findIndex(event => event.kind === "moved");
 }
 
+/** The roll a shot or a strike was decided by, as a line leads with it: nothing for an event a review told without it. */
+const rollOf = (event: ToldEvent): { roll?: number } => "roll" in event && typeof event.roll === "number" ? { roll: event.roll } : {};
+
 /**
  * What an action did, in order, in the viewer's words (§17.3 PR 7). A move
  * broken up by the reactions it set off is told once. `fighters` names
@@ -557,7 +560,7 @@ export function eventLines(events: readonly ToldEvent[], fighters: readonly Figh
                     icon: "🎯",
                     title,
                     sub: `${who} at ${name(event.target)} · ${event.chance}% to hit`,
-                    ...("roll" in event && typeof event.roll === "number" ? { roll: event.roll } : {}),
+                    ...rollOf(event),
                     sentence: `${who} ${verb} ${name(event.target)}${event.result === "miss" ? "" : ` for ${event.damage}`}`,
                 }];
             }
@@ -569,7 +572,7 @@ export function eventLines(events: readonly ToldEvent[], fighters: readonly Figh
                 const sub = [event.reaction ? "On guard" : undefined, odds].filter(Boolean).join(" · ") || undefined;
                 return [{
                     icon: "⚔️", title, sub,
-                    ...("roll" in event && typeof event.roll === "number" ? { roll: event.roll } : {}),
+                    ...rollOf(event),
                     sentence: event.reaction ? `${sentence} on guard` : sentence,
                 }];
             }

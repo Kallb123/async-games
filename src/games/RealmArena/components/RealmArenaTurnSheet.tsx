@@ -328,11 +328,12 @@ function Detail({ draft, battle, name, ap, target }: DetailProps) {
     }
 
     const health = `${Name(target.id)} · ${target.hp}/${max} HP`;
-    if (aim === 'shieldBash') return hint(`${health} · ${strikeChance(battle, target)}% to hit, for ${ABILITIES.shieldBash.damage}, and a hit stuns them.`);
-    if (aim === 'rend') return hint(`${health} · ${strikeChance(battle, target)}% to hit, for ${ABILITIES.rend.damage}.`);
+    const lands = strikeChance(battle, target);
+    if (aim === 'shieldBash') return hint(`${health} · ${lands}% to hit, for ${ABILITIES.shieldBash.damage}, and a hit stuns them.`);
+    if (aim === 'rend') return hint(`${health} · ${lands}% to hit, for ${ABILITIES.rend.damage}.`);
     const shot = shotOf(aim);
     const odds = shot && shotOdds(battle, fighter, target, shot);
-    if (!shot || !odds) return hint(`${health} · ${strikeChance(battle, target)}% to hit, for ${strike}.`);
+    if (!shot || !odds) return hint(`${health} · ${lands}% to hit, for ${strike}.`);
     const effect = shotEffect(fighter, shot);
     return (
         <>
