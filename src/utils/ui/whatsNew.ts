@@ -134,6 +134,10 @@ export const WHATS_NEW: WhatsNewGroup[] = [
         icon: "🔧",
         items: [
             {
+                title: "Results bar charts keep every bar on the same baseline",
+                detail: "On a game's results page, a bar whose name was too long for one line — Realm Arena's Man-at-arms, say — wrapped its label and stood its bar up above the others, so it looked taller or shorter than it was. Every bar now starts from the same line, with the names sitting underneath.",
+            },
+            {
                 title: "Realm Arena's setup screen shows how big each difficulty's warbands are",
                 detail: "The co-op Difficulty choices said a Normal warband musters as many points as each of you, but in Hold Out the warbands now muster a step smaller than that. Each difficulty now names the points its warbands and your squads muster, for the mission and battle size you've picked.",
                 game: "realmarena",
@@ -174,10 +178,6 @@ export const WHATS_NEW: WhatsNewGroup[] = [
                 title: "Kingdom Builder armies fight the scouts they meet",
                 detail: "A rival army could share a tile with your scouts and their settlers or caravans and do nothing at all, since scouts counted as a full escort. Scouts are now cheap rather than untouchable: an army with soldiers in it fights any scouts on its tile, alone or escorting, and once the last scout falls it takes the settlers and caravans they guarded. Both sides get the fight in their Battles list.",
                 game: "kingdombuilder",
-            },
-            {
-                title: "Turn recaps leave out moves that were taken back",
-                detail: "Undoing a move now removes both the move and the Undo from the recap and your next-turn notification. Plain passes stay quiet too, while a turn that pays out a card still tells you about the card.",
             },
         ],
     },
