@@ -113,6 +113,11 @@ export function playableFactions(gs: IRealmArenaSpecificGameState): readonly Fac
     return gs.factions ?? REALM_ONLY;
 }
 
+/** How many rounds this battle lasts (`battleRounds`): the one length its ending, its waves, its round counter and its record all read. */
+export function battleRoundsOf(gs: Pick<IRealmArenaSpecificGameState, "seats" | "coop" | "rulesVersion">): number {
+    return battleRounds(gs.seats.length, { mission: gs.coop?.mission, rulesVersion: gs.rulesVersion });
+}
+
 /** Each co-op warband's points (§30.5): the players', moved by the difficulty, and in a stout Hold Out (`stoutTeam`) a rung further down. */
 export function warbandBudgetOf(gs: IRealmArenaSpecificGameState): Budget {
     return warbandBudget(gs.seats.length, gs.size, gs.coop?.difficulty, stoutTeam(gs.coop?.mission, gs.rulesVersion) ? HOLD_OUT_ENEMY_STEPS : 0);
@@ -862,7 +867,7 @@ function holdTheCentreEnding(data: IRealmArenaGameData, battle: BattleState, coo
 
 /** Whether the battle is over (§5.1). Hold Out goes on through an enemy wiped out between waves (§30.3). */
 function battleIsOver(gs: IRealmArenaSpecificGameState): boolean {
-    if (gs.coop?.mission !== "holdOut") return isBattleOver(battleOf(gs), gs.seats, gs.roundsPlayed);
+    if (gs.coop?.mission !== "holdOut") return isBattleOver(battleOf(gs), gs.seats, gs.roundsPlayed, { mission: gs.coop?.mission, rulesVersion: gs.rulesVersion });
     return holdOutEnding(gs) !== undefined;
 }
 
@@ -872,7 +877,7 @@ function battleIsOver(gs: IRealmArenaSpecificGameState): boolean {
  * the last wave has landed and nobody of the enemy is standing.
  */
 function holdOutEnding(gs: IRealmArenaSpecificGameState): { won: boolean; detail: string } | undefined {
-    const rounds = battleRounds(gs.seats.length);
+    const rounds = battleRoundsOf(gs);
     const standing = sidesStanding(battleOf(gs));
     const round = Math.min(gs.roundsPlayed + 1, rounds);
     if (!standing.includes(TEAM_SIDE)) return { won: false, detail: `overrun in round ${round}` };
@@ -945,7 +950,7 @@ function rally(gs: IRealmArenaSpecificGameState): void {
 /** The wave due as the round `roundsPlayed` has just reached begins, if one is (§30.3). `version` is the End turn's that lands it. */
 function landWave(data: IRealmArenaGameData, version: number): void {
     const gs = data.specificGameState;
-    if (gs.coop?.mission !== "holdOut" || !waveArrives(gs.roundsPlayed + 1, battleRounds(gs.seats.length))) return;
+    if (gs.coop?.mission !== "holdOut" || !waveArrives(gs.roundsPlayed + 1, battleRoundsOf(gs))) return;
     for (const owner of warbandsFor(gs.seats)) {
         const fresh = waveOf(gs, owner, version >= GROWING_WAVES_VERSION);
         if (fresh.length === 0) continue;
@@ -971,7 +976,7 @@ function landWave(data: IRealmArenaGameData, version: number): void {
  */
 export function nextWaveOf(gs: IRealmArenaSpecificGameState): { round: number; arriving?: number; upTo?: true } | undefined {
     if (gs.coop?.mission !== "holdOut" || gs.phase !== "battle") return undefined;
-    const rounds = battleRounds(gs.seats.length);
+    const rounds = battleRoundsOf(gs);
     const round = nextWaveRound(gs.roundsPlayed + 1, rounds);
     if (round === undefined) return undefined;
     if (enemyHidden(gs.coop)) return { round };

@@ -8,7 +8,7 @@ import {
     computeRealmArenaResultStats, coopInviteOf, formatRealmArenaCharts, formatRealmArenaResultStats, gameStateToModel, RealmArenaInvitationModel, stepOutcomeToModel, type IRealmArenaGameData, type RealmArenaSettings,
 } from "./RealmArenaModels";
 import { recordBattle } from "./recordBattle";
-import { battleOf as battleOfState, enemyEvents, nextWaveOf, RealmArenaGameType, warbandBudgetOf, waveOf, waveStrength, type IRealmArenaOutcome, type RealmArenaEndTurn } from "./RealmArenaLogic";
+import { battleOf as battleOfState, battleRoundsOf, enemyEvents, nextWaveOf, RealmArenaGameType, warbandBudgetOf, waveOf, waveStrength, type IRealmArenaOutcome, type RealmArenaEndTurn } from "./RealmArenaLogic";
 import {
     battleRounds, ENEMY_SIDE, isStanding, isWarband, lastWaveRound, maxHpOf, nextWaveRound, readyMadeMuster, squadSight, standings, TEAM_SIDE, warbandOwner, waveArrives, wavesLanded, type BattleEvent,
 } from "./rules";
@@ -155,9 +155,9 @@ describe("Hold Out (§30.3)", () => {
         expect(game.specificGameState.fighters.some(fighter => isWarband(fighter.owner) && fighter.hp > 0)).toBe(true);
         expect(game.gameState.history.some(entry => entry.text.includes("fresh wave"))).toBe(true);
 
-        game.specificGameState.roundsPlayed = battleRounds(2);
+        game.specificGameState.roundsPlayed = battleRoundsOf(game.specificGameState);
         expect(new RealmArenaGameType().CheckGameOver(game)).toBe(true);
-        expect(game).toMatchObject({ endReason: "teamwin", endDetail: "held out for all 15 rounds" });
+        expect(game).toMatchObject({ endReason: "teamwin", endDetail: "held out for all 13 rounds" });
     });
 
     it("comes every third round from round four, and not after the last", () => {
@@ -172,11 +172,11 @@ describe("Hold Out (§30.3)", () => {
         const game = makeGame(["a", "b"], {}, { coop: { enemy: "realm", mission: "holdOut" } });
         await musterAll(game);
         game.specificGameState.fighters.find(fighter => isWarband(fighter.owner))!.hp = 0;
-        game.specificGameState.roundsPlayed = battleRounds(2) - 1;
+        game.specificGameState.roundsPlayed = battleRoundsOf(game.specificGameState) - 1;
         const fighters = game.specificGameState.fighters.length;
         await play(game, endTurnBy("a"));
         await play(game, endTurnBy("b"));
-        expect(game).toMatchObject({ complete: true, endReason: "teamwin", endDetail: "held out for all 15 rounds" });
+        expect(game).toMatchObject({ complete: true, endReason: "teamwin", endDetail: "held out for all 13 rounds" });
         expect(game.specificGameState.fighters).toHaveLength(fighters);
         expect(game.gameState.history.some(entry => entry.text.includes("fresh wave"))).toBe(false);
     });
@@ -371,9 +371,9 @@ describe("Hold Out's result (§30.10)", () => {
         const record = await recordBattle(game);
         expect(record?.waves).toBeDefined();
         const waves = record!.waves!;
-        expect(record!.battleRounds).toBe(15);
+        expect(record!.battleRounds).toBe(13);
         expect(waves[0]).toMatchObject({ round: 0, arrived: 2 * REALM.readyMade[80].length });
-        expect(waves.slice(1).map(wave => wave.round + 1).every(round => waveArrives(round, 15))).toBe(true);
+        expect(waves.slice(1).map(wave => wave.round + 1).every(round => waveArrives(round, 13))).toBe(true);
         // Every knock-out of the enemy is in a wave, by the player who scored it.
         const knockouts = record!.fighting.filter(row => row.userId !== ENEMY_SIDE).reduce((sum, row) => sum + row.knockouts, 0);
         expect(waves.reduce((sum, wave) => sum + [...wave.downed.values()].reduce((a, b) => a + b, 0), 0)).toBe(knockouts);
@@ -386,7 +386,7 @@ describe("Hold Out's result (§30.10)", () => {
         const stats = computeRealmArenaResultStats(game, record);
         const [group] = formatRealmArenaResultStats(stats, new Map(Object.entries(NAMES)));
         expect(group.username).toBe("Hold Out");
-        expect(group.lines[0]).toMatch(game.endReason === "teamwin" ? /^(Held out for all 15 rounds|Beat the last wave in round \d+ of 15)$/ : /^Overrun in round \d+ of 15$/);
+        expect(group.lines[0]).toMatch(game.endReason === "teamwin" ? /^(Held out for all 13 rounds|Beat the last wave in round \d+ of 13)$/ : /^Overrun in round \d+ of 13$/);
         expect(group.lines[1]).toMatch(new RegExp(`^Faced ${waves.length} waves?: \\d+ of the enemy took the field, and the team downed ${knockouts}$`));
         expect(group.lines).toHaveLength(2 + waves.length);
 

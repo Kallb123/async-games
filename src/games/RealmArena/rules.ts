@@ -1489,12 +1489,25 @@ export function endTurn(state: BattleState, player: string, round: number, keepS
 
 // ─── The end of the battle (§5.1) ───────────────────────────────────────────
 
+/** How many rounds Hold Out lasts for two players once the team is stout (`BALANCE_VERSION`): the same 13 as three players have. */
+export const HOLD_OUT_PAIR_ROUNDS = BATTLE_ROUNDS[3];
+
+/** What decides a battle's length besides its players: the co-op mission, and the rules version it was created under. */
+export interface BattleKind {
+    mission?: string;
+    rulesVersion?: number;
+}
+
 /**
  * How many battle rounds a battle of `playerCount` players lasts (§13.8). Solo
  * (§30.6) lasts a duel's: its round is one player's turn and one warband's, as
- * a duel's is two players'.
+ * a duel's is two players'. Hold Out for exactly two players, created under
+ * `BALANCE_VERSION`, lasts `HOLD_OUT_PAIR_ROUNDS` instead — and not Solo's, nor
+ * a duel's, nor Hold the Centre's. Everything that asks when a battle ends, or
+ * when its waves land, asks here with the battle's `kind`, so none can differ.
  */
-export function battleRounds(playerCount: number): number {
+export function battleRounds(playerCount: number, { mission, rulesVersion }: BattleKind = {}): number {
+    if (playerCount === 2 && stoutTeam(mission, rulesVersion)) return HOLD_OUT_PAIR_ROUNDS;
     const rounds = BATTLE_ROUNDS[(playerCount === 1 ? 2 : playerCount) as PlayerCount];
     if (rounds === undefined) throw new Error(`Realm Arena has no battle length for ${playerCount} players`);
     return rounds;
@@ -1535,8 +1548,8 @@ export function sidesStanding(state: BattleState): string[] {
 }
 
 /** Whether the battle is over: the turn limit has been played out, or at most one side is left (§5.1). */
-export function isBattleOver(state: BattleState, players: readonly string[], roundsPlayed: number): boolean {
-    return roundsPlayed >= battleRounds(players.length) || sidesStanding(state).length <= 1;
+export function isBattleOver(state: BattleState, players: readonly string[], roundsPlayed: number, kind: BattleKind = {}): boolean {
+    return roundsPlayed >= battleRounds(players.length, kind) || sidesStanding(state).length <= 1;
 }
 
 /** The points' worth of a side still standing: the first tie-break. In a free-for-all, a player's squad (`sideOf`). */

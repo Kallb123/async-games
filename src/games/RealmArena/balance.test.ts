@@ -3,11 +3,11 @@ import { at } from "@/utils/games/battlefield/testFixtures";
 import { buildBattlefield, type Battlefield } from "@/utils/games/battlefield/terrain";
 import { buildTimeline } from "@/utils/games/replay";
 import { ABILITIES, CHARACTERS, HOLD_OUT_ENEMY_STEPS, musterBudget, REALM, warbandBudget, FACTIONS, type CharacterId, type Difficulty } from "./characters";
-import { cloneRealmArenaState, nextWaveOf, warbandBudgetOf, waveOf, type IRealmArenaOutcome } from "./RealmArenaLogic";
+import { battleRoundsOf, cloneRealmArenaState, nextWaveOf, RealmArenaGameType, warbandBudgetOf, waveOf, type IRealmArenaOutcome } from "./RealmArenaLogic";
 import { buildInitialRealmArenaState, gameStateToModel, settingsOf, stepOutcomeToModel, type RealmArenaSettings } from "./RealmArenaModels";
 import { meta } from "./meta";
 import {
-    abilityRules, ACTION_POINTS, act, ARMOUR, armouredTeam, damageTo, weaponOf, weaponReaches, BALANCE_VERSION, battleFrom, check, fixedRolls, isBalanced, FAR_SHOT_DISTANCE, maxHpOf, MELEE_ACCURACY,
+    abilityRules, ACTION_POINTS, battleRounds, HOLD_OUT_PAIR_ROUNDS, lastWaveRound, waveArrives, isBattleOver, act, ARMOUR, armouredTeam, damageTo, weaponOf, weaponReaches, BALANCE_VERSION, battleFrom, check, fixedRolls, isBalanced, FAR_SHOT_DISTANCE, maxHpOf, MELEE_ACCURACY,
     musterHp, newFighter, shotOdds, startTurn, stoutTeam, strikeChance, teamHp, TEAM_HP_FACTOR, viewOf, warbandOwner,
     type Action, type BattleState, type Fighter,
 } from "./rules";
@@ -693,5 +693,76 @@ describe("the team's armour against the Realm in Hold Out", () => {
         expect(battleOf(drawn).armoured).toBe(true);
         expect(gameStateToModel(drawn.specificGameState, "a", null)).not.toHaveProperty("enemy");
         expect(JSON.stringify(gameStateToModel(drawn.specificGameState, "a", null))).not.toMatch(/armour/i);
+    });
+});
+
+describe("Hold Out for two lasts 13 rounds", () => {
+    const hold = { mission: "holdOut", rulesVersion: 7 };
+
+    it("is only two players' Hold Out under the rebalance: not Solo, a duel, Hold the Centre, or a battle from before it", () => {
+        expect(HOLD_OUT_PAIR_ROUNDS).toBe(13);
+        expect(battleRounds(2, hold)).toBe(13);
+        expect(battleRounds(2, { mission: "holdOut", rulesVersion: LEGACY })).toBe(15);
+        expect(battleRounds(2, { mission: "holdOut" })).toBe(15);
+        expect(battleRounds(1, hold)).toBe(15);
+        expect(battleRounds(2)).toBe(15);
+        expect(battleRounds(2, { rulesVersion: 7 })).toBe(15);
+        expect(battleRounds(3, hold)).toBe(13);
+        expect(battleRounds(3)).toBe(13);
+        expect(battleRounds(4)).toBe(12);
+    });
+
+    it("is what a game reads, whoever asks: its response, its ending, its waves", async () => {
+        const length = (players: string[], settings: RealmArenaSettings) => battleRoundsOf(makeGame(players, {}, settings).specificGameState);
+        const holdOut = { coop: { enemy: "realm" as const, mission: "holdOut" as const } };
+        expect(length(["a", "b"], holdOut)).toBe(13);
+        expect(length(["a", "b"], { ...holdOut, rulesVersion: LEGACY })).toBe(15);
+        expect(length(["a"], holdOut)).toBe(15);
+        expect(length(["a", "b", "c"], holdOut)).toBe(13);
+        expect(length(["a", "b"], { coop: { enemy: "realm" } })).toBe(15);
+        expect(length(["a", "b"], {})).toBe(15);
+
+        const game = makeGame(["a", "b"], {}, holdOut);
+        await musterAll(game);
+        const gs = game.specificGameState;
+        expect(gameStateToModel(gs, "a", null).battleRounds).toBe(13);
+        expect(gameStateToModel(makeGame(["a", "b"], {}, { ...holdOut, rulesVersion: LEGACY }).specificGameState, "a", null).battleRounds).toBe(15);
+        // The waves land at 4, 7, 10 and 13, and the last of them is the last round.
+        const rounds = battleRoundsOf(gs);
+        expect(Array.from({ length: rounds }, (_, k) => k + 1).filter(round => waveArrives(round, rounds))).toEqual([4, 7, 10, 13]);
+        expect(lastWaveRound(rounds)).toBe(13);
+        // Over once 13 rounds are played, and not before.
+        gs.roundsPlayed = 12;
+        expect(new RealmArenaGameType().CheckGameOver(game)).toBe(false);
+        gs.roundsPlayed = 13;
+        expect(new RealmArenaGameType().CheckGameOver(game)).toBe(true);
+        expect(game).toMatchObject({ endReason: "teamwin", endDetail: "held out for all 13 rounds" });
+        // The same battle from before the rebalance has two rounds more to play.
+        const old = makeGame(["a", "b"], {}, { ...holdOut, rulesVersion: LEGACY });
+        await musterAll(old);
+        old.specificGameState.roundsPlayed = 13;
+        expect(new RealmArenaGameType().CheckGameOver(old)).toBe(false);
+        old.specificGameState.roundsPlayed = 15;
+        expect(new RealmArenaGameType().CheckGameOver(old)).toBe(true);
+        expect(nextWaveOf(old.specificGameState)).toBeUndefined();
+        // And a plain duel still ends at 15.
+        const duel = makeGame(["a", "b"], {});
+        await musterAll(duel);
+        const state = battleOf(duel);
+        expect([14, 15].map(played => isBattleOver(state, ["a", "b"], played))).toEqual([false, true]);
+    });
+
+    it("lands the last wave at round 13 in a whole battle, with nothing after it", async () => {
+        const game = makeGame(["a", "b"], {}, { coop: { enemy: "realm", mission: "holdOut" } });
+        await musterAll(game);
+        const gs = game.specificGameState;
+        gs.fighters.forEach(one => { if (one.owner.startsWith("ai:")) one.hp = 0; });
+        gs.roundsPlayed = 11;
+        await play(game, endTurnBy("a"));
+        await play(game, endTurnBy("b"));
+        // Round 12 played, round 13's wave landed.
+        expect(gs.roundsPlayed).toBe(12);
+        expect(game.gameState.history.some(entry => entry.text.includes("fresh wave"))).toBe(true);
+        expect(game.complete).toBe(false);
     });
 });

@@ -3736,6 +3736,18 @@ changes, the first three for Hold Out alone and the rest for every mode.
   so the fighter card's "Armour 1" and every preview appear only once the
   faction is known — and every preview of an enemy's damage needs an enemy in
   view, which is what makes it known. Nothing is added to the wire.
+- **Two players' Hold Out lasts 13 rounds, not 15.** With the team tougher
+  and the warbands smaller, a pair needs no longer a battle than three players
+  have (the balance doc found 13 rounds worth a lot to two). `battleRounds`
+  takes the battle's `BattleKind` (mission and rules version) and answers
+  `HOLD_OUT_PAIR_ROUNDS` (13) for exactly two players of a Hold Out created
+  under `BALANCE_VERSION`: not for Solo, which reads a duel's 15, a duel, Hold
+  the Centre, or a battle from before it. Everything that asks reads that one
+  length (`battleRoundsOf(gs)`): the ending, the wave schedule and the next-wave
+  count, the response's round counter, the setup line, the battle record and
+  the balance harness. The waves still land at rounds 4, 7, 10 and 13, the last
+  being the last round, so a battle of 13 ends once the wave of round 13 has had
+  its round.
 - **The computer's warbands muster one step smaller.** `warbandBudget` takes a
   further `HOLD_OUT_ENEMY_STEPS` (−1) rung down the budget ladder (§30.5), so
   on Normal the warbands of a 2- or 3-player Hold Out muster 70 points, not
@@ -3794,7 +3806,7 @@ is stamped with the version it was **created** under
 (`specificGameState.rulesVersion`, kept in the settings a replay rebuilds it
 from, on the wire for the board's previews, and in an undo snapshot). A battle
 without the stamp, or with a lower one, plays by the old rules to the end:
-melee always hits and rolls nothing, cover counted once at any range, the Mage's Bolt
+melee always hits and rolls nothing, two players' Hold Out of 15 rounds, cover counted once at any range, the Mage's Bolt
 at 70% and range 10, Heal on a two-turn cooldown, Raise once per battle, and no
 `maxHp`, armour or smaller warbands.
 `battleFrom` reads the stamp into `BattleState.balanced`, which the rules,
@@ -4000,4 +4012,4 @@ Realm, its sibling in the same world.
 | 1.50 | More Hold Out achievements (§30.4): *Lone Wolf* for winning it in Solo, *Hold the Keep* on the Sacked Fort, *Broken Tide* for downing the whole last wave before the last round is over, and *Unbroken* with every one of the team's characters standing. |
 | 1.51 | The review plays itself (§26.2): Play in the review dock steps through the match on its own, the recap screen replays from the player's last turn, and a co-op End turn's step carries its parts — the End turn, each of the warband's actions and the hand-off, each with what the viewer was told and the board as they saw it after — so the enemy's turn plays one action at a time. Moves walk along their told path and the view frames each move from start to end, or over the stretch seen of one that crossed the edge of sight (§26.1, §26.2); the playback cap is four and a half seconds. Stances, watches and reactions say what they are over the character ("Hunker down", "Shield wall", "Overwatch", "On guard", "Guard"), and a followed step with nothing the viewer can place shows a faint "?" over the board (§26.1, §26.2). | When nothing says where to look, the view rests on the player's own side rather than the whole board: the board opens on their squad (the whole team in co-op), and a review step that has nothing to follow or is spread over more than half the battlefield goes there too; a turn beginning's fresh AP no longer counts as an action to follow.
 | 1.52 | Measuring balance (§30.12): `npm run ra-balance` and the *Realm Arena balance* workflow fight hundreds of co-op battles with the planner playing both sides and report win rates, how long the team lasts and how each round goes. |
-| 1.53 | The rebalance (§30.13, command version 7): melee hits 80% of the time, cover counts double against a shot from further than 10 squares, the Mage Bolt is 80% to a range of 12, in Hold Out against the Realm the team takes 1 less from every hit, a Cleric's Heal is once a turn instead of on a cooldown and its Raise is on a four-turn cooldown instead of once a battle, and in Hold Out the team has 50% more HP against warbands a step smaller. A battle keeps the rules it was created under. |
+| 1.53 | The rebalance (§30.13, command version 7): melee hits 80% of the time, cover counts double against a shot from further than 10 squares, the Mage Bolt is 80% to a range of 12, in Hold Out against the Realm the team takes 1 less from every hit, two players' Hold Out lasts 13 rounds instead of 15, a Cleric's Heal is once a turn instead of on a cooldown and its Raise is on a four-turn cooldown instead of once a battle, and in Hold Out the team has 50% more HP against warbands a step smaller. A battle keeps the rules it was created under. |
