@@ -82,6 +82,11 @@ export const WHATS_NEW: WhatsNewGroup[] = [
         icon: "✨",
         items: [
             {
+                title: "Realm Arena: see the cover you're moving into, and why a shot's odds are what they are",
+                detail: "Line up a move and the square you'd end on shows a shield on each side that gives cover: a whole one for full cover, half a shield for half. And every target now has a ? beside its chance to hit, which breaks the number down: the weapon's own accuracy, then what cover, height, smoke, range and the rest add or take off.",
+                game: "realmarena",
+            },
+            {
                 title: "Home page and games load faster",
                 detail: "Going back to a game or to the home page now shows it straight away, from what you saw a moment ago, and brings it up to date underneath. A game also starts loading the moment you touch its card, before you let go. The server is quicker too, above all when you check back often: players' names and pictures are no longer looked up afresh every time, and the home page reads only what it shows rather than every game you've ever finished. A new name or picture can take up to five minutes to reach other players.",
             },
@@ -120,11 +125,6 @@ export const WHATS_NEW: WhatsNewGroup[] = [
             {
                 title: "Realm Arena: Hold Out and achievements",
                 detail: "Choose a new co-op mission and survive repeated enemy waves: fallen warband fighters return every third round, and your team wins by keeping anyone standing to the end. Realm Arena now has five achievements too, for veterans and co-op teams that win together, bring everybody home or survive Hold Out.",
-                game: "realmarena",
-            },
-            {
-                title: "Realm Arena: points for an assist",
-                detail: "In a free-for-all, wounding a character is worth it even when somebody else finishes it off: whoever downs it still scores the knock-out, and every other player who hurt it since it last stood up scores half that, rounded up.",
                 game: "realmarena",
             },
         ],
