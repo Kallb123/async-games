@@ -643,6 +643,7 @@ export default function GameRealmArena({ params }: { params: Promise<{ gameid: u
                             // for the mode, so the frame doesn't jitter as units move.
                             home={{ squares: friendly, key: `home:${nav.mode}` }}
                             odds={reach?.options}
+                            coverAt={reach?.previewing ? turn?.after?.square : null}
                             overlay={reach && <RealmArenaTargets reach={reach} fighters={fighters} viewerId={myUserId} nameFor={playerName} />}
                             playback={playback}
                             onPlayed={played}

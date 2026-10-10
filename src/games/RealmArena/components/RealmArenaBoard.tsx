@@ -3,6 +3,7 @@ import React, { useEffect, useLayoutEffect, useMemo, useRef, useState } from 're
 import BoardZoom, { useBoardCentre, type BoardZoomFocus, type BoardZoomPivot } from '@/components/ui/BoardZoom';
 import ClickableMapNode from '@/components/ui/ClickableMapNode';
 import MapLabelLayer from '@/components/ui/MapLabelLayer';
+import { coverBySide, SIDE_STEPS, type Side } from '@/utils/games/battlefield/cover';
 import { facingTowards, type Battlefield, type Facing, type Square, type TerrainLetter } from '@/utils/games/battlefield/terrain';
 import { isoArea, isoBlock, isoBounds, isoCentre, isoCorner, isoDepth, isoGridLines, isoGroundAt, isoPoint, isoPoints, isoRuns, isoSlab, isoSquareAt, isoView, ISO_HALF_HEIGHT, ISO_HALF_WIDTH, type IsoBlock, type IsoRotation, type IsoView, type Point } from '@/utils/ui/isometric';
 import { RealmArenaTerrainArt, RealmArenaTerrainDefs, spriteId, SpriteUse } from '@/games/RealmArena/components/RealmArenaTerrain';
@@ -81,6 +82,9 @@ const SMOKE_SIZE = 2 * ISO_HALF_WIDTH;
 const ODDS_WIDTH = 10.5;
 const ODDS_HEIGHT = 4;
 const ODDS_RISE = HP_BAR_RISE + HP_BAR_HEIGHT + ODDS_HEIGHT / 2 + 0.6;
+/** A cover shield standing on a square's edge: narrow enough to stay clear of the figure's disc and the HP bar. */
+const SHIELD_WIDTH = 3.6;
+const SHIELD_HEIGHT = 4.6;
 /** How far below its disc's middle a figure is looked for, to tell whether something in front hides it: most of the way to the disc's foot. */
 const FOOT_PROBE = FIGURE_RADIUS * 0.6;
 /** Room over the back of the map for a figure standing there, and the odds above it. */
@@ -151,6 +155,8 @@ interface RealmArenaBoardProps {
     home?: { squares: readonly Square[]; key: string } | null;
     /** The selected character's chance to hit each enemy in reach, floated above each one. */
     odds?: readonly AttackOption[] | null;
+    /** The square a lined-up move ends on, to show the cover its sides give there: a shield on each side that covers (`CoverShields`). */
+    coverAt?: Square | null;
     /** Floats over the foot of the board, outside the zoom, so it stays put as the board pans: the selected character's targets. A playback's caption takes its place while it plays. */
     overlay?: React.ReactNode;
     /**
@@ -562,6 +568,41 @@ function Odds({ view, square, chance }: { view: IsoView; square: Square; chance:
     );
 }
 
+/** The outline of a shield, standing on its point at the origin. `left` is just its left half. */
+function shieldPath(left = false): string {
+    const half = SHIELD_WIDTH / 2, shoulder = -SHIELD_HEIGHT * 0.45, belly = -SHIELD_HEIGHT * 0.12;
+    return left
+        ? `M0 ${-SHIELD_HEIGHT}H${-half}V${shoulder}Q${-half} ${belly} 0 0Z`
+        : `M${-half} ${-SHIELD_HEIGHT}H${half}V${shoulder}Q${half} ${belly} 0 0Q${-half} ${belly} ${-half} ${shoulder}Z`;
+}
+
+/**
+ * The cover a square gives whoever stands on it, XCOM style: a full shield on
+ * each side that gives full cover, a half-filled one on each that gives half,
+ * and nothing on an open side. Each stands on the middle of its side's edge
+ * at the square's height, and `isoPoint` turns that edge to wherever the view
+ * has it, so the shields keep to the same sides of the ground at every turn.
+ */
+function CoverShields({ view, field, square }: { view: IsoView; field: Battlefield; square: Square }) {
+    const sides = coverBySide(field, square);
+    const col = square % view.width + 0.5, row = Math.floor(square / view.width) + 0.5;
+    return (
+        <g className="ag-ra-cover">
+            {(Object.keys(SIDE_STEPS) as Side[]).map(side => {
+                const cover = sides[side];
+                if (cover === 'none') return null;
+                const { x, y } = isoPoint(view, col + SIDE_STEPS[side].col / 2, row + SIDE_STEPS[side].row / 2, view.heights[square]);
+                return (
+                    <g key={side} transform={`translate(${x} ${y})`}>
+                        <path className="ag-ra-cover-shield" d={shieldPath()} />
+                        <path className="ag-ra-cover-fill" d={shieldPath(cover === 'half')} />
+                    </g>
+                );
+            })}
+        </g>
+    );
+}
+
 /** Runs of the flat squares that share a key: everything raised is drawn square by square instead, in depth order. */
 function flatRuns<K>(view: IsoView, keyOf: (square: Square) => K | undefined) {
     return isoRuns(view, square => view.heights[square] === 0 ? keyOf(square) : undefined);
@@ -920,7 +961,7 @@ function blasting(artId: string, view: IsoView, playback: Playback, cue: ScorchC
  * here and nowhere else — and whatever was in the middle of the frame is still
  * there after it (`BoardZoom`'s `pivot`).
  */
-export default function RealmArenaBoard({ field, fighters, fogGhosts = [], unseen, clouds, sides, sealed, owners, waveDue = false, showCentre = true, viewerId, colourFor, nameFor, selected, onSelect, placing, aiming, acting, refocus = 0, follow, home, odds, overlay, playback, onPlayed, unplaced }: RealmArenaBoardProps) {
+export default function RealmArenaBoard({ field, fighters, fogGhosts = [], unseen, clouds, sides, sealed, owners, waveDue = false, showCentre = true, viewerId, colourFor, nameFor, selected, onSelect, placing, aiming, acting, refocus = 0, follow, home, odds, coverAt, overlay, playback, onPlayed, unplaced }: RealmArenaBoardProps) {
     const [storedRotation, storeRotation] = useStoredValue(`realmarena-board-rotation-${viewerId}`);
     const rotation = storedRotation === '1' || storedRotation === '2' || storedRotation === '3'
         ? Number(storedRotation) as IsoRotation
@@ -1246,6 +1287,7 @@ export default function RealmArenaBoard({ field, fighters, fogGhosts = [], unsee
                             })}
 
                             {/* Over every figure, so a neighbour never hides one. */}
+                            {coverAt != null && <CoverShields view={view} field={field} square={coverAt} />}
                             {odds?.map(({ target, chance }) => <Odds key={target.id} view={view} square={target.square} chance={chance} />)}
 
                             {/* The centre's name sits just clear of its dashed edge,

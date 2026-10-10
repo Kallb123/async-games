@@ -3,8 +3,8 @@ import { useResettingState } from "@/utils/hooks/useResettingState";
 import { pathTo, type Reach } from "@/utils/games/battlefield/pathfinding";
 import type { Square } from "@/utils/games/battlefield/terrain";
 import { ABILITIES, ITEMS, type Ability, type Item } from "./characters";
-import { allied, blastedBy, check, demolishArea, fighterById, areaAround, isStanding, itemOf, reachOf, damageTo, shotOdds, type Action, type BattleState, type Check, type Fighter } from "./rules";
-import { ACTION_AIMS, attackOptions, hitChance, rangeKindOf, rangeSquares, reactionPreviews, rollsToHit, shotOf, targetKindOf, targetsOf, type AttackOption } from "./tactics";
+import { allied, blastedBy, check, demolishArea, fighterById, areaAround, isStanding, itemOf, oddsBreakdown, reachOf, damageTo, shotOdds, type Action, type BattleState, type Check, type Fighter, type OddsBreakdown } from "./rules";
+import { ACTION_AIMS, attackOptions, rangeKindOf, rangeSquares, reactionPreviews, rollsToHit, shotOf, targetKindOf, targetsOf, type AttackOption } from "./tactics";
 import { reachShading } from "./ui";
 
 /** What the board is armed for: a tap on a square or a character lines up one of these. */
@@ -31,6 +31,8 @@ export interface TargetOption {
     target: Fighter;
     /** Percent to land, 0–100: undefined for help given to an ally, which has none. */
     chance?: number;
+    /** How that chance came to what it is: the sheet's "why" for it. Absent when the aim lands every time or helps an ally. */
+    odds?: OddsBreakdown;
 }
 
 /**
@@ -44,7 +46,10 @@ export function targetOptions(battle: BattleState, fighter: Fighter, aim: Aim, c
         const target = fighterById(battle, id);
         if (!target) return [];
         if (allied(battle, target.owner, fighter.owner)) return [{ target }];
-        return [{ target, chance: rollsToHit(aim) ? hitChance(battle, fighter, target, shot) : 100 }];
+        if (!rollsToHit(aim)) return [{ target, chance: 100 }];
+        // The same sum `hitChance` takes, kept whole so the sheet can say what moved it.
+        const odds = oddsBreakdown(battle, fighter, target, shot);
+        return [{ target, chance: odds.chance, odds }];
     }).sort((a, b) => (b.chance ?? 0) - (a.chance ?? 0));
 }
 
