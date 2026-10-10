@@ -70,7 +70,7 @@ What the round-by-round tables showed:
 | **Enemy −*n* steps** | Each warband musters, and its waves refill to, the ready-made squad *n* steps down the points ladder (`BUDGETS`) from today's. On Normal for 2 or 3 players, −1 is 70 points and −2 is 60. | Co-op |
 | **No growth** | Waves refill each warband to its squad but no longer add a character a wave (§30.10 off). | Hold Out |
 | **Waves every 4** | A wave every fourth round instead of every third (`WAVE_EVERY`). | Hold Out |
-| **Team HP ×*k*** | The team's characters only have *k* times their HP (2), rounded; the warbands keep theirs, Realm or not. Heals, Raise, the rally and a restore scale with the team's own full HP. | Hold Out (team only) |
+| **Team HP ×*k*** | The team's characters only have *k* times their HP (1.5, 1.75 or 2), rounded; the warbands keep theirs, Realm or not. Heals, Raise, the rally and a restore scale with the team's own full HP. | Hold Out (team only) |
 | **HP ×*k*** | Every character's HP × *k* (1.5 or 2), rounded, on both sides. Heals, Raise, the rally and a restore scale with it, since they read full HP; damage, burning and the healing items don't. | Every mode |
 
 ## Results
@@ -109,7 +109,9 @@ Win rate · average round overrun in, over 24 battles a cell.
 | Restore 1 + armour 1 + enemy −1 step | 0% · r12.4 | 83% · r15.0 | 13% · r11.4 | 96% · r12.0 |
 | Restore 1 + HP ×2 | 4% · r11.1 | 13% · r14.5 | 8% · r11.2 | 63% · r12.0 |
 | Restore 1 + HP ×2 + enemy −1 step | 4% · r10.8 | 13% · r15.0 | 13% · r11.8 | 71% · r13.0 |
-| **Restore 1 + team HP ×2** | **50% · r14.8** | **100% · —** | **100% · —** | **100% · —** |
+| Restore 1 + team HP ×1.5 | 17% · r14.5 | 50% · r15.0 | 83% · r12.8 | 96% · r12.0 |
+| Restore 1 + team HP ×1.75 | 29% · r14.9 | 83% · r15.0 | 96% · r13.0 | 100% · — |
+| Restore 1 + team HP ×2 | 50% · r14.8 | 100% · — | 100% · — | 100% · — |
 | **Restore 1 + attack 3 AP + armour 1** | **13% · r14.8** | **92% · r15.0** | **79% · r12.2** | **100% · —** |
 
 ## What it says
@@ -161,8 +163,20 @@ Win rate · average round overrun in, over 24 battles a cell.
    at the end of round 4 against the Realm (5.8 today) and 10.1 against the
    Swarm (4.7). **With restore 1 it overshoots:** 100% in every 3-player cell
    and 2 players vs the Swarm, with only 2 players vs the Realm still a
-   contest (50%). That's the first set to beat the Realm reliably, and the
-   room between team HP ×1 and ×2 is where to tune.
+   contest (50%). That's the first set to beat the Realm reliably.
+   **Stepping it down** with restore 1 kept, at ×1.5 and ×1.75, moves 2
+   players far more than 3:
+
+   | Restore 1 + team HP | 2p vs Realm | 2p vs Swarm | 3p vs Realm | 3p vs Swarm |
+   |---|---|---|---|---|
+   | ×1.5 | 17% | 50% | 83% | 96% |
+   | ×1.75 | 29% | 83% | 96% | 100% |
+   | ×2 | 50% | 100% | 100% | 100% |
+
+   A 3-player team is near-certain from ×1.5, while 2 players need ×2 just
+   for even odds against the Realm. No one multiplier fits both team sizes,
+   so the 2-player gap (point 8) is now the bigger imbalance than the
+   enemy's faction.
 8. **Two players have it harder than three, with the same changes.** Check
    2p vs Realm in every row. A 2-player battle runs two rounds past the last
    wave (15 against 13), and the Sacked Fort for two splits the edge between
@@ -187,10 +201,11 @@ Win rate · average round overrun in, over 24 battles a cell.
 - **To keep two attacks a turn,** slow the killing for the team only.
   Doubling everyone's HP slows both sides alike and shifts the result little
   (point 6), but doubling the team's alone is the strongest lever found
-  (point 7). Restore 1 + team HP ×2 is too easy in most cells, so the next
-  runs are restore 1 with team HP ×1.5, and team HP ×2 alone with the
-  waves made harder for 3 players, aiming for something like 50–70% in
-  every cell. A real version also has to show the team's larger HP on the
+  (point 7). With restore 1, ×1.5 already makes 3 players near-certain and
+  ×2 is needed for 2 players to have even odds against the Realm. So either
+  tune it per team size (×2 for two, ×1.25–1.5 for three), or find what
+  makes 2 players' battle harder (point 8) and fix that, then use one
+  multiplier. A real version also has to show the team's larger HP on the
   board (`ui.ts` reads `CHARACTERS` for the HP bar), and say why a Knight
   has 24 HP in Hold Out and 12 everywhere else: something like the keep's
   defenders being *Steadfast*.
