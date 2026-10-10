@@ -22,7 +22,7 @@ vi.mock("./usePushEvents", () => ({ usePushEvents: () => ({ restartPoll: () => {
 // Below the mocks on purpose: vitest hoists `vi.mock` above the imports.
 import { useRefreshableData, type RefreshableData } from "./useRefreshableData";
 import { isDataUnconfirmed, readCachedData, setDataCacheOwner, writeCachedData } from "./dataCache";
-import { prefetchGameData } from "./prefetchGameData";
+import { GAME_DATA_CACHE_MS, prefetchGameData } from "./prefetchGameData";
 
 type Body = { n?: number; v?: string };
 
@@ -198,6 +198,29 @@ describe("a screen that opted in to the cache", () => {
         await answer(url, { n: 7 });
         expect(screen.current.data).toEqual({ n: 7 });
         expect(screen.current.isLoading).toBe(false);
+    });
+
+    it("paints a prefetch that has landed at once, and still revalidates it beneath", async () => {
+        const url = "/api/game/g2";
+        prefetchGameData(ALICE, "g2");
+        await answer(url, { n: 7 });
+        expect(readCachedData(ALICE, url, GAME_DATA_CACHE_MS)?.body).toEqual({ n: 7 });
+
+        // The board opens on the prefetched body, with the top bar's loading bar
+        // (`isRefreshing`) up, and asks again rather than trusting it...
+        const screen = mount({ url, cacheFor: GAME_DATA_CACHE_MS });
+        await screen.render();
+        expect(screen.current.data).toEqual({ n: 7 });
+        expect(screen.current.isLoading).toBe(false);
+        expect(screen.current.isRefreshing).toBe(true);
+        expect(requested(url)).toBe(2);
+        expect(isDataUnconfirmed(ALICE, url)).toBe(true);
+
+        // ...and the bar comes down when the second answer lands.
+        await answer(url, { n: 8 });
+        expect(screen.current.data).toEqual({ n: 8 });
+        expect(screen.current.isRefreshing).toBe(false);
+        expect(isDataUnconfirmed(ALICE, url)).toBe(false);
     });
 
     it("drops a cached body the server says is no longer the player's to see", async () => {

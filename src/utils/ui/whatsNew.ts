@@ -134,6 +134,10 @@ export const WHATS_NEW: WhatsNewGroup[] = [
         icon: "🔧",
         items: [
             {
+                title: "Coming back home starts you at the top of the page",
+                detail: "Leaving a game for the home page could land you partway down your games — or right at the bottom, on the notifications warning — instead of at the top. Home now always opens at the top.",
+            },
+            {
                 title: "Realm Arena's battle plays back steadily, one action at a time",
                 detail: "On phones, and in the Android app most of all, the battlefield could flicker black and judder while Hold Out's next spawn zones glowed, while an attack's damage flashed on an HP bar, or while a turn played back. Those effects no longer make the phone redraw the map over and over, so the board stays steady and still looks the same. Watching a turn play back, each action now waits for the map to finish zooming to it before it plays, and the map rests for half a second after it before moving on to the next.",
                 game: "realmarena",
@@ -174,10 +178,6 @@ export const WHATS_NEW: WhatsNewGroup[] = [
                 title: "Banned Islet's water meter climbs at the right pace",
                 detail: "The flood rate on the water meter ran too steep, so the island went under faster than it should: from level 4 up it flooded one tile too many every turn, and the last two levels flooded six. The meter now reads 2, 2, 3, 3, 3, 4, 4, 5, 5 and then the skull, so Legendary opens on three tiles a turn rather than four. Games already under way switch to the new rates on their next flood.",
                 game: "bannedislet",
-            },
-            {
-                title: "Every join link shows a picture when you share it",
-                detail: "Sharing a join link for a game that didn't have its own preview image yet — Kingdom Builder, for one — unfurled in the chat with a broken picture or none at all. A game without its own card now shows the general Async Games one instead.",
             },
         ],
     },

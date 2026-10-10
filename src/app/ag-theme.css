@@ -5686,6 +5686,10 @@ html:has(.ag-pull) { overscroll-behavior-y: contain; }
    landing page. Once `HomeScreen` has decided it renders one wrapper without
    `--guess`, and none of this applies. */
 .ag-home-screen { display: contents; }
+/* `HomeScreen`'s marker for the top of the page: a real box, so Next's scroll
+   on navigation has something to land on, but out of flow (and out of the
+   desktop grid) so it takes up no room. */
+.ag-home-top { position: absolute; top: 0; left: 0; width: 1px; height: 1px; pointer-events: none; }
 .ag-home-screen--guess.ag-home-dashboard { display: none; }
 html[data-ag-signed-in="1"] .ag-home-screen--guess.ag-home-dashboard { display: contents; }
 html[data-ag-signed-in="1"] .ag-home-screen--guess.ag-home-landing { display: none; }

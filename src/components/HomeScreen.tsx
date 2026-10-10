@@ -70,6 +70,12 @@ export default function HomeScreen() {
       {/* Only where the HTML came from the server: a client-side render has no
           use for it, and React warns about a script it can't run. */}
       {undecided && <script dangerouslySetInnerHTML={{ __html: SIGNED_IN_PRE_PAINT_SCRIPT }} />}
+      {/* Where Next lands a navigation back home. It scrolls to the top of the
+          page's first element, skipping any with no box — and both wrappers
+          below dissolve (`display: contents`), so it walked on to the next
+          sibling: the notification footer, scrolled into view at the bottom of
+          the page, or nothing at all, leaving home at the board's scroll. */}
+      <span className="ag-home-top" aria-hidden />
       {signedIn !== false && <div key="dashboard" className={wrapper("dashboard")}><Dashboard /></div>}
       {signedIn !== true && <div key="landing" className={wrapper("landing")}><Landing /></div>}
     </>
