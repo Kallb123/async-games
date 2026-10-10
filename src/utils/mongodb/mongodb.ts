@@ -49,14 +49,11 @@ export async function dbConnect() {
   if (!cached.promise) {
     const opts = {
       bufferCommands: false,
-      // A cold serverless instance otherwise opens its first socket on demand
-      // and serialises the parallel queries a request fires (dashboard, board)
-      // behind one handshake. Opening a few up front, and letting them
-      // handshake together (the driver default maxConnecting is 2), moves that
-      // cost into the connect we already wait for. maxPoolSize is left at the
-      // driver default; minPoolSize stays small because every warm instance
-      // holds its idle sockets open against the cluster.
-      minPoolSize: 3,
+      // A request fires its reads in parallel (dashboard, board), and on a new
+      // instance each needs a fresh handshake; the driver default lets only two
+      // handshake at once. No minPoolSize: connect() doesn't wait for it, and
+      // the driver holds it against every replica-set member, so it would
+      // only keep idle sockets open on the secondaries we never read from.
       maxConnecting: 3,
     };
     cached.promise = mongoose.connect(MONGODB_URI, opts).then((mongoose) => {
