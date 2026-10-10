@@ -60,7 +60,9 @@ export function toCompletedGames(results: IGameResultDataDocument[], directory: 
  * `chat` channel now learns there is something to read without opening the
  * game. See §13.5 for why this is a second round trip rather than a fourth
  * member of the game/invite/result `Promise.all`: it needs the game list to
- * build one `$or` clause per game, so it can only run once that is in hand.
+ * build one `$or` clause per game, so it can only start once that is in hand
+ * (buildDashboard starts it then, alongside the invitation and result reads
+ * and the name lookup, instead of after them).
  *
  * A live game is a handful, per §13.5, but nothing caps it — a player with an
  * unusually large number open sends a correspondingly large `$or`, still
@@ -140,20 +142,38 @@ function hasJoinedWorld(invite: IInvitationDataDocument, userId: string): boolea
  *    directory cache answers most of that from memory).
  */
 export async function buildDashboard(userId: string, time: TimeSpan = untimed): Promise<IDashboardResponse> {
+    // Kingdom Builder worlds hang off the user id alone, so that read starts
+    // now and runs under everything below rather than after it. It swallows its
+    // own failures (see kingdomBuilderWorlds), so a promise left running while
+    // the reads below throw can never be an unhandled rejection.
+    const worldsRead = time('kb_worlds', () => kingdomBuilderWorlds(userId));
+
     // Three reads, then partitioned here. "My turn" and "their turn" were two
     // Mongo queries over the same set of games, and the two invite lists two
     // over the same set of invitations — splitting in memory is both cheaper
     // and the thing that makes the snapshot consistent.
+    // A game that dropped this player for going quiet carries on without
+    // them; it is theirs again, as a loss, once it finishes.
+    // Projected to what a summary row reads (see GAME_SUMMARY_PROJECTION):
+    // not the move history, not any game's own state. The filter may name
+    // fields the projection leaves out.
+    const gamesRead = GameDataModel.find(
+        { userIdList: userId, complete: false, 'gameState.droppedPlayers': { $ne: userId } },
+        GAME_SUMMARY_PROJECTION,
+    ).exec() as Promise<IGameDataDocument[]>;
+
+    // The chat count needs only the game list, not the invitations, the
+    // finished games or the names, so it starts the moment the games are in
+    // hand and runs alongside the rest of the mongo_query span and the name
+    // lookup below. Like the worlds read it swallows its own failures; the
+    // no-op catch only covers the games read itself failing, which the
+    // mongo_query await below already reports (without it this derived promise
+    // would reject unobserved).
+    const unreadRead = gamesRead.then(games => time('unread_chat', () => unreadChatCounts(userId, games)));
+    unreadRead.catch(() => undefined);
+
     const [games, invites, results] = await time('mongo_query', () => Promise.all([
-        // A game that dropped this player for going quiet carries on without
-        // them; it is theirs again, as a loss, once it finishes.
-        // Projected to what a summary row reads (see GAME_SUMMARY_PROJECTION):
-        // not the move history, not any game's own state. The filter may name
-        // fields the projection leaves out.
-        GameDataModel.find(
-            { userIdList: userId, complete: false, 'gameState.droppedPlayers': { $ne: userId } },
-            GAME_SUMMARY_PROJECTION,
-        ).exec() as Promise<IGameDataDocument[]>,
+        gamesRead,
         InvitationModel.find({
             $or: [{ senderId: userId }, { "userIdList.userId": userId }]
         }).exec() as Promise<IInvitationDataDocument[]>,
@@ -175,15 +195,13 @@ export async function buildDashboard(userId: string, time: TimeSpan = untimed): 
         response: invitationToResponse(invite, directory)
     }));
 
-    // Read separately from the Promise.all above, deliberately: a failure
-    // here must not cost the turn lists and invitations that read just fine
-    // (see unreadChatCounts). Each is its own span, so a slow one is named
-    // rather than lost between `player_directory` and `response_build`; they
-    // swallow their own failures, so the span closes either way.
-    const [unreadCounts, worlds] = await Promise.all([
-        time('unread_chat', () => unreadChatCounts(userId, games)),
-        time('kb_worlds', () => kingdomBuilderWorlds(userId)),
-    ]);
+    // The chat count and the worlds are read separately from the Promise.all
+    // above, deliberately: a failure in either must not cost the turn lists and
+    // invitations that read just fine (see unreadChatCounts). Each is its own
+    // span, so a slow one is named rather than lost between `player_directory`
+    // and `response_build`; both were started earlier and run beside the
+    // reads above, so by here this only collects what has already landed.
+    const [unreadCounts, worlds] = await Promise.all([unreadRead, worldsRead]);
 
     return time('response_build', async () => ({
         worlds,
