@@ -35,7 +35,7 @@ import { battlefieldWith, coordsOf, type Battlefield, type Square } from "@/util
 import { ABILITIES, CHARACTERS, type AbilityId } from "./characters";
 import {
     abilitiesOf, act, allied, areaAround, ATTACK_AP, blastedIn, CENTRE, CENTRE_SCORES_FROM_ROUND, centrePoints, check, fighterById, hasEffect, isStanding, landedSmoke,
-    maxHpOf, moveAp, movementOf, reachOf, ROLL_SIDES, shotOdds, soaked, strikeChance, watchedSquares, weaponOf, weaponReaches,
+    damageTo, maxHpOf, moveAp, movementOf, reachOf, ROLL_SIDES, shotOdds, strikeChance, watchedSquares, weaponOf, weaponReaches,
     type Action, type BattleEvent, type BattleState, type Fighter, type FogGhost, type ShotOdds,
 } from "./rules";
 import { ACTION_AIMS, rangeSquares, reactionPreviews, rollsToHit, shotOf, targetKindOf, targetsOf, type ActionKind } from "./tactics";
@@ -468,8 +468,8 @@ function enemiesOf(battle: BattleState, player: string): Fighter[] {
  * the target has.
  */
 function expectedHarm(battle: BattleState, attacker: Fighter, target: Fighter): number {
-    const weapon = weaponOf(attacker);
-    if (weapon.kind === "melee") return weaponReaches(battle, attacker, target.square) ? worthOf(target, strikeChance(battle, target) * Math.min(soaked(battle, attacker, target, weapon.damage), target.hp) / ROLL_SIDES) : 0;
+    const weapon = weaponOf(battle, attacker);
+    if (weapon.kind === "melee") return weaponReaches(battle, attacker, target.square) ? worthOf(target, strikeChance(battle, target) * Math.min(damageTo(battle, attacker, target), target.hp) / ROLL_SIDES) : 0;
     const odds = shotOdds(battle, attacker, target);
     if (!odds) return 0;
     return worthOf(target, expectedDamage(odds, target.hp));

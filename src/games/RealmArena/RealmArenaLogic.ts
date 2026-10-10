@@ -15,6 +15,7 @@ import {
     act,
     allied,
     areaAround,
+    armouredTeam,
     battleFrom,
     battleRounds,
     blastedIn,
@@ -98,8 +99,7 @@ export function battleOf(gs: IRealmArenaSpecificGameState, complete = false): Ba
         seats: gs.seats,
         coop: gs.coop !== undefined,
         rulesVersion: gs.rulesVersion,
-        mission: gs.coop?.mission,
-        enemy: gs.coop?.enemy,
+        armoured: armouredTeam(gs.coop?.mission, gs.rulesVersion, gs.coop?.enemy),
     });
 }
 

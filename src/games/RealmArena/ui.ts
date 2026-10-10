@@ -12,7 +12,7 @@ import { ABILITIES, CHARACTERS, EFFECT_IDS, EFFECTS, ITEM_IDS, ITEMS, type Abili
 import { CHARACTER_IDS } from "./roster";
 import { battlefieldOf } from "./maps";
 import { EFFECT_ART, ITEM_ART, type BurstKind, type Missile, type Sprite, type ThrownItem } from "./art";
-import { ACTION_POINTS, CENTRE, SCORED_FOR, squadSight, hasEffect, isStanding, isWarband, maxHpOf, moveAp, pickOf, reachOf, weaponOf, type BattleState, type Fighter, type MusterPick, type ShotResult, type ToldEvent } from "./rules";
+import { ACTION_POINTS, CENTRE, SCORED_FOR, squadSight, hasEffect, isStanding, isWarband, maxHpOf, moveAp, pickOf, reachOf, shoots, type BattleState, type Fighter, type MusterPick, type ShotResult, type ToldEvent } from "./rules";
 
 const LETTER_OF = new Map<Terrain, TerrainLetter>(
     (Object.entries(TERRAIN) as [TerrainLetter, Terrain][]).map(([letter, terrain]) => [terrain, letter]),
@@ -1146,7 +1146,7 @@ function timeline(field: Battlefield, events: readonly ToldEvent[], before: read
                 // Every character a turn ends on watch is told at once, so they say so together.
                 const fighter = as.get(event.fighter);
                 const when = events[index - 1]?.kind === "watching" && landed !== null ? landed : beat();
-                if (fighter) say(event.fighter, when, weaponOf(fighter).kind === "ranged" ? OVERWATCH_WORD : ON_GUARD_WORD);
+                if (fighter) say(event.fighter, when, shoots(fighter) ? OVERWATCH_WORD : ON_GUARD_WORD);
                 break;
             }
             case "fireball":

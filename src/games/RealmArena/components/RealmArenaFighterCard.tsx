@@ -5,7 +5,7 @@ import Section from '@/components/ui/Section';
 import Stat from '@/components/ui/Stat';
 import { ITEM_ART } from '@/games/RealmArena/art';
 import { ABILITIES, CHARACTERS, ITEMS } from '@/games/RealmArena/characters';
-import { abilitiesOf, ARMOUR, isStanding, isWarband, maxHpOf, weaponIn, type BattleState, type Fighter } from '@/games/RealmArena/rules';
+import { abilitiesOf, ARMOUR, isStanding, isWarband, maxHpOf, weaponOf, type BattleState, type Fighter } from '@/games/RealmArena/rules';
 import { abilityWait, effectsOn, watchStatus } from '@/games/RealmArena/ui';
 import { ABILITY_MARK, weaponLine, weaponMark } from '@/games/RealmArena/roster';
 import { RealmArenaStatusList } from './RealmArenaEffects';
@@ -13,7 +13,7 @@ import { SpriteImage } from './RealmArenaTerrain';
 
 interface RealmArenaFighterCardProps {
     fighter: Fighter;
-    /** The battle it's in, which says what it's fighting with (`weaponIn`) and whether it wears armour (`BattleState.armoured`). */
+    /** The battle it's in, which says what it's fighting with (`weaponOf`) and whether it wears armour (`BattleState.armoured`). */
     battle: BattleState;
     /** Its heading: the character's name and whose it is. */
     label: string;
@@ -32,7 +32,7 @@ interface RealmArenaFighterCardProps {
  */
 export default function RealmArenaFighterCard({ fighter, battle, label, children }: RealmArenaFighterCardProps) {
     const character = CHARACTERS[fighter.character];
-    const weapon = weaponIn(battle, fighter);
+    const weapon = weaponOf(battle, fighter);
     return (
         <Section label={label}>
             <div className="ag-stack">

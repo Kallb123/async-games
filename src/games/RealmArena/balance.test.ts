@@ -7,7 +7,7 @@ import { cloneRealmArenaState, nextWaveOf, warbandBudgetOf, waveOf, type IRealmA
 import { buildInitialRealmArenaState, gameStateToModel, settingsOf, stepOutcomeToModel, type RealmArenaSettings } from "./RealmArenaModels";
 import { meta } from "./meta";
 import {
-    abilityRules, ACTION_POINTS, act, ARMOUR, armouredTeam, soaked, weaponIn, weaponReaches, BALANCE_VERSION, battleFrom, check, fixedRolls, isBalanced, isLongShot, LONG_RANGE_DENOMINATOR, LONG_RANGE_NUMERATOR, LONG_RANGE_PENALTY, maxHpOf, MELEE_ACCURACY,
+    abilityRules, ACTION_POINTS, act, ARMOUR, armouredTeam, damageTo, weaponOf, weaponReaches, BALANCE_VERSION, battleFrom, check, fixedRolls, isBalanced, isLongShot, LONG_RANGE_DENOMINATOR, LONG_RANGE_NUMERATOR, LONG_RANGE_PENALTY, maxHpOf, MELEE_ACCURACY,
     musterHp, newFighter, shotOdds, startTurn, stoutTeam, strikeChance, teamHp, TEAM_HP_FACTOR, viewOf, warbandOwner,
     type Action, type BattleState, type Fighter,
 } from "./rules";
@@ -528,7 +528,7 @@ describe("the Mage Bolt", () => {
 
     it("hits 90% of the time out to 15 squares, in a battle under the rebalance", () => {
         expect(CHARACTERS.mage.weapon).toMatchObject({ name: "Mage Bolt", accuracy: 90, range: 15 });
-        expect(weaponIn({ balanced: true }, mage)).toMatchObject({ name: "Mage Bolt", accuracy: 90, range: 15 });
+        expect(weaponOf({ balanced: true }, mage)).toMatchObject({ name: "Mage Bolt", accuracy: 90, range: 15 });
         const state = balanced(ROW, [mage, target(15)]);
         expect(shotOdds(state, mage, target(15))).toMatchObject({ chance: 90, longShot: false });
         expect(shotOdds(balanced(ROW, [mage, target(16)]), mage, target(16))).toBeUndefined();
@@ -539,15 +539,15 @@ describe("the Mage Bolt", () => {
     });
 
     it("was a Bolt at 70% to a range of 10 in a battle from before it, and its option never changed", () => {
-        expect(weaponIn({}, mage)).toMatchObject({ name: "Bolt", kind: "ranged", damage: 3, accuracy: 70, range: 10 });
+        expect(weaponOf({}, mage)).toMatchObject({ name: "Bolt", kind: "ranged", damage: 3, accuracy: 70, range: 10 });
         expect(shotOdds(legacy(ROW, [mage, target(10)]), mage, target(10))?.chance).toBe(70);
         expect(shotOdds(legacy(ROW, [mage, target(11)]), mage, target(11))).toBeUndefined();
         expect(weaponReaches(legacy(ROW, [mage]), mage, at(ROW, 11, 0))).toBe(false);
         const frost = { ...mage, option: "frostBolt" as const };
-        for (const state of [{}, { balanced: true as const }]) expect(weaponIn(state, frost)).toMatchObject({ name: "Frost bolt", accuracy: 70, range: 10 });
+        for (const state of [{}, { balanced: true as const }]) expect(weaponOf(state, frost)).toMatchObject({ name: "Frost bolt", accuracy: 70, range: 10 });
         // Nobody else's weapon is gated.
         const archer = fighter(3, "a", "archer", at(ROW, 0, 0));
-        expect(weaponIn({}, archer)).toBe(CHARACTERS.archer.weapon);
+        expect(weaponOf({}, archer)).toBe(CHARACTERS.archer.weapon);
     });
 
     it("is on the stats sheet as the current rules say", () => {
@@ -571,19 +571,20 @@ describe("the team's armour against the Realm in Hold Out", () => {
         expect(armouredTeam("holdOut", undefined, "realm")).toBe(false);
         // A view that doesn't know the enemy yet (a random one unseen) wears none, so the board can't name it.
         expect(armouredTeam("holdOut", 7, undefined)).toBe(false);
-        const built = (extra: object) => battleFrom(OPEN, { fighters: [], coop: true, rulesVersion: 7, mission: "holdOut", enemy: "realm", ...extra });
+        // The battle takes the answer from whoever builds it, and only in co-op.
+        const built = (extra: object) => battleFrom(OPEN, { fighters: [], coop: true, rulesVersion: 7, armoured: armouredTeam("holdOut", 7, "realm"), ...extra });
         expect(built({}).armoured).toBe(true);
         expect(viewOf({ ...built({}), fog: true }, "a").armoured).toBe(true);
-        for (const extra of [{ enemy: "swarm" }, { enemy: undefined }, { mission: undefined }, { rulesVersion: LEGACY }, { coop: false }]) expect(built(extra), JSON.stringify(extra)).not.toHaveProperty("armoured");
+        for (const extra of [{ armoured: armouredTeam("holdOut", 7, "swarm") }, { armoured: armouredTeam("holdOut", 7, undefined) }, { coop: false }]) expect(built(extra), JSON.stringify(extra)).not.toHaveProperty("armoured");
     });
 
     it("takes 1 off a warband's hit on the team, never below 1, and nothing off anyone else's", () => {
         const state = armoured([team, knight]);
-        expect([4, 3, 1, 0].map(damage => soaked(state, knight, team, damage))).toEqual([3, 2, 1, 0]);
-        expect(soaked(state, team, knight, 4)).toBe(4);
-        expect(soaked(state, knight, fighter(3, warbandOwner(1), "archer", 0), 4)).toBe(4);
-        expect(soaked(state, team, fighter(3, "b", "archer", 0), 4)).toBe(4);
-        expect(soaked(balanced(OPEN, []), knight, team, 4)).toBe(4);
+        expect([4, 3, 1, 0].map(damage => damageTo(state, knight, team, damage))).toEqual([3, 2, 1, 0]);
+        expect(damageTo(state, team, knight, 4)).toBe(4);
+        expect(damageTo(state, knight, fighter(3, warbandOwner(1), "archer", 0), 4)).toBe(4);
+        expect(damageTo(state, team, fighter(3, "b", "archer", 0), 4)).toBe(4);
+        expect(damageTo(balanced(OPEN, []), knight, team, 4)).toBe(4);
     });
 
     it("applies to a strike, a shot, its graze, a guard, and a blast's splash", () => {
@@ -629,6 +630,37 @@ describe("the team's armour against the Realm in Hold Out", () => {
         const plain = balanced(OPEN, [knight, team]);
         expect(run(plain, warbandOwner(0), { kind: "attack", fighter: 2, target: 1 }, [1]).byId(1).hp).toBe(CHARACTERS.archer.hp - 4);
         expect(run(legacy(OPEN, [knight, team]), warbandOwner(0), { kind: "attack", fighter: 2, target: 1 }).byId(1).hp).toBe(CHARACTERS.archer.hp - 4);
+    });
+
+    it("reaches a team that hasn't yet seen a random enemy only with the faction beside it", async () => {
+        const game = makeGame(["a", "b"], {}, { fog: true, coop: { enemy: "realm", random: true, mission: "holdOut" } });
+        await musterAll(game);
+        const gs = game.specificGameState;
+        expect(gs.coop?.enemySeen).toBeUndefined();
+        for (const viewer of ["a", "b", null]) expect(gameStateToModel(gs, viewer, null)).not.toHaveProperty("enemy");
+
+        // An unseen Realm warband lands a blow on a team character; everyone else is down but a teammate far off.
+        const { field } = battleOf(game);
+        const victim = gs.fighters.find(one => one.owner === "a")!;
+        const striker = gs.fighters.find(one => one.owner === warbandOwner(0) && one.character === "manAtArms")!;
+        const far = gs.fighters.find(one => one.owner === "b")!;
+        const beside = [[1, 0], [-1, 0], [0, 1], [0, -1]].map(([dc, dr]) => (Math.floor(victim.square / field.width) + dr) * field.width + (victim.square % field.width) + dc)
+            .find(square => field.tiles[square]?.terrain.standable && field.tiles[square].elevation === field.tiles[victim.square].elevation && !gs.fighters.some(one => one.square === square))!;
+        gs.fighters = gs.fighters.map(one => one.id === striker.id ? { ...one, square: beside } : one.id === victim.id || one.id === far.id ? one : { ...one, hp: 0 });
+
+        const end = Object.assign(endTurnBy(game.currentTurn), { recordedEnemyActions: [{ kind: "attack", fighter: striker.id, target: victim.id }], recordedRolls: [1] });
+        const { outcome } = await play(game, end);
+        expect(outcome.validMove).toBe(true);
+        // The blow was armoured: 4 became 3.
+        expect((outcome as IRealmArenaOutcome).events).toContainEqual(expect.objectContaining({ kind: "struck", fighter: striker.id, target: victim.id, damage: CHARACTERS.manAtArms.weapon.damage - ARMOUR }));
+        expect(gs.fighters.find(one => one.id === victim.id)!.hp).toBe(teamHp(victim.character) - (CHARACTERS.manAtArms.weapon.damage - ARMOUR));
+        expect(gs.coop?.enemySeen).toBe(true);
+        // Whoever is told the reduced damage — in the response or the review — is told whom they fight in the same breath.
+        for (const viewer of ["a", "b", null]) {
+            expect(gameStateToModel(gs, viewer, null).enemy, `${viewer}`).toBe("realm");
+            const told = stepOutcomeToModel(outcome, viewer, gs)?.events ?? [];
+            if (viewer !== null) expect(told).toContainEqual(expect.objectContaining({ kind: "struck", damage: CHARACTERS.manAtArms.weapon.damage - ARMOUR }));
+        }
     });
 
     it("is played in a whole Hold Out against the Realm, from the settings, and not against the Swarm", async () => {

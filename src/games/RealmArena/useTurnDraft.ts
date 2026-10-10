@@ -3,7 +3,7 @@ import { useResettingState } from "@/utils/hooks/useResettingState";
 import { pathTo, type Reach } from "@/utils/games/battlefield/pathfinding";
 import type { Square } from "@/utils/games/battlefield/terrain";
 import { ABILITIES, ITEMS, type Ability, type Item } from "./characters";
-import { allied, blastedBy, check, demolishArea, fighterById, areaAround, isStanding, itemOf, reachOf, shotOdds, weaponOf, type Action, type BattleState, type Check, type Fighter } from "./rules";
+import { allied, blastedBy, check, demolishArea, fighterById, areaAround, isStanding, itemOf, reachOf, damageTo, shotOdds, type Action, type BattleState, type Check, type Fighter } from "./rules";
 import { ACTION_AIMS, attackOptions, hitChance, rangeKindOf, rangeSquares, reactionPreviews, rollsToHit, shotOf, targetKindOf, targetsOf, type AttackOption } from "./tactics";
 import { reachShading } from "./ui";
 
@@ -97,7 +97,7 @@ export function hpPreview(battle: BattleState, fighter: Fighter, { aim, targets 
     if (area && isAtSquare(aim)) {
         const damage = landsOf(fighter, aim)?.damage ?? 0;
         const caught = damage > 0 ? battle.fighters.filter(one => isStanding(one) && area.includes(one.square)) : [];
-        return new Map(caught.map(one => [one.id, -damage]));
+        return new Map(caught.map(one => [one.id, -damageTo(battle, fighter, one, damage)]));
     }
     const heals = HEAL_HP[aim];
     if (heals !== undefined) return new Map(targets.map(id => [id, heals]));
@@ -106,9 +106,9 @@ export function hpPreview(battle: BattleState, fighter: Fighter, { aim, targets 
     return new Map(targets.flatMap((id): [number, number][] => {
         const target = fighterById(battle, id);
         if (!target) return [];
-        if (aim === "shieldBash" || aim === "rend") return [[id, -(ABILITIES[aim].damage ?? 0)]];
+        if (aim === "shieldBash" || aim === "rend") return [[id, -damageTo(battle, fighter, target, ABILITIES[aim].damage)]];
         const shot = shotOf(aim);
-        return [[id, -((shot && shotOdds(battle, fighter, target, shot)?.damage) ?? weaponOf(fighter).damage)]];
+        return [[id, -((shot && shotOdds(battle, fighter, target, shot)?.damage) ?? damageTo(battle, fighter, target))]];
     }));
 }
 

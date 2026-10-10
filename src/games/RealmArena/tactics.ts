@@ -13,7 +13,7 @@
 import type { Square } from "@/utils/games/battlefield/terrain";
 import { ABILITIES, STRIKING_ABILITIES } from "./characters";
 import {
-    ACTION_POINTS, check, coverNextTo, fighterById, inRange, itemOf, nextTo, reactionsTo, shotOdds, soaked, strikeChance, weaponOf, weaponReaches,
+    ACTION_POINTS, check, coverNextTo, fighterById, inRange, itemOf, nextTo, reactionsTo, damageTo, shoots, shotOdds, strikeChance, weaponReaches,
     type Action, type BattleState, type Fighter, type ShotKind, type ShotOdds,
 } from "./rules";
 
@@ -190,10 +190,9 @@ export function reactionPreviews(state: BattleState, mover: Fighter, path: reado
     return reactionsTo(state, mover, path).flatMap(({ watcher: id, step }): ReactionPreview[] => {
         const watcher = fighterById(state, id);
         if (!watcher) return [];
-        const weapon = weaponOf(watcher);
-        if (weapon.kind === "melee") return [{ watcher, kind: "guard", chance: strikeChance(state, mover), damage: soaked(state, watcher, mover, weapon.damage) }];
+        if (!shoots(watcher)) return [{ watcher, kind: "guard", chance: strikeChance(state, mover), damage: damageTo(state, watcher, mover) }];
         const { battle: there, moved } = standingAt(state, mover, path[step]);
         const odds = shotOdds(there, watcher, moved, "overwatch");
-        return [{ watcher, kind: "overwatch", odds, chance: odds?.chance ?? 0, damage: odds?.damage ?? weapon.damage }];
+        return [{ watcher, kind: "overwatch", odds, chance: odds?.chance ?? 0, damage: odds?.damage ?? damageTo(state, watcher, moved) }];
     });
 }

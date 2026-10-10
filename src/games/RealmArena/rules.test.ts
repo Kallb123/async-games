@@ -1250,7 +1250,7 @@ describe("options (§23.2)", () => {
         const target = fighter(2, "b", "knight", at(field, 5, 3));
 
         it("does 2 instead of 3, at the bolt's odds, and slows on a hit", () => {
-            expect(weaponOf(mage)).toMatchObject({ damage: 2, accuracy: 70, range: 10 });
+            expect(weaponOf({}, mage)).toMatchObject({ damage: 2, accuracy: 70, range: 10 });
             const hit = run({ field, fighters: [mage, target] }, "a", { kind: "attack", fighter: 1, target: 2 }, [70]);
             expect(hit.events[0]).toMatchObject({ chance: 70, damage: 3, result: "hit" });
             expect(hit.byId(2)).toMatchObject({ hp: 9, effects: { slowed: 2 } });

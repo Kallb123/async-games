@@ -3717,9 +3717,10 @@ changes, the first three for Hold Out alone and the rest for every mode.
   board's bars, the unit boxes and the muster sheet read it too. Hold the
   Centre, a duel, a free-for-all and Solo's Hold the Centre are as they were.
 - **The team wears 1 armour against the Realm.** When the warbands are the
-  Realm's (a random enemy is resolved as the battle is created, so it is
+  Realm's — the Renegades, as the team knows them, and as the player-facing
+  copy says (a random enemy is resolved as the battle is created, so it is
   already known to the rules), every hit a warband lands on one of the team's
-  characters does `ARMOUR` (1) less, never under 1 (`soaked`, switched on by
+  characters does `ARMOUR` (1) less, never under 1 (`damageTo`, the one place it's taken off — rules, planner and previews all read it — switched on by
   `BattleState.armoured`, built by `battleFrom` from the mission, the enemy and
   the battle's rules version). It counts for everything an enemy deals by a
   blow: weapon hits and their grazes (a graze is half the blow, then armoured),
@@ -3772,7 +3773,7 @@ changes, the first three for Hold Out alone and the rest for every mode.
   range of 15, not the Bolt's 70% and 10. (The Frost bolt option, which
   replaces it, is as it was: 70%, range 10.) A battle from before the
   rebalance keeps the old Bolt, the weapon the rules read for it being
-  `weaponIn(state, fighter)`; the board's weapon lines for it read the same.
+  `weaponOf(state, fighter)`, the only way to read a weapon; the board's weapon lines for it read the same.
 - **Heal is once a turn.** No cooldown, but a Cleric can't Heal twice in one of
   its owner's turns: `Ability.oncePerTurn`, written on the fighter as
   `usedThisTurn` and wiped as its owner's next turn begins (`startTurn`). The

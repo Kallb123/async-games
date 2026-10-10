@@ -7,7 +7,7 @@ import PendingTag from '@/components/ui/PendingTag';
 import Stat from '@/components/ui/Stat';
 import { ABILITIES, CHARACTERS, EFFECTS, type Ability, type AbilityId, type Affliction, type Item } from '@/games/RealmArena/characters';
 import { ITEM_ART } from '@/games/RealmArena/art';
-import { ATTACK_AP, HUNKER_AP, REACTION_COST, abilitiesOf, allied, check, fighterById, hasEffect, healedEffects, isStanding, itemOf, LONG_RANGE_PENALTY, maxHpOf, shotEffect, shotOdds, smokeSquares, strikeChance, weaponIn, weaponOf, type Action, type BattleState, type Fighter } from '@/games/RealmArena/rules';
+import { ATTACK_AP, HUNKER_AP, REACTION_COST, abilitiesOf, allied, check, damageTo, fighterById, hasEffect, healedEffects, isStanding, itemOf, LONG_RANGE_PENALTY, maxHpOf, shotEffect, shotOdds, smokeSquares, strikeChance, weaponOf, type Action, type BattleState, type Fighter } from '@/games/RealmArena/rules';
 import { abilityWait, whoseName } from '@/games/RealmArena/ui';
 import { rangeSquares, shotOf, targetsOf, type TargetKind } from '@/games/RealmArena/tactics';
 import { ABILITY_MARK, CHARACTER_MARK, weaponLine, weaponMark } from '@/games/RealmArena/roster';
@@ -130,7 +130,7 @@ export function RealmArenaAim({ draft, battle, player, nameFor, pendingTarget, o
 export default function RealmArenaTurnSheet({ draft, battle, player, pendingTarget }: RealmArenaTurnSheetProps) {
     const { fighter, aim } = draft;
     const character = CHARACTERS[fighter.character];
-    const weapon = weaponIn(battle, fighter);
+    const weapon = weaponOf(battle, fighter);
     const busy = pendingTarget !== null;
     const needs = (ap: number) => fighter.ap < ap ? `Needs ${ap} AP` : undefined;
     const reachable = (kind: TargetKind, least = 1) =>
@@ -292,7 +292,6 @@ function Detail({ draft, battle, name, ap, target }: DetailProps) {
     const { fighter, aim } = draft;
     const hint = (text: React.ReactNode) => <p className="ag-hint">{text}</p>;
     const Name = (id: number) => capitalise(name(id));
-    const strike = weaponOf(fighter).damage;
 
     if (draft.path) return <MoveDetail draft={draft} name={name} ap={ap} />;
     if (draft.area) {
@@ -311,7 +310,9 @@ function Detail({ draft, battle, name, ap, target }: DetailProps) {
     }
     if (aim === 'cleave') {
         const chances = draft.targets.map(id => { const hit = fighterById(battle, id); return hit ? `${strikeChance(battle, hit)}%` : ''; });
-        return hint(`Strikes ${andList(draft.targets.map(name))} for ${strike} each, at ${andList(chances)} to hit.`);
+        const damages = draft.targets.map(id => { const hit = fighterById(battle, id); return hit ? damageTo(battle, fighter, hit) : 0; });
+        const each = new Set(damages).size === 1 ? `${damages[0]} each` : andList(damages.map(String));
+        return hint(`Strikes ${andList(draft.targets.map(name))} for ${each}, at ${andList(chances)} to hit.`);
     }
     if (!target) return null;
     const max = maxHpOf(target);
@@ -329,11 +330,11 @@ function Detail({ draft, battle, name, ap, target }: DetailProps) {
 
     const health = `${Name(target.id)} · ${target.hp}/${max} HP`;
     const lands = strikeChance(battle, target);
-    if (aim === 'shieldBash') return hint(`${health} · ${lands}% to hit, for ${ABILITIES.shieldBash.damage}, and a hit stuns them.`);
-    if (aim === 'rend') return hint(`${health} · ${lands}% to hit, for ${ABILITIES.rend.damage}.`);
+    if (aim === 'shieldBash') return hint(`${health} · ${lands}% to hit, for ${damageTo(battle, fighter, target, ABILITIES.shieldBash.damage)}, and a hit stuns them.`);
+    if (aim === 'rend') return hint(`${health} · ${lands}% to hit, for ${damageTo(battle, fighter, target, ABILITIES.rend.damage)}.`);
     const shot = shotOf(aim);
     const odds = shot && shotOdds(battle, fighter, target, shot);
-    if (!shot || !odds) return hint(`${health} · ${lands}% to hit, for ${strike}.`);
+    if (!shot || !odds) return hint(`${health} · ${lands}% to hit, for ${damageTo(battle, fighter, target)}.`);
     const effect = shotEffect(fighter, shot);
     return (
         <>
