@@ -92,7 +92,11 @@ export default function RootLayout({
     <ClerkProvider appearance={clerkAppearance} signInUrl="/login" signUpUrl="/signup">
       {/* `data-env="dev"` is what ag-theme.css hangs the 🚧 top-bar badge off,
           so every screen is marked without any of them opting in. */}
-      <html lang="en" className={bricolageGrotesque.variable} data-env={isDevDeployment ? "dev" : undefined}>
+      {/* `suppressHydrationWarning`: the home page's inline script sets
+          `data-ag-signed-in` on this element before React hydrates, which is the
+          point of it (see `HomeScreen`). It only silences this element's own
+          attributes, not anything inside it. */}
+      <html lang="en" className={bricolageGrotesque.variable} data-env={isDevDeployment ? "dev" : undefined} suppressHydrationWarning>
         <body>
           <Providers>
             <div className="ag-app">
