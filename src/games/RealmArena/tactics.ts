@@ -13,7 +13,7 @@
 import type { Square } from "@/utils/games/battlefield/terrain";
 import { ABILITIES, STRIKING_ABILITIES } from "./characters";
 import {
-    ACTION_POINTS, check, coverNextTo, fighterById, inRange, itemOf, nextTo, reactionsTo, damageTo, shoots, shotOdds, strikeChance, weaponReaches,
+    ACTION_POINTS, check, coverNextTo, fighterById, inRange, itemOf, nextTo, oddsBreakdown, reactionsTo, damageTo, shoots, shotOdds, strikeChance, weaponReaches,
     type Action, type BattleState, type Fighter, type ShotKind, type ShotOdds,
 } from "./rules";
 
@@ -165,7 +165,7 @@ export function attackOptions(state: BattleState, fighter: Fighter, square: Squa
  * melee weapon, or an ability that strikes — a strike's (`strikeChance`).
  */
 export function hitChance(state: BattleState, fighter: Fighter, target: Fighter, shot: ShotKind = "attack"): number {
-    return shotOdds(state, fighter, target, shot)?.chance ?? strikeChance(state, target);
+    return oddsBreakdown(state, fighter, target, shot).chance;
 }
 
 /** One reaction a move would set off, and what it would do to the mover (§13.4). */

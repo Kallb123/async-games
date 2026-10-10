@@ -572,11 +572,6 @@ export function landedSmoke(throwers: readonly Fighter[]): Square[] {
     return throwers.flatMap(thrower => thrower.smoke !== undefined ? [thrower.smoke] : []);
 }
 
-/**
- * The odds of a shot from where the attacker stands, or undefined when it
- * can't take one: it fights in melee, the target is out of range, or it can't
- * see the target (§13.3).
- */
 /** The kinds of shot: an attack, an aimed shot, a crippling shot — at an attack's odds — and one on overwatch. */
 export type ShotKind = "attack" | "aimedShot" | "cripplingShot" | "overwatch";
 
@@ -591,12 +586,44 @@ export function shotEffect(shooter: Fighter, kind: ShotKind): Affliction | undef
     return weapon.kind === "ranged" ? weapon.effect : undefined;
 }
 
-/** What the effects on a character add to every shot at it: Marked's, Corroded's (§23.2, §31.2). */
-function effectsHitBonus(target: Fighter): number {
-    return EFFECT_IDS.reduce((total, effect) => {
+/**
+ * One thing that moves a chance to hit from its base: the amount it adds (or,
+ * below zero, takes off) and what it is, so a screen can say why without
+ * redoing the sum. The words are the UI's (`oddsLines` in ui.ts).
+ */
+export type OddsFactor =
+    | { kind: "cover"; amount: number; cover: Cover; /** What doubled it, when something did. */ doubled?: "hunkered" | "far"; /** Whether it's a shield wall's, standing in for none. */ shield: boolean }
+    | { kind: "highGround" | "smoke" | "aimedShot" | "overwatch"; amount: number }
+    | { kind: "effect"; amount: number; effect: EffectId };
+
+/** A chance to hit worked out once: where it starts, what moved it and where it came to. */
+export interface OddsBreakdown {
+    /** The weapon's accuracy, or a strike's `MELEE_ACCURACY`. */
+    base: number;
+    /** Everything that moved it, in the order they apply. Zero amounts are left out. */
+    factors: OddsFactor[];
+    /** `base` plus every factor's amount, before it's held to 0–100. */
+    raw: number;
+    /** Percent to hit, 0–100: `raw`, held there. */
+    chance: number;
+    /** Percent to graze on top of the chance to hit: a shot's only, a strike has no graze. */
+    grazeChance?: number;
+}
+
+const clampPercent = (percent: number) => Math.min(ROLL_SIDES, Math.max(0, percent));
+
+/** Sums a chance's base and factors into its breakdown. */
+function breakdownOf(base: number, factors: OddsFactor[]): OddsBreakdown {
+    const raw = factors.reduce((total, factor) => total + factor.amount, base);
+    return { base, factors, raw, chance: clampPercent(raw) };
+}
+
+/** What each effect on a character adds to every shot at it, one factor per effect: Marked's, Corroded's (§23.2, §31.2). */
+function effectFactors(target: Fighter): OddsFactor[] {
+    return EFFECT_IDS.flatMap((effect): OddsFactor[] => {
         const { hitBonus } = EFFECTS[effect] as Effect;
-        return total + (hitBonus !== undefined && hasEffect(target, effect) ? hitBonus : 0);
-    }, 0);
+        return hitBonus !== undefined && hasEffect(target, effect) ? [{ kind: "effect", amount: hitBonus, effect }] : [];
+    });
 }
 
 /**
@@ -605,38 +632,74 @@ function effectsHitBonus(target: Fighter): number {
  * always when the battle predates `BALANCE_VERSION`. Cover, height and smoke
  * are a ranged shot's: whoever is next to the target is past them.
  */
-export function strikeChance(state: Pick<BattleState, "balanced">, target: Fighter): number {
-    return state.balanced ? Math.min(ROLL_SIDES, Math.max(0, MELEE_ACCURACY + effectsHitBonus(target))) : ROLL_SIDES;
+export function strikeBreakdown(state: Pick<BattleState, "balanced">, target: Fighter): OddsBreakdown {
+    return state.balanced ? breakdownOf(MELEE_ACCURACY, effectFactors(target)) : breakdownOf(ROLL_SIDES, []);
 }
 
-export function shotOdds(state: BattleState, attacker: Fighter, target: Fighter, kind: ShotKind = "attack"): ShotOdds | undefined {
+/** A strike's chance to hit, 0–100 (`strikeBreakdown`). */
+export function strikeChance(state: Pick<BattleState, "balanced">, target: Fighter): number {
+    return strikeBreakdown(state, target).chance;
+}
+
+/** A shot's chance worked out once: its breakdown, the graze band above it, and the cover it was read against. */
+interface ShotBreakdown extends OddsBreakdown {
+    grazeChance: number;
+    cover: Cover;
+    far: boolean;
+    hunkered: boolean;
+}
+
+function shotBreakdown(state: BattleState, attacker: Fighter, target: Fighter, weapon: Extract<Weapon, { kind: "ranged" }>, kind: ShotKind): ShotBreakdown {
     const { field } = state;
-    const weapon = weaponOf(state, attacker);
-    if (weapon.kind !== "ranged") return undefined;
-    if (!inRange(field, attacker.square, target.square, weapon.range)) return undefined;
     // Measured as the range is. A hunkered target's cover is doubled already, and the two don't stack.
     const far = !!state.balanced && distance(field, attacker.square, target.square) > FAR_SHOT_DISTANCE;
 
     const sideCover = coverAgainst(field, target.square, attacker.square);
-    const cover = sideCover === "none" && shielded(state, target) ? "half" : sideCover;
-    const highGround = riseOf(field, attacker.square, target.square) >= HIGH_GROUND_RISE;
+    const shield = sideCover === "none" && shielded(state, target);
+    const cover = shield ? "half" : sideCover;
     const hunkered = hasEffect(target, "hunkered");
-    const raw = weapon.accuracy
-        - COVER_PENALTY[cover] * (hunkered || far ? 2 : 1)
-        + (highGround ? HIGH_GROUND_BONUS : 0)
-        + effectsHitBonus(target)
-        - (smokeSquares(state).has(target.square) ? ITEMS.smokePot.hitPenalty : 0)
-        + (kind === "aimedShot" ? ABILITIES.aimedShot.hitBonus : 0)
-        - (kind === "overwatch" ? OVERWATCH_PENALTY : 0);
-    const clamp = (percent: number) => Math.min(ROLL_SIDES, Math.max(0, percent));
-    const chance = clamp(raw);
+    const doubled = hunkered ? "hunkered" : far ? "far" : undefined;
+    const factors: OddsFactor[] = [
+        { kind: "cover", amount: -COVER_PENALTY[cover] * (doubled ? 2 : 1), cover, doubled, shield },
+        { kind: "highGround", amount: riseOf(field, attacker.square, target.square) >= HIGH_GROUND_RISE ? HIGH_GROUND_BONUS : 0 },
+        ...effectFactors(target),
+        { kind: "smoke", amount: smokeSquares(state).has(target.square) ? -ITEMS.smokePot.hitPenalty : 0 },
+        { kind: "aimedShot", amount: kind === "aimedShot" ? ABILITIES.aimedShot.hitBonus : 0 },
+        { kind: "overwatch", amount: kind === "overwatch" ? -OVERWATCH_PENALTY : 0 },
+    ];
+    const breakdown = breakdownOf(weapon.accuracy, factors.filter(factor => factor.amount !== 0));
+    // Grazes are the rolls that miss by `GRAZE_BAND` or less, counted from the
+    // raw chance: a shot at −10% can't so much as graze.
+    return { ...breakdown, grazeChance: clampPercent(breakdown.raw + GRAZE_BAND) - breakdown.chance, cover, far, hunkered };
+}
+
+/**
+ * How a character's chance to hit an enemy comes to what it is — a shot's
+ * (`shotOdds`), or, with a melee weapon, a strike's (`strikeBreakdown`): the
+ * one sum the turn sheet's "why" reads, so it can't drift from the chance shown.
+ * Mirrors `hitChance` in tactics.ts.
+ */
+export function oddsBreakdown(state: BattleState, attacker: Fighter, target: Fighter, kind: ShotKind = "attack"): OddsBreakdown {
+    const weapon = weaponOf(state, attacker);
+    if (weapon.kind === "ranged" && inRange(state.field, attacker.square, target.square, weapon.range)) return shotBreakdown(state, attacker, target, weapon, kind);
+    return strikeBreakdown(state, target);
+}
+
+/**
+ * The odds of a shot from where the attacker stands, or undefined when it
+ * can't take one: it fights in melee, the target is out of range, or it can't
+ * see the target (§13.3).
+ */
+export function shotOdds(state: BattleState, attacker: Fighter, target: Fighter, kind: ShotKind = "attack"): ShotOdds | undefined {
+    const weapon = weaponOf(state, attacker);
+    if (weapon.kind !== "ranged") return undefined;
+    if (!inRange(state.field, attacker.square, target.square, weapon.range)) return undefined;
+    const { chance, grazeChance, cover, far, hunkered } = shotBreakdown(state, attacker, target, weapon, kind);
     const flanked = cover === "none";
     const struck = weapon.damage + (flanked ? FLANK_BONUS : 0);
     // What lands, armour taken off where the team wears it: a graze is half of the blow before it.
     const damage = damageTo(state, attacker, target, struck);
-    // Grazes are the rolls that miss by `GRAZE_BAND` or less, counted from the
-    // raw chance: a shot at −10% can't so much as graze.
-    return { chance, farCover: far && !hunkered && cover !== "none", grazeChance: clamp(raw + GRAZE_BAND) - chance, damage, grazeDamage: damageTo(state, attacker, target, Math.ceil(struck / 2)), cover, flanked };
+    return { chance, farCover: far && !hunkered && cover !== "none", grazeChance, damage, grazeDamage: damageTo(state, attacker, target, Math.ceil(struck / 2)), cover, flanked };
 }
 
 /** A roll of 1–100 against a shot's odds: at or under the chance to hit hits, the graze band above it grazes, and anything more misses. */

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { coverAgainst } from "./cover";
+import { coverAgainst, coverBySide } from "./cover";
 import { at, fieldOf, hillOf } from "./testFixtures";
 
 describe("coverAgainst", () => {
@@ -81,5 +81,54 @@ describe("coverAgainst", () => {
     it("measures the rise from where the target stands, so raised ground beside it level with it covers nothing", () => {
         const field = hillOf([".", ".", "."], ["0", "4", "4"]);
         expect(coverAgainst(field, at(field, 0, 2), at(field, 0, 0))).toBe("none");
+    });
+});
+
+describe("coverBySide", () => {
+    it("gives full from a wall, half from rubble and none from open ground, side by side", () => {
+        const field = fieldOf(
+            ".......",
+            ".......",
+            "...#...",
+            "..,.,..",
+            ".......",
+            ".......",
+            ".......",
+        );
+        expect(coverBySide(field, at(field, 3, 3))).toEqual({ north: "full", west: "half", east: "half", south: "none" });
+    });
+
+    it("counts trees as full cover however low they stand", () => {
+        const field = fieldOf("...", ".T.", "...");
+        expect(coverBySide(field, at(field, 1, 2))).toMatchObject({ north: "full" });
+    });
+
+    it("reads a neighbour's cover from how far it rises above the square", () => {
+        // The foot of a full-height rise is covered by it; the top of it, looking down, by nothing.
+        const field = hillOf(["...", "...", "..."], ["000", "040", "000"]);
+        expect(coverBySide(field, at(field, 1, 0)).south).toBe("full");
+        expect(coverBySide(field, at(field, 1, 2)).north).toBe("full");
+        expect(coverBySide(field, at(field, 1, 1))).toEqual({ north: "none", east: "none", south: "none", west: "none" });
+    });
+
+    it("has none off the edge of the map", () => {
+        const field = fieldOf("...", "...", "...");
+        expect(coverBySide(field, at(field, 0, 0))).toEqual({ north: "none", east: "none", south: "none", west: "none" });
+    });
+
+    it("agrees with coverAgainst for an attacker straight down a side", () => {
+        const field = fieldOf(
+            ".......",
+            ".......",
+            "...#...",
+            "..,....",
+            ".......",
+            ".......",
+            ".......",
+        );
+        const target = at(field, 3, 3);
+        const sides = coverBySide(field, target);
+        expect(coverAgainst(field, target, at(field, 3, 0))).toBe(sides.north);
+        expect(coverAgainst(field, target, at(field, 0, 3))).toBe(sides.west);
     });
 });
