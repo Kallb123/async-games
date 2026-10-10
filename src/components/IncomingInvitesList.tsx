@@ -2,7 +2,7 @@
 
 import { useAuth } from "@clerk/nextjs";
 import { IInvitationResponse } from "@/utils/mongodb/InvitationData";
-import moment from 'moment';
+import { formatTimeAgo } from "@/utils/ui/time";
 import { useToast } from "@/components/ToastContext";
 import Avatar from "@/components/ui/Avatar";
 import ListSection from "@/components/ui/ListSection";
@@ -66,7 +66,7 @@ export default function IncomingInviteList({ invites, isLoading, onChanged }: In
                             <div style={{ font: "500 13px/1.4 var(--ag-font)", color: "var(--ag-ink)" }}>
                                 <strong style={{ fontWeight: 800 }}>{invite.sender}</strong> invited you to<br />
                                 <strong style={{ fontWeight: 800 }}>{invite.gameFriendlyName}</strong>
-                                <span style={{ color: "var(--ag-ink-softer)", fontWeight: 500 }}> · {moment(invite.timestamp).fromNow()}</span>
+                                <span style={{ color: "var(--ag-ink-softer)", fontWeight: 500 }}> · {formatTimeAgo(invite.timestamp)}</span>
                             </div>
                         </div>
                         <button

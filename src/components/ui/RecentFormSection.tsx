@@ -10,7 +10,7 @@ import ThumbBadge from "@/components/ui/ThumbBadge";
 import useAnimatedList from "@/utils/hooks/useAnimatedList";
 import { GAME_META } from "@/utils/ui/games";
 import type { IRecentMatch, MatchOutcome } from "@/app/api/stats/route";
-import moment from 'moment';
+import { formatTimeAgo } from "@/utils/ui/time";
 
 const OUTCOME_LABEL: Record<MatchOutcome, string> = { win: "W", loss: "L", draw: "D" };
 
@@ -51,7 +51,7 @@ export default function RecentFormSection({ matches, isLoading, isRefreshing = f
                                 key={match.gameId}
                                 type="button"
                                 className={`ag-result-chip${shared ? " ag-result-chip--shared" : ""}`}
-                                title={`${meta?.name ?? match.url} · ${moment(match.endedAt).fromNow()}${shared ? " · you played too" : ""}`}
+                                title={`${meta?.name ?? match.url} · ${formatTimeAgo(match.endedAt)}${shared ? " · you played too" : ""}`}
                                 onClick={() => setSelected(match)}
                             >
                                 <span className={`ag-result-dot ag-result-dot--${match.outcome}`}>
