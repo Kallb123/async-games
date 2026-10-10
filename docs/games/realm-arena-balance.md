@@ -215,6 +215,7 @@ except enemy −2 steps, which is new.
 | restore 1 | 79% · r12.4 | 100% · — | 83% · r12.8 | 96% · r12.0 |
 | enemy −1 step | 25% · r12.6 | 54% · r12.5 | 13% · r12.1 | 63% · r12.0 |
 | enemy −2 steps | 42% · r11.9 | 58% · r12.8 | 42% · r12.9 | 33% · r12.8 |
+| **enemy −1 step, and armour 1 against the Realm only** | **71% · r13.0** | **54% · r12.5** | **58% · r12.9** | **63% · r12.0** |
 
 The same 2-player cells at 15 rounds, for comparison: 0% / 8% alone, 17% /
 50% with restore 1, 4% / 17% with enemy −1 step.
@@ -234,11 +235,27 @@ The same 2-player cells at 15 rounds, for comparison: 0% / 8% alone, 17% /
   on its own side. So the Swarm's smaller squads aren't simply weaker, and
   a step down the ladder isn't a clean difficulty knob for it. The cells
   are ±20 points, so this wants a bigger run before anyone leans on it.
+- **Enemy −1 step with armour against the Realm alone is the most even set
+  found: 54–71% in every cell.** The Swarm cells are enemy −1 step's,
+  unchanged, since armour is off against them. Against the Realm, armour 1
+  lifts 2 players from 25% to 71% and 3 players from 13% to 58%. That's the
+  faction split point 4 found turned to use: armour is worth much more
+  against the Swarm's 2-damage hits than the Realm's 4s, so giving it only
+  where it's needed keeps the Swarm where it was. The cells sit within
+  each other's ±20, so they're a match within what 24 battles can tell.
+  How it reads to a player is the open question: a rule that only applies
+  against one enemy wants a reason (the Realm's deserters fighting the
+  keep's own drill, so the defenders know their blows), or a version that
+  isn't faction-shaped: armour against melee only, say, or −1 against any
+  hit of 4 or more, which in practice is the Realm's swords, maces and
+  Rend.
 - **Where that leaves a default:** team HP ×1.5 and 13 rounds for every team
   size, plus restore 1, is the most even set found, with something taken
   off to bring it back from near-certain. Enemy steps are better kept for
   the difficulty setting, which already moves warbands up and down the
-  ladder (§30.5), than for Normal itself.
+  ladder (§30.5), than for Normal itself. The alternative is the even set
+  above (enemy −1 step, armour against the Realm), which needs no restore
+  at all.
 
 ## Where this points
 
