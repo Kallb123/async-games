@@ -192,11 +192,53 @@ Win rate · average round overrun in, over 24 battles a cell.
    for even odds against the Realm. No one multiplier fits both team sizes,
    so the 2-player gap (point 8) is now the bigger imbalance than the
    enemy's faction.
-8. **Two players have it harder than three, with the same changes.** Check
-   2p vs Realm in every row. A 2-player battle runs two rounds past the last
-   wave (15 against 13), and the Sacked Fort for two splits the edge between
-   two warbands rather than three. It's open which of the two matters; a
-   2-player run with the last wave moved, or a 13-round battle, would tell.
+8. **Two players had it harder than three because their battle ran two
+   rounds longer.** A 2-player battle lasted 15 rounds against 3 players' 13,
+   with the last wave at round 13 in both, so 2 players had two more rounds
+   of the biggest wave to survive. Cutting it to 13 rounds closes most of the
+   gap (see *Team HP +50% as the new default*, below): with team HP ×1.5 and
+   restore 1, 2 players go from 17% / 50% to 79% / 100% against the Realm /
+   Swarm, beside 3 players' 83% / 96%. The Sacked Fort's two-warband split
+   doesn't seem to matter.
+
+## Team HP +50% as the new default
+
+Taking team HP ×1.5 as given, and 2-player Hold Out cut to 13 rounds (the
+rule's real version would cut Hold Out alone, and Solo, which lasts a duel's
+rounds, would come along unless it's kept apart). 3-player battles already
+lasted 13 rounds, so their cells are the earlier runs with the same seeds,
+except enemy −2 steps, which is new.
+
+| Team HP ×1.5, 13 rounds, plus | 2p vs Realm | 2p vs Swarm | 3p vs Realm | 3p vs Swarm |
+|---|---|---|---|---|
+| nothing | 8% · r12.2 | 29% · r12.1 | 17% · r12.6 | 54% · r12.1 |
+| restore 1 | 79% · r12.4 | 100% · — | 83% · r12.8 | 96% · r12.0 |
+| enemy −1 step | 25% · r12.6 | 54% · r12.5 | 13% · r12.1 | 63% · r12.0 |
+| enemy −2 steps | 42% · r11.9 | 58% · r12.8 | 42% · r12.9 | 33% · r12.8 |
+
+The same 2-player cells at 15 rounds, for comparison: 0% / 8% alone, 17% /
+50% with restore 1, 4% / 17% with enemy −1 step.
+
+- **13 rounds is worth a lot to 2 players on its own:** every 2-player cell
+  rises by 8–60 points, and they now land close to 3 players' with the same
+  levers.
+- **Restore 1 is now even across team sizes and factions (79–100%)**, but
+  too easy for the planner, and people should do better still. A Normal
+  built on it needs pulling back a little: restore 1 with team HP ×1.25,
+  say, or the rally (§30.11) dropped now that downed characters come back.
+- **A smaller enemy is the gentler lever, and a noisy one.** −1 step lands
+  2 players at 25% / 54% and 3 players at 13% / 63%. −2 steps evens the
+  Realm (42% for both team sizes) but makes 3 players vs the Swarm *harder*
+  (33%, against 63% at −1 step). The 60-point Swarm squad (a Ravager, a
+  Skitterling and two Spitters) is half Spitters, with no Bloater to burst
+  on its own side. So the Swarm's smaller squads aren't simply weaker, and
+  a step down the ladder isn't a clean difficulty knob for it. The cells
+  are ±20 points, so this wants a bigger run before anyone leans on it.
+- **Where that leaves a default:** team HP ×1.5 and 13 rounds for every team
+  size, plus restore 1, is the most even set found, with something taken
+  off to bring it back from near-certain. Enemy steps are better kept for
+  the difficulty setting, which already moves warbands up and down the
+  ladder (§30.5), than for Normal itself.
 
 ## Where this points
 
@@ -218,9 +260,10 @@ Win rate · average round overrun in, over 24 battles a cell.
   (point 6), but doubling the team's alone is the strongest lever found
   (point 7). With restore 1, ×1.5 already makes 3 players near-certain and
   ×2 is needed for 2 players to have even odds against the Realm. So either
-  tune it per team size (×2 for two, ×1.25–1.5 for three), or find what
-  makes 2 players' battle harder (point 8) and fix that, then use one
-  multiplier. A real version also has to show the team's larger HP on the
+  tune it per team size, or find what makes 2 players' battle harder and
+  fix that, then use one multiplier. It was the length (point 8): with
+  2-player Hold Out cut to 13 rounds, one multiplier fits both (*Team HP
+  +50% as the new default*). A real version also has to show the team's larger HP on the
   board (`ui.ts` reads `CHARACTERS` for the HP bar), and say why a Knight
   has 24 HP in Hold Out and 12 everywhere else: something like the keep's
   defenders being *Steadfast*.
@@ -249,6 +292,7 @@ For re-running: each was an environment switch in a scratch worktree.
   `warbandBudget` (`characters.ts`), with `rung` clamped to the ladder.
 - **No growth:** `waveStrength` with no extra characters.
 - **Waves every 4:** `WAVE_EVERY` in `rules.ts`.
+- **13 rounds for 2 players:** `battleRounds` in `rules.ts` answering 13 for two seats (and so for Solo, which reads two). Only co-op battles were run, so nothing else noticed.
 - **Team HP ×*k*:** a `maxHpOf(fighter)` in `rules.ts`, the character's HP, times *k* unless `isWarband(fighter.owner)`, read everywhere a full HP was read from `CHARACTERS`: `newFighter`, the heal checks and `mend`, Raise, the rally, the restore, and the planner's `worthOf` (so a team HP is worth half as much to it).
 - **HP ×*k*:** every `CHARACTERS[c].hp` scaled and rounded as the table loads.
 
