@@ -220,7 +220,7 @@ The same 2-player cells at 15 rounds, for comparison: 0% / 8% alone, 17% /
 50% with restore 1, 4% / 17% with enemy −1 step.
 
 - **13 rounds is worth a lot to 2 players on its own:** every 2-player cell
-  rises by 8–60 points, and they now land close to 3 players' with the same
+  rises by 8–62 points, and they now land close to 3 players' with the same
   levers.
 - **Restore 1 is now even across team sizes and factions (79–100%)**, but
   too easy for the planner, and people should do better still. A Normal
