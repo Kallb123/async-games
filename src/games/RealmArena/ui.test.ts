@@ -1869,6 +1869,7 @@ describe("eventLines as sentences", () => {
     it("tells who healed whom, and what a draught was given to", () => {
         expect(bobSees({ kind: "healed", fighter: 3, target: 0, hp: 3 })).toBe("Alice's Cleric healed Alice's Archer for 3");
         expect(bobSees({ kind: "healed", fighter: 3, target: 3, hp: 3, via: "purify" })).toBe("Alice's Cleric purified itself for 3");
+        expect(bobSees({ kind: "healed", fighter: 3, target: 3, hp: 4 })).toBe("Alice's Cleric healed itself for 4");
         expect(bobSees({ kind: "healed", fighter: 0, target: 0, hp: 3, via: "draught" })).toBe("Alice's Archer drank a healing draught for 3");
         expect(bobSees({ kind: "healed", fighter: 0, target: 2, hp: 3, via: "draught" })).toBe("Alice's Archer gave Alice's Mage a healing draught for 3");
     });

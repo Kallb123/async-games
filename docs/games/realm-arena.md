@@ -707,7 +707,7 @@ games are named for. It would also be Defender of the Realm's first faction.
 | **Archer** | Long range; the overwatch specialist | 6 | 6 | Bow, 80%, range 20, 3 | **Aimed shot:** +20% to hit (3 AP, 2 turns) | 20 |
 | **Scout** | Fastest and fragile; the flanker | 8 | 6 | Knives, melee, 3 | **Sneak:** move without setting off reactions (2 AP a move, no cooldown) | 20 |
 | **Mage** | Fragile; hits an area | 6 | 5 | Mage Bolt, 80%, range 12, 3 | **Fireball:** 3 damage to every character in a 3×3 area, friend or foe, up to 12 squares away, with no roll (3 AP, 3 turns) | 30 |
-| **Cleric** | Support | 6 | 7 | Staff, melee, 2 | **Heal:** restore 4 HP to an ally they can see within 12 squares (2 AP, once a turn, no cooldown). **Raise:** bring a downed ally back at half HP (3 AP, 4 turns) | 25 |
+| **Cleric** | Support | 6 | 7 | Staff, melee, 2 | **Heal:** restore 4 HP to themselves or an ally they can see within 12 squares (2 AP, once a turn, no cooldown). **Raise:** bring a downed ally back at half HP (3 AP, 4 turns) | 25 |
 
 **The budget:** 100 points each for two players, 80 for three, and 70 each for
 four (free-for-all or teams). That's 4–6 characters at two players and 3–4 at
@@ -726,7 +726,7 @@ open. All are first guesses for playtesting, kept in `characters.ts` and
 - **"Next to" is touching, side or corner**, unless high cover fills both
   corners between the two squares. It's what melee, guard, a healing draught
   and raising need. A heal is aimed as a fireball is: at an ally in sight
-  within 12 squares.
+  within 12 squares, or at the Cleric itself.
 - **Flanking's +1 damage is for shots.** Melee has no cover to lose (a strike
   is made from next door), so it doesn't get it.
 - **A graze does half damage, rounded up**, so it always does something. A
@@ -3864,8 +3864,8 @@ rest of B6.
   nobody anything — and its knock-out's points are nobody's either. It needs
   an enemy beside it.
 - **Broodmother:** the leader. **Regrowth** (2 AP, cooldown 2) is a shorter
-  Heal: 3 HP to an ally it can see within 8 squares, clearing what a heal
-  clears.
+  Heal: 3 HP to itself or an ally it can see within 8 squares, clearing what
+  a heal clears.
 
 **Corroded:** +10% to every shot at the character, overwatch included, for
 two of its turns; it counts down as every effect does (§20.1). It's healed —
@@ -4013,3 +4013,4 @@ Realm, its sibling in the same world.
 | 1.51 | The review plays itself (§26.2): Play in the review dock steps through the match on its own, the recap screen replays from the player's last turn, and a co-op End turn's step carries its parts — the End turn, each of the warband's actions and the hand-off, each with what the viewer was told and the board as they saw it after — so the enemy's turn plays one action at a time. Moves walk along their told path and the view frames each move from start to end, or over the stretch seen of one that crossed the edge of sight (§26.1, §26.2); the playback cap is four and a half seconds. Stances, watches and reactions say what they are over the character ("Hunker down", "Shield wall", "Overwatch", "On guard", "Guard"), and a followed step with nothing the viewer can place shows a faint "?" over the board (§26.1, §26.2). | When nothing says where to look, the view rests on the player's own side rather than the whole board: the board opens on their squad (the whole team in co-op), and a review step that has nothing to follow or is spread over more than half the battlefield goes there too; a turn beginning's fresh AP no longer counts as an action to follow.
 | 1.52 | Measuring balance (§30.12): `npm run ra-balance` and the *Realm Arena balance* workflow fight hundreds of co-op battles with the planner playing both sides and report win rates, how long the team lasts and how each round goes. |
 | 1.53 | The rebalance (§30.13, command version 7): melee hits 80% of the time, cover counts double against a shot from further than 10 squares, the Mage Bolt is 80% to a range of 12, in Hold Out against the Realm the team takes 1 less from every hit, two players' Hold Out lasts 13 rounds instead of 15, a Cleric's Heal is once a turn instead of on a cooldown and its Raise is on a four-turn cooldown instead of once a battle, and in Hold Out the team has 50% more HP against warbands a step smaller. A battle keeps the rules it was created under. |
+| 1.54 | A Cleric's Heal and a Broodmother's Regrowth can be aimed at the healer itself, as a healing draught can (§13.6, §31.2). Only what a move may be aimed at grows, so no command version. |
