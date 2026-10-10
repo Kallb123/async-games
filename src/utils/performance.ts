@@ -7,6 +7,9 @@
  * app, so `performance.now()` keeps counting across every in-app navigation,
  * and a game opened after a minute on the dashboard would otherwise read as a
  * minute-long load.
+ *
+ * `game_board_painted` is the frame the board reached the screen; `game_usable`
+ * is the first idle moment of the main thread after it (see `useGameData`).
  */
 export const JOURNEY_MILESTONES = ['auth_ready', 'first_data', 'dashboard_usable', 'game_board_painted', 'game_usable'] as const;
 export type JourneyMilestone = typeof JOURNEY_MILESTONES[number];
