@@ -90,7 +90,11 @@ Win rate · average round overrun in, over 24 battles a cell.
 | HP ×1.5 | 0% · r9.7 | 0% · r10.3 | 0% · r8.8 | 0% · r10.8 |
 | Enemy −1 step + HP ×1.5 | 0% · r8.9 | 0% · r12.4 | 0% · r9.3 | 8% · r11.3 |
 | HP ×2 | 0% · r11.0 | 0% · r12.3 | 0% · r10.0 | 0% · r11.0 |
+| Team HP ×1.5 | 0% · r12.5 | 8% · r13.0 | 17% · r12.6 | 54% · r12.1 |
+| Team HP ×1.75 | 8% · r13.7 | 17% · r14.3 | 29% · r12.8 | 92% · r12.5 |
 | Team HP ×2 | 21% · r14.4 | 50% · r13.8 | 42% · r12.7 | 100% · — |
+| Team HP ×1.5 + enemy −1 step | 4% · r13.2 | 17% · r13.8 | 13% · r12.1 | 63% · r12.0 |
+| Team HP ×1.75 + enemy −1 step | 4% · r13.4 | 50% · r14.5 | 29% · r12.6 | 88% · r12.7 |
 | Attack 3 AP | 0% · r11.4 | 0% · r11.8 | 8% · r11.8 | 13% · r11.5 |
 | Armour 1 | 0% · r11.2 | 8% · r13.4 | 0% · r10.4 | 33% · r11.7 |
 | Armour 1 + waves every 4 | 0% · r10.3 | 17% · r12.9 | 0% · r10.5 | 38% · r12.1 |
@@ -167,11 +171,22 @@ Win rate · average round overrun in, over 24 battles a cell.
    **Stepping it down** with restore 1 kept, at ×1.5 and ×1.75, moves 2
    players far more than 3:
 
-   | Restore 1 + team HP | 2p vs Realm | 2p vs Swarm | 3p vs Realm | 3p vs Swarm |
+   | Team HP | 2p vs Realm | 2p vs Swarm | 3p vs Realm | 3p vs Swarm |
    |---|---|---|---|---|
-   | ×1.5 | 17% | 50% | 83% | 96% |
-   | ×1.75 | 29% | 83% | 96% | 100% |
-   | ×2 | 50% | 100% | 100% | 100% |
+   | ×1.5 | 0% | 8% | 17% | 54% |
+   | ×1.75 | 8% | 17% | 29% | 92% |
+   | ×2 | 21% | 50% | 42% | 100% |
+   | ×1.5, enemy −1 step | 4% | 17% | 13% | 63% |
+   | ×1.75, enemy −1 step | 4% | 50% | 29% | 88% |
+   | ×1.5, restore 1 | 17% | 50% | 83% | 96% |
+   | ×1.75, restore 1 | 29% | 83% | 96% | 100% |
+   | ×2, restore 1 | 50% | 100% | 100% | 100% |
+
+   Restore 1 is worth far more than a smaller enemy at every team HP: at
+   ×1.5 it lifts 3 players vs the Realm from 17% to 83%, where a step
+   smaller does nothing (13%). The smaller enemy helps only against the
+   Swarm, and there only for 2 players at ×1.75 (17% → 50%) — against the
+   Realm it changes nothing, as everywhere else in these runs (point 1).
 
    A 3-player team is near-certain from ×1.5, while 2 players need ×2 just
    for even odds against the Realm. No one multiplier fits both team sizes,
