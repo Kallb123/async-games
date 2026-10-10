@@ -33,7 +33,18 @@ import { globSync } from 'node:fs';
 // paced and eased walks, the knock, the lunge and the shake on impact) took
 // Realm Arena's board route to 1,006 KB. Raised well clear this time, so the
 // animation work still to come (docs/isometric-animations.md §6) has room.
-const limits = { routeJavaScript: 1_150_000, largestImage: 5_250_000 };
+//
+// Moment.js came out in favour of Intl helpers (utils/ui/time.ts): the home
+// route fell from 929 KB to 628 KB, the profile from 921 KB to 619 KB and the
+// result page from 903 KB to 601 KB. Realm Arena's board (997 KB) still sets
+// the limit above, so a library creeping back into a screen would have passed.
+// Every route that isn't a game board therefore has a limit of its own, a few
+// percent above the heaviest of them (the Snakes & Ladders setup screen, 825 KB)
+// and well under what those screens weighed with Moment.
+const limits = { routeJavaScript: 1_150_000, screenJavaScript: 900_000, largestImage: 5_250_000 };
+// A game's board screen, /games/<game>/[gameid]. The result page next to them
+// is an ordinary screen.
+const isBoardRoute = route => /^\/games\/(?!result\/)[^/]+\/\[gameid\]$/i.test(route);
 const manifests = globSync('.next/server/app/**/page_client-reference-manifest.js');
 if (!manifests.length) throw new Error('No App Router client manifests found; run `npm run build` first.');
 let failed = false;
@@ -50,9 +61,10 @@ for (const manifestFile of manifests) {
   const bytes = [...chunks].reduce((sum, file) => sum + statSync(`.next/${file}`).size, 0);
   const route = manifestFile.replace(/^.*app\//, '/').replace(/\/?page_client-reference-manifest\.js$/, '') || '/';
   console.log(`Route JS ${route}: ${(bytes / 1024).toFixed(1)} KB`);
-  if (bytes > limits.routeJavaScript) {
+  const limit = isBoardRoute(route) ? limits.routeJavaScript : limits.screenJavaScript;
+  if (bytes > limit) {
     failed = true;
-    console.error(`Over budget: ${route} ships ${(bytes / 1024).toFixed(1)} KB of JavaScript (limit ${(limits.routeJavaScript / 1024).toFixed(1)} KB)`);
+    console.error(`Over budget: ${route} ships ${(bytes / 1024).toFixed(1)} KB of JavaScript (limit ${(limit / 1024).toFixed(1)} KB)`);
   }
 }
 let largestImage = { file: '', bytes: 0 };

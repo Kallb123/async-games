@@ -16,6 +16,21 @@ interface IGameDataBody<T> {
     gameData: T;
 }
 
+/** The longest `whenMainThreadIdle` waits for a quiet moment before reporting anyway. */
+const IDLE_WAIT_MS = 3000;
+
+/**
+ * Runs `callback` once the main thread has a gap, so work queued at paint (the
+ * board's effects, its first layout) has finished and a tap would be handled at
+ * once. `requestIdleCallback` where there is one (capped, so a board that never
+ * stops animating still reports); elsewhere (Safari) a task queued after the
+ * current one, which also lets whatever is already queued run first.
+ */
+function whenMainThreadIdle(callback: () => void) {
+    if (typeof requestIdleCallback === 'function') requestIdleCallback(callback, { timeout: IDLE_WAIT_MS });
+    else setTimeout(callback, 0);
+}
+
 /**
  * Whether the board the viewer is looking at could change without them doing
  * anything — which is when `useGameData` polls for it.
@@ -115,13 +130,22 @@ export function useGameData<T extends IGameDataResponse>(gameId: string) {
         if (unlockedHere?.length) offer(unlockedHere.map(unlock => ({ ...unlock, gameId })));
     }, [unlockedHere, gameId, offer]);
 
+    // `game_board_painted` is the frame the board first reached the screen.
+    // `game_usable` is later: the first moment after that paint when the main
+    // thread is free to answer a tap — the board's hydration, layout and
+    // effects have run — so it is the paint plus whatever the board still had
+    // to chew through. Every board mounts its controls in the same commit as
+    // its first `gameData` (a cached paint included, which accepts a command
+    // just as a confirmed one does), so this one place covers every game. A
+    // first-match guide or tour covering the board is the player's to dismiss
+    // and is deliberately not waited for: that would time the player, not the app.
     const reportedUsable = useRef(false);
     useEffect(() => {
         if (gameData && !reportedUsable.current) {
             reportedUsable.current = true;
             requestAnimationFrame(() => requestAnimationFrame(() => {
                 window.__agPerformanceMark?.('game_board_painted');
-                window.__agPerformanceMark?.('game_usable');
+                whenMainThreadIdle(() => window.__agPerformanceMark?.('game_usable'));
             }));
         }
     }, [gameData]);

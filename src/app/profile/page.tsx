@@ -16,7 +16,7 @@ import RealmArenaMasterySection from "@/games/RealmArena/components/RealmArenaMa
 import type { PlayerMastery } from "@/games/RealmArena/mastery";
 import NameForm from "@/components/NameForm";
 import { IFriendRequestResponse } from "@/utils/mongodb/FriendshipData";
-import { formatRelativeTime, isRecentlyActive } from "@/utils/ui/time";
+import { formatRelativeTime, formatTimeAgo, isRecentlyActive } from "@/utils/ui/time";
 import { FRIEND_EVENTS } from "@/utils/hooks/usePushEvents";
 import { useRefreshableData } from "@/utils/hooks/useRefreshableData";
 import { useNowToTheMinute } from "@/utils/hooks/useNow";
@@ -27,7 +27,6 @@ import { profileImageUrl } from "@/utils/ui/avatar";
 import type { IAchievementUnlock, IGameStats, IRecentMatch } from "@/app/api/stats/route";
 import type { IReceivedReaction } from "@/app/api/reactions/route";
 import { useClerk } from "@clerk/nextjs";
-import moment from 'moment';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { Suspense, useState } from "react";
 
@@ -363,7 +362,7 @@ function Profile() {
                         <Avatar name={personalName(request.user)} imageUrl={request.user.imageUrl} size={36} />
                         <div className="ag-list-row-main">
                             <div className="ag-list-row-title">{displayName(request.user)}</div>
-                            <div className="ag-list-row-sub">wants to be friends · {moment(request.timestamp).fromNow()}</div>
+                            <div className="ag-list-row-sub">wants to be friends · {formatTimeAgo(request.timestamp)}</div>
                         </div>
                         <button type="button" className="ag-pill-action ag-pill-action--accept" onClick={() => handleAccept(request.friendshipId)}>Accept</button>
                         <button type="button" className="ag-link-muted" style={{ marginLeft: 8 }} onClick={() => handleRemove(request.friendshipId, 'Friend request declined.')}>Decline</button>
@@ -384,7 +383,7 @@ function Profile() {
                         <Avatar name={personalName(request.user)} imageUrl={request.user.imageUrl} size={36} />
                         <div className="ag-list-row-main">
                             <div className="ag-list-row-title">{displayName(request.user)}</div>
-                            <div className="ag-list-row-sub">waiting to accept · {moment(request.timestamp).fromNow()}</div>
+                            <div className="ag-list-row-sub">waiting to accept · {formatTimeAgo(request.timestamp)}</div>
                         </div>
                         <button type="button" className="ag-link-muted" onClick={() => handleRemove(request.friendshipId, 'Friend request cancelled.')}>Cancel</button>
                     </div>
