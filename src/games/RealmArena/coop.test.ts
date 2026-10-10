@@ -8,9 +8,9 @@ import {
     computeRealmArenaResultStats, coopInviteOf, formatRealmArenaCharts, formatRealmArenaResultStats, gameStateToModel, RealmArenaInvitationModel, stepOutcomeToModel, type IRealmArenaGameData, type RealmArenaSettings,
 } from "./RealmArenaModels";
 import { recordBattle } from "./recordBattle";
-import { battleOf as battleOfState, enemyEvents, nextWaveOf, RealmArenaGameType, waveOf, waveStrength, type IRealmArenaOutcome, type RealmArenaEndTurn } from "./RealmArenaLogic";
+import { battleOf as battleOfState, enemyEvents, nextWaveOf, RealmArenaGameType, warbandBudgetOf, waveOf, waveStrength, type IRealmArenaOutcome, type RealmArenaEndTurn } from "./RealmArenaLogic";
 import {
-    battleRounds, ENEMY_SIDE, isStanding, isWarband, lastWaveRound, nextWaveRound, readyMadeMuster, squadSight, standings, TEAM_SIDE, warbandOwner, waveArrives, wavesLanded, type BattleEvent,
+    battleRounds, ENEMY_SIDE, isStanding, isWarband, lastWaveRound, maxHpOf, nextWaveRound, readyMadeMuster, squadSight, standings, TEAM_SIDE, warbandOwner, waveArrives, wavesLanded, type BattleEvent,
 } from "./rules";
 import type { IRealmArenaStepOutcome, RealmArenaPartState } from "./apiModels";
 import type { GameResultBarChart, GameResultChart, GameResultTable } from "@/utils/apiModels/GameDataApi";
@@ -260,7 +260,7 @@ describe("Hold Out's growing waves (§30.10)", () => {
         const owner = warbandOwner(0);
         game.specificGameState.roundsPlayed = 3;
         const fresh = waveOf(game.specificGameState, owner, true);
-        expect(fresh.map(fighter => fighter.character)).toEqual([REALM.readyMade[80][0]]);
+        expect(fresh.map(fighter => fighter.character)).toEqual([REALM.readyMade[warbandBudgetOf(game.specificGameState)][0]]);
         const occupied = new Set(game.specificGameState.fighters.map(fighter => fighter.square));
         expect(fresh.every(fighter => !occupied.has(fighter.square))).toBe(true);
         expect(waveOf(game.specificGameState, owner, false)).toEqual([]);
@@ -270,7 +270,7 @@ describe("Hold Out's growing waves (§30.10)", () => {
         for (const version of [undefined, 4]) {
             const game = holdOut();
             await musterAll(game);
-            const squad = REALM.readyMade[80].length;
+            const squad = REALM.readyMade[warbandBudgetOf(game.specificGameState)].length;
             for (const [round, grown] of [[3, 1], [6, 2]] as const) {
                 game.specificGameState.roundsPlayed = round - 1;
                 const before = game.specificGameState.roundsPlayed;
@@ -300,7 +300,7 @@ describe("Hold Out's rally and the next wave told (§30.11)", () => {
         gs.fighters.forEach(fighter => { if (isWarband(fighter.owner)) fighter.hp = 0; });
         const [hurt, wounded, down] = team(game);
         hurt.hp = 1;
-        wounded.hp = CHARACTERS[wounded.character].hp - 1;
+        wounded.hp = maxHpOf(wounded) - 1;
         down.hp = 0;
         const a = endTurnBy("a"), b = endTurnBy("b");
         if (version !== undefined) Object.assign(a, { version }), Object.assign(b, { version });
@@ -314,10 +314,10 @@ describe("Hold Out's rally and the next wave told (§30.11)", () => {
         await musterAll(game);
         await landRoundFour(game);
         const [hurt, wounded, down, ...rest] = team(game);
-        expect(hurt.hp).toBe(1 + Math.floor(CHARACTERS[hurt.character].hp / 2));
-        expect(wounded.hp).toBe(CHARACTERS[wounded.character].hp);
+        expect(hurt.hp).toBe(1 + Math.floor(maxHpOf(hurt) / 2));
+        expect(wounded.hp).toBe(maxHpOf(wounded));
         expect(down.hp).toBe(0);
-        for (const fighter of rest) expect(fighter.hp).toBe(CHARACTERS[fighter.character].hp);
+        for (const fighter of rest) expect(fighter.hp).toBe(maxHpOf(fighter));
         expect(game.gameState.history.map(entry => entry.text)).toContain("The team rallies: everyone standing regains half their HP");
     });
 
@@ -471,7 +471,7 @@ describe("difficulty (§30.5)", () => {
             expect(waveOf(game.specificGameState, owner, true)).toEqual([]);
             const band = game.specificGameState.fighters.filter(fighter => fighter.owner === owner);
             band.forEach(fighter => { fighter.hp = 0; });
-            expect(waveOf(game.specificGameState, owner, true).map(fighter => fighter.character)).toEqual([...REALM.readyMade[warbandBudget(2, "normal", difficulty)]]);
+            expect(waveOf(game.specificGameState, owner, true).map(fighter => fighter.character)).toEqual([...REALM.readyMade[warbandBudgetOf(game.specificGameState)]]);
         }
     });
 

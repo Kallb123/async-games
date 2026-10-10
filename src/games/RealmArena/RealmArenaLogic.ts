@@ -7,7 +7,7 @@ import { recordedRolls } from "@/utils/games/recordedRolls";
 import { isDropped, nextActivePlayer, registerPlayerDropoutAdapter } from "@/utils/games/playerDropout";
 import { v4 as uuidv4, NIL as NIL_UUID } from 'uuid';
 import type { IRealmArenaCoop, IRealmArenaGameData, IRealmArenaSpecificGameState } from "@/games/RealmArena/RealmArenaModels";
-import { ABILITIES, CHARACTERS, DIFFICULTY_NAMES, EFFECTS, enemyNameOf, factionById, FACTIONS, ITEMS, musterBudget, readyMadeSquad, REALM_ONLY, warbandBudget, type Budget, type CharacterId, type FactionId } from "@/games/RealmArena/characters";
+import { ABILITIES, CHARACTERS, DIFFICULTY_NAMES, EFFECTS, enemyNameOf, factionById, FACTIONS, HOLD_OUT_ENEMY_STEPS, ITEMS, musterBudget, readyMadeSquad, REALM_ONLY, warbandBudget, type Budget, type CharacterId, type FactionId } from "@/games/RealmArena/characters";
 import { battlefieldById, battlefieldOf } from "@/games/RealmArena/maps";
 import { addTally, NO_TALLY, type Tally } from "@/games/RealmArena/mastery";
 import {
@@ -28,6 +28,7 @@ import {
     isWarband,
     landedSmoke,
     lastWaveRound,
+    maxHpOf,
     musterRefusal,
     nextWaveRound,
     newFighter,
@@ -42,7 +43,9 @@ import {
     standingPoints,
     standings,
     startTurn,
+    stoutTeam,
     TEAM_SIDE,
+    teamHp,
     viewOf,
     storedFighter,
     warbandOwner,
@@ -95,6 +98,7 @@ export function battleOf(gs: IRealmArenaSpecificGameState, complete = false): Ba
         fog: gs.fog === true && !complete,
         seats: gs.seats,
         coop: gs.coop !== undefined,
+        rulesVersion: gs.rulesVersion,
     });
 }
 
@@ -108,9 +112,19 @@ export function playableFactions(gs: IRealmArenaSpecificGameState): readonly Fac
     return gs.factions ?? REALM_ONLY;
 }
 
-/** Each co-op warband's points (§30.5): the players', moved by the difficulty. */
+/**
+ * Whether the team of a battle is the tougher one `BALANCE_VERSION` gives
+ * Hold Out: more HP for its characters (`teamHp`) against warbands a rung
+ * smaller (`HOLD_OUT_ENEMY_STEPS`). Every other mission and mode plays as it
+ * did, and so does a battle created before it.
+ */
+export function holdsOutStoutly(gs: Pick<IRealmArenaSpecificGameState, "coop" | "rulesVersion">): boolean {
+    return stoutTeam(gs.coop?.mission, gs.rulesVersion);
+}
+
+/** Each co-op warband's points (§30.5): the players', moved by the difficulty, and in a stout Hold Out a rung further down (`holdsOutStoutly`). */
 export function warbandBudgetOf(gs: IRealmArenaSpecificGameState): Budget {
-    return warbandBudget(gs.seats.length, gs.size, gs.coop?.difficulty);
+    return warbandBudget(gs.seats.length, gs.size, gs.coop?.difficulty, holdsOutStoutly(gs) ? HOLD_OUT_ENEMY_STEPS : 0);
 }
 
 /** The squad every warband musters, and each wave refills it to (§29.7, §30.3): its faction's ready-made squad for its budget. */
@@ -315,6 +329,7 @@ export function cloneRealmArenaState(gs: IRealmArenaSpecificGameState): IRealmAr
         ...(gs.fog ? { fog: true } : {}),
         ...(gs.size ? { size: gs.size } : {}),
         ...(gs.factions ? { factions: [...gs.factions] } : {}),
+        ...(gs.rulesVersion !== undefined ? { rulesVersion: gs.rulesVersion } : {}),
         musters: (gs.musters ?? []).map(({ owner, faction, picks }) => ({ owner, ...(faction ? { faction } : {}), picks: picks.map(pickOf) })),
         // Written once as the battle is created and never changed, so shared.
         mastery: gs.mastery ?? {},
@@ -439,10 +454,13 @@ function clause(event: BattleEvent, fighters: readonly Fighter[], actor: string,
             return event.reaction
                 ? `${name(event.fighter)} fired on overwatch: ${landed(event.damage, event.result === "graze")}`
                 : `shot ${name(event.target)} with ${name(event.fighter)} (${event.chance}%): ${landed(event.damage, event.result === "graze")}`;
-        case "struck":
+        case "struck": {
+            // A strike that rolled and missed did no damage: "and missed", as a shot's "a miss".
+            const outcome = event.missed ? "and missed" : `for ${event.damage}`;
             return event.reaction
-                ? `${name(event.fighter)} struck on guard for ${event.damage}`
-                : `struck ${name(event.target)} with ${name(event.fighter)} for ${event.damage}`;
+                ? `${name(event.fighter)} struck on guard ${outcome}`
+                : `struck ${name(event.target)} with ${name(event.fighter)} ${outcome}`;
+        }
         case "fireball":
             return `threw a fireball with ${name(event.fighter)}, hitting ${pluralize(hitIn(event.targets).length, "character")} for ${event.damage}`;
         case "downed": return `${name(event.fighter)} is down`;
@@ -928,7 +946,7 @@ const RALLYING_VERSION = 6;
 function rally(gs: IRealmArenaSpecificGameState): void {
     for (const fighter of gs.fighters) {
         if (isWarband(fighter.owner) || !isStanding(fighter)) continue;
-        const full = CHARACTERS[fighter.character].hp;
+        const full = maxHpOf(fighter);
         fighter.hp = Math.min(full, fighter.hp + Math.floor(full / 2));
     }
 }
@@ -1042,8 +1060,11 @@ export class RealmArenaMuster implements IGameCommand {
                 musters.push(...order.map((_, k) => ({ owner: warbandOwner(k), picks: readyMadeMuster(field, order.length + k, squad) })));
             }
             // Every squad joins the battlefield at once, ids in seat order, the warbands' last.
+            // In a stout Hold Out the team's characters have more HP than their
+            // character's (`holdsOutStoutly`); the warbands' keep theirs.
+            const stout = holdsOutStoutly(gs);
             gs.fighters = musters.flatMap(({ owner, picks }) => picks.map(pick => ({ owner, pick })))
-                .map(({ owner, pick }, id) => newFighter(id, owner, pick.character, pick.square, pick.item ?? null, pick.option));
+                .map(({ owner, pick }, id) => newFighter(id, owner, pick.character, pick.square, pick.item ?? null, pick.option, stout && !isWarband(owner) ? teamHp(pick.character) : undefined));
             gs.musters = [];
             gs.phase = "battle";
             data.gameState.history.unshift({ text: "The squads take the field, and the battle begins" });

@@ -8,7 +8,7 @@ import Section from '@/components/ui/Section';
 import { ITEM_ART } from '@/games/RealmArena/art';
 import { CHARACTERS, FACTIONS, ITEM_IDS, ITEMS, OPTIONS, type ItemId, type OptionId } from '@/games/RealmArena/characters';
 import type { Ranks } from '@/games/RealmArena/mastery';
-import type { MusterPick } from '@/games/RealmArena/rules';
+import { teamHp, type MusterPick } from '@/games/RealmArena/rules';
 import { CHARACTER_MARK, factionRosterLine, optionsFor, optionView, starterView } from '@/games/RealmArena/roster';
 import type { UnitRef } from '@/games/RealmArena/stats';
 import { numberedName, squadOf } from '@/games/RealmArena/ui';
@@ -31,6 +31,8 @@ interface RealmArenaMusterSheetProps {
     onMuster: () => void;
     /** The muster is in flight. */
     pending: boolean;
+    /** The team is the tougher one Hold Out gives it (`stoutTeam`), so each character is shown with its bigger HP. */
+    stout?: boolean;
 }
 
 /**
@@ -58,7 +60,7 @@ export default function RealmArenaMusterSheet(props: RealmArenaMusterSheetProps)
 }
 
 /** Whichever step of the muster the player is on: picking the squad, or placing it. */
-function MusterStep({ draft, budget, colour, onPick, onMuster, pending }: RealmArenaMusterSheetProps) {
+function MusterStep({ draft, budget, colour, onPick, onMuster, pending, stout = false }: RealmArenaMusterSheetProps) {
     const { factions, faction, setFaction, roster, counts, setCounts, items, setItems, pointsLeft, refusal, placement, ranks } = draft;
     const [info, setInfo] = useState<UnitRef>();
     // Over budget, the box already says why the muster can't go.
@@ -126,7 +128,7 @@ function MusterStep({ draft, budget, colour, onPick, onMuster, pending }: RealmA
                             mark={CHARACTER_MARK[pick.character]}
                             colour={colour}
                             name={numberedName(picks, index)}
-                            sub={pick.option ? optionView(pick.option).name : `${CHARACTERS[pick.character].hp} HP`}
+                            sub={pick.option ? optionView(pick.option).name : `${stout ? teamHp(pick.character) : CHARACTERS[pick.character].hp} HP`}
                             selected={index === selected}
                             onClick={() => onPick(index)}
                         >

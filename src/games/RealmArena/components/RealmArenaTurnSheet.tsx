@@ -7,7 +7,7 @@ import PendingTag from '@/components/ui/PendingTag';
 import Stat from '@/components/ui/Stat';
 import { ABILITIES, CHARACTERS, EFFECTS, type Ability, type AbilityId, type Affliction, type Item } from '@/games/RealmArena/characters';
 import { ITEM_ART } from '@/games/RealmArena/art';
-import { ATTACK_AP, HUNKER_AP, REACTION_COST, abilitiesOf, allied, check, fighterById, hasEffect, healedEffects, isStanding, itemOf, shotEffect, shotOdds, smokeSquares, weaponOf, type Action, type BattleState, type Fighter } from '@/games/RealmArena/rules';
+import { ATTACK_AP, HUNKER_AP, REACTION_COST, abilitiesOf, allied, check, fighterById, hasEffect, healedEffects, isStanding, itemOf, LONG_RANGE_PENALTY, maxHpOf, shotEffect, shotOdds, smokeSquares, strikeChance, weaponOf, type Action, type BattleState, type Fighter } from '@/games/RealmArena/rules';
 import { abilityWait, whoseName } from '@/games/RealmArena/ui';
 import { rangeSquares, shotOf, targetsOf, type TargetKind } from '@/games/RealmArena/tactics';
 import { ABILITY_MARK, CHARACTER_MARK, weaponLine, weaponMark } from '@/games/RealmArena/roster';
@@ -37,11 +37,11 @@ const AIM_HINT: Readonly<Record<Aim, string>> = {
     raise: 'Tap a downed ally next to them.',
     throw: 'Tap a shaded square to throw it there: where it lands is shaded red, and catches friend and foe alike.',
     draught: 'Tap them, or a hurt ally next to them, to give the draught.',
-    shieldBash: 'Tap an enemy next to them. It always hits, and stuns.',
+    shieldBash: 'Tap an enemy next to them to see the odds. A hit stuns them.',
     cripplingShot: 'Tap an enemy to see the odds. A hit slows them.',
     huntersMark: 'Tap an enemy they can see within 12 squares.',
     demolish: 'Tap the low cover next to them to blast it away. Everyone else beside it is struck, friend or foe.',
-    rend: 'Tap an enemy next to them. It always hits.',
+    rend: 'Tap an enemy next to them to see the odds.',
     regrowth: `Tap a hurt ally they can see within ${ABILITIES.regrowth.range} squares.`,
 };
 
@@ -217,7 +217,7 @@ function TargetList({ draft, name, disabled, onFocus }: TargetListProps) {
                         key={target.id}
                         icon={CHARACTER_MARK[target.character]}
                         name={capitalise(name(target.id))}
-                        cost={`${target.hp}/${CHARACTERS[target.character].hp} HP`}
+                        cost={`${target.hp}/${maxHpOf(target)} HP`}
                         tag={chance !== undefined ? `${chance}% to hit` : aimed ? 'Aiming' : 'Pick'}
                         disabled={disabled}
                         active={aimed}
@@ -309,9 +309,12 @@ function Detail({ draft, battle, name, ap, target }: DetailProps) {
             {draft.blasts?.length ? ` Blasts away ${pluralize(draft.blasts.length, 'square')} of low cover.` : ''}
         </>);
     }
-    if (aim === 'cleave') return hint(`Strikes ${andList(draft.targets.map(name))} for ${strike} each.`);
+    if (aim === 'cleave') {
+        const chances = draft.targets.map(id => { const hit = fighterById(battle, id); return hit ? `${strikeChance(battle, hit)}%` : ''; });
+        return hint(`Strikes ${andList(draft.targets.map(name))} for ${strike} each, at ${andList(chances)} to hit.`);
+    }
     if (!target) return null;
-    const max = CHARACTERS[target.character].hp;
+    const max = maxHpOf(target);
     if (aim === 'heal' || aim === 'regrowth' || aim === 'draught') {
         const hp = Math.min(HEAL_HP[aim] ?? 0, max - target.hp);
         const cleared = healedEffects(target).map(effect => EFFECTS[effect].state);
@@ -325,11 +328,11 @@ function Detail({ draft, battle, name, ap, target }: DetailProps) {
     }
 
     const health = `${Name(target.id)} · ${target.hp}/${max} HP`;
-    if (aim === 'shieldBash') return hint(`${health} · always hits, for ${ABILITIES.shieldBash.damage}, and stuns them.`);
-    if (aim === 'rend') return hint(`${health} · always hits, for ${ABILITIES.rend.damage}.`);
+    if (aim === 'shieldBash') return hint(`${health} · ${strikeChance(battle, target)}% to hit, for ${ABILITIES.shieldBash.damage}, and a hit stuns them.`);
+    if (aim === 'rend') return hint(`${health} · ${strikeChance(battle, target)}% to hit, for ${ABILITIES.rend.damage}.`);
     const shot = shotOf(aim);
     const odds = shot && shotOdds(battle, fighter, target, shot);
-    if (!shot || !odds) return hint(`${health} · a strike always hits, for ${strike}.`);
+    if (!shot || !odds) return hint(`${health} · ${strikeChance(battle, target)}% to hit, for ${strike}.`);
     const effect = shotEffect(fighter, shot);
     return (
         <>
@@ -338,7 +341,7 @@ function Detail({ draft, battle, name, ap, target }: DetailProps) {
                 <Stat value={`${odds.grazeChance}%`} label="Graze" />
                 <Stat value={odds.grazeChance > 0 ? `${odds.damage} / ${odds.grazeDamage}` : odds.damage} label="Damage" />
             </div>
-            {hint(`${health} · ${odds.flanked ? 'flanked, +1 damage' : `${odds.cover} cover`}${hasEffect(target, 'hunkered') ? ', hunkered down' : ''}${smokeSquares(battle).has(target.square) ? ', in smoke' : ''}${effect ? ` · a hit leaves them ${EFFECTS[effect].state}` : ''}`)}
+            {hint(`${health} · ${odds.flanked ? 'flanked, +1 damage' : `${odds.cover} cover`}${hasEffect(target, 'hunkered') ? ', hunkered down' : ''}${smokeSquares(battle).has(target.square) ? ', in smoke' : ''}${odds.longShot ? `, long range −${LONG_RANGE_PENALTY}%` : ''}${effect ? ` · a hit leaves them ${EFFECTS[effect].state}` : ''}`)}
         </>
     );
 }
@@ -364,12 +367,12 @@ function MoveDetail({ draft, name, ap }: Pick<DetailProps, 'draft' | 'name' | 'a
                 ? <p className="ag-hint">{aim === 'sneak' ? 'A sneak sets off nobody.' : 'Nobody on watch sees this move.'}</p>
                 : (
                     <div className="ag-list">
-                        {reactions.map(({ watcher, kind, odds, damage }) => (
+                        {reactions.map(({ watcher, kind, chance, damage }) => (
                             <ListRow
                                 key={watcher.id}
                                 icon="⚠"
                                 title={capitalise(name(watcher.id))}
-                                sub={kind === 'guard' ? `On guard · strikes for ${damage}` : `On overwatch · ${odds?.chance ?? 0}% to hit for ${damage}`}
+                                sub={`${kind === 'guard' ? 'On guard' : 'On overwatch'} · ${chance}% to hit for ${damage}`}
                             />
                         ))}
                     </div>

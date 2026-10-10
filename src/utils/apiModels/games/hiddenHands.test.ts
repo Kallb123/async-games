@@ -787,10 +787,10 @@ describe("Realm Arena's random co-op enemy", () => {
             : one.id === far.id ? one : { ...one, hp: 0 });
         expect(realmArenaBattle(game).fighters.filter(one => isRealmArenaStanding(one)).length).toBe(3);
 
-        const ended = Object.assign(realmArenaEndTurn(game.currentTurn), { recordedEnemyActions: [{ kind: "rend", fighter: ravager.id, target: archer.id }] }) as RealmArenaEndTurn;
+        const ended = Object.assign(realmArenaEndTurn(game.currentTurn), { recordedEnemyActions: [{ kind: "rend", fighter: ravager.id, target: archer.id }], recordedRolls: [1] }) as RealmArenaEndTurn;
         const { outcome } = await playRealmArena(game, ended);
         expect(outcome.validMove).toBe(true);
-        expect((outcome as IRealmArenaOutcome).events).toContainEqual({ kind: "struck", fighter: ravager.id, target: archer.id, damage: 6, reaction: false });
+        expect((outcome as IRealmArenaOutcome).events).toContainEqual({ kind: "struck", fighter: ravager.id, target: archer.id, damage: 6, reaction: false, chance: 80, roll: 1 });
         expect(gs.coop?.enemySeen).toBe(true);
         for (const viewer of ["a", "b"]) expect(realmArenaStateToModel(gs, viewer, null).enemy).toBe("swarm");
         // The enemy's turn is told once it's over, by when the team knows whom it fights.
@@ -820,7 +820,7 @@ describe("Realm Arena's random co-op enemy", () => {
         expect(Object.keys(hidden).sort()).toEqual([
             "battleRounds", "blasted", "budget", "canUndo", "clouds", "coop",
             "difficulty", "fighters", "fog", "ghosts", "map", "mastery", "mission", "mustered",
-            "myMuster", "nextWave", "phase", "round", "scores", "size",
+            "myMuster", "nextWave", "phase", "round", "rulesVersion", "scores", "size",
         ]);
         // What the host chose in the open: every viewer's, the null viewer's included.
         expect(hidden).toMatchObject({ difficulty: "hard", size: "large" });

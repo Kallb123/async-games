@@ -19,7 +19,7 @@ import { enemyNameOf, RA_SOLO_PARAM, REALM_ONLY } from "@/games/RealmArena/chara
 import { rematchFlag } from "@/utils/ui/rematch";
 import { reachAfter, useTurnDraft } from "@/games/RealmArena/useTurnDraft";
 import { battlefieldOf } from "@/games/RealmArena/maps";
-import { ACTION_POINTS, battleFrom, centreHolders, ENEMY_SIDE, isStanding, isWarband, sideScore, TEAM_SIDE, warbandsFor, type Action, type BattleEvent, type Fighter } from "@/games/RealmArena/rules";
+import { ACTION_POINTS, battleFrom, centreHolders, ENEMY_SIDE, isStanding, isWarband, sideScore, stoutTeam, TEAM_SIDE, warbandsFor, type Action, type BattleEvent, type Fighter } from "@/games/RealmArena/rules";
 import { actionFollow, battleCues, centreInSight, endOf, coopColourOf, ENEMY_COLOUR, fighterName, friendlySquares, isFollowedPart, isUnplaced, partFollow, partLabel, reviewParts, STEP_BEAT_MS, STEP_MIN_MS, TEAM_COLOUR, TEAM_NAME, unseenSquares, waveLineOf, withPartState } from "@/games/RealmArena/ui";
 import type { IRealmArenaOutcome } from "@/games/RealmArena/RealmArenaLogic";
 import type { ICommandResponse } from "@/app/api/game/command/route";
@@ -283,7 +283,7 @@ export default function GameRealmArena({ params }: { params: Promise<{ gameid: u
     // throwers it can't. The fog lifts once the battle is over.
     const fogged = !!gs?.fog && !complete;
     const clouds = gs?.clouds ?? [];
-    const battle = battleFrom(field, { fighters, fog: fogged, clouds, seats, coop });
+    const battle = battleFrom(field, { fighters, fog: fogged, clouds, seats, coop, rulesVersion: gs?.rulesVersion });
     // Every square the viewer's squad can't see, dimmed on the board: a
     // sweep of sight lines, so only redone when someone moves or cover goes.
     const shown = gs?.fighters;
@@ -704,7 +704,7 @@ export default function GameRealmArena({ params }: { params: Promise<{ gameid: u
                     )}
 
                     {musterTurn && (
-                        <RealmArenaMusterSheet draft={draft} budget={gs.budget} colour={colourFor(myUserId)} onPick={pickUp} onMuster={muster} pending={pendingTarget === 'muster'} />
+                        <RealmArenaMusterSheet draft={draft} budget={gs.budget} colour={colourFor(myUserId)} onPick={pickUp} onMuster={muster} pending={pendingTarget === 'muster'} stout={stoutTeam(gs.mission, gs.rulesVersion)} />
                     )}
 
                     {/* Nothing about anyone else's squad is on the wire until

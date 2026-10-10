@@ -117,7 +117,7 @@ describe("Realm Arena replay", () => {
         const fields: Record<ToldEvent["kind"], string[]> = {
             moved: ["fighter", "path", "sneaking"],
             shot: ["chance", "damage", "fighter", "reaction", "result", "target"],
-            struck: ["damage", "fighter", "reaction", "target"],
+            struck: ["chance", "damage", "fighter", "reaction", "target"],
             fireball: ["at", "damage", "fighter", "targets"],
             downed: ["by", "fighter"],
             healed: ["fighter", "hp", "target"],
@@ -139,8 +139,8 @@ describe("Realm Arena replay", () => {
         expect(events.some(event => event.kind === "shot")).toBe(true);
         for (const event of events) {
             const { kind, ...rest } = event;
-            // A draught's or a Purify's `via` is the one optional field.
-            expect(Object.keys(rest).filter(key => key !== "via").sort()).toEqual(fields[kind]);
+            // A draught's or a Purify's `via`, and a strike's `missed`, are the optional fields.
+            expect(Object.keys(rest).filter(key => key !== "via" && key !== "missed").sort()).toEqual(fields[kind]);
         }
     });
 

@@ -15,7 +15,7 @@ import { usePrefersReducedMotion } from '@/utils/hooks/usePrefersReducedMotion';
 import { PlaybackProvider, setAttributes, translation, usePlaybackFrame, usePlaybackRef, usePlaybackValue } from '@/utils/hooks/usePlayback';
 import { CHARACTER_ART, facingCell, ITEM_ART, SMOKE_ART, spriteBox, TERRAIN_ART, type CharacterPose } from '@/games/RealmArena/art';
 import { CHARACTERS, ITEMS, type CharacterId, type ItemId } from '@/games/RealmArena/characters';
-import { ACTION_POINTS, CENTRE, isStanding, isWarband, smokeSquares, type BattleState, type Fighter, type FogGhost, type MusterPick, type ToldEvent } from '@/games/RealmArena/rules';
+import { ACTION_POINTS, CENTRE, isStanding, isWarband, maxHpOf, smokeSquares, type BattleState, type Fighter, type FogGhost, type MusterPick, type ToldEvent } from '@/games/RealmArena/rules';
 import type { AttackOption } from '@/games/RealmArena/tactics';
 import { apPips, areaRect, captionAt, eventLines, type BattleCue, type CaptionCue, type FallCue, type FxPoints, type ScorchCue, type Shove, type Timed, type WalkCue, effectsOn, facingOf, fadeInAt, fadeOutAt, fighterStatus, aimFocus, endOf, focusOn, hpFraction, legLengthOn, progressOf, reachFocus, shakeAt, shakesOf, shovesOf, shoveAt, terrainLetter, toldAt, toldOf, walkerAt, walkCameraAt, legPoint, walkLift, walkSquares, type Told } from '@/games/RealmArena/ui';
 
@@ -664,7 +664,7 @@ function FighterNode({ artId, view, fighter, ring, selected, acting, colour, fac
             isSelected={selected}
             showRing={false}
             onClick={() => onSelect(fighter.id)}
-            title={[`${character.name} · ${nameFor(fighter.owner)}`, `${fighter.hp}/${character.hp} HP`, ...fighterStatus(fighter)].join(' · ')}
+            title={[`${character.name} · ${nameFor(fighter.owner)}`, `${fighter.hp}/${maxHpOf(fighter)} HP`, ...fighterStatus(fighter)].join(' · ')}
         >
             <Figure
                 ring={ring}

@@ -5,7 +5,7 @@ import Section from '@/components/ui/Section';
 import Stat from '@/components/ui/Stat';
 import { ITEM_ART } from '@/games/RealmArena/art';
 import { ABILITIES, CHARACTERS, ITEMS } from '@/games/RealmArena/characters';
-import { abilitiesOf, isStanding, weaponOf, type Fighter } from '@/games/RealmArena/rules';
+import { abilitiesOf, isStanding, maxHpOf, weaponOf, type Fighter } from '@/games/RealmArena/rules';
 import { abilityWait, effectsOn, watchStatus } from '@/games/RealmArena/ui';
 import { ABILITY_MARK, weaponLine, weaponMark } from '@/games/RealmArena/roster';
 import { RealmArenaStatusList } from './RealmArenaEffects';
@@ -35,7 +35,7 @@ export default function RealmArenaFighterCard({ fighter, label, children }: Real
         <Section label={label}>
             <div className="ag-stack">
                 <div className="ag-stat-row">
-                    <Stat value={`${fighter.hp}/${character.hp}`} label="HP" />
+                    <Stat value={`${fighter.hp}/${maxHpOf(fighter)}`} label="HP" />
                     <Stat value={fighter.ap} label="AP left" />
                     <Stat value={fighter.banked} label="AP banked" />
                 </div>

@@ -41,6 +41,6 @@ describe("weaponLine", () => {
     it("says what a weapon leaves on a hit, when it leaves anything (§23.2)", () => {
         expect(weaponLine(kitOf("mage").weapon)).toBe("70% · range 10 · 3 damage");
         expect(weaponLine(kitOf("mage", "frostBolt").weapon)).toBe("70% · range 10 · 2 damage · slowed on a hit");
-        expect(weaponLine(kitOf("knight").weapon)).toBe("Melee · 4 damage");
+        expect(weaponLine(kitOf("knight").weapon)).toBe("Melee · 80% · 4 damage");
     });
 });

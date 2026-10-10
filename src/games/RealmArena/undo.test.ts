@@ -8,7 +8,7 @@ import { resolveStalledTurn } from "@/utils/games/turnTimeout";
 import { undoableCommandsIn } from "@/utils/testing/undoableCommands";
 import { CHARACTERS, REALM } from "./characters";
 import { battlefieldById } from "./maps";
-import { RealmArenaGameDataModel } from "./RealmArenaModels";
+import { RealmArenaGameDataModel, type RealmArenaSettings } from "./RealmArenaModels";
 import { cloneRealmArenaState, RealmArenaUndo, UNDO_STACK_DEPTH } from "./RealmArenaLogic";
 import type { IRealmArenaGameDataResponse } from "./apiModels";
 import { check, moveAp, reachOf, reactionsTo, readyMadeMuster, type Action, type Fighter } from "./rules";
@@ -33,8 +33,8 @@ const own = (game: RealmArenaTestGame, player: string) => game.specificGameState
 const byId = (game: RealmArenaTestGame, id: number) => game.specificGameState.fighters.find(one => one.id === id)!;
 
 /** A battle on a's first turn, a's squad with a Scout in it to sneak with. */
-async function battle(): Promise<RealmArenaTestGame> {
-    const game = makeGame();
+async function battle(settings: RealmArenaSettings = {}): Promise<RealmArenaTestGame> {
+    const game = makeGame(PLAYERS, {}, settings);
     const field = battlefieldById(game.specificGameState.map);
     for (const [seat, squad] of [REALM.readyMade[80], REALM.readyMade[100]].entries()) {
         const { outcome } = await play(game, muster(PLAYERS[seat], readyMadeMuster(field, seat, squad)));
@@ -162,15 +162,19 @@ describe("Realm Arena — what can't be taken back", () => {
         expect((await responseFor(game, "a")).specificGameState.canUndo).toBe(false);
     });
 
-    it("never pushes one for a move a watcher reacted to, even a guard's strike that rolled nothing", async () => {
-        const game = await battle();
+    // A guard's strike rolls to hit from `BALANCE_VERSION` on, and rolled nothing before.
+    it.each([
+        ["a guard's strike, which rolls to hit", {}, true],
+        ["a guard's strike in a battle from before melee rolled, which rolled nothing", { rulesVersion: 6 }, false],
+    ])("never pushes one for a move a watcher reacted to, even %s", async (_name, settings, rolled) => {
+        const game = await battle(settings);
         const mover = own(game, "a").find(one => one.character !== "knight")!;
         const action = oneStep(game, mover) as Action & { path: number[] };
         guardAtTheEnd(game, action);
 
         const command = actBy("a", action);
         expect((await play(game, command)).outcome.validMove).toBe(true);
-        expect(consumedRandomness(command)).toBe(false);
+        expect(consumedRandomness(command)).toBe(rolled);
         expect(game.specificGameState.undoStack ?? []).toHaveLength(0);
         expect((await play(game, undoBy("a"))).outcome.validMove).toBe(false);
     });

@@ -235,6 +235,7 @@ describe("act", () => {
         expect(bashed.byId(2).effects.stunned).toBeGreaterThan(0);
         expect(bashed.byId(2).woundedBy).toEqual(["c", "a"]);
         expect(run(state, "a", { kind: "raise", fighter: 3, target: 4 }).byId(3).spent).toEqual(["raise"]);
+        expect(run({ ...state, balanced: true }, "a", { kind: "raise", fighter: 3, target: 4 }).byId(3).cooldowns).toEqual({ raise: 4 });
     });
 
     it("turns a mover to face the way it last stepped, and leaves anyone else facing as they were", () => {
@@ -492,14 +493,23 @@ describe("abilities (§13.5, §13.6)", () => {
         expect(check({ field, fighters }, "a", { kind: "heal", fighter: 1, target: 1 })).toEqual({ refused: "Pick an ally to heal" });
     });
 
-    it("raise brings a downed ally back at half HP, once per battle", () => {
+    it("raise brings a downed ally back at half HP, and waits out a cooldown of four turns", () => {
         const fighters = [fighter(1, "a", "cleric", at(field, 1, 1)), fighter(2, "a", "knight", at(field, 2, 2), { hp: 0, ap: 0 })];
-        const { byId, events } = run({ field, fighters }, "a", { kind: "raise", fighter: 1, target: 2 });
+        const { byId, events } = run({ field, fighters, balanced: true }, "a", { kind: "raise", fighter: 1, target: 2 });
         expect(byId(2)).toMatchObject({ hp: 6, ap: 0 });
-        expect(byId(1).spent).toEqual(["raise"]);
+        expect(byId(1).spent).toEqual([]);
+        expect(byId(1).cooldowns).toEqual({ raise: ABILITIES.raise.cooldown });
+        expect(ABILITIES.raise.cooldown).toBe(4);
         expect(events).toEqual([{ kind: "raised", fighter: 1, target: 2, hp: 6 }]);
-        const again = { field, fighters: [{ ...byId(1), ap: 4 }, { ...byId(2), hp: 0 }] };
-        expect(check(again, "a", { kind: "raise", fighter: 1, target: 2 })).toEqual({ refused: "Raise has been used this battle" });
+        const again = { field, fighters: [{ ...byId(1), ap: 4 }, { ...byId(2), hp: 0 }], balanced: true as const };
+        expect(check(again, "a", { kind: "raise", fighter: 1, target: 2 })).toEqual({ refused: "Raise isn't ready yet" });
+        // Back in four of its owner's turns.
+        let cleric = { ...byId(1), ap: 4 };
+        for (let turn = 1; turn <= 4; turn++) {
+            cleric = startTurn({ field, fighters: [cleric], balanced: true }, "a").fighters[0];
+            const verdict = check({ field, fighters: [cleric, { ...byId(2), hp: 0 }], balanced: true }, "a", { kind: "raise", fighter: 1, target: 2 });
+            expect(verdict, `turn ${turn}`).toEqual(turn < 4 ? { refused: "Raise isn't ready yet" } : { ap: 3 });
+        }
     });
 
     it("raise needs room for the fallen to stand", () => {

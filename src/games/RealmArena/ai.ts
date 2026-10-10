@@ -35,10 +35,10 @@ import { battlefieldWith, coordsOf, type Battlefield, type Square } from "@/util
 import { ABILITIES, CHARACTERS, type AbilityId } from "./characters";
 import {
     abilitiesOf, act, allied, areaAround, ATTACK_AP, blastedIn, CENTRE, CENTRE_SCORES_FROM_ROUND, centrePoints, check, fighterById, hasEffect, isStanding, landedSmoke,
-    moveAp, movementOf, reachOf, ROLL_SIDES, shotOdds, watchedSquares, weaponOf, weaponReaches,
+    maxHpOf, moveAp, movementOf, reachOf, ROLL_SIDES, shotOdds, strikeChance, watchedSquares, weaponOf, weaponReaches,
     type Action, type BattleEvent, type BattleState, type Fighter, type FogGhost, type ShotOdds,
 } from "./rules";
-import { ACTION_AIMS, rangeSquares, reactionPreviews, shotOf, targetKindOf, targetsOf, type ActionKind } from "./tactics";
+import { ACTION_AIMS, rangeSquares, reactionPreviews, rollsToHit, shotOf, targetKindOf, targetsOf, type ActionKind } from "./tactics";
 
 /**
  * What each term of a battle's score is worth (§29.7): the same for every
@@ -321,11 +321,12 @@ const lastSquare = (action: Action): Square => "path" in action ? action.path[ac
 
 /**
  * What an action is worth: the score of the battle it leaves (§29.7). A shot
- * is played out hitting, grazing and missing, weighed by the odds of each. A
- * move is played out with every reaction it sets off missing, less what the
- * overwatch on its path could be expected to take off the mover — a guard
- * rolls nothing, so it's in the played-out battle already. Anything else rolls
- * nothing, and is played out once.
+ * is played out hitting, grazing and missing, weighed by the odds of each, and
+ * a melee strike hitting and missing. A move is played out with every reaction
+ * it sets off missing, less what the overwatch on its path could be expected
+ * to take off the mover — and, where a strike rolls, the guard too; before
+ * strikes rolled a guard was in the played-out battle already. Anything else
+ * rolls nothing, and is played out once.
  */
 function judge(plan: Plan, action: Action): number {
     const { state, owner } = plan;
@@ -341,22 +342,30 @@ function judge(plan: Plan, action: Action): number {
     if (!mover) return value;
     for (const reaction of reactionPreviews(state, mover, action.path)) {
         if (reaction.kind === "overwatch" && reaction.odds) value -= WEIGHTS.strength * worthOf(mover, expectedDamage(reaction.odds, mover.hp));
+        if (reaction.kind === "guard" && state.balanced) value -= WEIGHTS.strength * worthOf(mover, reaction.chance * Math.min(reaction.damage, mover.hp) / ROLL_SIDES);
     }
     return value;
 }
 
 /**
  * The rolls an action is played out with, and how likely each is: a shot's
- * hit, graze and miss, by its odds, and for anything else one roll that misses
- * whatever it's asked for — the overwatch a move sets off. That one is past
- * the dice, so even an overwatch shot that can't miss outright doesn't graze:
+ * hit, graze and miss, by its odds; a melee strike's hit and miss, by
+ * `strikeChance` — a cleave's two blows played out together, at its first
+ * target's chance; and for anything else one roll that misses whatever it's
+ * asked for — the overwatch or guard a move sets off. That one is past the
+ * dice, so even an overwatch shot that can't miss outright doesn't graze:
  * it's only ever played out, never rolled.
  */
 function rollsFor(state: BattleState, action: Action): { roll: number; weight: number }[] {
     const shot = shotOf(action.kind);
     const actor = fighterById(state, action.fighter);
-    const target = "target" in action ? fighterById(state, action.target) : undefined;
+    const aimed = "target" in action ? action.target : "targets" in action ? action.targets[0] : undefined;
+    const target = aimed !== undefined ? fighterById(state, aimed) : undefined;
     const odds = shot && actor && target ? shotOdds(state, actor, target, shot) : undefined;
+    if (!odds && state.balanced && rollsToHit(action.kind) && target) {
+        const landed = strikeChance(state, target);
+        return [{ roll: 1, weight: landed }, { roll: ROLL_SIDES, weight: ROLL_SIDES - landed }].filter(({ weight }) => weight > 0).map(({ roll, weight }) => ({ roll, weight: weight / ROLL_SIDES }));
+    }
     if (!odds) return [{ roll: ROLL_SIDES + 1, weight: 1 }];
     const { chance, grazeChance } = odds;
     return [
@@ -439,9 +448,9 @@ function harmKnown(plan: Plan, fighter: Fighter, enemies: readonly Fighter[]): M
     // faces, or what it has banked or spent, which every action changes, the
     // overwatch a move sets off among them. Of the character itself, not
     // where it stands either.
-    const read = ({ id, owner, character, option, hp, effects }: Fighter) => [id, owner, character, option ?? null, hp, effects];
+    const read = ({ id, owner, character, option, hp, maxHp, effects }: Fighter) => [id, owner, character, option ?? null, hp, maxHp ?? null, effects];
     const walls = state.fighters.filter(one => isStanding(one) && hasEffect(one, "shieldWall")).map(({ id, owner, square }) => [id, owner, square]);
-    const key = JSON.stringify([fieldId(memo, state.field), read(fighter), enemies.map(enemy => [...read(enemy), enemy.square]), walls, state.clouds ?? [], landedSmoke(state.fighters), state.sides ?? null]);
+    const key = JSON.stringify([fieldId(memo, state.field), read(fighter), enemies.map(enemy => [...read(enemy), enemy.square]), walls, state.clouds ?? [], landedSmoke(state.fighters), state.sides ?? null, state.balanced ?? false]);
     let known = memo.harm.get(key);
     if (!known) memo.harm.set(key, known = new Map());
     return known;
@@ -454,12 +463,13 @@ function enemiesOf(battle: BattleState, player: string): Fighter[] {
 
 /**
  * The points' worth one attack by `attacker` on `target` could be expected to
- * take off it from where the two stand: a shot by its odds, a strike in full,
- * and nothing when its weapon doesn't reach. Never more than the target has.
+ * take off it from where the two stand: a shot by its odds, a strike by its
+ * chance to land, and nothing when its weapon doesn't reach. Never more than
+ * the target has.
  */
 function expectedHarm(battle: BattleState, attacker: Fighter, target: Fighter): number {
     const weapon = weaponOf(attacker);
-    if (weapon.kind === "melee") return weaponReaches(battle, attacker, target.square) ? worthOf(target, Math.min(weapon.damage, target.hp)) : 0;
+    if (weapon.kind === "melee") return weaponReaches(battle, attacker, target.square) ? worthOf(target, strikeChance(battle, target) * Math.min(weapon.damage, target.hp) / ROLL_SIDES) : 0;
     const odds = shotOdds(battle, attacker, target);
     if (!odds) return 0;
     return worthOf(target, expectedDamage(odds, target.hp));
@@ -472,6 +482,5 @@ function expectedDamage({ chance, grazeChance, damage, grazeDamage }: ShotOdds, 
 
 /** What `hp` of a character is worth, in points: its cost, a share for each HP. */
 function worthOf(fighter: Fighter, hp: number): number {
-    const { points, hp: full } = CHARACTERS[fighter.character];
-    return points * hp / full;
+    return CHARACTERS[fighter.character].points * hp / maxHpOf(fighter);
 }

@@ -2,7 +2,8 @@
 
 A record of what was tried to make *Hold Out* (docs/games/realm-arena.md
 §30.3, §30.9–§30.11) winnable, and what each change did to the team's chances
-in simulation. None of these rules has shipped. This file holds the numbers
+in simulation. Only team HP ×1.5 and the enemy −1 step shipped, with the
+other changes in *Where this points*; the rest have not. This file holds the numbers
 and how each lever was built, so the next person tuning the mode doesn't start
 from scratch.
 
@@ -258,6 +259,22 @@ The same 2-player cells at 15 rounds, for comparison: 0% / 8% alone, 17% /
   at all.
 
 ## Where this points
+
+**What shipped (command version 7, realm-arena.md §30.13).** Not the set
+above's restore or armour, but the two levers that needed no new mechanism,
+plus three changes that slow the killing in every mode: in Hold Out, **team
+HP ×1.5** (rounded up, as `maxHpOf`) and **the enemy −1 step** (the warbands
+and every wave refill muster one rung down the budget ladder); and everywhere,
+**melee hits 80%** instead of always, **a shot at over two thirds of its range
+is −20%**, a Cleric's **Heal is once a turn** with no cooldown, and its
+**Raise is on a four-turn cooldown** instead of once a battle. The rest of
+this section, and the cells above, are what pointed there and what was left
+over: restore, armour and attack 3 AP, 13 rounds for two players. A
+first look at the combined set, 8 battles a cell on seeds 1–8 (so ±30 points,
+and only a check that it is neither hopeless nor trivial), gave the team
+0% against the Realm and 50% against the Swarm at 2 players, and 38% and 88% at
+3 players. It wants the 200-run comparison the end of this file describes
+before anyone leans on it.
 
 - **Restore one downed character per player as each wave lands.** It's
   Hold Out-only, fits the mission's fiction (reinforcements reach the keep),

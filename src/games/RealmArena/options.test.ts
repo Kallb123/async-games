@@ -179,7 +179,8 @@ describe("playing the options (§23.2)", () => {
         const { field } = battleOf(game);
         enemy.square = field.tiles.findIndex((tile, square) => tile.terrain.standable && square !== bash.square
             && !("refused" in check({ field, fighters: [bash, { ...enemy, square }] }, "a", { kind: "shieldBash", fighter: bash.id, target: enemy.id })));
-        expect((await play(game, actBy("a", { kind: "shieldBash", fighter: bash.id, target: enemy.id }))).outcome.validMove).toBe(true);
+        // A roll of 1 lands the strike, which stuns on a hit.
+        expect((await play(game, Object.assign(actBy("a", { kind: "shieldBash", fighter: bash.id, target: enemy.id }), { recordedRolls: [1] }))).outcome.validMove).toBe(true);
         expect(own(game, "b")[0].effects).toEqual({ stunned: 1 });
         expect((await play(game, cmd(RealmArenaUndo, "a"))).outcome.validMove).toBe(false);
     });

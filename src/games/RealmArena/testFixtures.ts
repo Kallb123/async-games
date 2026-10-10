@@ -37,7 +37,8 @@ export function makeGame(turnOrder: string[] = PLAYERS, mastery: MasterySnapshot
         userIdList: [...turnOrder],
         turnTimer: "unlimited",
         gameState: { turnOrder: [...turnOrder], history: [], commandHistory: [] },
-        specificGameState: buildInitialRealmArenaState(turnOrder, mastery, settings),
+        // Under the current rules unless a test says otherwise (`rulesVersion`: 6 for the old).
+        specificGameState: buildInitialRealmArenaState(turnOrder, mastery, { rulesVersion: gameCommandVersion(meta), ...settings }),
         complete: false,
         winner: "",
         markModified: () => {},

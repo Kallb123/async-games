@@ -82,6 +82,11 @@ export const WHATS_NEW: WhatsNewGroup[] = [
         icon: "✨",
         items: [
             {
+                title: "Realm Arena rebalanced: tougher Hold Out defenders, melee can miss, long shots harder",
+                detail: "In Hold Out your characters now have 50% more HP, and the enemy warbands muster one step smaller. In every battle a blow in melee hits 80% of the time rather than always, a shot at a target further than two thirds of its range is 20% less likely to hit, a Cleric can Heal every turn (once a turn, no waiting), and Raise can be used again four turns after the last one instead of once a battle. Battles already under way keep the rules they started with.",
+                game: "realmarena",
+            },
+            {
                 title: "Home page and games load faster",
                 detail: "The home page and a game's board come back from the server sooner, above all when you check back often: players' names and pictures no longer have to be looked up afresh every time, and the home page reads only what it shows rather than every game you've ever finished. A new name or picture can take up to five minutes to reach other players.",
             },
@@ -120,11 +125,6 @@ export const WHATS_NEW: WhatsNewGroup[] = [
             {
                 title: "Realm Arena: points for an assist",
                 detail: "In a free-for-all, wounding a character is worth it even when somebody else finishes it off: whoever downs it still scores the knock-out, and every other player who hurt it since it last stood up scores half that, rounded up.",
-                game: "realmarena",
-            },
-            {
-                title: "Realm Arena battle results: the points race, damage by character and more",
-                detail: "A finished battle's results chart every player's score round by round, with a skull on their line wherever one of their characters fell, and each squad's health beside it. A bar chart shows the damage each kind of character dealt, split by whose it was, and a table sets out everything each squad did — knock-outs, damage dealt and taken, healing, shots landed, reactions on watch — with each player's top fighter named.",
                 game: "realmarena",
             },
         ],

@@ -58,6 +58,30 @@ export const GRAZE_BAND = 10;
 export const FLANK_BONUS = 1;
 export const ROLL_SIDES = 100;
 
+/**
+ * The command version whose rules this file's balance changes are: a melee
+ * strike rolls to hit (`MELEE_ACCURACY`), a long shot is harder
+ * (`LONG_RANGE_PENALTY`), a Cleric's Heal is once a turn and its Raise on a
+ * cooldown (`abilityRules`), and in Hold Out the team has more HP
+ * (`TEAM_HP_FACTOR`) against smaller warbands (`HOLD_OUT_ENEMY_STEPS`). A
+ * battle is stamped with the version it was created under
+ * (`IRealmArenaSpecificGameState.rulesVersion`), so one begun before it keeps
+ * the rules it began with, on a replay too. Never moves once shipped.
+ */
+export const BALANCE_VERSION = 7;
+
+/** Whether a battle created under this rules version plays by `BALANCE_VERSION`'s rules: one with no stamp, from before them, doesn't. */
+export const isBalanced = (rulesVersion: number | undefined): boolean => (rulesVersion ?? 0) >= BALANCE_VERSION;
+
+/** A melee strike's chance to hit, before what's on its target (`strikeChance`): it hits four times in five (§13.3). */
+export const MELEE_ACCURACY = 80;
+/** A ranged shot at a target further than this many thirds of its weapon's range is a long shot (`isLongShot`): two thirds. */
+export const LONG_RANGE_THIRDS = 2;
+/** What a long shot takes off its chance to hit (§13.3). */
+export const LONG_RANGE_PENALTY = 20;
+/** Hold Out's team characters have this many times their table HP, rounded up (`teamHp`). */
+export const TEAM_HP_FACTOR = 1.5;
+
 /** The mission's scoring area, by the id a map gives its objective (§13.7). */
 export const CENTRE = "centre";
 export const CENTRE_POINTS = 5;
@@ -103,6 +127,12 @@ export interface Fighter {
     facing?: Facing;
     /** 0 means it's down: out of the battle unless a Cleric raises it (§13.5). */
     hp: number;
+    /**
+     * The most HP it can have, where that isn't its character's (`teamHp`:
+     * Hold Out's team): set as it is mustered, absent otherwise. Read only
+     * through `maxHpOf`.
+     */
+    maxHp?: number;
     /** AP left to spend this turn. */
     ap: number;
     /** AP banked on overwatch or guard, spent 2 a reaction until its owner's next turn (§13.4). */
@@ -125,6 +155,8 @@ export interface Fighter {
     cooldowns: Partial<Record<AbilityId, number>>;
     /** Once-per-battle abilities it has used. */
     spent: AbilityId[];
+    /** Once-per-turn abilities it has used this turn, wiped as its owner's next turn begins; absent while there are none. */
+    usedThisTurn?: AbilityId[];
     /** The item it carries, bought at muster, or null once it's used or when it never had one (§21.1). */
     item: ItemId | null;
     /** The option it was mustered with, swapping part of its kit for another (§23.2): absent on the starter character. */
@@ -175,6 +207,12 @@ export interface BattleState {
      * the server, the board and the recap alike. Read only through `sideOf`.
      */
     sides?: Readonly<Record<string, string>>;
+    /**
+     * Whether the battle plays by `BALANCE_VERSION`'s rules, as it was created
+     * under them (`isBalanced`). Never stored or sent: `battleFrom` builds it
+     * from the battle's `rulesVersion`.
+     */
+    balanced?: true;
 }
 
 /** What a `BattleState` is built from: the persisted state on the server, the response on the board and in the recap. */
@@ -185,6 +223,8 @@ export interface BattleSource {
     /** The players in seat order, and whether they fight together against the computer's warbands (§29): what the sides are read from. */
     seats?: readonly string[];
     coop?: boolean;
+    /** The rules version the battle was created under; absent for one from before `BALANCE_VERSION`. */
+    rulesVersion?: number;
 }
 
 /**
@@ -211,9 +251,12 @@ export const ENEMY_SIDE = "enemy";
  * battle so far — has no `sides`. Co-op has two: the players, and a warband
  * for each of them (§29.1).
  */
-export function battleFrom(field: Battlefield, { fighters, fog, clouds, seats = [], coop }: BattleSource): BattleState {
+export function battleFrom(field: Battlefield, { fighters, fog, clouds, seats = [], coop, rulesVersion }: BattleSource): BattleState {
     const sides = coop ? Object.fromEntries([...seats.map(player => [player, TEAM_SIDE]), ...warbandsFor(seats).map(warband => [warband, ENEMY_SIDE])]) : undefined;
-    return { field, fighters, ...(fog ? { fog: true } : {}), ...(clouds && clouds.length > 0 ? { clouds } : {}), ...(sides ? { sides } : {}) };
+    return {
+        field, fighters, ...(fog ? { fog: true } : {}), ...(clouds && clouds.length > 0 ? { clouds } : {}), ...(sides ? { sides } : {}),
+        ...(isBalanced(rulesVersion) ? { balanced: true as const } : {}),
+    };
 }
 
 /** The side an owner fights on (§29.6): its own, in a free-for-all. */
@@ -245,7 +288,13 @@ export type ShotResult = "hit" | "graze" | "miss";
 export type BattleEvent =
     | { kind: "moved"; fighter: number; path: Square[]; sneaking: boolean }
     | { kind: "shot"; fighter: number; target: number; chance: number; roll: number; result: ShotResult; damage: number; reaction: boolean }
-    | { kind: "struck"; fighter: number; target: number; damage: number; reaction: boolean }
+    /**
+     * A melee strike. In a battle under `BALANCE_VERSION` it rolled (`chance`
+     * and `roll`) and may have `missed`, doing no damage; before it, it always
+     * hit and carries neither. A Demolish's splash is a `demolished` event, not
+     * this, and never rolls.
+     */
+    | { kind: "struck"; fighter: number; target: number; damage: number; reaction: boolean; chance?: number; roll?: number; missed?: true }
     | { kind: "fireball"; fighter: number; at: Square; targets: number[]; damage: number }
     | { kind: "downed"; fighter: number; by: number }
     /**
@@ -287,10 +336,11 @@ export const SCORED_FOR: Readonly<Record<Extract<BattleEvent, { kind: "scored" }
 };
 
 /**
- * An event as a review sends it to every player (§26.2): a shot without the
- * roll that decided it, which the log never tells.
+ * An event as a review sends it to every player (§26.2): a shot or a strike
+ * without the roll that decided it, which the log never tells.
  */
-export type ToldEvent = Exclude<BattleEvent, { kind: "shot" }> | Omit<Extract<BattleEvent, { kind: "shot" }>, "roll">;
+export type ToldEvent = Exclude<BattleEvent, { kind: "shot" | "struck" }>
+    | Omit<Extract<BattleEvent, { kind: "shot" }>, "roll"> | Omit<Extract<BattleEvent, { kind: "struck" }>, "roll">;
 
 export interface Outcome {
     fighters: Fighter[];
@@ -329,6 +379,43 @@ export const weaponOf = (fighter: Pick<Fighter, "character" | "option">): Weapon
 
 /** The abilities a character has: its character's, with the one its option swaps out swapped for its own (§23.2). */
 export const abilitiesOf = (fighter: Pick<Fighter, "character" | "option">): readonly AbilityId[] => kitOf(fighter.character, fighter.option).abilities;
+
+/**
+ * The most HP a character can have: its character's, or — for Hold Out's team
+ * under `BALANCE_VERSION` — the more it was mustered with (`teamHp`). Every
+ * full HP the rules, the computer and the board read comes through here: heals
+ * and the rally cap at it, a raise gives back half of it, a HP bar fills to it.
+ */
+export const maxHpOf = (fighter: Pick<Fighter, "character" | "maxHp">): number => fighter.maxHp ?? CHARACTERS[fighter.character].hp;
+
+/**
+ * Whether a battle's team is the tougher one `BALANCE_VERSION` gives Hold Out
+ * (`teamHp`, and warbands a rung smaller): the mission, created under the
+ * balance rules. The one test the server, the muster sheet and the tests all use.
+ */
+export const stoutTeam = (mission: string | undefined, rulesVersion: number | undefined): boolean => mission === "holdOut" && isBalanced(rulesVersion);
+
+/** What a character of Hold Out's team is mustered with: its table HP times `TEAM_HP_FACTOR`, rounded up. */
+export const teamHp = (character: CharacterId): number => Math.ceil(CHARACTERS[character].hp * TEAM_HP_FACTOR);
+
+/** The limits on how often an ability can be used. */
+export type AbilityLimits = Pick<Ability, "cooldown" | "oncePerBattle" | "oncePerTurn">;
+
+/** How Heal and Raise were limited before `BALANCE_VERSION`: a battle created earlier keeps them (`abilityRules`). */
+const UNBALANCED_LIMITS: Readonly<Partial<Record<AbilityId, AbilityLimits>>> = {
+    heal: { cooldown: 2 },
+    raise: { cooldown: 0, oncePerBattle: true },
+};
+
+/**
+ * How often an ability can be used in this battle: the table's, except for the
+ * two a battle created before `BALANCE_VERSION` has as they were — the table
+ * is the current rules, which a board and a stats sheet read.
+ */
+export function abilityRules(state: Pick<BattleState, "balanced">, id: AbilityId): AbilityLimits {
+    const { cooldown, oncePerBattle, oncePerTurn }: AbilityLimits = (!state.balanced && UNBALANCED_LIMITS[id]) || ABILITIES[id];
+    return { cooldown, oncePerBattle, oncePerTurn };
+}
 
 /** Movement points each AP spent on moving buys it: its character's, halved and rounded up while it's slowed (§20.1). */
 export function movementOf(fighter: Fighter): number {
@@ -396,6 +483,8 @@ export function reachOf(state: BattleState, fighter: Fighter, sneaking = false, 
 export interface ShotOdds {
     /** Percent to hit, 0–100. */
     chance: number;
+    /** Whether the target is further than a long shot's reach (`isLongShot`), which cost `LONG_RANGE_PENALTY`. */
+    longShot: boolean;
     /** Percent to graze, on top of the chance to hit. */
     grazeChance: number;
     damage: number;
@@ -453,11 +542,30 @@ function effectsHitBonus(target: Fighter): number {
     }, 0);
 }
 
+/**
+ * Whether a target `away` squares from a ranged weapon of this `range` is a
+ * long shot: further than `LONG_RANGE_THIRDS` of every three squares of it. Worked
+ * in whole numbers, so a target exactly two thirds out isn't one.
+ */
+export const isLongShot = (away: number, range: number): boolean => away * 3 > range * LONG_RANGE_THIRDS;
+
+/**
+ * What a melee strike's chance to hit is (§13.3): `MELEE_ACCURACY` plus what
+ * the effects on the target add to every attack at it (Marked, Corroded), and
+ * always when the battle predates `BALANCE_VERSION`. Cover, height and smoke
+ * are a ranged shot's: whoever is next to the target is past them.
+ */
+export function strikeChance(state: Pick<BattleState, "balanced">, target: Fighter): number {
+    return state.balanced ? Math.min(ROLL_SIDES, Math.max(0, MELEE_ACCURACY + effectsHitBonus(target))) : ROLL_SIDES;
+}
+
 export function shotOdds(state: BattleState, attacker: Fighter, target: Fighter, kind: ShotKind = "attack"): ShotOdds | undefined {
     const { field } = state;
     const weapon = weaponOf(attacker);
     if (weapon.kind !== "ranged") return undefined;
     if (!inRange(field, attacker.square, target.square, weapon.range)) return undefined;
+    // Measured as the range is, so a shot is long exactly when it is near the end of it.
+    const longShot = !!state.balanced && isLongShot(distance(field, attacker.square, target.square), weapon.range);
 
     const sideCover = coverAgainst(field, target.square, attacker.square);
     const cover = sideCover === "none" && shielded(state, target) ? "half" : sideCover;
@@ -466,6 +574,7 @@ export function shotOdds(state: BattleState, attacker: Fighter, target: Fighter,
         - COVER_PENALTY[cover] * (hasEffect(target, "hunkered") ? 2 : 1)
         + (highGround ? HIGH_GROUND_BONUS : 0)
         + effectsHitBonus(target)
+        - (longShot ? LONG_RANGE_PENALTY : 0)
         - (smokeSquares(state).has(target.square) ? ITEMS.smokePot.hitPenalty : 0)
         + (kind === "aimedShot" ? ABILITIES.aimedShot.hitBonus : 0)
         - (kind === "overwatch" ? OVERWATCH_PENALTY : 0);
@@ -475,7 +584,7 @@ export function shotOdds(state: BattleState, attacker: Fighter, target: Fighter,
     const damage = weapon.damage + (flanked ? FLANK_BONUS : 0);
     // Grazes are the rolls that miss by `GRAZE_BAND` or less, counted from the
     // raw chance: a shot at −10% can't so much as graze.
-    return { chance, grazeChance: clamp(raw + GRAZE_BAND) - chance, damage, grazeDamage: Math.ceil(damage / 2), cover, flanked };
+    return { chance, longShot, grazeChance: clamp(raw + GRAZE_BAND) - chance, damage, grazeDamage: Math.ceil(damage / 2), cover, flanked };
 }
 
 /** A roll of 1–100 against a shot's odds: at or under the chance to hit hits, the graze band above it grazes, and anything more misses. */
@@ -623,6 +732,7 @@ export function viewOf(state: BattleState, player: string | null): BattleState {
         fog: true,
         ...(clouds.length > 0 ? { clouds } : {}),
         ...(state.sides ? { sides: state.sides } : {}),
+        ...(state.balanced ? { balanced: true as const } : {}),
     };
 }
 
@@ -706,6 +816,7 @@ const isSquare = (field: Battlefield, value: unknown): value is Square =>
 function abilityRefusal(fighter: Fighter, ability: AbilityId): string | undefined {
     if (!abilitiesOf(fighter).includes(ability)) return `This ${CHARACTERS[fighter.character].name} can't use ${ABILITIES[ability].name}`;
     if (fighter.spent.includes(ability)) return `${ABILITIES[ability].name} has been used this battle`;
+    if (fighter.usedThisTurn?.includes(ability)) return `${ABILITIES[ability].name} has been used this turn`;
     if ((fighter.cooldowns[ability] ?? 0) > 0) return `${ABILITIES[ability].name} isn't ready yet`;
     return undefined;
 }
@@ -855,7 +966,7 @@ function healRefusal(state: BattleState, healer: Fighter, target: Fighter | unde
     const far = draught ? undefined : aimRefusal(state, healer, target.square, range);
     if (far) return far;
     if (draught && target.id !== healer.id && !nextTo(state.field, healer.square, target.square)) return "Too far away to heal";
-    return target.hp < CHARACTERS[target.character].hp || healedEffects(target).length > 0 ? undefined : "Already at full health";
+    return target.hp < maxHpOf(target) || healedEffects(target).length > 0 ? undefined : "Already at full health";
 }
 
 /** Whether a square is low cover next to one standing on `from`: what a Knight's Demolish can be aimed at (§23.2). */
@@ -884,7 +995,7 @@ export function afflictionsOn(fighter: Fighter): Affliction[] {
 export function purified(state: BattleState, cleric: Fighter): Fighter[] {
     return state.fighters.filter(ally => allied(state, ally.owner, cleric.owner) && isStanding(ally)
         && (ally.id === cleric.id || nextTo(state.field, cleric.square, ally.square))
-        && (ally.hp < CHARACTERS[ally.character].hp || afflictionsOn(ally).length > 0));
+        && (ally.hp < maxHpOf(ally) || afflictionsOn(ally).length > 0));
 }
 
 // ─── Taking an action ───────────────────────────────────────────────────────
@@ -997,10 +1108,24 @@ function resolver(state: BattleState, roll: Roll) {
         if (result === "hit" && effect) afflict(by, target, effect);
     };
 
-    /** A melee strike, which always hits (§13.3): for the weapon's damage, or an ability's own (Shield bash). */
-    const strike = (by: Fighter, target: Fighter, reaction = false, damage = weaponOf(by).damage) => {
-        events.push({ kind: "struck", fighter: by.id, target: target.id, damage, reaction });
-        wound(by, target, damage);
+    /**
+     * A melee strike (§13.3): for the weapon's damage, or an ability's own
+     * (Shield bash, Rend). Under `BALANCE_VERSION` it rolls against
+     * `strikeChance` — a hit or a miss, with no graze — and before it, it
+     * always hit and rolled nothing. Says whether it landed.
+     */
+    const strike = (by: Fighter, target: Fighter, reaction = false, damage = weaponOf(by).damage): boolean => {
+        if (!battle.balanced) {
+            events.push({ kind: "struck", fighter: by.id, target: target.id, damage, reaction });
+            wound(by, target, damage);
+            return true;
+        }
+        const chance = strikeChance(battle, target);
+        const rolled = roll();
+        const missed = rolled > chance;
+        events.push({ kind: "struck", fighter: by.id, target: target.id, damage: missed ? 0 : damage, reaction, chance, roll: rolled, ...(missed ? { missed: true as const } : {}) });
+        if (!missed) wound(by, target, damage);
+        return !missed;
     };
 
     /**
@@ -1032,7 +1157,7 @@ function resolver(state: BattleState, roll: Roll) {
      * Cleric's Heal, a healing draught and Purify share (§20.2, §21.3, §23.2).
      */
     const mend = (by: Fighter, target: Fighter, hp: number, via?: "draught" | "purify") => {
-        const restored = Math.min(hp, CHARACTERS[target.character].hp - target.hp);
+        const restored = Math.min(hp, maxHpOf(target) - target.hp);
         target.hp += restored;
         events.push({ kind: "healed", fighter: by.id, target: target.id, hp: restored, ...(via ? { via } : {}) });
         for (const effect of via === "purify" ? afflictionsOn(target) : healedEffects(target)) {
@@ -1089,9 +1214,10 @@ export function act(state: BattleState, player: string, action: Action, roll: Ro
     if (!moving) actor.ap -= checked.ap;
     if (Object.hasOwn(ABILITIES, action.kind)) {
         const id = action.kind as AbilityId;
-        const ability: Ability = ABILITIES[id];
-        if (ability.cooldown > 0) actor.cooldowns[id] = ability.cooldown;
-        if (ability.oncePerBattle) actor.spent.push(id);
+        const { cooldown, oncePerBattle, oncePerTurn } = abilityRules(state, id);
+        if (cooldown > 0) actor.cooldowns[id] = cooldown;
+        if (oncePerBattle) actor.spent.push(id);
+        if (oncePerTurn) actor.usedThisTurn = [...actor.usedThisTurn ?? [], id];
     }
 
     switch (action.kind) {
@@ -1114,8 +1240,8 @@ export function act(state: BattleState, player: string, action: Action, roll: Ro
         }
         case "shieldBash":
             // For the ability's damage, not the sword's, and stunned if it stays up (§23.2).
-            run.strike(actor, get(action.target), false, ABILITIES.shieldBash.damage);
-            run.afflict(actor, get(action.target), ABILITIES.shieldBash.effect);
+            // A miss stuns nobody, as a shot leaves its effect only on a hit.
+            if (run.strike(actor, get(action.target), false, ABILITIES.shieldBash.damage)) run.afflict(actor, get(action.target), ABILITIES.shieldBash.effect);
             break;
         case "rend":
             // For the ability's damage, not the talons' (§31.2).
@@ -1211,7 +1337,7 @@ export function act(state: BattleState, player: string, action: Action, roll: Ro
             // Back on its feet at half HP, with nothing to spend until its
             // owner's next turn; the points for downing it stay scored (§13.5).
             const target = get(action.target);
-            target.hp = Math.ceil(CHARACTERS[target.character].hp / 2);
+            target.hp = Math.ceil(maxHpOf(target) / 2);
             events.push({ kind: "raised", fighter: actor.id, target: target.id, hp: target.hp });
             break;
         }
@@ -1246,6 +1372,7 @@ export function startTurn(state: BattleState, player: string): Outcome {
         fighter.ap = hasEffect(fighter, "stunned") ? EFFECTS.stunned.ap : ACTION_POINTS;
         fighter.banked = 0;
         delete fighter.smoke;
+        delete fighter.usedThisTurn;
         if (hasEffect(fighter, "burning")) {
             const { damage } = EFFECTS.burning;
             // A burner whose squad has left the battle (a dropped player's)
@@ -1455,9 +1582,16 @@ export function musterRefusal(field: Battlefield, seat: number, picks: unknown, 
     return points <= budget ? undefined : `That squad costs ${points} points, and the budget is ${budget}`;
 }
 
-/** A character as it first stands on the battlefield, at full HP with nothing spent, carrying what it was mustered with. */
-export function newFighter(id: number, owner: string, character: CharacterId, square: Square, item: ItemId | null = null, option?: OptionId): Fighter {
-    return { id, owner, character, square, hp: CHARACTERS[character].hp, ap: 0, banked: 0, effects: {}, cooldowns: {}, spent: [], item, ...(option ? { option } : {}) };
+/**
+ * A character as it first stands on the battlefield, at full HP with nothing
+ * spent, carrying what it was mustered with. `maxHp` is given where it isn't
+ * its character's (`teamHp`).
+ */
+export function newFighter(id: number, owner: string, character: CharacterId, square: Square, item: ItemId | null = null, option?: OptionId, maxHp?: number): Fighter {
+    return {
+        id, owner, character, square, hp: maxHp ?? CHARACTERS[character].hp, ...(maxHp !== undefined ? { maxHp } : {}),
+        ap: 0, banked: 0, effects: {}, cooldowns: {}, spent: [], item, ...(option ? { option } : {}),
+    };
 }
 
 /**
@@ -1472,6 +1606,7 @@ export function storedFighter(fighter: Fighter): Fighter {
         // Copied, so an undo snapshot never shares them with the live fighter.
         ...(fighter.tally ? { tally: addTally(fighter.tally, NO_TALLY) } : {}),
         ...(fighter.woundedBy ? { woundedBy: [...fighter.woundedBy] } : {}),
+        ...(fighter.usedThisTurn ? { usedThisTurn: [...fighter.usedThisTurn] } : {}),
     };
 }
 
