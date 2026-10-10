@@ -5428,6 +5428,11 @@ html:has(.ag-pull) { overscroll-behavior-y: contain; }
    by setting their SVG `opacity` and `transform` attributes (`usePlayback`). So
    no rule below may set either on them: a CSS property beats an attribute, and
    would freeze the piece where the stylesheet left it. The stylesheet only says
+/* The cover a lined-up move's destination gives, a shield on each side that covers:
+   an outline with a full fill for full cover, and a left half for half. */
+.ag-ra-cover { pointer-events: none; }
+.ag-ra-cover-shield { fill: color-mix(in oklch, var(--ra-night) 80%, transparent); stroke: var(--ag-gold); stroke-width: 0.4; stroke-linejoin: round; }
+.ag-ra-cover-fill { fill: var(--ag-gold); }
    how each looks. Outlined in the night so it reads on grass, stone or a figure.
    Nothing here takes a tap. */
 .ag-ra-fx { pointer-events: none; }

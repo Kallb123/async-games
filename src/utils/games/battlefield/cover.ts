@@ -16,9 +16,18 @@
 // full height the line crosses may also block sight, so ask `canSee` first.
 
 import { sightLine } from "./lineOfSight";
-import { coverOfRise, isNeighbour, riseOf, type Battlefield, type Cover, type Square } from "./terrain";
+import { coordsOf, coverOfRise, isNeighbour, riseOf, squareAt, type Battlefield, type Cover, type Square } from "./terrain";
 
 const RANK: Record<Cover, number> = { none: 0, half: 1, full: 2 };
+
+function better(best: Cover, cover: Cover): Cover {
+    return RANK[cover] > RANK[best] ? cover : best;
+}
+
+/** What one square next to `target` covers it by: its terrain's own cover, or how far it rises above it, whichever is more. */
+function coverFrom(field: Battlefield, neighbour: Square, target: Square): Cover {
+    return better(field.tiles[neighbour].terrain.cover, coverOfRise(riseOf(field, neighbour, target)));
+}
 
 /** The cover `target` has against an attack from `attacker`. `"none"` means it's flanked. */
 export function coverAgainst(field: Battlefield, target: Square, attacker: Square): Cover {
@@ -26,6 +35,33 @@ export function coverAgainst(field: Battlefield, target: Square, attacker: Squar
     const { crossed, grazed } = sightLine(field, target, attacker, 1);
     return [...crossed, ...grazed.flat()]
         .filter(square => isNeighbour(field, target, square))
-        .flatMap(square => [field.tiles[square].terrain.cover, coverOfRise(riseOf(field, square, target))])
-        .reduce<Cover>((best, cover) => RANK[cover] > RANK[best] ? cover : best, "none");
+        .map(square => coverFrom(field, square, target))
+        .reduce<Cover>(better, "none");
+}
+
+/** The four sides of a square, as a step to the square beyond: north is up the map, towards row 0. */
+export const SIDE_STEPS = {
+    north: { col: 0, row: -1 },
+    east: { col: 1, row: 0 },
+    south: { col: 0, row: 1 },
+    west: { col: -1, row: 0 },
+} as const;
+
+export type Side = keyof typeof SIDE_STEPS;
+
+/**
+ * The cover each side of `square` gives whoever stands on it, whichever way
+ * an attacker comes from: what the square beside it gives (`coverFrom`, the
+ * same reckoning `coverAgainst` makes for the ones the line crosses). Only
+ * the four sides, not the corners, since that is where a shield is drawn;
+ * the edge of the map gives none.
+ */
+export function coverBySide(field: Battlefield, square: Square): Record<Side, Cover> {
+    const { col, row } = coordsOf(field, square);
+    const sides = {} as Record<Side, Cover>;
+    for (const side of Object.keys(SIDE_STEPS) as Side[]) {
+        const next = squareAt(field, col + SIDE_STEPS[side].col, row + SIDE_STEPS[side].row);
+        sides[side] = next === undefined ? "none" : coverFrom(field, next, square);
+    }
+    return sides;
 }
