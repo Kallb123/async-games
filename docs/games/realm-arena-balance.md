@@ -70,6 +70,7 @@ What the round-by-round tables showed:
 | **Enemy −*n* steps** | Each warband musters, and its waves refill to, the ready-made squad *n* steps down the points ladder (`BUDGETS`) from today's. On Normal for 2 or 3 players, −1 is 70 points and −2 is 60. | Co-op |
 | **No growth** | Waves refill each warband to its squad but no longer add a character a wave (§30.10 off). | Hold Out |
 | **Waves every 4** | A wave every fourth round instead of every third (`WAVE_EVERY`). | Hold Out |
+| **Team HP ×*k*** | The team's characters only have *k* times their HP (2), rounded; the warbands keep theirs, Realm or not. Heals, Raise, the rally and a restore scale with the team's own full HP. | Hold Out (team only) |
 | **HP ×*k*** | Every character's HP × *k* (1.5 or 2), rounded, on both sides. Heals, Raise, the rally and a restore scale with it, since they read full HP; damage, burning and the healing items don't. | Every mode |
 
 ## Results
@@ -89,6 +90,7 @@ Win rate · average round overrun in, over 24 battles a cell.
 | HP ×1.5 | 0% · r9.7 | 0% · r10.3 | 0% · r8.8 | 0% · r10.8 |
 | Enemy −1 step + HP ×1.5 | 0% · r8.9 | 0% · r12.4 | 0% · r9.3 | 8% · r11.3 |
 | HP ×2 | 0% · r11.0 | 0% · r12.3 | 0% · r10.0 | 0% · r11.0 |
+| Team HP ×2 | 21% · r14.4 | 50% · r13.8 | 42% · r12.7 | 100% · — |
 | Attack 3 AP | 0% · r11.4 | 0% · r11.8 | 8% · r11.8 | 13% · r11.5 |
 | Armour 1 | 0% · r11.2 | 8% · r13.4 | 0% · r10.4 | 33% · r11.7 |
 | Armour 1 + waves every 4 | 0% · r10.3 | 17% · r12.9 | 0% · r10.5 | 38% · r12.1 |
@@ -107,6 +109,7 @@ Win rate · average round overrun in, over 24 battles a cell.
 | Restore 1 + armour 1 + enemy −1 step | 0% · r12.4 | 83% · r15.0 | 13% · r11.4 | 96% · r12.0 |
 | Restore 1 + HP ×2 | 4% · r11.1 | 13% · r14.5 | 8% · r11.2 | 63% · r12.0 |
 | Restore 1 + HP ×2 + enemy −1 step | 4% · r10.8 | 13% · r15.0 | 13% · r11.8 | 71% · r13.0 |
+| **Restore 1 + team HP ×2** | **50% · r14.8** | **100% · —** | **100% · —** | **100% · —** |
 | **Restore 1 + attack 3 AP + armour 1** | **13% · r14.8** | **92% · r15.0** | **79% · r12.2** | **100% · —** |
 
 ## What it says
@@ -148,7 +151,19 @@ Win rate · average round overrun in, over 24 battles a cell.
    reaches 71% against the Swarm for 3 players. That's still well short of
    attack 3 AP or armour, which tilt the exchange towards the team rather
    than slowing both sides alike. Against the Realm it stays at 4–13%.
-7. **Two players have it harder than three, with the same changes.** Check
+7. **Doubling the team's HP alone is the strongest lever of all,** and keeps
+   two attacks a turn. On its own it wins 42% vs the Realm and 100% vs the
+   Swarm for 3 players, and 21% / 50% for 2: more than any other single
+   change, and more than restore + armour + attack 3 AP together against the
+   Realm. Unlike HP ×2 for everyone, it tilts the exchange: 3 players down
+   2.2 Realm characters and 8.5 Swarm for each one they lose, against 1.1 and
+   1.6 with everyone's HP doubled. A 3-player team still has 9.9 characters
+   at the end of round 4 against the Realm (5.8 today) and 10.1 against the
+   Swarm (4.7). **With restore 1 it overshoots:** 100% in every 3-player cell
+   and 2 players vs the Swarm, with only 2 players vs the Realm still a
+   contest (50%). That's the first set to beat the Realm reliably, and the
+   room between team HP ×1 and ×2 is where to tune.
+8. **Two players have it harder than three, with the same changes.** Check
    2p vs Realm in every row. A 2-player battle runs two rounds past the last
    wave (15 against 13), and the Sacked Fort for two splits the edge between
    two warbands rather than three. It's open which of the two matters; a
@@ -169,11 +184,16 @@ Win rate · average round overrun in, over 24 battles a cell.
   can last long enough for it to matter. Restore + armour + attack 3 AP is
   too easy against the Swarm, so try it with the Swarm's waves no longer
   growing, or the Swarm a step bigger.
-- **To keep two attacks a turn,** slow the killing for the team only:
-  doubled HP for the team's characters in Hold Out (the enemy left as it is),
-  or armour 1. Doubling everyone's HP slows both sides alike, so on its own
-  it shifts the result little (point 6). Team-only HP ×2 with restore 1 is
-  the obvious next run.
+- **To keep two attacks a turn,** slow the killing for the team only.
+  Doubling everyone's HP slows both sides alike and shifts the result little
+  (point 6), but doubling the team's alone is the strongest lever found
+  (point 7). Restore 1 + team HP ×2 is too easy in most cells, so the next
+  runs are restore 1 with team HP ×1.5, and team HP ×2 alone with the
+  waves made harder for 3 players, aiming for something like 50–70% in
+  every cell. A real version also has to show the team's larger HP on the
+  board (`ui.ts` reads `CHARACTERS` for the HP bar), and say why a Knight
+  has 24 HP in Hold Out and 12 everywhere else: something like the keep's
+  defenders being *Steadfast*.
 - Every one of these is a rule, so it takes a command version, as growing
   waves (5) and the rally (6) did.
 
@@ -199,6 +219,7 @@ For re-running: each was an environment switch in a scratch worktree.
   `warbandBudget` (`characters.ts`), with `rung` clamped to the ladder.
 - **No growth:** `waveStrength` with no extra characters.
 - **Waves every 4:** `WAVE_EVERY` in `rules.ts`.
+- **Team HP ×*k*:** a `maxHpOf(fighter)` in `rules.ts`, the character's HP, times *k* unless `isWarband(fighter.owner)`, read everywhere a full HP was read from `CHARACTERS`: `newFighter`, the heal checks and `mend`, Raise, the rally, the restore, and the planner's `worthOf` (so a team HP is worth half as much to it).
 - **HP ×*k*:** every `CHARACTERS[c].hp` scaled and rounded as the table loads.
 
 To compare a change properly, run the same scenarios on the base branch and
