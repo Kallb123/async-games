@@ -1073,12 +1073,12 @@ function aimRefusal(state: BattleState, actor: Fighter, at: unknown, range: numb
 
 /**
  * Why a character can't heal `target`, or undefined when it can: an ally that
- * is hurt or has something a heal clears (§20.2, §21.2) — one it can see in
- * the ability's `range` (Heal, Regrowth), or, for a healing draught
- * (`draught`), one next to it or itself.
+ * is hurt or has something a heal clears (§20.2, §21.2), or itself — one it
+ * can see in the ability's `range` (Heal, Regrowth), or, for a healing
+ * draught (`draught`), one next to it.
  */
 function healRefusal(state: BattleState, healer: Fighter, target: Fighter | undefined, draught: boolean, range = 0): string | undefined {
-    if (!target || !allied(state, target.owner, healer.owner) || !isStanding(target) || (target.id === healer.id && !draught)) return "Pick an ally to heal";
+    if (!target || !allied(state, target.owner, healer.owner) || !isStanding(target)) return "Pick an ally to heal";
     const far = draught ? undefined : aimRefusal(state, healer, target.square, range);
     if (far) return far;
     if (draught && target.id !== healer.id && !nextTo(state.field, healer.square, target.square)) return "Too far away to heal";

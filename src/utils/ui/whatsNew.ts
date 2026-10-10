@@ -82,6 +82,11 @@ export const WHATS_NEW: WhatsNewGroup[] = [
         icon: "✨",
         items: [
             {
+                title: "Realm Arena: Clerics and Broodmothers can heal themselves",
+                detail: "A Cleric's Heal and a Broodmother's Regrowth can now be aimed at the healer itself, not only at an ally — handy when the healer is the one taking the hits.",
+                game: "realmarena",
+            },
+            {
                 title: "Realm Arena: see the cover you're moving into, and why a shot's odds are what they are",
                 detail: "Line up a move and the square you'd end on shows a shield on each side that gives cover: a whole one for full cover, half a shield for half. And every target now has a ? beside its chance to hit, which breaks the number down: the weapon's own accuracy, then what cover, height, smoke, range and the rest add or take off.",
                 game: "realmarena",
@@ -120,11 +125,6 @@ export const WHATS_NEW: WhatsNewGroup[] = [
             {
                 title: "Realm Arena: Hold Out on the Sacked Fort",
                 detail: "Hold Out has a battlefield of its own. Your team starts in a ruined keep in the middle of the map, and the enemy closes in from every edge, where each fresh wave lands too. Its walls are full of gaps, so there's no corner to sit in. The host picks it, or the gate forts, when setting up.",
-                game: "realmarena",
-            },
-            {
-                title: "Realm Arena: Hold Out and achievements",
-                detail: "Choose a new co-op mission and survive repeated enemy waves: fallen warband fighters return every third round, and your team wins by keeping anyone standing to the end. Realm Arena now has five achievements too, for veterans and co-op teams that win together, bring everybody home or survive Hold Out.",
                 game: "realmarena",
             },
         ],

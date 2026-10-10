@@ -349,6 +349,12 @@ describe("items (§21)", () => {
         knight.hp = 5;
         expect((await play(game, actBy("a", { kind: "draught", fighter: knight.id, target: knight.id }))).outcome.validMove).toBe(true);
         expect(game.gameState.history[0].text).toBe("{{a}} healed their Knight with its healing draught for 3");
+
+        // A Cleric's Heal on itself needs no "with" either.
+        const cleric = own(game, "a")[3];
+        cleric.hp = 3;
+        expect((await play(game, actBy("a", { kind: "heal", fighter: cleric.id, target: cleric.id }))).outcome.validMove).toBe(true);
+        expect(game.gameState.history[0].text).toBe("{{a}} healed their Cleric for 4");
     });
 
     it("keeps nothing of an item's action but what was checked", async () => {

@@ -547,7 +547,14 @@ describe("abilities (§13.5, §13.6)", () => {
         expect(byId(2).hp).toBe(12);
         expect(events).toEqual([{ kind: "healed", fighter: 1, target: 2, hp: 2 }]);
         expect(check({ field, fighters: [fighters[0], { ...fighters[1], hp: 12 }] }, "a", { kind: "heal", fighter: 1, target: 2 })).toEqual({ refused: "Already at full health" });
-        expect(check({ field, fighters }, "a", { kind: "heal", fighter: 1, target: 1 })).toEqual({ refused: "Pick an ally to heal" });
+        expect(check({ field, fighters }, "a", { kind: "heal", fighter: 1, target: 1 })).toEqual({ refused: "Already at full health" });
+    });
+
+    it("heal can be aimed at the Cleric itself", () => {
+        const cleric = fighter(1, "a", "cleric", at(field, 1, 1), { hp: 2, effects: { burning: 2 } });
+        const { byId, events } = run({ field, fighters: [cleric] }, "a", { kind: "heal", fighter: 1, target: 1 });
+        expect(byId(1)).toMatchObject({ hp: 6, effects: {} });
+        expect(events[0]).toEqual({ kind: "healed", fighter: 1, target: 1, hp: 4 });
     });
 
     it("raise brings a downed ally back at half HP, and waits out a cooldown of four turns", () => {
@@ -1059,11 +1066,9 @@ describe("items (§21)", () => {
             expect(check({ field, fighters: [{ ...carrier, hp: 6 }] }, "a", { kind: "draught", fighter: 1, target: 1 })).toEqual({ refused: "Already at full health" });
         });
 
-        it("needs a healing draught, which a Cleric's Heal still doesn't stretch to the Cleric itself", () => {
+        it("needs a healing draught", () => {
             const flask = carrying(1, "a", "archer", at(field, 0, 0), "fireFlask", { hp: 2 });
             expect(check({ field, fighters: [flask] }, "a", { kind: "draught", fighter: 1, target: 1 })).toEqual({ refused: "They have no healing draught" });
-            const cleric = fighter(1, "a", "cleric", at(field, 0, 0), { hp: 2 });
-            expect(check({ field, fighters: [cleric] }, "a", { kind: "heal", fighter: 1, target: 1 })).toEqual({ refused: "Pick an ally to heal" });
         });
     });
 
@@ -1410,6 +1415,13 @@ describe("the Swarm (§31)", () => {
             expect(byId(1)).toMatchObject({ cooldowns: { regrowth: 2 } });
             const far = fighter(2, "a", "ravager", at(field, 9, 0), { hp: 4 });
             expect(check({ field, fighters: [mother, far] }, "a", { kind: "regrowth", fighter: 1, target: 2 })).toEqual({ refused: "Out of range or out of sight" });
+        });
+
+        it("can be aimed at the Broodmother itself", () => {
+            const mother = fighter(1, "a", "broodmother", at(field, 0, 0), { hp: 3 });
+            const { byId } = run({ field, fighters: [mother] }, "a", { kind: "regrowth", fighter: 1, target: 1 });
+            expect(byId(1)).toMatchObject({ hp: 6, cooldowns: { regrowth: 2 } });
+            expect(check({ field, fighters: [{ ...mother, hp: 8 }] }, "a", { kind: "regrowth", fighter: 1, target: 1 })).toEqual({ refused: "Already at full health" });
         });
     });
 

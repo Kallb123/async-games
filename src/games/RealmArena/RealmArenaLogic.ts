@@ -464,12 +464,9 @@ function clause(event: BattleEvent, fighters: readonly Fighter[], actor: string,
         case "healed": {
             const hp = event.hp > 0 ? ` for ${event.hp}` : "";
             const self = event.target === event.fighter;
-            switch (event.via) {
-                case "draught": return `healed ${name(event.target)} with ${self ? "its" : `${name(event.fighter)}'s`} healing draught${hp}`;
-                // A Cleric's Purify reaches itself, and needs no "with" to say so.
-                case "purify": return `purified ${name(event.target)}${self ? "" : ` with ${name(event.fighter)}`}${hp}`;
-                default: return `healed ${name(event.target)} with ${name(event.fighter)}${hp}`;
-            }
+            if (event.via === "draught") return `healed ${name(event.target)} with ${self ? "its" : `${name(event.fighter)}'s`} healing draught${hp}`;
+            // A Purify, a Heal or a Regrowth on the healer itself needs no "with" to say so.
+            return `${event.via === "purify" ? "purified" : "healed"} ${name(event.target)}${self ? "" : ` with ${name(event.fighter)}`}${hp}`;
         }
         case "thrown": {
             const hit = hitIn(event.targets).length === 0 ? ""

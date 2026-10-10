@@ -122,7 +122,7 @@ export const ABILITIES = {
     aimedShot: { name: "Aimed shot", ap: 3, cooldown: 2, hitBonus: 20, description: "A shot at +20% to hit" },
     sneak: { name: "Sneak", ap: 2, cooldown: 0, description: "Move without setting off overwatch or guard" },
     fireball: { name: "Fireball", ap: 3, cooldown: 3, range: 12, damage: 3, effect: "burning", blasts: "area", description: "Hits every character in a 3×3 area, friend or foe, sets them burning, and blasts away the low cover there" },
-    heal: { name: "Heal", ap: 2, cooldown: 0, oncePerTurn: true, range: 12, hp: 4, description: "Restore 4 HP to an ally it can see within 12 squares, and clear burning, slowed, stunned and corroded. Once a turn" },
+    heal: { name: "Heal", ap: 2, cooldown: 0, oncePerTurn: true, range: 12, hp: 4, description: "Restore 4 HP to itself or an ally it can see within 12 squares, and clear burning, slowed, stunned and corroded. Once a turn" },
     raise: { name: "Raise", ap: 3, cooldown: 4, description: "Bring a downed ally next to them back at half HP" },
     shieldBash: { name: "Shield bash", ap: 2, cooldown: 3, damage: 2, effect: "stunned", description: "Strike one enemy next to them for 2, and stun it" },
     demolish: { name: "Demolish", ap: 2, cooldown: 2, damage: 2, blasts: "target", description: "Blast away one square of low cover next to them, and strike everyone else beside it for 2, friend or foe" },
@@ -130,7 +130,7 @@ export const ABILITIES = {
     huntersMark: { name: "Hunter's mark", ap: 1, cooldown: 2, range: 12, effect: "marked", description: "Mark an enemy it can see within 12 squares: +15% to hit it, for every attacker" },
     purify: { name: "Purify", ap: 2, cooldown: 3, hp: 2, description: "Clear burning, stunned, slowed, marked and corroded from itself and each ally next to it, and give each 2 HP" },
     rend: { name: "Rend", ap: 3, cooldown: 3, damage: 6, description: "Tear into one enemy next to them for 6" },
-    regrowth: { name: "Regrowth", ap: 2, cooldown: 2, range: 8, hp: 3, description: "Restore 3 HP to an ally it can see within 8 squares, and clear burning, slowed, stunned and corroded" },
+    regrowth: { name: "Regrowth", ap: 2, cooldown: 2, range: 8, hp: 3, description: "Restore 3 HP to itself or an ally it can see within 8 squares, and clear burning, slowed, stunned and corroded" },
     burst: { name: "Burst", ap: 1, cooldown: 0, oncePerBattle: true, damage: 3, effect: "corroded", description: "Burst, splashing acid on everyone next to it for 3, friend or foe, and corroding them. The Bloater is downed" },
 } as const satisfies Record<AbilityId, Ability>;
 

@@ -192,7 +192,7 @@ export function tapFighter(context: TapContext, id: number): TapResult {
     const target = fighterById(battle, id);
     if (!target) return undefined;
     if (isAtSquare(aim)) return tapSquare(context, target.square);
-    // Itself, only when it can be the aim's target: a draught it drinks.
+    // Itself, only when it can be the aim's target: a draught it drinks, or a Heal or Regrowth on itself.
     if (target.id === fighter.id && !candidates.includes(id)) return undefined;
     const enemy = !allied(battle, target.owner, fighter.owner) && isStanding(target);
 
