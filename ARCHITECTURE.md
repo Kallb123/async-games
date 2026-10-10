@@ -1108,8 +1108,10 @@ game — is documented fully in
   page request would pay Clerk's handshake redirect for nothing — so no page
   or layout may call `auth()` / `currentUser()` (a guard test,
   `src/middleware.test.ts`, fails if one can). The home and join pages guess
-  which screen to paint first from Clerk's `__client_uat` cookie
-  (`src/utils/users/signedInHint.ts`); Clerk corrects the guess on the client.
+  which screen to paint first from Clerk's `__client_uat` cookie (the rule is
+  in `src/utils/users/clientUat.ts`; `/join` reads it on the server through
+  `signedInHint.ts`, `/` in the browser); Clerk corrects the guess on the
+  client.
   The root layout wraps everything in `<ClerkProvider>`.
 - API routes read the session with `await auth()` / `currentUser()` from
   `@clerk/nextjs/server` and reject unauthenticated requests.
@@ -1124,28 +1126,41 @@ game — is documented fully in
   same `GameLibrary` browser the signed-in library uses, pointed at sign-up —
   instead of a bounce to `/login`. Locked-out accounts still go to
   `/unlockaccess`.
-- **Which screen a two-audience route shows is decided on the server.** `/` and
-  `/join` are the two screens with something to show a visitor who has no
+- **Which screen a two-audience route shows is decided before Clerk loads.** `/`
+  and `/join` are the two screens with something to show a visitor who has no
   account, and so the two whose *audience* has to be settled before they
-  render. Each is a server page that guesses from Clerk's `__client_uat`
-  cookie (`signedInHint()` in `src/utils/users/signedInHint.ts` — not
-  `auth()`, which would need Clerk's middleware on the page; see above) and
-  hands the guess to the client component below it: `/` renders either
-  `components/Dashboard.tsx` or `components/Landing.tsx`, and `/join` passes
-  `initiallySignedIn` into `JoinForm`, whose guest lockup and signed-in code
-  box share one component and most of their state. The browser can't tell the
-  two audiences apart until Clerk has loaded, and deciding it there meant each
-  screen showed the wrong thing until it had: `/` flashed the dashboard's
-  skeletons at a visitor with no account before replacing them with the
-  landing page, and `/join` — the one route strangers arrive at cold, from a
-  link in a chat app — rendered nothing at all. Both screens still mount
-  `useAuthGuard({ allowSignedOut: true })` and correct themselves from Clerk,
-  for the session the cookie claims and the browser then rejects. Reading the
-  cookie makes a route dynamic, which is what buys the right first paint;
-  `/join` already was, for the lobby lookup its `generateMetadata` does. Whatever the
-  guest form starts out holding — its random Adjective+Animal name, the die
-  face beside it — is drawn on the server and passed down too, because server
-  HTML and the browser's first render have to agree on it.
+  render. Both guess from Clerk's `__client_uat` cookie (the rule is
+  `signedInHintFrom` in `src/utils/users/clientUat.ts` — not `auth()`, which
+  would need Clerk's middleware on the page; see above); they differ in where.
+  `/join` is a server page: `signedInHint()` reads the cookie on the server and
+  passes `initiallySignedIn` into `JoinForm`, whose guest lockup and signed-in
+  code box share one component and most of their state. Whatever the guest form
+  starts out holding — its random Adjective+Animal name, the die face beside it
+  — is drawn on the server and passed down too, because server HTML and the
+  browser's first render have to agree on it. `/join` is dynamic for that, and
+  for the lobby lookup its `generateMetadata` does.
+
+  `/` is **static** (`○` in the build table; served from the CDN, no function
+  render on a cold open or a navigation home), so it can't read the request. Its
+  HTML holds both `components/Dashboard.tsx` and `components/Landing.tsx`, each
+  in an `ag-home-screen` wrapper; an inline script (`SIGNED_IN_PRE_PAINT_SCRIPT`,
+  tested against the same rule) sets `data-ag-signed-in` on `<html>` when the
+  cookie says signed in, and `ag-theme.css` shows the dashboard for that and the
+  landing page otherwise, JavaScript off included. `HomeScreen` renders both
+  until hydration, then keeps the one the cookie names (and, once Clerk has
+  loaded, the one Clerk names) without remounting it. Nothing in the page may read
+  the request (`cookies()`, `headers()`, `auth()`) or it turns dynamic again, and
+  nothing may carry a root `app/loading.tsx`: a loading file is a Suspense
+  boundary, and one round a page this big is sent as skeleton plus a hidden block
+  swapped in later (see `components/HomeLoading.tsx`).
+
+  Deciding it in the browser *after Clerk loads* is what each used to avoid: `/`
+  flashed the dashboard's skeletons at a visitor with no account before
+  replacing them with the landing page, and `/join` — the one route strangers
+  arrive at cold, from a link in a chat app — rendered nothing at all. Both
+  screens still mount `useAuthGuard({ allowSignedOut: true })` and correct
+  themselves from Clerk, for the session the cookie claims and the browser then
+  rejects.
 - **Admin tooling.** A third flag, `publicMetadata.admin`, gates the support
   screen at `/admin` and every route under `/api/admin/**` (`requireAdmin` in
   `src/utils/api/adminRequest.ts`; `isAdmin` in `src/utils/ui/players.ts` is the

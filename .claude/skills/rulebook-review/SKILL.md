@@ -121,12 +121,15 @@ change that added one → also a finding, the other way round.
 - Client components are `'use client'`; server-only modules stay out of their
   import chain, and route handlers stay out of client modules'
   (`serverModuleGraph.test.ts`).
-- The two-audience routes (`/` and `/join`) settle who is looking **on the
-  server** from Clerk's cookie (`signedInHint()`, never `auth()` — Clerk's
-  middleware runs on the API only) and hand the answer down — deciding it in the
-  browser meant each showed the wrong thing until Clerk loaded. Anything the
-  guest form starts out holding (its random name, its die face) is drawn on the
-  server too, because server HTML and the first client render have to agree.
+- The two-audience routes (`/` and `/join`) settle who is looking from Clerk's
+  cookie, never `auth()` (Clerk's middleware runs on the API only). `/join` does
+  it **on the server** (`signedInHint()`) and hands the answer down, with the
+  guest form's random name and die face drawn there too so server HTML and the
+  first client render agree. `/` is **static**: it must not read the request
+  (`cookies()`, `headers()`, `auth()`, `searchParams`) or it goes `ƒ` again, and
+  no `app/loading.tsx` may exist — its Suspense boundary puts a skeleton in
+  front of the prerendered page. `HomeScreen` and an inline script choose in the
+  browser; the cookie rule lives once, in `src/utils/users/clientUat.ts`.
 - Bootstrap is sanctioned **only** on in-game board screens; `ag-*` everywhere
   else.
 

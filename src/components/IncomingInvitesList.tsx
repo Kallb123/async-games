@@ -44,7 +44,7 @@ export default function IncomingInviteList({ invites, isLoading, onChanged }: In
     }
 
     return (
-        // Shape mirrored (label, icon, row count) in app/loading.tsx's homepage
+        // Shape mirrored (label, icon, row count) in components/HomeLoading.tsx's homepage
         // skeleton — keep the two in sync if this changes.
         <ListSection
             label="Invites"

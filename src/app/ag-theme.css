@@ -161,7 +161,7 @@ button {
 }
 
 /* The "new game" + avatar circles on the right of the dashboard's topbar,
-   and the skeleton pair standing in for them in app/loading.tsx. */
+   and the skeleton pair standing in for them in components/HomeLoading.tsx. */
 .ag-topbar-actions {
     display: flex;
     gap: 0.5rem;
@@ -5656,6 +5656,21 @@ html:has(.ag-pull) { overscroll-behavior-y: contain; }
 .ag-ra-targets-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
 .ag-ra-targets-row b { font-weight: 800; color: var(--ag-gold); }
 
+/* ---- The home page, before anything has decided which screen it is ----
+   `/` is one static page for everyone (`app/page.tsx`), so its HTML holds both
+   screens, each in an `ag-home-screen` wrapper that dissolves (`display:
+   contents`) so the screen inside lays out as if it were the page's own.
+   `HomeScreen` marks the wrappers `--guess` while it doesn't know which is
+   wanted — in the prerendered HTML and through hydration — and the choice is
+   made here, from the attribute the inline script sets on `<html>` when Clerk's
+   cookie says someone is signed in. No attribute, or no JavaScript at all, is the
+   landing page. Once `HomeScreen` has decided it renders one wrapper without
+   `--guess`, and none of this applies. */
+.ag-home-screen { display: contents; }
+.ag-home-screen--guess.ag-home-dashboard { display: none; }
+html[data-ag-signed-in="1"] .ag-home-screen--guess.ag-home-dashboard { display: contents; }
+html[data-ag-signed-in="1"] .ag-home-screen--guess.ag-home-landing { display: none; }
+
 /* ============================================================= *
  *  Desktop expansion — design §16.
  *
@@ -5724,7 +5739,12 @@ html:has(.ag-pull) { overscroll-behavior-y: contain; }
 
        The last row is the slack: it carries the run-off the app column used to
        pad, which the rail's dark ground now has to reach through. */
-    .ag-app:has(.ag-desk) {
+    /* While the home page is still two screens in one (`ag-home-screen`, below),
+       `.ag-desk` is in the document for the landing visitor too, hidden. `:has()`
+       can't see `display: none`, so the grid asks the same question the
+       wrappers' own rules do: is the dashboard the one showing? Yes for the
+       signed-in attribute, and yes once only the dashboard is left. */
+    .ag-app:has(.ag-desk):where(html[data-ag-signed-in="1"] *, :not(:has(.ag-home-landing.ag-home-screen--guess))) {
         /* Full bleed. The rail is chrome, and chrome belongs against the edge
            of the window: capping the column here instead centred it, which put
            a sliver of cream down the outside of the rail at every width just
@@ -5757,7 +5777,7 @@ html:has(.ag-pull) { overscroll-behavior-y: contain; }
        grid drops the item off stretch and down to its fit-content size — which
        here is one turn card wide. */
     .ag-desk-col,
-    .ag-app:has(.ag-desk) > .ag-footer {
+    .ag-app:has(.ag-desk):where(html[data-ag-signed-in="1"] *, :not(:has(.ag-home-landing.ag-home-screen--guess))) > .ag-footer {
         width: 100%;
         max-width: var(--ag-queue-width);
         justify-self: center;
@@ -5773,7 +5793,7 @@ html:has(.ag-pull) { overscroll-behavior-y: contain; }
        warning strip is the root layout's, mounted beside the screen rather than
        inside it (see `layout.tsx`). It still decides for itself which screens
        it belongs on — this only says where it sits once it is there. */
-    .ag-app:has(.ag-desk) > .ag-footer { grid-area: footer; }
+    .ag-app:has(.ag-desk):where(html[data-ag-signed-in="1"] *, :not(:has(.ag-home-landing.ag-home-screen--guess))) > .ag-footer { grid-area: footer; }
 
     /* ---- The rail ---- */
     .ag-rail {

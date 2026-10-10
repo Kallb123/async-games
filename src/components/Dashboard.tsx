@@ -17,10 +17,15 @@ import { DASHBOARD_COMPLETED_LIMIT } from "@/utils/apiModels/GameDataApi";
 
 /**
  * The signed-in home screen. `HomeScreen` decides who gets this and who gets
- * `Landing` — starting from the session cookie the server read, so a visitor
- * with no account never sees these skeletons flash past on their way to the
- * landing page, and someone with games waiting sees them in the first paint
- * rather than after Clerk has loaded in the browser.
+ * `Landing` — starting from Clerk's signed-in cookie, read in the browser, so a
+ * visitor with no account never sees these skeletons flash past on their way to
+ * the landing page, and someone with games waiting sees them in the first paint
+ * rather than after Clerk has loaded.
+ *
+ * It is prerendered with no viewer and can be mounted for a moment for a visitor
+ * who turns out not to be signed in (while `HomeScreen` is still guessing), so
+ * nothing here may act before Clerk says who is looking: the fetch and the
+ * notification registration both wait on `useIsAuthorised`.
  *
  * The guard stays for the locked-out account it sends to /unlockaccess; the
  * signed-out case is `HomeScreen`'s, so this never renders `Landing` itself.
@@ -34,7 +39,7 @@ import { DASHBOARD_COMPLETED_LIMIT } from "@/utils/apiModels/GameDataApi";
  *
  * `.ag-desk` itself dissolves at that breakpoint (`display: contents`) so the
  * grid can also place the notification footer, which the root layout renders
- * beside this screen rather than inside it. Keep `app/loading.tsx` in step with
+ * beside this screen rather than inside it. Keep `components/HomeLoading.tsx` in step with
  * this shape.
  */
 export default function Dashboard() {
