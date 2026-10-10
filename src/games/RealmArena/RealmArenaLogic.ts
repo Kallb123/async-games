@@ -98,6 +98,8 @@ export function battleOf(gs: IRealmArenaSpecificGameState, complete = false): Ba
         seats: gs.seats,
         coop: gs.coop !== undefined,
         rulesVersion: gs.rulesVersion,
+        mission: gs.coop?.mission,
+        enemy: gs.coop?.enemy,
     });
 }
 

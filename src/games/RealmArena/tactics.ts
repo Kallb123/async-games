@@ -13,7 +13,7 @@
 import type { Square } from "@/utils/games/battlefield/terrain";
 import { ABILITIES, STRIKING_ABILITIES } from "./characters";
 import {
-    ACTION_POINTS, check, coverNextTo, fighterById, inRange, itemOf, nextTo, reactionsTo, shotOdds, strikeChance, weaponOf, weaponReaches,
+    ACTION_POINTS, check, coverNextTo, fighterById, inRange, itemOf, nextTo, reactionsTo, shotOdds, soaked, strikeChance, weaponOf, weaponReaches,
     type Action, type BattleState, type Fighter, type ShotKind, type ShotOdds,
 } from "./rules";
 
@@ -191,7 +191,7 @@ export function reactionPreviews(state: BattleState, mover: Fighter, path: reado
         const watcher = fighterById(state, id);
         if (!watcher) return [];
         const weapon = weaponOf(watcher);
-        if (weapon.kind === "melee") return [{ watcher, kind: "guard", chance: strikeChance(state, mover), damage: weapon.damage }];
+        if (weapon.kind === "melee") return [{ watcher, kind: "guard", chance: strikeChance(state, mover), damage: soaked(state, watcher, mover, weapon.damage) }];
         const { battle: there, moved } = standingAt(state, mover, path[step]);
         const odds = shotOdds(there, watcher, moved, "overwatch");
         return [{ watcher, kind: "overwatch", odds, chance: odds?.chance ?? 0, damage: odds?.damage ?? weapon.damage }];

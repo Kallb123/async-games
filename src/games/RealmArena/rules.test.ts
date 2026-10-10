@@ -1080,7 +1080,7 @@ describe("options (§23.2)", () => {
             expect(kitOf("archer", "cripplingShot").abilities).toEqual(["cripplingShot"]);
             expect(kitOf("scout", "huntersMark").abilities).toEqual(["huntersMark"]);
             expect(kitOf("cleric", "purify").abilities).toEqual(["heal", "purify"]);
-            expect(kitOf("mage", "frostBolt")).toEqual({ weapon: { ...CHARACTERS.mage.weapon, name: "Frost bolt", damage: 2, effect: "slowed" }, abilities: ["fireball"] });
+            expect(kitOf("mage", "frostBolt")).toEqual({ weapon: { name: "Frost bolt", kind: "ranged", damage: 2, accuracy: 70, range: 10, effect: "slowed" }, abilities: ["fireball"] });
             for (const option of Object.keys(OPTIONS) as OptionId[]) {
                 const { character } = OPTIONS[option];
                 if (option !== "frostBolt") expect(kitOf(character, option).weapon).toBe(CHARACTERS[character].weapon);

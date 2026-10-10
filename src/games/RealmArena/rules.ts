@@ -34,7 +34,7 @@ import { DEFAULT_CLIMB, pathCost, pathTo, reachFrom, type MoveRules, type Reach 
 import { coordsOf, distance, facingTowards, HALF_HEIGHT, isNeighbour, riseOf, squareAt, type Area, type Battlefield, type Cover, type Facing, type Square } from "@/utils/games/battlefield/terrain";
 import {
     ABILITIES, AFFLICTIONS, CHARACTERS, EFFECT_IDS, EFFECTS, isCharacterId, isItemId, isOptionId, ITEMS, kitOf, OPTIONS, squadPoints,
-    type Ability, type AbilityId, type Affliction, type CharacterId, type Effect, type EffectId, type Faction, type Item, type ItemId, type OptionId, type PlayerCount, type Weapon,
+    type Ability, type AbilityId, type Affliction, type CharacterId, type Effect, type EffectId, type Faction, type FactionId, type Item, type ItemId, type OptionId, type PlayerCount, type Weapon,
 } from "./characters";
 import { addTally, NO_TALLY, type Ranks, type Tally } from "./mastery";
 
@@ -82,6 +82,8 @@ export const LONG_RANGE_DENOMINATOR = 3;
 export const LONG_RANGE_PENALTY = 20;
 /** Hold Out's team characters have this many times their table HP, rounded up (`teamHp`). */
 export const TEAM_HP_FACTOR = 1.5;
+/** What the Realm's hits take off a hit on Hold Out's team, never leaving less than 1 (`soaked`, `BattleState.armoured`). */
+export const ARMOUR = 1;
 
 /** The mission's scoring area, by the id a map gives its objective (§13.7). */
 export const CENTRE = "centre";
@@ -214,6 +216,14 @@ export interface BattleState {
      * from the battle's `rulesVersion`.
      */
     balanced?: true;
+    /**
+     * Whether the team's characters wear `ARMOUR` against the warbands: Hold
+     * Out under `BALANCE_VERSION` against the Realm (`armouredTeam`). Never
+     * stored or sent; `battleFrom` builds it from the battle's mission and
+     * enemy, which a view of the battle leaves out while a random enemy is
+     * unseen — so nothing a board shows of the armour can name the faction.
+     */
+    armoured?: true;
 }
 
 /** What a `BattleState` is built from: the persisted state on the server, the response on the board and in the recap. */
@@ -226,6 +236,9 @@ export interface BattleSource {
     coop?: boolean;
     /** The rules version the battle was created under; absent for one from before `BALANCE_VERSION`. */
     rulesVersion?: number;
+    /** The co-op mission and the faction of the warbands, where the viewer knows them: what the armour is read from. */
+    mission?: string;
+    enemy?: FactionId;
 }
 
 /**
@@ -252,11 +265,12 @@ export const ENEMY_SIDE = "enemy";
  * battle so far — has no `sides`. Co-op has two: the players, and a warband
  * for each of them (§29.1).
  */
-export function battleFrom(field: Battlefield, { fighters, fog, clouds, seats = [], coop, rulesVersion }: BattleSource): BattleState {
+export function battleFrom(field: Battlefield, { fighters, fog, clouds, seats = [], coop, rulesVersion, mission, enemy }: BattleSource): BattleState {
     const sides = coop ? Object.fromEntries([...seats.map(player => [player, TEAM_SIDE]), ...warbandsFor(seats).map(warband => [warband, ENEMY_SIDE])]) : undefined;
     return {
         field, fighters, ...(fog ? { fog: true } : {}), ...(clouds && clouds.length > 0 ? { clouds } : {}), ...(sides ? { sides } : {}),
         ...(isBalanced(rulesVersion) ? { balanced: true as const } : {}),
+        ...(coop && armouredTeam(mission, rulesVersion, enemy) ? { armoured: true as const } : {}),
     };
 }
 
@@ -396,11 +410,39 @@ export const maxHpOf = (fighter: Pick<Fighter, "character" | "maxHp">): number =
  */
 export const stoutTeam = (mission: string | undefined, rulesVersion: number | undefined): boolean => mission === "holdOut" && isBalanced(rulesVersion);
 
+/** Whether Hold Out's team wears armour against its enemy: the stout team (`stoutTeam`), against the Realm's warbands alone. */
+export const armouredTeam = (mission: string | undefined, rulesVersion: number | undefined, enemy: FactionId | undefined): boolean => stoutTeam(mission, rulesVersion) && enemy === "realm";
+
+/**
+ * What a hit from `by` does to `target` where the team is armoured: `ARMOUR`
+ * less, never less than 1, when a warband's blow lands on one of the team's.
+ * Every hit, ability and splash of the enemy's counts; burning, which isn't
+ * dealt by a blow, and the team's own friendly fire don't. Nothing, for a
+ * blow that does nothing.
+ */
+export function soaked(state: Pick<BattleState, "armoured">, by: Pick<Fighter, "owner">, target: Pick<Fighter, "owner">, damage: number): number {
+    return state.armoured && damage > 0 && isWarband(by.owner) && !isWarband(target.owner) ? Math.max(1, damage - ARMOUR) : damage;
+}
+
 /** What a character of Hold Out's team is mustered with: its table HP times `TEAM_HP_FACTOR`, rounded up. */
 export const teamHp = (character: CharacterId): number => Math.ceil(CHARACTERS[character].hp * TEAM_HP_FACTOR);
 
 /** The HP a character is mustered with, which the muster sheet shows and `newFighter` gives: the team's bigger HP when `stout`, else its character's. */
 export const musterHp = (character: CharacterId, stout: boolean): number => stout ? teamHp(character) : CHARACTERS[character].hp;
+
+/** The Mage's Bolt as a battle created before `BALANCE_VERSION` has it: 70% to hit, range 10, under its old name (`weaponIn`). */
+const UNBALANCED_BOLT: Weapon = { name: "Bolt", kind: "ranged", damage: 3, accuracy: 70, range: 10 };
+
+/**
+ * The weapon a character fights with in this battle: `weaponOf`, except that
+ * the Mage's own bolt is the old one in a battle from before `BALANCE_VERSION`
+ * (the character table is the current rules). Whatever reads a weapon's
+ * accuracy or range — a shot's odds, what the weapon reaches, what the board
+ * says of it — goes through here; its kind and damage are the same either way.
+ */
+export function weaponIn(state: Pick<BattleState, "balanced">, fighter: Pick<Fighter, "character" | "option">): Weapon {
+    return !state.balanced && fighter.character === "mage" && !fighter.option ? UNBALANCED_BOLT : weaponOf(fighter);
+}
 
 /** The limits on how often an ability can be used. */
 export type AbilityLimits = Pick<Ability, "cooldown" | "oncePerBattle" | "oncePerTurn">;
@@ -450,7 +492,7 @@ export function inRange(field: Battlefield, from: Square, to: Square, range: num
 
 /** Whether a character's weapon could hit someone on a square from where it stands: in melee reach for a melee weapon, in range and in sight for a ranged one. */
 export function weaponReaches(state: BattleState, fighter: Fighter, square: Square): boolean {
-    const weapon = weaponOf(fighter);
+    const weapon = weaponIn(state, fighter);
     return weapon.kind === "ranged" ? inRange(state.field, fighter.square, square, weapon.range) : inMeleeReach(state.field, fighter.square, square);
 }
 
@@ -564,11 +606,11 @@ export function strikeChance(state: Pick<BattleState, "balanced">, target: Fight
 
 export function shotOdds(state: BattleState, attacker: Fighter, target: Fighter, kind: ShotKind = "attack"): ShotOdds | undefined {
     const { field } = state;
-    const weapon = weaponOf(attacker);
+    const weapon = weaponIn(state, attacker);
     if (weapon.kind !== "ranged") return undefined;
     if (!inRange(field, attacker.square, target.square, weapon.range)) return undefined;
     // Measured as the range is, so a shot is long exactly when it is near the end of it.
-    const longShot = !!state.balanced && isLongShot(distance(field, attacker.square, target.square), weapon.range);
+    const longShot = !!state.balanced && !!weapon.longShotPenalty && isLongShot(distance(field, attacker.square, target.square), weapon.range);
 
     const sideCover = coverAgainst(field, target.square, attacker.square);
     const cover = sideCover === "none" && shielded(state, target) ? "half" : sideCover;
@@ -584,10 +626,12 @@ export function shotOdds(state: BattleState, attacker: Fighter, target: Fighter,
     const clamp = (percent: number) => Math.min(ROLL_SIDES, Math.max(0, percent));
     const chance = clamp(raw);
     const flanked = cover === "none";
-    const damage = weapon.damage + (flanked ? FLANK_BONUS : 0);
+    const struck = weapon.damage + (flanked ? FLANK_BONUS : 0);
+    // What lands, armour taken off where the team wears it: a graze is half of the blow before it.
+    const damage = soaked(state, attacker, target, struck);
     // Grazes are the rolls that miss by `GRAZE_BAND` or less, counted from the
     // raw chance: a shot at −10% can't so much as graze.
-    return { chance, longShot, grazeChance: clamp(raw + GRAZE_BAND) - chance, damage, grazeDamage: Math.ceil(damage / 2), cover, flanked };
+    return { chance, longShot, grazeChance: clamp(raw + GRAZE_BAND) - chance, damage, grazeDamage: soaked(state, attacker, target, Math.ceil(struck / 2)), cover, flanked };
 }
 
 /** A roll of 1–100 against a shot's odds: at or under the chance to hit hits, the graze band above it grazes, and anything more misses. */
@@ -736,6 +780,7 @@ export function viewOf(state: BattleState, player: string | null): BattleState {
         ...(clouds.length > 0 ? { clouds } : {}),
         ...(state.sides ? { sides: state.sides } : {}),
         ...(state.balanced ? { balanced: true as const } : {}),
+        ...(state.armoured ? { armoured: true as const } : {}),
     };
 }
 
@@ -1117,7 +1162,8 @@ function resolver(state: BattleState, roll: Roll) {
      * `strikeChance` — a hit or a miss, with no graze — and before it, it
      * always hit and rolled nothing. Says whether it landed.
      */
-    const strike = (by: Fighter, target: Fighter, reaction = false, damage = weaponOf(by).damage): boolean => {
+    const strike = (by: Fighter, target: Fighter, reaction = false, blow = weaponOf(by).damage): boolean => {
+        const damage = soaked(battle, by, target, blow);
         if (!battle.balanced) {
             events.push({ kind: "struck", fighter: by.id, target: target.id, damage, reaction });
             wound(by, target, damage);
@@ -1141,7 +1187,7 @@ function resolver(state: BattleState, roll: Roll) {
         const area = new Set(squares);
         const hit = fighters.filter(one => isStanding(one) && area.has(one.square));
         events.push(told(hit.map(one => one.id)));
-        if (damage > 0) for (const target of hit) wound(by, target, damage);
+        if (damage > 0) for (const target of hit) wound(by, target, soaked(battle, by, target, damage));
         if (effect) for (const target of hit) afflict(by, target, effect);
     };
 

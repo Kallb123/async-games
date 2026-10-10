@@ -2,10 +2,11 @@
 
 A record of what was tried to make *Hold Out* (docs/games/realm-arena.md
 §30.3, §30.9–§30.11) winnable, and what each change did to the team's chances
-in simulation. Team HP ×1.5 and the enemy −1 step shipped for Hold Out, with
-melee at 80%, long shots at −20% and the Cleric's new Heal and Raise for every
-mode (see *Where this points*); restore, armour, 3 AP attacks and 13 rounds
-did not. This file holds the numbers
+in simulation. Team HP ×1.5, the enemy −1 step and 1 armour against the Realm
+shipped for Hold Out, with melee at 80%, the Archer's and Spitter's long shots
+at −20%, the Mage Bolt at 90% to a range of 15 and the Cleric's new Heal and
+Raise for every mode (see *Where this points*); restore, armour against the
+Swarm, 3 AP attacks and 13 rounds did not. This file holds the numbers
 and how each lever was built, so the next person tuning the mode doesn't start
 from scratch.
 
@@ -263,20 +264,25 @@ The same 2-player cells at 15 rounds, for comparison: 0% / 8% alone, 17% /
 ## Where this points
 
 **What shipped (command version 7, realm-arena.md §30.13).** Not the set
-above's restore or armour, but the two levers that needed no new mechanism,
-plus three changes that slow the killing in every mode: in Hold Out, **team
-HP ×1.5** (rounded up, as `maxHpOf`) and **the enemy −1 step** (the warbands
-and every wave refill muster one rung down the budget ladder); and everywhere,
-**melee hits 80%** instead of always, **a shot at over two thirds of its range
-is −20%**, a Cleric's **Heal is once a turn** with no cooldown, and its
-**Raise is on a four-turn cooldown** instead of once a battle. The rest of
-this section, and the cells above, are what pointed there and what was left
-over: restore, armour and attack 3 AP, 13 rounds for two players. A
+above's restore, but the levers that needed little new mechanism, plus
+changes that slow the killing in every mode: in Hold Out, **team HP ×1.5**
+(rounded up, as `maxHpOf`), **the enemy −1 step** (the warbands and every
+wave refill muster one rung down the budget ladder) and **armour 1 for the
+team against the Realm only** (the faction-shaped version the cells above
+found most even; the Swarm's hits are not armoured, and burning is not
+reduced); and everywhere, **melee hits 80%** instead of always, **an Archer's
+or Spitter's shot at over two thirds of its range is −20%** (the Mage's bolts
+aren't), the **Mage Bolt is 90% to a range of 15**, a Cleric's **Heal is once a
+turn** with no cooldown, and its **Raise is on a four-turn cooldown** instead
+of once a battle. The rest of this section, and the cells above, are what
+pointed there and what was left over: restore, armour against the Swarm and
+attack 3 AP, 13 rounds for two players. A
 first look at the combined set, 8 battles a cell on seeds 1–8 (so ±30 points,
-and only a check that it is neither hopeless nor trivial), gave the team
-0% against the Realm and 50% against the Swarm at 2 players, and 38% and 88% at
-3 players. It wants the 200-run comparison the end of this file describes
-before anyone leans on it.
+and only a check that it is neither hopeless nor trivial), gave the team 50%
+against the Realm and 50% against the Swarm at 2 players, and 88% and 88% at
+3 players. Before the armour and the Mage Bolt the Realm cells were 0% and 38%;
+the Swarm cells are unchanged, as neither touches them. It wants the 200-run
+comparison the end of this file describes before anyone leans on it.
 
 - **Restore one downed character per player as each wave lands.** It's
   Hold Out-only, fits the mission's fiction (reinforcements reach the keep),

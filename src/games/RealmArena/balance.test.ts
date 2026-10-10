@@ -7,11 +7,12 @@ import { cloneRealmArenaState, nextWaveOf, warbandBudgetOf, waveOf, type IRealmA
 import { buildInitialRealmArenaState, gameStateToModel, settingsOf, stepOutcomeToModel, type RealmArenaSettings } from "./RealmArenaModels";
 import { meta } from "./meta";
 import {
-    abilityRules, ACTION_POINTS, act, BALANCE_VERSION, battleFrom, check, fixedRolls, isBalanced, isLongShot, LONG_RANGE_DENOMINATOR, LONG_RANGE_NUMERATOR, LONG_RANGE_PENALTY, maxHpOf, MELEE_ACCURACY,
+    abilityRules, ACTION_POINTS, act, ARMOUR, armouredTeam, soaked, weaponIn, weaponReaches, BALANCE_VERSION, battleFrom, check, fixedRolls, isBalanced, isLongShot, LONG_RANGE_DENOMINATOR, LONG_RANGE_NUMERATOR, LONG_RANGE_PENALTY, maxHpOf, MELEE_ACCURACY,
     musterHp, newFighter, shotOdds, startTurn, stoutTeam, strikeChance, teamHp, TEAM_HP_FACTOR, viewOf, warbandOwner,
     type Action, type BattleState, type Fighter,
 } from "./rules";
-import { hitChance, reactionPreviews, rollsToHit } from "./tactics";
+import { hitChance, rangeSquares, reactionPreviews, rollsToHit } from "./tactics";
+import { characterStats } from "./stats";
 import { abilityWait, eventLines, hpFraction } from "./ui";
 import { nextAction } from "./ai";
 import { actBy, battleOf, endTurnBy, makeGame, musterAll, play, playScriptedBattle, type RealmArenaTestGame } from "./testFixtures";
@@ -240,14 +241,23 @@ describe("long shots (§13.3)", () => {
         expect(odds("archer", 21)).toBeUndefined();
     });
 
-    it("takes 20 off a Mage's bolt, a Frost bolt and a Spitter's acid at their own two thirds", () => {
-        expect(odds("mage", 6)).toMatchObject({ chance: 70, longShot: false });
-        expect(odds("mage", 7)).toMatchObject({ chance: 50, longShot: true });
+    it("takes 20 off a Spitter's acid past 8 squares, as it does the bow", () => {
         expect(odds("spitter", 8)).toMatchObject({ chance: 70, longShot: false });
         expect(odds("spitter", 9)).toMatchObject({ chance: 50, longShot: true });
+    });
+
+    it("is for the bow and the acid alone: a Mage's Bolt and Frost bolt are never long shots", () => {
+        expect(CHARACTERS.archer.weapon).toMatchObject({ longShotPenalty: true });
+        expect(CHARACTERS.spitter.weapon).toMatchObject({ longShotPenalty: true });
+        expect(CHARACTERS.mage.weapon).not.toHaveProperty("longShotPenalty");
+        // The Mage Bolt reaches 15, so 10 is two thirds and 15 the end of it: 90% all the way.
+        expect([5, 10, 11, 15].map(away => odds("mage", away))).toMatchObject(Array(4).fill({ chance: 90, longShot: false }));
+        expect(odds("mage", 16)).toBeUndefined();
         const frost = fighter(1, "a", "mage", at(ROW, 0, 0), { option: "frostBolt" });
-        const target = fighter(2, "b", "knight", at(ROW, 9, 0));
-        expect(shotOdds(balanced(ROW, [frost, target]), frost, target)).toMatchObject({ chance: 50, longShot: true });
+        const far = fighter(2, "b", "knight", at(ROW, 9, 0));
+        expect(shotOdds(balanced(ROW, [frost, far]), frost, far)).toMatchObject({ chance: 70, longShot: false });
+        // A bow of the same range would be.
+        expect(odds("archer", 15)).toMatchObject({ chance: 60, longShot: true });
     });
 
     it("applies to an aimed shot, a crippling shot and overwatch, on top of everything else", () => {
@@ -509,5 +519,128 @@ describe("the computer, under the rebalance", () => {
         const view = { ...balanced(OPEN, [knight, small, sturdy]), sides: { a: "team", [warbandOwner(0)]: "enemy" } };
         // A kill is worth more than a scratch: it goes for the one it can down.
         expect(nextAction(view, warbandOwner(0), 1)).toMatchObject({ kind: "attack", target: 2 });
+    });
+});
+
+describe("the Mage Bolt", () => {
+    const mage = fighter(1, "a", "mage", at(ROW, 0, 0));
+    const target = (away: number) => fighter(2, "b", "knight", at(ROW, away, 0));
+
+    it("hits 90% of the time out to 15 squares, in a battle under the rebalance", () => {
+        expect(CHARACTERS.mage.weapon).toMatchObject({ name: "Mage Bolt", accuracy: 90, range: 15 });
+        expect(weaponIn({ balanced: true }, mage)).toMatchObject({ name: "Mage Bolt", accuracy: 90, range: 15 });
+        const state = balanced(ROW, [mage, target(15)]);
+        expect(shotOdds(state, mage, target(15))).toMatchObject({ chance: 90, longShot: false });
+        expect(shotOdds(balanced(ROW, [mage, target(16)]), mage, target(16))).toBeUndefined();
+        expect(weaponReaches(state, mage, at(ROW, 15, 0))).toBe(true);
+        expect(weaponReaches(state, mage, at(ROW, 16, 0))).toBe(false);
+        expect(rangeSquares(state, mage, "weapon").has(at(ROW, 15, 0))).toBe(true);
+        expect(check({ ...state, fighters: [mage, target(15)] }, "a", { kind: "attack", fighter: 1, target: 2 })).toEqual({ ap: 2 });
+    });
+
+    it("was a Bolt at 70% to a range of 10 in a battle from before it, and its option never changed", () => {
+        expect(weaponIn({}, mage)).toMatchObject({ name: "Bolt", kind: "ranged", damage: 3, accuracy: 70, range: 10 });
+        expect(shotOdds(legacy(ROW, [mage, target(10)]), mage, target(10))?.chance).toBe(70);
+        expect(shotOdds(legacy(ROW, [mage, target(11)]), mage, target(11))).toBeUndefined();
+        expect(weaponReaches(legacy(ROW, [mage]), mage, at(ROW, 11, 0))).toBe(false);
+        const frost = { ...mage, option: "frostBolt" as const };
+        for (const state of [{}, { balanced: true as const }]) expect(weaponIn(state, frost)).toMatchObject({ name: "Frost bolt", accuracy: 70, range: 10 });
+        // Nobody else's weapon is gated.
+        const archer = fighter(3, "a", "archer", at(ROW, 0, 0));
+        expect(weaponIn({}, archer)).toBe(CHARACTERS.archer.weapon);
+    });
+
+    it("is on the stats sheet as the current rules say", () => {
+        const row = characterStats("mage").actions.find(one => one.name === "Mage Bolt");
+        expect(row).toMatchObject({ hit: "90%", range: "15", damage: "3" });
+        expect(characterStats("mage").actions.some(one => one.name === "Bolt")).toBe(false);
+    });
+});
+
+describe("the team's armour against the Realm in Hold Out", () => {
+    const team = fighter(1, "a", "archer", at(OPEN, 1, 1));
+    const knight = fighter(2, warbandOwner(0), "knight", at(OPEN, 2, 1));
+    const armoured = (fighters: Fighter[]): BattleState => ({ ...balanced(OPEN, fighters), armoured: true, sides: { a: "team", [warbandOwner(0)]: "enemy" } });
+
+    it("is Hold Out's only, against the Realm's only, under the rebalance's rules only", () => {
+        expect(ARMOUR).toBe(1);
+        expect(armouredTeam("holdOut", 7, "realm")).toBe(true);
+        expect(armouredTeam("holdOut", 7, "swarm")).toBe(false);
+        expect(armouredTeam(undefined, 7, "realm")).toBe(false);
+        expect(armouredTeam("holdOut", LEGACY, "realm")).toBe(false);
+        expect(armouredTeam("holdOut", undefined, "realm")).toBe(false);
+        // A view that doesn't know the enemy yet (a random one unseen) wears none, so the board can't name it.
+        expect(armouredTeam("holdOut", 7, undefined)).toBe(false);
+        const built = (extra: object) => battleFrom(OPEN, { fighters: [], coop: true, rulesVersion: 7, mission: "holdOut", enemy: "realm", ...extra });
+        expect(built({}).armoured).toBe(true);
+        expect(viewOf({ ...built({}), fog: true }, "a").armoured).toBe(true);
+        for (const extra of [{ enemy: "swarm" }, { enemy: undefined }, { mission: undefined }, { rulesVersion: LEGACY }, { coop: false }]) expect(built(extra), JSON.stringify(extra)).not.toHaveProperty("armoured");
+    });
+
+    it("takes 1 off a warband's hit on the team, never below 1, and nothing off anyone else's", () => {
+        const state = armoured([team, knight]);
+        expect([4, 3, 1, 0].map(damage => soaked(state, knight, team, damage))).toEqual([3, 2, 1, 0]);
+        expect(soaked(state, team, knight, 4)).toBe(4);
+        expect(soaked(state, knight, fighter(3, warbandOwner(1), "archer", 0), 4)).toBe(4);
+        expect(soaked(state, team, fighter(3, "b", "archer", 0), 4)).toBe(4);
+        expect(soaked(balanced(OPEN, []), knight, team, 4)).toBe(4);
+    });
+
+    it("applies to a strike, a shot, its graze, a guard, and a blast's splash", () => {
+        const state = armoured([knight, team]);
+        const strike = run({ ...state }, warbandOwner(0), { kind: "attack", fighter: 2, target: 1 }, [1]);
+        expect(strike.events[0]).toMatchObject({ kind: "struck", damage: 3 });
+        expect(strike.byId(1).hp).toBe(CHARACTERS.archer.hp - 3);
+
+        const bow = fighter(3, warbandOwner(0), "archer", at(OPEN, 5, 1));
+        const knightTeam = fighter(4, "a", "knight", at(OPEN, 1, 1));
+        const odds = shotOdds(armoured([bow, knightTeam]), bow, knightTeam)!;
+        // Flanked, so 3 + 1 = 4 before armour, and a graze of half that.
+        expect(odds).toMatchObject({ flanked: true, damage: 3, grazeDamage: 1 });
+        expect(shotOdds(balanced(OPEN, [bow, knightTeam]), bow, knightTeam)).toMatchObject({ damage: 4, grazeDamage: 2 });
+        expect(run(armoured([bow, knightTeam]), warbandOwner(0), { kind: "attack", fighter: 3, target: 4 }, [1]).byId(4).hp).toBe(CHARACTERS.knight.hp - 3);
+
+        // A guard's preview of a move says so.
+        const guard = fighter(5, warbandOwner(0), "knight", at(OPEN, 3, 1), { ap: 0, banked: 4 });
+        const mover = fighter(6, "a", "scout", at(OPEN, 0, 1));
+        expect(reactionPreviews(armoured([guard, mover]), mover, [at(OPEN, 0, 1), at(OPEN, 1, 1), at(OPEN, 2, 1)])).toMatchObject([{ kind: "guard", damage: 3 }]);
+
+        // A fireball from a warband's Mage: 3 becomes 2 on the team, and stays 3 on its own side.
+        const caster = fighter(7, warbandOwner(0), "mage", at(OPEN, 8, 1));
+        const own = fighter(8, warbandOwner(0), "knight", at(OPEN, 4, 2));
+        const hit = fighter(9, "a", "knight", at(OPEN, 4, 1));
+        const ball = run(armoured([caster, own, hit]), warbandOwner(0), { kind: "fireball", fighter: 7, at: at(OPEN, 4, 1) });
+        expect(ball.byId(9).hp).toBe(CHARACTERS.knight.hp - ABILITIES.fireball.damage + ARMOUR);
+        expect(ball.byId(8).hp).toBe(CHARACTERS.knight.hp - ABILITIES.fireball.damage);
+    });
+
+    it("leaves the team's own friendly fire, and burning, as they were", () => {
+        const caster = fighter(1, "a", "mage", at(OPEN, 8, 1));
+        const friend = fighter(2, "a", "knight", at(OPEN, 4, 1));
+        const ball = run(armoured([caster, friend, knight]), "a", { kind: "fireball", fighter: 1, at: at(OPEN, 4, 1) });
+        expect(ball.byId(2).hp).toBe(CHARACTERS.knight.hp - ABILITIES.fireball.damage);
+        // A fire a warband lit burns for its full 1 on the team.
+        const lit = { ...friend, effects: { burning: 2 }, burnedBy: knight.id };
+        const burned = startTurn(armoured([lit, knight]), "a");
+        expect(burned.fighters.find(one => one.id === 2)!.hp).toBe(CHARACTERS.knight.hp - 1);
+    });
+
+    it("is none at all against the Swarm, in Hold the Centre, or in a battle from before it", () => {
+        const plain = balanced(OPEN, [knight, team]);
+        expect(run(plain, warbandOwner(0), { kind: "attack", fighter: 2, target: 1 }, [1]).byId(1).hp).toBe(CHARACTERS.archer.hp - 4);
+        expect(run(legacy(OPEN, [knight, team]), warbandOwner(0), { kind: "attack", fighter: 2, target: 1 }).byId(1).hp).toBe(CHARACTERS.archer.hp - 4);
+    });
+
+    it("is played in a whole Hold Out against the Realm, from the settings, and not against the Swarm", async () => {
+        const realm = makeGame(["a", "b"], {}, { coop: { enemy: "realm", mission: "holdOut" } });
+        const swarm = makeGame(["a", "b"], {}, { coop: { enemy: "swarm", mission: "holdOut" } });
+        const centre = makeGame(["a", "b"], {}, { coop: { enemy: "realm" } });
+        const old = makeGame(["a", "b"], {}, { rulesVersion: LEGACY, coop: { enemy: "realm", mission: "holdOut" } });
+        expect([realm, swarm, centre, old].map(game => battleOf(game).armoured === true)).toEqual([true, false, false, false]);
+        // A random enemy plays armoured when it's the Realm, though the board is not told until it's seen.
+        const drawn = makeGame(["a", "b"], {}, { fog: true, coop: { enemy: "realm", random: true, mission: "holdOut" } });
+        expect(battleOf(drawn).armoured).toBe(true);
+        expect(gameStateToModel(drawn.specificGameState, "a", null)).not.toHaveProperty("enemy");
+        expect(JSON.stringify(gameStateToModel(drawn.specificGameState, "a", null))).not.toMatch(/armour/i);
     });
 });

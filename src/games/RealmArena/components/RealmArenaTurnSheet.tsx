@@ -7,7 +7,7 @@ import PendingTag from '@/components/ui/PendingTag';
 import Stat from '@/components/ui/Stat';
 import { ABILITIES, CHARACTERS, EFFECTS, type Ability, type AbilityId, type Affliction, type Item } from '@/games/RealmArena/characters';
 import { ITEM_ART } from '@/games/RealmArena/art';
-import { ATTACK_AP, HUNKER_AP, REACTION_COST, abilitiesOf, allied, check, fighterById, hasEffect, healedEffects, isStanding, itemOf, LONG_RANGE_PENALTY, maxHpOf, shotEffect, shotOdds, smokeSquares, strikeChance, weaponOf, type Action, type BattleState, type Fighter } from '@/games/RealmArena/rules';
+import { ATTACK_AP, HUNKER_AP, REACTION_COST, abilitiesOf, allied, check, fighterById, hasEffect, healedEffects, isStanding, itemOf, LONG_RANGE_PENALTY, maxHpOf, shotEffect, shotOdds, smokeSquares, strikeChance, weaponIn, weaponOf, type Action, type BattleState, type Fighter } from '@/games/RealmArena/rules';
 import { abilityWait, whoseName } from '@/games/RealmArena/ui';
 import { rangeSquares, shotOf, targetsOf, type TargetKind } from '@/games/RealmArena/tactics';
 import { ABILITY_MARK, CHARACTER_MARK, weaponLine, weaponMark } from '@/games/RealmArena/roster';
@@ -130,7 +130,7 @@ export function RealmArenaAim({ draft, battle, player, nameFor, pendingTarget, o
 export default function RealmArenaTurnSheet({ draft, battle, player, pendingTarget }: RealmArenaTurnSheetProps) {
     const { fighter, aim } = draft;
     const character = CHARACTERS[fighter.character];
-    const weapon = weaponOf(fighter);
+    const weapon = weaponIn(battle, fighter);
     const busy = pendingTarget !== null;
     const needs = (ap: number) => fighter.ap < ap ? `Needs ${ap} AP` : undefined;
     const reachable = (kind: TargetKind, least = 1) =>

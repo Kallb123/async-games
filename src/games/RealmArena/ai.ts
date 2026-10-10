@@ -35,7 +35,7 @@ import { battlefieldWith, coordsOf, type Battlefield, type Square } from "@/util
 import { ABILITIES, CHARACTERS, type AbilityId } from "./characters";
 import {
     abilitiesOf, act, allied, areaAround, ATTACK_AP, blastedIn, CENTRE, CENTRE_SCORES_FROM_ROUND, centrePoints, check, fighterById, hasEffect, isStanding, landedSmoke,
-    maxHpOf, moveAp, movementOf, reachOf, ROLL_SIDES, shotOdds, strikeChance, watchedSquares, weaponOf, weaponReaches,
+    maxHpOf, moveAp, movementOf, reachOf, ROLL_SIDES, shotOdds, soaked, strikeChance, watchedSquares, weaponOf, weaponReaches,
     type Action, type BattleEvent, type BattleState, type Fighter, type FogGhost, type ShotOdds,
 } from "./rules";
 import { ACTION_AIMS, rangeSquares, reactionPreviews, rollsToHit, shotOf, targetKindOf, targetsOf, type ActionKind } from "./tactics";
@@ -450,7 +450,7 @@ function harmKnown(plan: Plan, fighter: Fighter, enemies: readonly Fighter[]): M
     // where it stands either.
     const read = ({ id, owner, character, option, hp, maxHp, effects }: Fighter) => [id, owner, character, option ?? null, hp, maxHp ?? null, effects];
     const walls = state.fighters.filter(one => isStanding(one) && hasEffect(one, "shieldWall")).map(({ id, owner, square }) => [id, owner, square]);
-    const key = JSON.stringify([fieldId(memo, state.field), read(fighter), enemies.map(enemy => [...read(enemy), enemy.square]), walls, state.clouds ?? [], landedSmoke(state.fighters), state.sides ?? null, state.balanced ?? false]);
+    const key = JSON.stringify([fieldId(memo, state.field), read(fighter), enemies.map(enemy => [...read(enemy), enemy.square]), walls, state.clouds ?? [], landedSmoke(state.fighters), state.sides ?? null, state.balanced ?? false, state.armoured ?? false]);
     let known = memo.harm.get(key);
     if (!known) memo.harm.set(key, known = new Map());
     return known;
@@ -469,7 +469,7 @@ function enemiesOf(battle: BattleState, player: string): Fighter[] {
  */
 function expectedHarm(battle: BattleState, attacker: Fighter, target: Fighter): number {
     const weapon = weaponOf(attacker);
-    if (weapon.kind === "melee") return weaponReaches(battle, attacker, target.square) ? worthOf(target, strikeChance(battle, target) * Math.min(weapon.damage, target.hp) / ROLL_SIDES) : 0;
+    if (weapon.kind === "melee") return weaponReaches(battle, attacker, target.square) ? worthOf(target, strikeChance(battle, target) * Math.min(soaked(battle, attacker, target, weapon.damage), target.hp) / ROLL_SIDES) : 0;
     const odds = shotOdds(battle, attacker, target);
     if (!odds) return 0;
     return worthOf(target, expectedDamage(odds, target.hp));

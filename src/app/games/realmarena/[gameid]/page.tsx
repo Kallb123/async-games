@@ -283,7 +283,7 @@ export default function GameRealmArena({ params }: { params: Promise<{ gameid: u
     // throwers it can't. The fog lifts once the battle is over.
     const fogged = !!gs?.fog && !complete;
     const clouds = gs?.clouds ?? [];
-    const battle = battleFrom(field, { fighters, fog: fogged, clouds, seats, coop, rulesVersion: gs?.rulesVersion });
+    const battle = battleFrom(field, { fighters, fog: fogged, clouds, seats, coop, rulesVersion: gs?.rulesVersion, mission: gs?.mission, enemy: gs?.enemy });
     // Every square the viewer's squad can't see, dimmed on the board: a
     // sweep of sight lines, so only redone when someone moves or cover goes.
     const shown = gs?.fighters;
@@ -672,7 +672,7 @@ export default function GameRealmArena({ params }: { params: Promise<{ gameid: u
                     )}
 
                     {selected && (
-                        <RealmArenaFighterCard fighter={selected} label={`${fighterName(fighters, selected)} · ${playerName(selected.owner)}`}>
+                        <RealmArenaFighterCard fighter={selected} battle={battle} label={`${fighterName(fighters, selected)} · ${playerName(selected.owner)}`}>
                             {turn && <RealmArenaTurnSheet draft={turn} battle={battle} player={myUserId} pendingTarget={pendingTarget} />}
                         </RealmArenaFighterCard>
                     )}

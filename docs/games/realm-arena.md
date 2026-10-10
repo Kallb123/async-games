@@ -643,12 +643,13 @@ As proposed in v0.3 (defaults taken):
 
 - **Chance to hit.** Each weapon has an accuracy (a bow, 80%). Half cover
   takes off 20 and full cover 40. High ground adds 10. A flanked target (no
-  cover between you) loses its cover. A shot at a target further than two
-  thirds of its weapon's range is a long shot, and takes off 20 more (§30.13).
+  cover between you) loses its cover. An Archer's or a Spitter's shot at a
+  target further than two thirds of its weapon's range is a long shot, and
+  takes off 20 more; a Mage's bolts are not (§30.13).
   It's shown as one percentage before you commit.
 - **Range.** A weapon can't shoot past its range. Past two thirds of it, a
-  shot is a long shot at −20% (§30.13); closer than that there's no fall-off to
-  work out. Ranges are in the character table (§13.6), scaled to the bigger
+  bow's or acid spit's shot is a long shot at −20% (§30.13); closer than that,
+  and for a Mage's bolt anywhere, there's no fall-off to work out. Ranges are in the character table (§13.6), scaled to the bigger
   board.
 - **Grazes.** A shot that misses by 10 or less grazes, for half damage. An 80%
   shot is then 80% hit, 10% graze and 10% clean miss.
@@ -706,7 +707,7 @@ games are named for. It would also be Defender of the Realm's first faction.
 | **Knight** | Slow and very tough | 4 | 12 | Mace, melee, 4 | **Shield wall:** allies next to the Knight count as in half cover until its next turn (2 AP, 3 turns) | 25 |
 | **Archer** | Long range; the overwatch specialist | 6 | 6 | Bow, 80%, range 20, 3 | **Aimed shot:** +20% to hit (3 AP, 2 turns) | 20 |
 | **Scout** | Fastest and fragile; the flanker | 8 | 6 | Knives, melee, 3 | **Sneak:** move without setting off reactions (2 AP a move, no cooldown) | 20 |
-| **Mage** | Fragile; hits an area | 6 | 5 | Bolt, 70%, range 10, 3 | **Fireball:** 3 damage to every character in a 3×3 area, friend or foe, up to 12 squares away, with no roll (3 AP, 3 turns) | 30 |
+| **Mage** | Fragile; hits an area | 6 | 5 | Mage Bolt, 90%, range 15, 3 | **Fireball:** 3 damage to every character in a 3×3 area, friend or foe, up to 12 squares away, with no roll (3 AP, 3 turns) | 30 |
 | **Cleric** | Support | 6 | 7 | Staff, melee, 2 | **Heal:** restore 4 HP to an ally they can see within 12 squares (2 AP, once a turn, no cooldown). **Raise:** bring a downed ally back at half HP (3 AP, 4 turns) | 25 |
 
 **The budget:** 100 points each for two players, 80 for three, and 70 each for
@@ -3701,8 +3702,8 @@ falls, and round by round how many of the team are still standing.
 Hold Out was unwinnable (§30.12, and [`realm-arena-balance.md`](./realm-arena-balance.md)):
 the team lost before the first wave, because melee always hit and an attack
 costs 2 of a character's 4 AP, so a Ravager or a Knight took out a fragile
-character in one enemy turn, and the team had no way to get anyone back. Five
-changes, the first two for Hold Out alone and the rest for every mode.
+character in one enemy turn, and the team had no way to get anyone back. Eight
+changes, the first three for Hold Out alone and the rest for every mode.
 
 **Hold Out only**
 
@@ -3715,6 +3716,26 @@ changes, the first two for Hold Out alone and the rest for every mode.
   point of HP by it (a team character's HP is worth two thirds as much), and the
   board's bars, the unit boxes and the muster sheet read it too. Hold the
   Centre, a duel, a free-for-all and Solo's Hold the Centre are as they were.
+- **The team wears 1 armour against the Realm.** When the warbands are the
+  Realm's (a random enemy is resolved as the battle is created, so it is
+  already known to the rules), every hit a warband lands on one of the team's
+  characters does `ARMOUR` (1) less, never under 1 (`soaked`, switched on by
+  `BattleState.armoured`, built by `battleFrom` from the mission, the enemy and
+  the battle's rules version). It counts for everything an enemy deals by a
+  blow: weapon hits and their grazes (a graze is half the blow, then armoured),
+  Cleave, Rend, a guard's strike, a Fireball's or a Demolish's splash and a
+  flask. It does not count for burning, which no blow deals, or for the team's
+  own friendly fire; the Swarm's hits, 2 and 3 a go, are not armoured at all.
+  The planner's odds, expected harm and guard previews read the reduced damage,
+  and a hit event carries what was dealt, but an area event carries the
+  blast's own damage, so the battle record's tally of a blast on armoured
+  characters runs one high per target. **The faction stays hidden.** A random
+  enemy's faction is secret from the team until it's seen (§29.3). The rules
+  apply armour whatever the board knows, but the board builds its battle from
+  the enemy only where the response names it (`enemy` is left off until seen),
+  so the fighter card's "Armour 1" and every preview appear only once the
+  faction is known — and every preview of an enemy's damage needs an enemy in
+  view, which is what makes it known. Nothing is added to the wire.
 - **The computer's warbands muster one step smaller.** `warbandBudget` takes a
   further `HOLD_OUT_ENEMY_STEPS` (−1) rung down the budget ladder (§30.5), so
   on Normal the warbands of a 2- or 3-player Hold Out muster 70 points, not
@@ -3739,13 +3760,19 @@ changes, the first two for Hold Out alone and the rest for every mode.
   and the recap files it as a miss. The odds are read where a shot's are: the
   turn sheet, the target list, a guard's preview of a move (`strikeChance`,
   `hitChance`, `reactionPreviews`) and the planner's expected harm.
-- **Long shots, −20%.** A ranged weapon's shot at a target more than two thirds
+- **Long shots, −20%.** A shot of a ranged weapon with `longShotPenalty` — the
+  Archer's bow and the Spitter's acid, not the Mage's bolts — at a target more than two thirds
   of its range away (`LONG_RANGE_NUMERATOR`/`LONG_RANGE_DENOMINATOR`, `isLongShot`, in whole numbers so
   exactly two thirds isn't one) takes `LONG_RANGE_PENALTY` (20) off, measured
-  by the distance the range check uses. It is every ranged weapon's — the bow,
-  the Mage's bolt and Frost bolt, a Spitter's acid — in `shotOdds`, so an aimed
+  by the distance the range check uses. It is read in `shotOdds`, so an aimed
   shot, a crippling shot and overwatch have it, and so do the planner and the
-  turn sheet, which says "long range −20%".
+  turn sheet, which says "long range −20%". The Mage's Mage Bolt and Frost
+  bolt carry no flag: a Mage's shot is the same at any range it can reach.
+- **The Mage Bolt.** The Mage's own weapon is the Mage Bolt: 90% to hit and a
+  range of 15, not the Bolt's 70% and 10. (The Frost bolt option, which
+  replaces it, is as it was: 70%, range 10.) A battle from before the
+  rebalance keeps the old Bolt, the weapon the rules read for it being
+  `weaponIn(state, fighter)`; the board's weapon lines for it read the same.
 - **Heal is once a turn.** No cooldown, but a Cleric can't Heal twice in one of
   its owner's turns: `Ability.oncePerTurn`, written on the fighter as
   `usedThisTurn` and wiped as its owner's next turn begins (`startTurn`). The
@@ -3763,8 +3790,9 @@ is stamped with the version it was **created** under
 (`specificGameState.rulesVersion`, kept in the settings a replay rebuilds it
 from, on the wire for the board's previews, and in an undo snapshot). A battle
 without the stamp, or with a lower one, plays by the old rules to the end:
-melee always hits and rolls nothing, no long-shot penalty, Heal on a
-two-turn cooldown, Raise once per battle, and no `maxHp` or smaller warbands.
+melee always hits and rolls nothing, no long-shot penalty, the Mage's Bolt
+at 70% and range 10, Heal on a two-turn cooldown, Raise once per battle, and no
+`maxHp`, armour or smaller warbands.
 `battleFrom` reads the stamp into `BattleState.balanced`, which the rules,
 the planner and the board all read; the abilities' old limits are
 `UNBALANCED_LIMITS` in `rules.ts`, as `abilityRules` reads them, since the
@@ -3968,4 +3996,4 @@ Realm, its sibling in the same world.
 | 1.50 | More Hold Out achievements (§30.4): *Lone Wolf* for winning it in Solo, *Hold the Keep* on the Sacked Fort, *Broken Tide* for downing the whole last wave before the last round is over, and *Unbroken* with every one of the team's characters standing. |
 | 1.51 | The review plays itself (§26.2): Play in the review dock steps through the match on its own, the recap screen replays from the player's last turn, and a co-op End turn's step carries its parts — the End turn, each of the warband's actions and the hand-off, each with what the viewer was told and the board as they saw it after — so the enemy's turn plays one action at a time. Moves walk along their told path and the view frames each move from start to end, or over the stretch seen of one that crossed the edge of sight (§26.1, §26.2); the playback cap is four and a half seconds. Stances, watches and reactions say what they are over the character ("Hunker down", "Shield wall", "Overwatch", "On guard", "Guard"), and a followed step with nothing the viewer can place shows a faint "?" over the board (§26.1, §26.2). | When nothing says where to look, the view rests on the player's own side rather than the whole board: the board opens on their squad (the whole team in co-op), and a review step that has nothing to follow or is spread over more than half the battlefield goes there too; a turn beginning's fresh AP no longer counts as an action to follow.
 | 1.52 | Measuring balance (§30.12): `npm run ra-balance` and the *Realm Arena balance* workflow fight hundreds of co-op battles with the planner playing both sides and report win rates, how long the team lasts and how each round goes. |
-| 1.53 | The rebalance (§30.13, command version 7): melee hits 80% of the time, a long shot (past two thirds of its range) is −20%, a Cleric's Heal is once a turn instead of on a cooldown and its Raise is on a four-turn cooldown instead of once a battle, and in Hold Out the team has 50% more HP against warbands a step smaller. A battle keeps the rules it was created under. |
+| 1.53 | The rebalance (§30.13, command version 7): melee hits 80% of the time, an Archer's or Spitter's long shot (past two thirds of its range) is −20%, the Mage Bolt is 90% to a range of 15, in Hold Out against the Realm the team takes 1 less from every hit, a Cleric's Heal is once a turn instead of on a cooldown and its Raise is on a four-turn cooldown instead of once a battle, and in Hold Out the team has 50% more HP against warbands a step smaller. A battle keeps the rules it was created under. |
