@@ -11,9 +11,9 @@
 // would refuse. Pure and browser-safe, like rules.ts.
 
 import type { Square } from "@/utils/games/battlefield/terrain";
-import { ABILITIES } from "./characters";
+import { ABILITIES, STRIKING_ABILITIES } from "./characters";
 import {
-    ACTION_POINTS, check, coverNextTo, fighterById, inRange, itemOf, nextTo, reactionsTo, shotOdds, weaponOf, weaponReaches,
+    ACTION_POINTS, check, coverNextTo, fighterById, inRange, itemOf, nextTo, reactionsTo, damageTo, shoots, shotOdds, strikeChance, weaponReaches,
     type Action, type BattleState, type Fighter, type ShotKind, type ShotOdds,
 } from "./rules";
 
@@ -75,10 +75,20 @@ export const ACTION_AIMS: Readonly<Record<ActionKind, ActionAim>> = {
     burst: { at: "self" },
 };
 
-/** The shot an action takes, if it's one: its odds are `shotOdds`. Anything else aimed at an enemy always lands. */
+/** The shot an action takes, if it's one: its odds are `shotOdds`. Anything else aimed at an enemy is a strike or lands. */
 export function shotOf(kind: ActionKind): Exclude<ShotKind, "overwatch"> | undefined {
     const aim = ACTION_AIMS[kind];
     return aim.at === "enemy" ? aim.shot : undefined;
+}
+
+/**
+ * Whether an action rolls to hit what it's aimed at: a shot, a strike with a
+ * weapon (an attack or an aimed shot by a melee character falls back to it),
+ * or one of the abilities that strike. A Hunter's mark, a heal, a fireball and
+ * the rest land.
+ */
+export function rollsToHit(kind: ActionKind): boolean {
+    return shotOf(kind) !== undefined || STRIKING_ABILITIES.has(kind);
 }
 
 /** The `check` kind that says who an action can be aimed at: its own, or — for a cleave — each of its targets'. Undefined for one not aimed at a character. */
@@ -129,7 +139,7 @@ export function standingAt(state: BattleState, fighter: Fighter, square: Square)
     return { battle: { ...state, fighters: state.fighters.map(one => one.id === fighter.id ? moved : one) }, moved };
 }
 
-/** One enemy a character's weapon could hit, and its chance to: a strike always hits. */
+/** One enemy a character's weapon could hit, and its chance to: a shot's odds, or a strike's. */
 export interface AttackOption {
     target: Fighter;
     /** Percent to hit, 0–100. */
@@ -150,9 +160,12 @@ export function attackOptions(state: BattleState, fighter: Fighter, square: Squa
     }).sort((a, b) => b.chance - a.chance);
 }
 
-/** A character's chance to hit an enemy, 0–100: a shot's odds, or — for a strike, or with no shot at all — every time. */
-export function hitChance(state: BattleState, fighter: Fighter, target: Fighter, shot: ShotKind | undefined = "attack"): number {
-    return (shot && shotOdds(state, fighter, target, shot)?.chance) ?? 100;
+/**
+ * A character's chance to hit an enemy, 0–100: a shot's odds, or — with a
+ * melee weapon, or an ability that strikes — a strike's (`strikeChance`).
+ */
+export function hitChance(state: BattleState, fighter: Fighter, target: Fighter, shot: ShotKind = "attack"): number {
+    return shotOdds(state, fighter, target, shot)?.chance ?? strikeChance(state, target);
 }
 
 /** One reaction a move would set off, and what it would do to the mover (§13.4). */
@@ -161,7 +174,9 @@ export interface ReactionPreview {
     kind: "overwatch" | "guard";
     /** An overwatch shot's odds against the mover on the square it comes at. */
     odds?: ShotOdds;
-    /** What it does on a hit; a guard always hits. */
+    /** Percent to hit the mover, 0–100: the overwatch shot's, or the guard's strike's. */
+    chance: number;
+    /** What it does on a hit. */
     damage: number;
 }
 
@@ -175,10 +190,9 @@ export function reactionPreviews(state: BattleState, mover: Fighter, path: reado
     return reactionsTo(state, mover, path).flatMap(({ watcher: id, step }): ReactionPreview[] => {
         const watcher = fighterById(state, id);
         if (!watcher) return [];
-        const weapon = weaponOf(watcher);
-        if (weapon.kind === "melee") return [{ watcher, kind: "guard", damage: weapon.damage }];
+        if (!shoots(watcher)) return [{ watcher, kind: "guard", chance: strikeChance(state, mover), damage: damageTo(state, watcher, mover) }];
         const { battle: there, moved } = standingAt(state, mover, path[step]);
         const odds = shotOdds(there, watcher, moved, "overwatch");
-        return [{ watcher, kind: "overwatch", odds, damage: odds?.damage ?? weapon.damage }];
+        return [{ watcher, kind: "overwatch", odds, chance: odds?.chance ?? 0, damage: odds?.damage ?? damageTo(state, watcher, moved) }];
     });
 }

@@ -2,7 +2,10 @@
 
 A record of what was tried to make *Hold Out* (docs/games/realm-arena.md
 §30.3, §30.9–§30.11) winnable, and what each change did to the team's chances
-in simulation. None of these rules has shipped. This file holds the numbers
+in simulation. Team HP ×1.5, the enemy −1 step, 1 armour against the Realm and
+13 rounds for two players shipped for Hold Out, with melee at 80%, cover counted double against a shot from beyond 10 squares, the Mage Bolt at 80% to a range of 12 and the Cleric's new Heal and
+Raise for every mode (see *Where this points*); restore, armour against the
+Swarm and 3 AP attacks did not. This file holds the numbers
 and how each lever was built, so the next person tuning the mode doesn't start
 from scratch.
 
@@ -259,6 +262,27 @@ The same 2-player cells at 15 rounds, for comparison: 0% / 8% alone, 17% /
 
 ## Where this points
 
+**What shipped (command version 7, realm-arena.md §30.13).** Not the set
+above's restore, but the levers that needed little new mechanism, plus
+changes that slow the killing in every mode: in Hold Out, **team HP ×1.5**
+(rounded up, as `maxHpOf`), **the enemy −1 step** (the warbands and every
+wave refill muster one rung down the budget ladder) and **armour 1 for the
+team against the Realm only** (the faction-shaped version the cells above
+found most even; the Swarm's hits are not armoured, and burning is not
+reduced) and **13 rounds for two players** (Solo keeps 15); and everywhere, **melee hits 80%** instead of always, **cover counts
+double against a shot from over 10 squares** (hunkering down is the same
+doubling, not stacked), the **Mage Bolt is 80% to a range of 12**, a Cleric's **Heal is once a
+turn** with no cooldown, and its **Raise is on a four-turn cooldown** instead
+of once a battle. The rest of this section, and the cells above, are what
+pointed there and what was left over: restore, armour against the Swarm and
+attack 3 AP. A
+first look at an earlier form of the combined set (a long-shot penalty and a 90%, range-15 Mage Bolt instead of the cover rule and the 80%, range-12 one), 8 battles a cell on seeds 1–8 (so ±30 points,
+and only a check that it is neither hopeless nor trivial), gave the team 50%
+against the Realm and 50% against the Swarm at 2 players, and 88% and 88% at
+3 players. Before the armour and the Mage Bolt the Realm cells were 0% and 38%;
+the Swarm cells are unchanged, as neither touches them. It wants the 200-run
+comparison the end of this file describes before anyone leans on it.
+
 - **Restore one downed character per player as each wave lands.** It's
   Hold Out-only, fits the mission's fiction (reinforcements reach the keep),
   is legible ("Bob's Archer rejoins the fight"), and helps the most on its
@@ -309,7 +333,7 @@ For re-running: each was an environment switch in a scratch worktree.
   `warbandBudget` (`characters.ts`), with `rung` clamped to the ladder.
 - **No growth:** `waveStrength` with no extra characters.
 - **Waves every 4:** `WAVE_EVERY` in `rules.ts`.
-- **13 rounds for 2 players:** `battleRounds` in `rules.ts` answering 13 for two seats (and so for Solo, which reads two). Only co-op battles were run, so nothing else noticed.
+- **13 rounds for 2 players:** `battleRounds` in `rules.ts` answering 13 for two seats (and so for Solo, which reads two). Only co-op battles were run, so nothing else noticed. (The shipped version is Hold Out's alone, for exactly two players, and leaves Solo at 15: `battleRounds(playerCount, { mission, rulesVersion })`.)
 - **Team HP ×*k*:** a `maxHpOf(fighter)` in `rules.ts`, the character's HP, times *k* unless `isWarband(fighter.owner)`, read everywhere a full HP was read from `CHARACTERS`: `newFighter`, the heal checks and `mend`, Raise, the rally, the restore, and the planner's `worthOf` (so a team HP is worth half as much to it).
 - **HP ×*k*:** every `CHARACTERS[c].hp` scaled and rounded as the table loads.
 

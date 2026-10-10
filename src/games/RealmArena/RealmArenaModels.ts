@@ -7,14 +7,16 @@ import { mongoMap } from "@/utils/games/mongoMaps";
 import { capitalise, pluralize } from "@/utils/ui/text";
 import { userIdListToNamesAndMap } from "@/utils/users/clerk";
 import { RealmArenaGameType, type IGameCommand } from "@/utils/apiModels/GameLogic";
-import { battleOf, budgetOf, enemyEvents, enemyHidden, nextWaveOf, toldTo, unnamed, warbandBudgetOf, type IRealmArenaOutcome, type RealmArenaBoard, type Told } from "./RealmArenaLogic";
+import { battleOf, battleRoundsOf, budgetOf, enemyEvents, enemyHidden, nextWaveOf, toldTo, unnamed, warbandBudgetOf, type IRealmArenaOutcome, type RealmArenaBoard, type Told } from "./RealmArenaLogic";
 import { rollOffTurnOrder } from "@/utils/games/rollOff";
+import { gameCommandVersion } from "@/utils/ui/games";
+import { meta } from "./meta";
 import { randomInt } from "@/utils/games/random";
 import { userToken } from "@/utils/games/history";
 import { BATTLE_SIZE_NAMES, CHARACTERS, COOP_PLAYERS, DIFFICULTY_NAMES, FACTION_IDS, factionById, FACTIONS, fitsCoop, isFactionId, playableFactionsOf, RANDOM_ENEMY, REALM_ONLY, UNKNOWN_ENEMY, type BattleSize, type CharacterId, type Difficulty, type FactionId } from "./characters";
 import { addTally, NO_TALLY, xpOf, type MasterySnapshot, type Tally } from "./mastery";
 import { battlefieldById, COOP_MAPS, DEPLOYMENT_NAMES, mapFor, type CoopMap, type RealmArenaMapId } from "./maps";
-import { allied, battleRounds, ENEMY_SIDE, fighterById, fogGhost, isWarband, pickOf, squadSight, storedFighter, TEAM_SIDE, viewOf, warbandsFor, type BattleEvent, type Fighter, type FogGhost, type MusterPick, type ToldEvent } from "./rules";
+import { allied, ENEMY_SIDE, fighterById, fogGhost, isWarband, pickOf, squadSight, storedFighter, TEAM_SIDE, viewOf, warbandsFor, type BattleEvent, type Fighter, type FogGhost, type MusterPick, type ToldEvent } from "./rules";
 import type { IRealmArenaGameDataResponse, IRealmArenaSpecificGameStateResponse, IRealmArenaStepOutcome, IRealmArenaStepPart, RealmArenaPartState } from "./apiModels";
 import type { Square } from "@/utils/games/battlefield/terrain";
 import { addRecords, NO_RECORD, RECORD_KEYS, type BattleRecord, type FightingRecord, type FightingRow, type WaveRecord } from "./battleRecord";
@@ -111,6 +113,16 @@ export interface IRealmArenaSpecificGameState {
      * them (`playableFactions`).
      */
     factions?: FactionId[];
+    /**
+     * The command version the battle was created under (`GameMeta.commandVersion`),
+     * which decides which of the rules that have changed it plays by: from
+     * `BALANCE_VERSION` on, melee rolls to hit, cover counts double at range, Heal and
+     * Raise are limited differently, and Hold Out's team is tougher against
+     * smaller warbands. Fixed when the battle is created, so one in progress
+     * keeps its rules through a deploy and a replay plays it the same way;
+     * absent on a battle from before it, which plays by the old ones.
+     */
+    rulesVersion?: number;
     /** Battle rounds played to the end: 0 until the first round's last turn ends. The round being played is one more. */
     roundsPlayed: number;
     /**
@@ -265,12 +277,13 @@ RealmArenaInvitationSchema.methods.CreateGame = async function(invite: IRealmAre
         fog: this.fog === true,
         size: battleSizeOf(this.size),
         factions: playableFactionsOf(this.factions),
+        rulesVersion: gameCommandVersion(meta),
         ...(coop && enemy ? { coop: { ...coop, enemy, ...(coop.enemy === RANDOM_ENEMY ? { random: true as const } : {}) } } : {}),
     });
 
     const field = battlefieldById(specificGameState.map);
     const zones = DEPLOYMENT_NAMES[specificGameState.map];
-    history.push({ text: `Setup: ${coop?.mission === "holdOut" ? "Hold Out" : "Hold the Centre"} on the ${field.name}, over ${battleRounds(turnOrder.length)} battle rounds` });
+    history.push({ text: `Setup: ${coop?.mission === "holdOut" ? "Hold Out" : "Hold the Centre"} on the ${field.name}, over ${battleRoundsOf(specificGameState)} battle rounds` });
     if (invited && !coop) {
         history.push({ text: `Setup: co-op is for up to ${COOP_PLAYERS.max} players, so this is a free-for-all` });
     }
@@ -330,6 +343,8 @@ export interface RealmArenaSettings {
     factions?: FactionId[];
     /** In co-op against the computer (§29): the faction drawn or picked, whether it was drawn at `random` (§29.3), the mission (§30.3), the difficulty (§30.5) and the battlefield picked for Hold Out (§30.9). */
     coop?: CoopSettings;
+    /** The command version the battle is created under: what it plays by (`IRealmArenaSpecificGameState.rulesVersion`). Absent plays by the rules from before `BALANCE_VERSION`. */
+    rulesVersion?: number;
 }
 
 /**
@@ -365,6 +380,7 @@ export function buildInitialRealmArenaState(turnOrder: string[], mastery: Master
         ...(fog ? { fog: true } : {}),
         ...(size ? { size } : {}),
         ...(factions ? { factions } : {}),
+        ...(settings.rulesVersion !== undefined ? { rulesVersion: settings.rulesVersion } : {}),
         ...(settings.coop ? { coop: coopState(settings.coop) } : {}),
         phase: "muster",
         roundsPlayed: 0,
@@ -385,7 +401,7 @@ function coopState({ enemy, random, mission, difficulty, map }: CoopSettings): I
 
 /** What a battle's settings are, read back off its state: what a replay rebuilds it from. */
 export function settingsOf(gs: IRealmArenaSpecificGameState): RealmArenaSettings {
-    const settings = { fog: gs.fog === true, size: gs.size, factions: gs.factions };
+    const settings = { fog: gs.fog === true, size: gs.size, factions: gs.factions, rulesVersion: gs.rulesVersion };
     if (!gs.coop) return settings;
     const { nextWarband: _turn, enemySeen: _seen, ...coop } = gs.coop;
     return { ...settings, coop };
@@ -422,6 +438,8 @@ var RealmArenaGameDataSchema = new Schema<IRealmArenaGameDataDocument>(
             size: { type: String, set: battleSizeOf },
             // Written once, as the battle is created (B6); absent is the Realm alone.
             factions: { type: [String], default: undefined },
+            // Written once, as the battle is created; absent plays by the rules from before it.
+            rulesVersion: Number,
             phase: String,
             roundsPlayed: Number,
             fighters: Schema.Types.Mixed,
@@ -491,7 +509,7 @@ export function gameStateToModel(
     complete = false,
 ): IRealmArenaSpecificGameStateResponse {
     const seats = [...gs.seats];
-    const rounds = battleRounds(seats.length);
+    const rounds = battleRoundsOf(gs);
     const musters = gs.musters ?? [];
     const own = gs.phase === "muster" ? musters.find(muster => muster.owner === viewerId) : undefined;
     const view = viewOf(battleOf(gs, complete), viewerId);
@@ -505,6 +523,7 @@ export function gameStateToModel(
         fog: gs.fog === true,
         coop: gs.coop !== undefined,
         ...(gs.size ? { size: gs.size } : {}),
+        ...(gs.rulesVersion !== undefined ? { rulesVersion: gs.rulesVersion } : {}),
         // What the muster offers (B6): the host's choice, which nobody needs once the squads are on the field.
         ...(gs.phase === "muster" ? { factions: [...gs.factions ?? REALM_ONLY] } : {}),
         ...(gs.coop?.mission ? { mission: gs.coop.mission } : {}),
@@ -594,9 +613,9 @@ export function stepOutcomeToModel(outcome: unknown, viewerId: string | null, gs
     return { events: withoutRolls(told), ...parts ? { parts } : {} };
 }
 
-/** Events as a review is told them: a shot's roll is the log's to leave out (§26.2). */
+/** Events as a review is told them: a shot's or a strike's roll is the log's to leave out (§26.2). */
 const withoutRolls = (events: readonly BattleEvent[]): ToldEvent[] => events.map((event): ToldEvent => {
-    if (event.kind !== "shot") return event;
+    if (event.kind !== "shot" && event.kind !== "struck") return event;
     const { roll: _roll, ...rest } = event;
     return rest;
 });

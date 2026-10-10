@@ -12,7 +12,7 @@ import { ABILITIES, CHARACTERS, EFFECT_IDS, EFFECTS, ITEM_IDS, ITEMS, type Abili
 import { CHARACTER_IDS } from "./roster";
 import { battlefieldOf } from "./maps";
 import { EFFECT_ART, ITEM_ART, type BurstKind, type Missile, type Sprite, type ThrownItem } from "./art";
-import { ACTION_POINTS, CENTRE, SCORED_FOR, squadSight, hasEffect, isStanding, isWarband, moveAp, pickOf, reachOf, weaponOf, type BattleState, type Fighter, type MusterPick, type ShotResult, type ToldEvent } from "./rules";
+import { ACTION_POINTS, CENTRE, SCORED_FOR, squadSight, hasEffect, isStanding, isWarband, maxHpOf, moveAp, pickOf, reachOf, shoots, type BattleState, type Fighter, type MusterPick, type ShotResult, type ToldEvent } from "./rules";
 
 const LETTER_OF = new Map<Terrain, TerrainLetter>(
     (Object.entries(TERRAIN) as [TerrainLetter, Terrain][]).map(([letter, terrain]) => [terrain, letter]),
@@ -339,12 +339,13 @@ export function facingOf(field: Pick<Battlefield, "width" | "height">, { square,
 
 /** How full a character's HP bar is, 0–1 — or would be, were it to lose `lost` HP (gain, if negative), never below empty or past full. */
 export function hpFraction(fighter: Fighter, lost = 0): number {
-    return Math.min(1, Math.max(0, fighter.hp - lost) / CHARACTERS[fighter.character].hp);
+    return Math.min(1, Math.max(0, fighter.hp - lost) / maxHpOf(fighter));
 }
 
-/** Why an ability can't be used yet — "Used", "Back in 2 turns" — or undefined when it's ready. */
+/** Why an ability can't be used yet — "Used", "Used this turn", "Back in 2 turns" — or undefined when it's ready. */
 export function abilityWait(fighter: Fighter, id: AbilityId): string | undefined {
     if (fighter.spent.includes(id)) return "Used";
+    if (fighter.usedThisTurn?.includes(id)) return "Used this turn";
     const cooldown = fighter.cooldowns[id] ?? 0;
     return cooldown > 0 ? `Back in ${pluralize(cooldown, "turn")}` : undefined;
 }
@@ -530,6 +531,9 @@ function firstMoveOf(events: readonly ToldEvent[]): number {
     return events.findIndex(event => event.kind === "moved");
 }
 
+/** The roll a shot or a strike was decided by, as a line leads with it: nothing for an event a review told without it. */
+const rollOf = (event: ToldEvent): { roll?: number } => "roll" in event && typeof event.roll === "number" ? { roll: event.roll } : {};
+
 /**
  * What an action did, in order, in the viewer's words (§17.3 PR 7). A move
  * broken up by the reactions it set off is told once. `fighters` names
@@ -556,13 +560,21 @@ export function eventLines(events: readonly ToldEvent[], fighters: readonly Figh
                     icon: "🎯",
                     title,
                     sub: `${who} at ${name(event.target)} · ${event.chance}% to hit`,
-                    ...("roll" in event && typeof event.roll === "number" ? { roll: event.roll } : {}),
+                    ...rollOf(event),
                     sentence: `${who} ${verb} ${name(event.target)}${event.result === "miss" ? "" : ` for ${event.damage}`}`,
                 }];
             }
             case "struck": {
-                const title = `${Name(event.fighter)} struck ${name(event.target)} for ${event.damage}`;
-                return [{ icon: "⚔️", title, sub: event.reaction ? "On guard" : undefined, sentence: event.reaction ? `${title} on guard` : title }];
+                // Under the balance rules a strike rolls, like a shot: a miss is told as one, with the odds and the roll.
+                const title = event.missed ? "Miss" : `${Name(event.fighter)} struck ${name(event.target)} for ${event.damage}`;
+                const sentence = event.missed ? `${Name(event.fighter)} struck at ${name(event.target)} and missed` : title;
+                const odds = event.chance === undefined ? undefined : `${event.chance}% to hit`;
+                const sub = [event.reaction ? "On guard" : undefined, odds].filter(Boolean).join(" · ") || undefined;
+                return [{
+                    icon: "⚔️", title, sub,
+                    ...rollOf(event),
+                    sentence: event.reaction ? `${sentence} on guard` : sentence,
+                }];
             }
             case "fireball": {
                 const names = event.targets.map(name);
@@ -1119,7 +1131,8 @@ function timeline(field: Battlefield, events: readonly ToldEvent[], before: read
                 if (event.reaction) say(event.fighter, land - SLASH_MS, GUARD_WORD);
                 const from = at.get(event.fighter);
                 if (square !== undefined && from !== undefined) cues.push({ kind: "slash", square, striker: event.fighter, from, start: land - SLASH_MS, length: 2 * SLASH_MS });
-                text(event.target, land, minus(event.damage), "hit", { hpChange: -event.damage, from });
+                if (event.missed) text(event.target, land, "Miss", "miss", { hpChange: 0, from });
+                else text(event.target, land, minus(event.damage), "hit", { hpChange: -event.damage, from });
                 break;
             }
             case "burned":
@@ -1133,7 +1146,7 @@ function timeline(field: Battlefield, events: readonly ToldEvent[], before: read
                 // Every character a turn ends on watch is told at once, so they say so together.
                 const fighter = as.get(event.fighter);
                 const when = events[index - 1]?.kind === "watching" && landed !== null ? landed : beat();
-                if (fighter) say(event.fighter, when, weaponOf(fighter).kind === "ranged" ? OVERWATCH_WORD : ON_GUARD_WORD);
+                if (fighter) say(event.fighter, when, shoots(fighter) ? OVERWATCH_WORD : ON_GUARD_WORD);
                 break;
             }
             case "fireball":
@@ -1437,7 +1450,7 @@ export function toldOf(cues: readonly BattleCue[], before: Fighter | undefined, 
     const texts = cues.filter((cue): cue is TextCue => cue.kind === "text" && cue.fighter === fighter.id);
     const shoves = shovesOf(cues, fighter.id, still);
     if (texts.length === 0 && shoves.length === 0) return null;
-    const max = CHARACTERS[fighter.character].hp;
+    const max = maxHpOf(fighter);
     const blows = texts.filter(cue => cue.hpChange !== undefined).sort((a, b) => a.start - b.start);
     let level = before.hp;
     const steps = blows.map((cue, index): HpStep => {

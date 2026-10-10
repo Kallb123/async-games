@@ -14,7 +14,8 @@
 import { nextAction, turnMemo } from "../../src/games/RealmArena/ai";
 import { DIFFICULTY_NAMES, BATTLE_SIZE_NAMES, type BattleSize, type Difficulty, type FactionId } from "../../src/games/RealmArena/characters";
 import type { RealmArenaSettings } from "../../src/games/RealmArena/RealmArenaModels";
-import { ACTION_POINTS, battleRounds, isStanding, isWarband, viewOf, waveArrives } from "../../src/games/RealmArena/rules";
+import { battleRoundsOf } from "../../src/games/RealmArena/RealmArenaLogic";
+import { ACTION_POINTS, isStanding, isWarband, viewOf, waveArrives } from "../../src/games/RealmArena/rules";
 import { actBy, battleOf, endTurnBy, makeGame, musterAll, play } from "../../src/games/RealmArena/testFixtures";
 
 export type Mission = "holdOut" | "holdTheCentre";
@@ -124,7 +125,7 @@ export async function simulateBattle(scenario: BalanceScenario, seed: number): P
     const players = seatsFor(scenario.players);
     const game = makeGame(players, {}, settingsOf(scenario));
     await musterAll(game);
-    const rounds = battleRounds(players.length);
+    const rounds = battleRoundsOf(game.specificGameState);
     const byRound: RoundCount[] = [];
     const waves: number[] = [];
     const teamFielded = battleOf(game).fighters.filter(fighter => !isWarband(fighter.owner)).length;

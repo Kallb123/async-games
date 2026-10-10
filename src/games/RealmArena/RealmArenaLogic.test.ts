@@ -212,7 +212,7 @@ describe("a whole battle, played by two scripted squads", () => {
         const game = makeGame();
         await musterAll(game);
         const expected: Record<string, number> = { a: 0, b: 0 };
-        let shots = 0;
+        let shots = 0, strikes = 0;
 
         const checkConsistent = () => {
             for (const fighter of game.specificGameState.fighters) {
@@ -244,13 +244,15 @@ describe("a whole battle, played by two scripted squads", () => {
                 // every knock-out of an enemy is worth its points cost ÷ 5.
                 for (const event of (outcome as IRealmArenaOutcome).events) {
                     if (event.kind === "shot") shots++;
+                    if (event.kind === "struck") strikes++;
                     if (event.kind === "downed") {
                         const fallen = game.specificGameState.fighters.find(one => one.id === event.fighter)!;
                         const by = game.specificGameState.fighters.find(one => one.id === event.by)!;
                         if (by.owner !== fallen.owner) expected[by.owner] += knockoutPoints(fallen.character);
                     }
                 }
-                expect(command.recordedRolls ?? []).toHaveLength((outcome as IRealmArenaOutcome).events.filter(event => event.kind === "shot").length);
+                // Every shot and every melee strike drew a roll, and nothing else did.
+                expect(command.recordedRolls ?? []).toHaveLength((outcome as IRealmArenaOutcome).events.filter(event => event.kind === "shot" || event.kind === "struck").length);
                 if (game.complete) break;
                 checkConsistent();
             }
@@ -265,6 +267,7 @@ describe("a whole battle, played by two scripted squads", () => {
         expect(game.gameState.history[0].text).toBe(`{{${game.winner}}} wins the battle`);
         // The squads met and fought: there were shots and someone went down.
         expect(shots).toBeGreaterThan(0);
+        expect(strikes).toBeGreaterThan(0);
         expect(game.specificGameState.fighters.some(one => !isStanding(one))).toBe(true);
 
         // Every roll was recorded: the same commands, replayed from the start

@@ -7,7 +7,7 @@ import { recordedRolls } from "@/utils/games/recordedRolls";
 import { isDropped, nextActivePlayer, registerPlayerDropoutAdapter } from "@/utils/games/playerDropout";
 import { v4 as uuidv4, NIL as NIL_UUID } from 'uuid';
 import type { IRealmArenaCoop, IRealmArenaGameData, IRealmArenaSpecificGameState } from "@/games/RealmArena/RealmArenaModels";
-import { ABILITIES, CHARACTERS, DIFFICULTY_NAMES, EFFECTS, enemyNameOf, factionById, FACTIONS, ITEMS, musterBudget, readyMadeSquad, REALM_ONLY, warbandBudget, type Budget, type CharacterId, type FactionId } from "@/games/RealmArena/characters";
+import { ABILITIES, CHARACTERS, DIFFICULTY_NAMES, EFFECTS, enemyNameOf, factionById, FACTIONS, HOLD_OUT_ENEMY_STEPS, ITEMS, musterBudget, readyMadeSquad, REALM_ONLY, warbandBudget, type Budget, type CharacterId, type FactionId } from "@/games/RealmArena/characters";
 import { battlefieldById, battlefieldOf } from "@/games/RealmArena/maps";
 import { addTally, NO_TALLY, type Tally } from "@/games/RealmArena/mastery";
 import {
@@ -15,6 +15,7 @@ import {
     act,
     allied,
     areaAround,
+    armouredTeam,
     battleFrom,
     battleRounds,
     blastedIn,
@@ -28,6 +29,7 @@ import {
     isWarband,
     landedSmoke,
     lastWaveRound,
+    maxHpOf,
     musterRefusal,
     nextWaveRound,
     newFighter,
@@ -42,6 +44,7 @@ import {
     standingPoints,
     standings,
     startTurn,
+    stoutTeam,
     TEAM_SIDE,
     viewOf,
     storedFighter,
@@ -95,6 +98,8 @@ export function battleOf(gs: IRealmArenaSpecificGameState, complete = false): Ba
         fog: gs.fog === true && !complete,
         seats: gs.seats,
         coop: gs.coop !== undefined,
+        rulesVersion: gs.rulesVersion,
+        armoured: armouredTeam(gs.coop?.mission, gs.rulesVersion, gs.coop?.enemy),
     });
 }
 
@@ -108,9 +113,14 @@ export function playableFactions(gs: IRealmArenaSpecificGameState): readonly Fac
     return gs.factions ?? REALM_ONLY;
 }
 
-/** Each co-op warband's points (§30.5): the players', moved by the difficulty. */
+/** How many rounds this battle lasts (`battleRounds`): the one length its ending, its waves, its round counter and its record all read. */
+export function battleRoundsOf(gs: Pick<IRealmArenaSpecificGameState, "seats" | "coop" | "rulesVersion">): number {
+    return battleRounds(gs.seats.length, { mission: gs.coop?.mission, rulesVersion: gs.rulesVersion });
+}
+
+/** Each co-op warband's points (§30.5): the players', moved by the difficulty, and in a stout Hold Out (`stoutTeam`) a rung further down. */
 export function warbandBudgetOf(gs: IRealmArenaSpecificGameState): Budget {
-    return warbandBudget(gs.seats.length, gs.size, gs.coop?.difficulty);
+    return warbandBudget(gs.seats.length, gs.size, gs.coop?.difficulty, stoutTeam(gs.coop?.mission, gs.rulesVersion) ? HOLD_OUT_ENEMY_STEPS : 0);
 }
 
 /** The squad every warband musters, and each wave refills it to (§29.7, §30.3): its faction's ready-made squad for its budget. */
@@ -315,6 +325,7 @@ export function cloneRealmArenaState(gs: IRealmArenaSpecificGameState): IRealmAr
         ...(gs.fog ? { fog: true } : {}),
         ...(gs.size ? { size: gs.size } : {}),
         ...(gs.factions ? { factions: [...gs.factions] } : {}),
+        ...(gs.rulesVersion !== undefined ? { rulesVersion: gs.rulesVersion } : {}),
         musters: (gs.musters ?? []).map(({ owner, faction, picks }) => ({ owner, ...(faction ? { faction } : {}), picks: picks.map(pickOf) })),
         // Written once as the battle is created and never changed, so shared.
         mastery: gs.mastery ?? {},
@@ -439,10 +450,13 @@ function clause(event: BattleEvent, fighters: readonly Fighter[], actor: string,
             return event.reaction
                 ? `${name(event.fighter)} fired on overwatch: ${landed(event.damage, event.result === "graze")}`
                 : `shot ${name(event.target)} with ${name(event.fighter)} (${event.chance}%): ${landed(event.damage, event.result === "graze")}`;
-        case "struck":
+        case "struck": {
+            // A strike that rolled and missed did no damage: "and missed", as a shot's "a miss".
+            const outcome = event.missed ? "and missed" : `for ${event.damage}`;
             return event.reaction
-                ? `${name(event.fighter)} struck on guard for ${event.damage}`
-                : `struck ${name(event.target)} with ${name(event.fighter)} for ${event.damage}`;
+                ? `${name(event.fighter)} struck on guard ${outcome}`
+                : `struck ${name(event.target)} with ${name(event.fighter)} ${outcome}`;
+        }
         case "fireball":
             return `threw a fireball with ${name(event.fighter)}, hitting ${pluralize(hitIn(event.targets).length, "character")} for ${event.damage}`;
         case "downed": return `${name(event.fighter)} is down`;
@@ -751,7 +765,7 @@ export class RealmArenaGameType implements IGameType {
      * What a command's own sender is told it did: everything, but in a battle
      * fought in fog of war and not yet over, cut to what their side saw
      * (`toldTo`) — which in co-op is the enemy's turn inside their End turn
-     * (§29.8). A shot's roll stays: it's theirs, or one fired at them.
+     * (§29.8). A shot's or a strike's roll stays: it's theirs, or one aimed at them.
      */
     outcomeFor(gameData: IGameData, outcome: ICommandOutcome, viewerId: string): ICommandOutcome {
         const data = gameData as IRealmArenaGameData;
@@ -853,7 +867,7 @@ function holdTheCentreEnding(data: IRealmArenaGameData, battle: BattleState, coo
 
 /** Whether the battle is over (§5.1). Hold Out goes on through an enemy wiped out between waves (§30.3). */
 function battleIsOver(gs: IRealmArenaSpecificGameState): boolean {
-    if (gs.coop?.mission !== "holdOut") return isBattleOver(battleOf(gs), gs.seats, gs.roundsPlayed);
+    if (gs.coop?.mission !== "holdOut") return isBattleOver(battleOf(gs), gs.seats, gs.roundsPlayed, { mission: gs.coop?.mission, rulesVersion: gs.rulesVersion });
     return holdOutEnding(gs) !== undefined;
 }
 
@@ -863,7 +877,7 @@ function battleIsOver(gs: IRealmArenaSpecificGameState): boolean {
  * the last wave has landed and nobody of the enemy is standing.
  */
 function holdOutEnding(gs: IRealmArenaSpecificGameState): { won: boolean; detail: string } | undefined {
-    const rounds = battleRounds(gs.seats.length);
+    const rounds = battleRoundsOf(gs);
     const standing = sidesStanding(battleOf(gs));
     const round = Math.min(gs.roundsPlayed + 1, rounds);
     if (!standing.includes(TEAM_SIDE)) return { won: false, detail: `overrun in round ${round}` };
@@ -928,7 +942,7 @@ const RALLYING_VERSION = 6;
 function rally(gs: IRealmArenaSpecificGameState): void {
     for (const fighter of gs.fighters) {
         if (isWarband(fighter.owner) || !isStanding(fighter)) continue;
-        const full = CHARACTERS[fighter.character].hp;
+        const full = maxHpOf(fighter);
         fighter.hp = Math.min(full, fighter.hp + Math.floor(full / 2));
     }
 }
@@ -936,7 +950,7 @@ function rally(gs: IRealmArenaSpecificGameState): void {
 /** The wave due as the round `roundsPlayed` has just reached begins, if one is (§30.3). `version` is the End turn's that lands it. */
 function landWave(data: IRealmArenaGameData, version: number): void {
     const gs = data.specificGameState;
-    if (gs.coop?.mission !== "holdOut" || !waveArrives(gs.roundsPlayed + 1, battleRounds(gs.seats.length))) return;
+    if (gs.coop?.mission !== "holdOut" || !waveArrives(gs.roundsPlayed + 1, battleRoundsOf(gs))) return;
     for (const owner of warbandsFor(gs.seats)) {
         const fresh = waveOf(gs, owner, version >= GROWING_WAVES_VERSION);
         if (fresh.length === 0) continue;
@@ -962,7 +976,7 @@ function landWave(data: IRealmArenaGameData, version: number): void {
  */
 export function nextWaveOf(gs: IRealmArenaSpecificGameState): { round: number; arriving?: number; upTo?: true } | undefined {
     if (gs.coop?.mission !== "holdOut" || gs.phase !== "battle") return undefined;
-    const rounds = battleRounds(gs.seats.length);
+    const rounds = battleRoundsOf(gs);
     const round = nextWaveRound(gs.roundsPlayed + 1, rounds);
     if (round === undefined) return undefined;
     if (enemyHidden(gs.coop)) return { round };
@@ -1042,8 +1056,11 @@ export class RealmArenaMuster implements IGameCommand {
                 musters.push(...order.map((_, k) => ({ owner: warbandOwner(k), picks: readyMadeMuster(field, order.length + k, squad) })));
             }
             // Every squad joins the battlefield at once, ids in seat order, the warbands' last.
+            // In a stout Hold Out the team's characters have more HP than their
+            // character's (`stoutTeam`); the warbands' keep theirs.
+            const stout = stoutTeam(gs.coop?.mission, gs.rulesVersion);
             gs.fighters = musters.flatMap(({ owner, picks }) => picks.map(pick => ({ owner, pick })))
-                .map(({ owner, pick }, id) => newFighter(id, owner, pick.character, pick.square, pick.item ?? null, pick.option));
+                .map(({ owner, pick }, id) => newFighter(id, owner, pick.character, pick.square, pick.item ?? null, pick.option, stout && !isWarband(owner)));
             gs.musters = [];
             gs.phase = "battle";
             data.gameState.history.unshift({ text: "The squads take the field, and the battle begins" });
