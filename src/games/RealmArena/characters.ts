@@ -487,6 +487,11 @@ export const FACTIONS: Readonly<Record<FactionId, Faction>> = {
     },
 };
 
+/** The faction a character is mustered from: each is in one roster alone (§29.3). */
+export function factionOf(character: CharacterId): FactionId {
+    return FACTION_IDS.find(id => FACTIONS[id].characters.includes(character))!;
+}
+
 /** The Realm: the first faction, and the one every player fought as before a squad could choose its own (B6). */
 export const REALM = FACTIONS.realm;
 

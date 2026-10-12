@@ -2,12 +2,12 @@ import { describe, expect, it, vi } from "vitest";
 import { at } from "@/utils/games/battlefield/testFixtures";
 import { buildBattlefield, type Battlefield } from "@/utils/games/battlefield/terrain";
 import { buildTimeline } from "@/utils/games/replay";
-import { ABILITIES, CHARACTERS, HOLD_OUT_ENEMY_STEPS, musterBudget, REALM, warbandBudget, FACTIONS, type CharacterId, type Difficulty } from "./characters";
+import { ABILITIES, CHARACTERS, HOLD_OUT_ENEMY_STEPS, musterBudget, REALM, warbandBudget, FACTIONS, type CharacterId, type Difficulty, type FactionId } from "./characters";
 import { battleRoundsOf, cloneRealmArenaState, nextWaveOf, RealmArenaGameType, warbandBudgetOf, waveOf, type IRealmArenaOutcome } from "./RealmArenaLogic";
 import { buildInitialRealmArenaState, gameStateToModel, settingsOf, stepOutcomeToModel, type RealmArenaSettings } from "./RealmArenaModels";
 import { meta } from "./meta";
 import {
-    abilityRules, ACTION_POINTS, battleRounds, HOLD_OUT_PAIR_ROUNDS, lastWaveRound, waveArrives, isBattleOver, act, ARMOUR, armouredTeam, damageTo, weaponOf, weaponReaches, BALANCE_VERSION, battleFrom, check, fixedRolls, isBalanced, FAR_SHOT_DISTANCE, maxHpOf, MELEE_ACCURACY,
+    abilityRules, ACTION_POINTS, battleRounds, HOLD_OUT_PAIR_ROUNDS, lastWaveRound, waveArrives, isBattleOver, act, ARMOUR, armouredTeam, armourOf, damageTo, weaponOf, weaponReaches, BALANCE_VERSION, battleFrom, check, fixedRolls, isBalanced, FAR_SHOT_DISTANCE, maxHpOf, MELEE_ACCURACY,
     musterHp, newFighter, shotOdds, startTurn, stoutTeam, strikeChance, teamHp, TEAM_HP_FACTOR, viewOf, warbandOwner,
     type Action, type BattleState, type Fighter,
 } from "./rules";
@@ -576,25 +576,39 @@ describe("the Mage Bolt", () => {
     });
 });
 
-describe("the team's armour against the Realm in Hold Out", () => {
+describe("the team's armour against the Realm and the Miners in Hold Out", () => {
     const team = fighter(1, "a", "archer", at(OPEN, 1, 1));
     const knight = fighter(2, warbandOwner(0), "knight", at(OPEN, 2, 1));
-    const armoured = (fighters: Fighter[]): BattleState => ({ ...balanced(OPEN, fighters), armoured: true, sides: { a: "team", [warbandOwner(0)]: "enemy" } });
+    const armoured = (fighters: Fighter[], against: FactionId = "realm"): BattleState => ({ ...balanced(OPEN, fighters), armoured: against, sides: { a: "team", [warbandOwner(0)]: "enemy" } });
 
-    it("is Hold Out's only, against the Realm's only, under the rebalance's rules only", () => {
+    it("is Hold Out's only, against the Realm's and the Miners' only, under the rebalance's rules only", () => {
         expect(ARMOUR).toBe(1);
-        expect(armouredTeam("holdOut", 7, "realm")).toBe(true);
-        expect(armouredTeam("holdOut", 7, "swarm")).toBe(false);
-        expect(armouredTeam(undefined, 7, "realm")).toBe(false);
-        expect(armouredTeam("holdOut", LEGACY, "realm")).toBe(false);
-        expect(armouredTeam("holdOut", undefined, "realm")).toBe(false);
+        expect(armouredTeam("holdOut", 7, "realm")).toBe("realm");
+        expect(armouredTeam("holdOut", 7, "miners")).toBe("miners");
+        expect(armouredTeam("holdOut", 7, "swarm")).toBeUndefined();
+        expect(armouredTeam(undefined, 7, "realm")).toBeUndefined();
+        expect(armouredTeam("holdOut", LEGACY, "realm")).toBeUndefined();
+        expect(armouredTeam("holdOut", undefined, "realm")).toBeUndefined();
         // A view that doesn't know the enemy yet (a random one unseen) wears none, so the board can't name it.
-        expect(armouredTeam("holdOut", 7, undefined)).toBe(false);
+        expect(armouredTeam("holdOut", 7, undefined)).toBeUndefined();
         // The battle takes the answer from whoever builds it, and only in co-op.
         const built = (extra: object) => battleFrom(OPEN, { fighters: [], coop: true, rulesVersion: 7, armoured: armouredTeam("holdOut", 7, "realm"), ...extra });
-        expect(built({}).armoured).toBe(true);
-        expect(viewOf({ ...built({}), fog: true }, "a").armoured).toBe(true);
+        expect(built({}).armoured).toBe("realm");
+        expect(viewOf({ ...built({}), fog: true }, "a").armoured).toBe("realm");
         for (const extra of [{ armoured: armouredTeam("holdOut", 7, "swarm") }, { armoured: armouredTeam("holdOut", 7, undefined) }, { coop: false }]) expect(built(extra), JSON.stringify(extra)).not.toHaveProperty("armoured");
+    });
+
+    it("is worn by a Miner of the team against the Miners, but not against the Realm, which it's tough enough for (§33.1)", () => {
+        const miner = fighter(1, "a", "miner", at(OPEN, 1, 1));
+        const realmKnight = fighter(2, warbandOwner(0), "knight", at(OPEN, 2, 1));
+        const enemyMiner = fighter(3, warbandOwner(0), "miner", at(OPEN, 2, 1));
+        expect(armourOf(armoured([team, miner]), team)).toBe(ARMOUR);
+        expect(armourOf(armoured([team, miner]), miner)).toBe(0);
+        expect(armourOf(armoured([team, miner], "miners"), miner)).toBe(ARMOUR);
+        expect(armourOf(armoured([team, miner], "miners"), team)).toBe(ARMOUR);
+        expect(armourOf(armoured([realmKnight]), realmKnight)).toBe(0);
+        expect(damageTo(armoured([miner, realmKnight]), realmKnight, miner)).toBe(CHARACTERS.knight.weapon.damage);
+        expect(damageTo(armoured([miner, enemyMiner], "miners"), enemyMiner, miner)).toBe(CHARACTERS.miner.weapon.damage - ARMOUR);
     });
 
     it("takes 1 off a warband's hit on the team, never below 1, and nothing off anyone else's", () => {
@@ -687,10 +701,11 @@ describe("the team's armour against the Realm in Hold Out", () => {
         const swarm = makeGame(["a", "b"], {}, { coop: { enemy: "swarm", mission: "holdOut" } });
         const centre = makeGame(["a", "b"], {}, { coop: { enemy: "realm" } });
         const old = makeGame(["a", "b"], {}, { rulesVersion: LEGACY, coop: { enemy: "realm", mission: "holdOut" } });
-        expect([realm, swarm, centre, old].map(game => battleOf(game).armoured === true)).toEqual([true, false, false, false]);
+        const miners = makeGame(["a", "b"], {}, { coop: { enemy: "miners", mission: "holdOut" } });
+        expect([realm, miners, swarm, centre, old].map(game => battleOf(game).armoured)).toEqual(["realm", "miners", undefined, undefined, undefined]);
         // A random enemy plays armoured when it's the Realm, though the board is not told until it's seen.
         const drawn = makeGame(["a", "b"], {}, { fog: true, coop: { enemy: "realm", random: true, mission: "holdOut" } });
-        expect(battleOf(drawn).armoured).toBe(true);
+        expect(battleOf(drawn).armoured).toBe("realm");
         expect(gameStateToModel(drawn.specificGameState, "a", null)).not.toHaveProperty("enemy");
         expect(JSON.stringify(gameStateToModel(drawn.specificGameState, "a", null))).not.toMatch(/armour/i);
     });

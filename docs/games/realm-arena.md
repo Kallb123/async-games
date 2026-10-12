@@ -3716,7 +3716,8 @@ changes, the first three for Hold Out alone and the rest for every mode.
   point of HP by it (a team character's HP is worth two thirds as much), and the
   board's bars, the unit boxes and the muster sheet read it too. Hold the
   Centre, a duel, a free-for-all and Solo's Hold the Centre are as they were.
-- **The team wears 1 armour against the Realm.** When the warbands are the
+- **The team wears 1 armour against the Realm** (and, since §33, the
+  Miners — though not a Miner of its own against the Realm). When the warbands are the
   Realm's — the Renegades, as the team knows them, and as the player-facing
   copy says (a random enemy is resolved as the battle is created, so it is
   already known to the rules), every hit a warband lands on one of the team's
@@ -4017,8 +4018,18 @@ Prospector, Sapper.
 - **Balance** (§30.12): the harness fights the Miners as an enemy by default,
   and `--teams` (the workflow's *teams*) has the team muster a faction other
   than the Realm, so a Miners team can be set against a Realm one on the same
-  seeds. Hold Out's armour (§30.13) stays the Realm's alone: the Miners hit as
-  hard, but there are fewer of them.
+  seeds. Its first run (200 battles a scenario, Hold Out on the Sacked Fort)
+  found the Miners the hardest enemy at every team size — a Realm team won
+  11%, 42% and 48% of the time against them for one, two and three players,
+  against 54%, 68% and 69% against the Realm — and a Miners team the
+  strongest against the Realm (82%, 73%, 94%).
+- **Armour** (§30.13): so Hold Out's team wears its armour against the
+  Miners as it does against the Realm — they hit as hard, and harder to bring
+  down — and a Miner of the team wears none against the Realm, which it's
+  tough enough for. `BattleState.armoured` names the enemy it's worn against
+  (`armouredTeam`), and `armourOf` is what one character wears: `damageTo`,
+  the planner and the fighter card all read it. No battle under way can have
+  a Miner in it, so this needs no rules version.
 
 ---
 

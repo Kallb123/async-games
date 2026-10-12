@@ -5,7 +5,7 @@ import Section from '@/components/ui/Section';
 import Stat from '@/components/ui/Stat';
 import { ITEM_ART } from '@/games/RealmArena/art';
 import { ABILITIES, CHARACTERS, ITEMS } from '@/games/RealmArena/characters';
-import { abilitiesOf, ARMOUR, isStanding, isWarband, maxHpOf, weaponOf, type BattleState, type Fighter } from '@/games/RealmArena/rules';
+import { abilitiesOf, armourOf, isStanding, maxHpOf, weaponOf, type BattleState, type Fighter } from '@/games/RealmArena/rules';
 import { abilityWait, effectsOn, watchStatus } from '@/games/RealmArena/ui';
 import { ABILITY_MARK, weaponLine, weaponMark } from '@/games/RealmArena/roster';
 import { RealmArenaStatusList } from './RealmArenaEffects';
@@ -13,7 +13,7 @@ import { SpriteImage } from './RealmArenaTerrain';
 
 interface RealmArenaFighterCardProps {
     fighter: Fighter;
-    /** The battle it's in, which says what it's fighting with (`weaponOf`) and whether it wears armour (`BattleState.armoured`). */
+    /** The battle it's in, which says what it's fighting with (`weaponOf`) and what armour it wears (`armourOf`). */
     battle: BattleState;
     /** Its heading: the character's name and whose it is. */
     label: string;
@@ -40,7 +40,7 @@ export default function RealmArenaFighterCard({ fighter, battle, label, children
                     <Stat value={`${fighter.hp}/${maxHpOf(fighter)}`} label="HP" />
                     <Stat value={fighter.ap} label="AP left" />
                     <Stat value={fighter.banked} label="AP banked" />
-                    {battle.armoured && !isWarband(fighter.owner) && <Stat value={ARMOUR} label="Armour" />}
+                    {armourOf(battle, fighter) > 0 && <Stat value={armourOf(battle, fighter)} label="Armour" />}
                 </div>
                 <p className="ag-hint">{isStanding(fighter) ? watchStatus(fighter) ?? character.role : 'Down'}</p>
                 <RealmArenaStatusList effects={effectsOn(fighter)} />
