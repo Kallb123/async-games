@@ -84,7 +84,7 @@ export const MELEE_ACCURACY = 80;
 export const FAR_SHOT_DISTANCE = 10;
 /** Hold Out's team characters have this many times their table HP, rounded up (`teamHp`). */
 export const TEAM_HP_FACTOR = 1.5;
-/** What a hard-hitting enemy's hits take off a hit on Hold Out's team, never leaving less than 1 (`armourOf`, `BattleState.armoured`). */
+/** What the Realm's hits take off a hit on Hold Out's team, never leaving less than 1 (`armourOf`, `BattleState.armoured`). */
 export const ARMOUR = 1;
 
 /** The mission's scoring area, by the id a map gives its objective (§13.7). */
@@ -219,14 +219,13 @@ export interface BattleState {
      */
     balanced?: true;
     /**
-     * The enemy the team's characters wear `ARMOUR` against (`armourOf`): Hold
-     * Out under `BALANCE_VERSION` against the Realm or the Miners
-     * (`armouredTeam`). Never stored or sent; `battleFrom` builds it from the
-     * battle's mission and enemy, which a view of the battle leaves out while
-     * a random enemy is unseen — so nothing a board shows of the armour can
-     * name the faction.
+     * Whether the team's characters wear `ARMOUR` against the warbands: Hold
+     * Out under `BALANCE_VERSION` against the Realm (`armouredTeam`). Never
+     * stored or sent; `battleFrom` builds it from the battle's mission and
+     * enemy, which a view of the battle leaves out while a random enemy is
+     * unseen — so nothing a board shows of the armour can name the faction.
      */
-    armoured?: FactionId;
+    armoured?: true;
 }
 
 /** What a `BattleState` is built from: the persisted state on the server, the response on the board and in the recap. */
@@ -240,11 +239,11 @@ export interface BattleSource {
     /** The rules version the battle was created under; absent for one from before `BALANCE_VERSION`. */
     rulesVersion?: number;
     /**
-     * The enemy the team is armoured against (`armouredTeam`), which the caller
-     * works out from the mission and the enemy it knows: the board's, a
-     * faction the response left off until seen, is never one.
+     * Whether the team is armoured (`armouredTeam`), which the caller works out
+     * from the mission and the enemy it knows: the board's, a faction the
+     * response left off until seen, is never one.
      */
-    armoured?: FactionId;
+    armoured?: boolean;
 }
 
 /**
@@ -276,7 +275,7 @@ export function battleFrom(field: Battlefield, { fighters, fog, clouds, seats = 
     return {
         field, fighters, ...(fog ? { fog: true } : {}), ...(clouds && clouds.length > 0 ? { clouds } : {}), ...(sides ? { sides } : {}),
         ...(isBalanced(rulesVersion) ? { balanced: true as const } : {}),
-        ...(coop && armoured ? { armoured } : {}),
+        ...(coop && armoured ? { armoured: true as const } : {}),
     };
 }
 
@@ -438,24 +437,16 @@ export const stoutTeam = (mission: string | undefined, rulesVersion: number | un
 /** How many rungs a co-op battle's warbands muster from the difficulty's (`warbandBudget`): `HOLD_OUT_ENEMY_STEPS` against a stout team, else none. */
 export const warbandSteps = (mission: string | undefined, rulesVersion: number | undefined): number => stoutTeam(mission, rulesVersion) ? HOLD_OUT_ENEMY_STEPS : 0;
 
-/** The enemies whose blows Hold Out's team is armoured against: the ones that hit hardest (§30.13, §33.1). The Swarm's 2s and 3s aren't. */
-const ARMOURED_AGAINST: readonly FactionId[] = ["realm", "miners"];
+/** Whether Hold Out's team wears armour against its enemy: the stout team (`stoutTeam`), against the Realm's warbands alone. */
+export const armouredTeam = (mission: string | undefined, rulesVersion: number | undefined, enemy: FactionId | undefined): boolean => stoutTeam(mission, rulesVersion) && enemy === "realm";
 
 /**
- * The enemy Hold Out's team wears armour against, if it does: the stout team
- * (`stoutTeam`), against the Realm's or the Miners' warbands.
- */
-export const armouredTeam = (mission: string | undefined, rulesVersion: number | undefined, enemy: FactionId | undefined): FactionId | undefined =>
-    stoutTeam(mission, rulesVersion) && enemy && ARMOURED_AGAINST.includes(enemy) ? enemy : undefined;
-
-/**
- * The armour one of the team's characters wears (`ARMOUR`), or 0: everyone
- * of the team where the team is armoured, but a Miner against the Realm,
- * which is tough enough without it (§33.1). A warband's character wears none.
+ * The armour one of the team's characters wears where the team is armoured
+ * (`ARMOUR`), or 0: none for a warband's, and none for a Miner, which is tough
+ * enough without it (§33.3).
  */
 export function armourOf(state: Pick<BattleState, "armoured">, fighter: Pick<Fighter, "owner" | "character">): number {
-    if (!state.armoured || isWarband(fighter.owner)) return 0;
-    return state.armoured === "realm" && factionOf(fighter.character) === "miners" ? 0 : ARMOUR;
+    return state.armoured && !isWarband(fighter.owner) && factionOf(fighter.character) !== "miners" ? ARMOUR : 0;
 }
 
 /**
@@ -869,7 +860,7 @@ export function viewOf(state: BattleState, player: string | null): BattleState {
         ...(clouds.length > 0 ? { clouds } : {}),
         ...(state.sides ? { sides: state.sides } : {}),
         ...(state.balanced ? { balanced: true as const } : {}),
-        ...(state.armoured ? { armoured: state.armoured } : {}),
+        ...(state.armoured ? { armoured: true as const } : {}),
     };
 }
 

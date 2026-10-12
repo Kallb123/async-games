@@ -3716,8 +3716,8 @@ changes, the first three for Hold Out alone and the rest for every mode.
   point of HP by it (a team character's HP is worth two thirds as much), and the
   board's bars, the unit boxes and the muster sheet read it too. Hold the
   Centre, a duel, a free-for-all and Solo's Hold the Centre are as they were.
-- **The team wears 1 armour against the Realm** (and, since §33, the
-  Miners — though not a Miner of its own against the Realm). When the warbands are the
+- **The team wears 1 armour against the Realm** (but, since §33, not a
+  Miner of its own). When the warbands are the
   Realm's — the Renegades, as the team knows them, and as the player-facing
   copy says (a random enemy is resolved as the battle is created, so it is
   already known to the rules), every hit a warband lands on one of the team's
@@ -4023,13 +4023,16 @@ Prospector, Sapper.
   11%, 42% and 48% of the time against them for one, two and three players,
   against 54%, 68% and 69% against the Realm — and a Miners team the
   strongest against the Realm (82%, 73%, 94%).
-- **Armour** (§30.13): so Hold Out's team wears its armour against the
-  Miners as it does against the Realm — they hit as hard, and harder to bring
-  down — and a Miner of the team wears none against the Realm, which it's
-  tough enough for. `BattleState.armoured` names the enemy it's worn against
-  (`armouredTeam`), and `armourOf` is what one character wears: `damageTo`,
-  the planner and the fighter card all read it. No battle under way can have
-  a Miner in it, so this needs no rules version.
+- **Armour** (§30.13): Hold Out's team wears its armour against the Realm
+  alone, as before the Miners, and a Miner of the team wears none: it's tough
+  enough without it. A second run, with armour against the Miners too and
+  none for a Miner against the Realm, overshot both ways — a Realm team won
+  57%, 77% and 85% against the Miners, a Miners team 78%, 98% and 99% — so the
+  armour against the Miners was taken back out, leaving a Miners team at
+  37%, 25% and 32% against the Realm rather than 82%, 73% and 94%.
+  `armourOf` is what one character wears: `damageTo`, the planner and the
+  fighter card all read it. No battle under way can have a Miner in it, so
+  this needs no rules version.
 
 ---
 
