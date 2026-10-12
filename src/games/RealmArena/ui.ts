@@ -613,13 +613,15 @@ export function eventLines(events: readonly ToldEvent[], fighters: readonly Figh
                     sentence: event.reaction ? `${sentence} on guard` : sentence,
                 }];
             }
-            case "fireball": {
+            case "fireball":
+            case "dynamite": {
                 const names = event.targets.map(name);
+                const { name: ability } = ABILITIES[event.kind];
                 return [{
-                    icon: "🔥",
-                    title: `Fireball: ${event.targets.length === 0 ? "nobody hit" : names.join(", ")}`,
+                    icon: AREA_BLAST[event.kind].icon,
+                    title: `${ability}: ${event.targets.length === 0 ? "nobody hit" : names.join(", ")}`,
                     sub: `${event.damage} damage each`,
-                    sentence: `${Owner(event.fighter)} fireball hit ${caught(names)}${event.targets.length > 0 && event.damage > 0 ? ` for ${event.damage} each` : ""}`,
+                    sentence: `${Owner(event.fighter)} ${ability.toLowerCase()} hit ${caught(names)}${event.targets.length > 0 && event.damage > 0 ? ` for ${event.damage} each` : ""}`,
                 }];
             }
             case "downed":
@@ -880,6 +882,7 @@ export const FLIGHT_PACE: Readonly<Record<Missile, { base: number; perSquare: nu
     fireFlask: { base: 300, perSquare: 20, max: 800 },
     thunderFlask: { base: 300, perSquare: 20, max: 800 },
     smokePot: { base: 300, perSquare: 20, max: 800 },
+    dynamite: { base: 300, perSquare: 20, max: 800 },
 };
 /** How long a shot goes on once it's there: an arrow stuck in a figure, or one glancing off or flying past. */
 const SHOT_AFTER_MS = 350;
@@ -941,6 +944,15 @@ export function legLengthOn(view: IsoView): (from: Square, to: Square) => number
 
 /** What each character that shoots something other than an arrow shoots (§26.1): the Mage's bolt, the Spitter's acid. */
 const SHOT_MISSILE: Readonly<Partial<Record<CharacterId, Missile>>> = { mage: "bolt", spitter: "acid" };
+
+/**
+ * How each ability that lands on a 3×3 shows (§26.1, §33.2): the glyph its
+ * lines and rows lead with, what flies, and what it bursts into.
+ */
+export const AREA_BLAST: Readonly<Record<"fireball" | "dynamite", { icon: string; missile: Missile; burst: BurstKind }>> = {
+    fireball: { icon: "🔥", missile: "fireball", burst: "fire" },
+    dynamite: { icon: "🧨", missile: "dynamite", burst: "blast" },
+};
 
 /** What each thrown item bursts into (§26.1), and over how much. */
 const THROWN_BURST: Readonly<Record<ThrownItem, BurstKind>> = { fireFlask: "fire", thunderFlask: "thunder", smokePot: "smoke" };
@@ -1187,17 +1199,19 @@ function timeline(field: Battlefield, events: readonly ToldEvent[], before: read
                 break;
             }
             case "fireball":
+            case "dynamite":
             case "thrown": {
                 const item = event.kind === "thrown" ? event.item : null;
+                const blast = event.kind === "thrown" ? undefined : AREA_BLAST[event.kind];
                 // A draught is never thrown: it's drunk, and told as a heal.
                 if (item === "healingDraught") break;
-                const missile = item ?? "fireball";
+                const missile: Missile = item ?? blast!.missile;
                 const flight = flightOf(event.fighter, event.at, missile);
                 const land = beat(flight);
                 fly(event.fighter, event.at, missile, "landed", land, flight);
-                // A fireball spreads over the 3×3, and so does a flask made to.
+                // A fireball or dynamite spreads over the 3×3, and so does a flask made to.
                 const radius = item && !(ITEMS[item] as Item).area ? 0 : 1;
-                cues.push({ kind: "burst", burst: item ? THROWN_BURST[item] : "fire", at: event.at, radius, start: land, length: BURST_MS });
+                cues.push({ kind: "burst", burst: item ? THROWN_BURST[item] : blast!.burst, at: event.at, radius, start: land, length: BURST_MS });
                 landing = { start: land, targets: event.targets };
                 if (event.damage > 0) event.targets.forEach(target => text(target, land, minus(event.damage), "hit", { hpChange: -event.damage, from: event.at }));
                 break;
@@ -1689,14 +1703,14 @@ export const POP_MS = 120;
 export const KNOCK = 1.5;
 /** How far a melee striker lunges at its target through its slash, in board units. */
 export const LUNGE = 2.5;
-/** How long the whole battlefield shakes as a fireball or a thunder flask lands. */
+/** How long the whole battlefield shakes as a fireball, dynamite or a thunder flask lands. */
 export const SHAKE_MS = 150;
 /** How far the battlefield is shaken at the start of it, in board units: it dies away to nothing. */
 export const SHAKE = 2;
 /** How many times the shake swings to and fro over its length. */
 const SHAKE_SWINGS = 2;
 /** The missiles whose landing shakes the battlefield: the ones that explode. */
-const SHAKING_MISSILES: ReadonlySet<Missile> = new Set<Missile>(["fireball", "thunderFlask"]);
+const SHAKING_MISSILES: ReadonlySet<Missile> = new Set<Missile>(["fireball", "thunderFlask", "dynamite"]);
 
 /**
  * A figure pushed off its square and back over a stretch of the playback: the
@@ -1794,6 +1808,7 @@ export const FLIGHT_ARC: Readonly<Record<Missile, number>> = {
     thunderFlask: 0.3,
     smokePot: 0.3,
     acid: 0.2,
+    dynamite: 0.3,
 };
 /**
  * The highest any arc peaks above the straight line, in board units: three

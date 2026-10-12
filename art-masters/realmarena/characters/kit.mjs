@@ -41,6 +41,16 @@ export const MATERIALS = {
     bone: { colour: '#e6dcc4', shine: 0.2 },
     sac: { colour: '#b9c66a', shine: 0.3 },
     acid: { colour: '#a6e03a', glow: true },
+    // The Miners' (§33): a red beard, iron, brass, stone, dynamite and its
+    // spark, a helmet lamp, and the runes' glow.
+    ginger: { colour: '#b4612c' },
+    iron: { colour: '#5d6168', shine: 0.45 },
+    brass: { colour: '#c79a3e', shine: 0.55 },
+    stone: { colour: '#8d877c' },
+    dynamite: { colour: '#c4322a', shine: 0.25 },
+    spark: { colour: '#ffe27a', glow: true },
+    lamp: { colour: '#fff1b0', glow: true },
+    rune: { colour: '#7fd8ff', glow: true },
 };
 
 /**
@@ -151,4 +161,53 @@ export function limbPair(from, joints, options) {
 /** A pair of legs, from `hip` through `knee` to `foot`, given for the left one. */
 export function legPair(hip, knee, foot, { r = 0.025, mat = 'chitin', tip = mat } = {}) {
     return limbPair(hip, [knee, foot], { r, mat, tip });
+}
+
+/** How far a dwarf stands below a man (§33): its body crouched by it, its legs the shorter for it. */
+const DWARF_DROP = 0.1;
+
+/** Where a dwarf's head sits, for its helmet and beard. */
+export const DWARF_HEAD = { at: [HEAD.at[0], HEAD.at[1], HEAD.at[2] - DWARF_DROP], r: HEAD.r };
+
+/**
+ * A dwarf, the Miners' (§33): `body`, short in the leg and broad in the
+ * chest, and a beard down to its belt. Takes `body`'s options, with
+ * `girth` — the material its barrel chest is — and `beard`'s.
+ */
+export function dwarf({ girth, beard = 'ginger', ...options }) {
+    const [x, , z] = DWARF_HEAD.at;
+    return [
+        ...body({ stance: 0.08, ...options, crouch: DWARF_DROP }),
+        { ball: { at: [0.005, 0, 0.36], r: [0.125, 0.165, 0.15] }, mat: girth ?? options.torso },
+        // The beard: full round the jaw, falling in a broad wedge to the belt.
+        { ball: { at: [x + 0.06, 0, z - 0.05], r: [0.06, 0.095, 0.07] }, mat: beard },
+        { taper: { from: [x + 0.08, 0, z - 0.06], to: [x + 0.11, 0, z - 0.3], r: 0.075, r2: 0.02 }, mat: beard },
+        { box: { at: [x + 0.098, 0, z - 0.02], size: [0.02, 0.09, 0.022] }, mat: beard },
+    ];
+}
+
+/**
+ * A pick, the Miners' tool and weapon: a haft from `hand` up to `top`, and a
+ * curved steel head across it, its point forward and its back spike behind.
+ */
+export function pick(hand, top, { haft = 'wood', head = 'steel', reach = 0.15 } = {}) {
+    const [x, y, z] = top;
+    return [
+        { capsule: { from: [hand[0] - 0.02, hand[1], hand[2] - 0.07], to: top, r: 0.016 }, mat: haft },
+        { ball: { at: top, r: 0.03 }, mat: head },
+        { taper: { from: top, to: [x + reach * 0.6, y, z + 0.01], r: 0.026, r2: 0.018 }, mat: head },
+        { taper: { from: [x + reach * 0.6, y, z + 0.01], to: [x + reach, y, z - 0.06], r: 0.018, r2: 0 }, mat: head },
+        { taper: { from: top, to: [x - reach * 0.6, y, z - 0.04], r: 0.022, r2: 0 }, mat: head },
+    ];
+}
+
+/** A stick of dynamite from `from` to `to`, its fuse out of the `to` end, lit when `lit`. */
+export function dynamiteStick(from, to, { lit = false } = {}) {
+    const [x, y, z] = to;
+    const fuse = [x + (x - from[0]) * 0.5, y + (y - from[1]) * 0.5, z + (z - from[2]) * 0.5 + 0.02];
+    return [
+        { capsule: { from, to, r: 0.02 }, mat: 'dynamite' },
+        { capsule: { from: to, to: fuse, r: 0.005 }, mat: 'darkLeather' },
+        ...(lit ? [{ ball: { at: fuse, r: 0.022 }, mat: 'spark' }] : []),
+    ];
 }

@@ -7,7 +7,7 @@ import { battleRoundsOf, cloneRealmArenaState, nextWaveOf, RealmArenaGameType, w
 import { buildInitialRealmArenaState, gameStateToModel, settingsOf, stepOutcomeToModel, type RealmArenaSettings } from "./RealmArenaModels";
 import { meta } from "./meta";
 import {
-    abilityRules, ACTION_POINTS, battleRounds, HOLD_OUT_PAIR_ROUNDS, lastWaveRound, waveArrives, isBattleOver, act, ARMOUR, armouredTeam, damageTo, weaponOf, weaponReaches, BALANCE_VERSION, battleFrom, check, fixedRolls, isBalanced, FAR_SHOT_DISTANCE, maxHpOf, MELEE_ACCURACY,
+    abilityRules, ACTION_POINTS, battleRounds, HOLD_OUT_PAIR_ROUNDS, lastWaveRound, waveArrives, isBattleOver, act, ARMOUR, armouredTeam, armourOf, damageTo, weaponOf, weaponReaches, BALANCE_VERSION, battleFrom, check, fixedRolls, isBalanced, FAR_SHOT_DISTANCE, maxHpOf, MELEE_ACCURACY,
     musterHp, newFighter, shotOdds, startTurn, stoutTeam, strikeChance, teamHp, TEAM_HP_FACTOR, viewOf, warbandOwner,
     type Action, type BattleState, type Fighter,
 } from "./rules";
@@ -584,6 +584,7 @@ describe("the team's armour against the Realm in Hold Out", () => {
     it("is Hold Out's only, against the Realm's only, under the rebalance's rules only", () => {
         expect(ARMOUR).toBe(1);
         expect(armouredTeam("holdOut", 7, "realm")).toBe(true);
+        expect(armouredTeam("holdOut", 7, "miners")).toBe(false);
         expect(armouredTeam("holdOut", 7, "swarm")).toBe(false);
         expect(armouredTeam(undefined, 7, "realm")).toBe(false);
         expect(armouredTeam("holdOut", LEGACY, "realm")).toBe(false);
@@ -595,6 +596,14 @@ describe("the team's armour against the Realm in Hold Out", () => {
         expect(built({}).armoured).toBe(true);
         expect(viewOf({ ...built({}), fog: true }, "a").armoured).toBe(true);
         for (const extra of [{ armoured: armouredTeam("holdOut", 7, "swarm") }, { armoured: armouredTeam("holdOut", 7, undefined) }, { coop: false }]) expect(built(extra), JSON.stringify(extra)).not.toHaveProperty("armoured");
+    });
+
+    it("isn't worn by a Miner of the team, which is tough enough without it (§33.3)", () => {
+        const miner = fighter(1, "a", "miner", at(OPEN, 1, 1));
+        expect(armourOf(armoured([team, miner, knight]), team)).toBe(ARMOUR);
+        expect(armourOf(armoured([team, miner, knight]), miner)).toBe(0);
+        expect(armourOf(armoured([team, knight]), knight)).toBe(0);
+        expect(damageTo(armoured([miner, knight]), knight, miner)).toBe(CHARACTERS.knight.weapon.damage);
     });
 
     it("takes 1 off a warband's hit on the team, never below 1, and nothing off anyone else's", () => {
@@ -687,7 +696,8 @@ describe("the team's armour against the Realm in Hold Out", () => {
         const swarm = makeGame(["a", "b"], {}, { coop: { enemy: "swarm", mission: "holdOut" } });
         const centre = makeGame(["a", "b"], {}, { coop: { enemy: "realm" } });
         const old = makeGame(["a", "b"], {}, { rulesVersion: LEGACY, coop: { enemy: "realm", mission: "holdOut" } });
-        expect([realm, swarm, centre, old].map(game => battleOf(game).armoured === true)).toEqual([true, false, false, false]);
+        const miners = makeGame(["a", "b"], {}, { coop: { enemy: "miners", mission: "holdOut" } });
+        expect([realm, miners, swarm, centre, old].map(game => battleOf(game).armoured === true)).toEqual([true, false, false, false, false]);
         // A random enemy plays armoured when it's the Realm, though the board is not told until it's seen.
         const drawn = makeGame(["a", "b"], {}, { fog: true, coop: { enemy: "realm", random: true, mission: "holdOut" } });
         expect(battleOf(drawn).armoured).toBe(true);

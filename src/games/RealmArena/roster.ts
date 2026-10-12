@@ -27,6 +27,11 @@ export const CHARACTER_MARK: Readonly<Record<CharacterId, string>> = {
     spitter: "🧪",
     bloater: "🫧",
     broodmother: "👑",
+    miner: "⛏️",
+    stonewarden: "⚒️",
+    prospector: "💎",
+    sapper: "🧨",
+    runepriest: "🔨",
 };
 
 /** Every character, in §13.6's table's order. */

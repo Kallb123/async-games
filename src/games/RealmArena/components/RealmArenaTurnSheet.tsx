@@ -7,13 +7,13 @@ import InfoModal from '@/components/ui/InfoModal';
 import ListRow from '@/components/ui/ListRow';
 import PendingTag from '@/components/ui/PendingTag';
 import Stat from '@/components/ui/Stat';
-import { ABILITIES, CHARACTERS, EFFECTS, type Ability, type AbilityId, type Affliction, type Item } from '@/games/RealmArena/characters';
+import { ABILITIES, CHARACTERS, EFFECTS, type AbilityId, type Affliction } from '@/games/RealmArena/characters';
 import { ITEM_ART } from '@/games/RealmArena/art';
 import { ATTACK_AP, HUNKER_AP, REACTION_COST, abilitiesOf, allied, check, damageTo, fighterById, hasEffect, healedEffects, isStanding, itemOf, maxHpOf, shotEffect, shotOdds, smokeSquares, strikeChance, weaponOf, type Action, type BattleState, type Fighter, type OddsBreakdown } from '@/games/RealmArena/rules';
-import { abilityWait, oddsLines, whoseName } from '@/games/RealmArena/ui';
+import { abilityWait, AREA_BLAST, oddsLines, whoseName } from '@/games/RealmArena/ui';
 import { rangeSquares, shotOf, targetsOf, type TargetKind } from '@/games/RealmArena/tactics';
 import { ABILITY_MARK, CHARACTER_MARK, weaponLine, weaponMark } from '@/games/RealmArena/roster';
-import { HEAL_HP, INSTANT_KINDS, type Aim, type InstantKind, type TurnDraft } from '@/games/RealmArena/useTurnDraft';
+import { HEAL_HP, INSTANT_KINDS, isAtSquare, landsOf, type Aim, type InstantKind, type TurnDraft } from '@/games/RealmArena/useTurnDraft';
 import { andList, capitalise, pluralize } from '@/utils/ui/text';
 import { SpriteImage } from './RealmArenaTerrain';
 
@@ -35,6 +35,7 @@ const AIM_HINT: Readonly<Record<Aim, string>> = {
     aimedShot: 'Tap an enemy to see the odds.',
     cleave: 'Tap two enemies next to them.',
     fireball: 'Tap the square to centre the fireball on. It hits the 3×3 around it, friend or foe.',
+    dynamite: `Tap a square within ${ABILITIES.dynamite.range} to throw the dynamite at. It hits the 3×3 around it, friend or foe.`,
     heal: `Tap a hurt ally they can see within ${ABILITIES.heal.range} squares.`,
     raise: 'Tap a downed ally next to them.',
     throw: 'Tap a shaded square to throw it there: where it lands is shaded red, and catches friend and foe alike.',
@@ -55,6 +56,7 @@ const SEND_LABEL: Readonly<Record<Aim, string>> = {
     aimedShot: 'Take the aimed shot',
     cleave: 'Cleave',
     fireball: 'Throw the fireball',
+    dynamite: 'Throw the dynamite',
     heal: 'Heal',
     raise: 'Raise',
     throw: 'Throw',
@@ -74,7 +76,8 @@ const SEND_LABEL: Readonly<Record<Aim, string>> = {
 const ABILITY_ROW: Readonly<Record<AbilityId, { icon: string; tag: string; needs?: TargetKind | 'cover'; least?: number }>> = {
     sneak: { icon: '🤫', tag: 'Sneak' },
     shieldWall: { icon: '🛡️', tag: 'Raise it' },
-    fireball: { icon: '🔥', tag: 'Aim' },
+    fireball: { icon: AREA_BLAST.fireball.icon, tag: 'Aim' },
+    dynamite: { icon: AREA_BLAST.dynamite.icon, tag: 'Aim' },
     cleave: { icon: ABILITY_MARK, tag: 'Aim', needs: 'attack', least: 2 },
     aimedShot: { icon: ABILITY_MARK, tag: 'Aim', needs: 'aimedShot' },
     heal: { icon: '✚', tag: 'Aim', needs: 'heal' },
@@ -352,13 +355,12 @@ function Detail({ draft, battle, name, ap, target }: DetailProps) {
 
     if (draft.path) return <MoveDetail draft={draft} name={name} ap={ap} />;
     if (draft.area) {
-        // What lands — a fireball, the item thrown, or a Demolish — and on whom.
+        // What lands — a fireball, dynamite, the item thrown, or a Demolish — and on whom.
         const thrown = aim === 'throw' ? itemOf(fighter) : undefined;
         if (thrown?.hitPenalty) return hint('Smoke over the 3×3 until your next turn. It hurts nobody.');
         const area = new Set(draft.area);
         const caught = battle.fighters.filter(one => isStanding(one) && area.has(one.square));
-        const lands: Ability | Item = thrown ?? (aim === 'demolish' ? ABILITIES.demolish : ABILITIES.fireball);
-        const { damage = 0, effect } = lands;
+        const { damage = 0, effect } = (isAtSquare(aim) ? landsOf(fighter, aim) : undefined) ?? {};
         return hint(<>
             {caught.length === 0 ? `Nobody is ${draft.area.length > 1 ? 'in the blast' : 'there'}.` : landsOn(caught.map(one => name(one.id)).join(', '), damage, effect)}
             {caught.some(one => allied(battle, one.owner, fighter.owner)) ? ' That includes your own.' : ''}

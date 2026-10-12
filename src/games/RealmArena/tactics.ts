@@ -64,6 +64,7 @@ export const ACTION_AIMS: Readonly<Record<ActionKind, ActionAim>> = {
     // Cleave strikes where an attack could: within the Man-at-arms's melee reach.
     cleave: { at: "enemies", count: 2, each: "attack", range: "weapon" },
     fireball: { at: "square", range: ABILITIES.fireball.range },
+    dynamite: { at: "square", range: ABILITIES.dynamite.range },
     throw: { at: "square", range: "item" },
     demolish: { at: "square", range: "cover" },
     hunker: { at: "self" },

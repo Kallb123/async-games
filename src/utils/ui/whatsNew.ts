@@ -82,6 +82,11 @@ export const WHATS_NEW: WhatsNewGroup[] = [
         icon: "✨",
         items: [
             {
+                title: "Realm Arena: choose your faction — the Realm, the Swarm or the Miners",
+                detail: "Each player now picks a faction as they muster, from those the host allows, and co-op can pit you against any of them. The Swarm fields more, cheaper and weaker beasts whose acid corrodes; the new Miners are dwarves out of the deep mines, each one tougher than the Realm's and a little dearer for it, so you field fewer of them. Miners hack through cover with their pickaxes, Stonewardens hold the line behind slabs of stone, Prospectors shoot steady crossbows, Runepriests heal and raise the fallen, and Sappers throw dynamite that blasts a 3×3 and the low cover in it. Miners of your own are tough enough that they don't wear Hold Out's armour against the Renegades.",
+                game: "realmarena",
+            },
+            {
                 title: "Realm Arena: Clerics and Broodmothers can heal themselves",
                 detail: "A Cleric's Heal and a Broodmother's Regrowth can now be aimed at the healer itself, not only at an ally — handy when the healer is the one taking the hits.",
                 game: "realmarena",
@@ -121,11 +126,6 @@ export const WHATS_NEW: WhatsNewGroup[] = [
             {
                 title: "Board zooming keeps up with your fingers, and Realm Arena zooms in closer",
                 detail: "Pinching to zoom a big board — Realm Arena's battlefield above all, but World Domination, Outbreak, Race Cars and the rest too — used to redraw the whole map on every frame, so it lagged well behind your fingers while scrolling around stayed smooth. The map now just stretches while you pinch, looking a touch soft until you let go, when it sharpens at its new zoom. In Realm Arena, picking a target from the list now zooms in close on your character and the target rather than out across the map, and selecting a character frames the nearer half of where it could move instead of most of it.",
-            },
-            {
-                title: "Realm Arena: Hold Out on the Sacked Fort",
-                detail: "Hold Out has a battlefield of its own. Your team starts in a ruined keep in the middle of the map, and the enemy closes in from every edge, where each fresh wave lands too. Its walls are full of gaps, so there's no corner to sit in. The host picks it, or the gate forts, when setting up.",
-                game: "realmarena",
             },
         ],
     },

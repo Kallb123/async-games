@@ -178,6 +178,7 @@ const TALLIED: Readonly<Partial<Record<Action["kind"], keyof Tally>>> = {
     cleave: "abilities",
     shieldWall: "abilities",
     fireball: "abilities",
+    dynamite: "abilities",
     heal: "abilities",
     raise: "abilities",
     shieldBash: "abilities",
@@ -459,7 +460,8 @@ function clause(event: BattleEvent, fighters: readonly Fighter[], actor: string,
                 : `struck ${name(event.target)} with ${name(event.fighter)} ${outcome}`;
         }
         case "fireball":
-            return `threw a fireball with ${name(event.fighter)}, hitting ${pluralize(hitIn(event.targets).length, "character")} for ${event.damage}`;
+        case "dynamite":
+            return `${ACTION_PHRASES[event.kind]} with ${name(event.fighter)}, hitting ${pluralize(hitIn(event.targets).length, "character")} for ${event.damage}`;
         case "downed": return `${name(event.fighter)} is down`;
         case "healed": {
             const hp = event.hp > 0 ? ` for ${event.hp}` : "";
@@ -508,6 +510,7 @@ function veiledClause(event: BattleEvent, name: (id: number) => string, hitIn: (
     switch (event.kind) {
         case "moved": return `moved ${name(event.fighter)}`;
         case "fireball":
+        case "dynamite":
         case "demolished":
         case "burst": return `used an ability with ${name(event.fighter)}${hit(event.targets, event.damage)}`;
         case "healed": return event.via === "draught" ? undefined : `used an ability on ${name(event.target)} with ${name(event.fighter)}`;
@@ -611,6 +614,7 @@ function felt(battle: BattleState, events: readonly BattleEvent[]): boolean {
             case "shot":
             case "struck": return enemy(event.fighter) && event.damage > 0 && !enemy(event.target);
             case "fireball":
+            case "dynamite":
             case "thrown":
             case "demolished":
             case "burst": return enemy(event.fighter) && event.targets.some(target => !enemy(target));
@@ -721,6 +725,7 @@ export function toldTo(events: readonly BattleEvent[], battle: BattleState, view
                 return [{ ...event, path: end !== undefined && seen(end) ? event.path.filter(seen) : [] }];
             }
             case "fireball":
+            case "dynamite":
             case "thrown":
             case "demolished":
                 return keep(saw(event.fighter) || event.targets.some(saw) || areaAround(battle.field, event.at).some(seen));
@@ -1148,6 +1153,7 @@ const ACTION_PHRASES: Readonly<Record<Action["kind"], string>> = {
     shieldWall: "raised a shield wall",
     cleave: "cleaved",
     fireball: "threw a fireball",
+    dynamite: "threw dynamite",
     heal: "healed an ally",
     raise: "raised a fallen ally",
     throw: "threw an item",
@@ -1187,6 +1193,7 @@ function cleanAction(action: Action): Action {
         case "burst": return { kind: action.kind, fighter: action.fighter };
         case "cleave": return { kind: action.kind, fighter: action.fighter, targets: [...action.targets] };
         case "fireball":
+        case "dynamite":
         case "throw":
         case "demolish": return { kind: action.kind, fighter: action.fighter, at: action.at };
     }

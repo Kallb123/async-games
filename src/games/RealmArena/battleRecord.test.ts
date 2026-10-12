@@ -153,6 +153,17 @@ describe("the battle recorder (§28)", () => {
         expect(Object.fromEntries(pointsPerRound[0])).toEqual({ a: 0, b: knockoutPoints("knight") });
     });
 
+    it("counts dynamite's blast as dealt by the Sapper, and on its own side as friendly fire (§33.2)", () => {
+        const recorder = battleRecorder(PLAYERS);
+        const sapper = newFighter(4, "b", "sapper", 4);
+        const miner = newFighter(5, "b", "miner", 5);
+        recorder.observe(act("0", []), battle([knight, sapper, miner]));
+        recorder.observe(act("1", [
+            { kind: "dynamite", fighter: sapper.id, at: 0, targets: [knight.id, miner.id], damage: 4 },
+        ]), battle([{ ...knight, hp: knight.hp - 4 }, sapper, { ...miner, hp: miner.hp - 4 }]));
+        expect(recorder.result().fighting.find(one => one.character === "sapper")).toMatchObject({ dealt: 4, friendlyFire: 4 });
+    });
+
     it("counts a Burst's splash as dealt, and what the Bloater had left as taken, with no knock-out for anybody (§31.2)", () => {
         const recorder = battleRecorder(PLAYERS);
         const bloater = newFighter(4, "b", "bloater", 4);

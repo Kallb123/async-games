@@ -1039,7 +1039,7 @@ recap, a guide and a tutorial.
 | C5 | Character mastery, earned by what a character does (§23) | Built. Replaces B4 |
 | B3 | Teams of two, in alternate seats, with a team score (§5.2) | After C |
 | B5 | Fog of war, as the host's choice (§8, §27) | Built |
-| B6 | More factions | The Swarm, as a co-op enemy (§31); a squad choosing its own faction, from those the host allows (§32) |
+| B6 | More factions | The Swarm, as a co-op enemy (§31); a squad choosing its own faction, from those the host allows (§32); the Miners, a third faction (§33) |
 | B7 | A second mission and battlefield | After C |
 | B8 | Co-op against the computer (§29) | Built: sides, the battlefields, factions as data, the planner, the enemy's turn, the end of it and the screens (§29.2–§29.9) |
 | B9 | After co-op: the shared ending for Banned Islet, Outbreak and Fires Out, last seen in fog, Hold Out, achievements, difficulty and solo (§30) | Built, with battle size beside difficulty (§30.5) |
@@ -1366,8 +1366,8 @@ and opening ground.
   ground and is drawn differently, so it's clear something was there. It costs 1 to move into, can be stood on, and gives no
   cover.
 - **What blasts it:** Fireball, every low cover square in its 3×3; a fire
-  flask, its square and the squares next to it; and Demolish (§23), one square
-  next to a Knight.
+  flask, its square and the squares next to it; Demolish (§23), one square
+  next to a Knight or a Miner; and a Sapper's Dynamite (§33), as Fireball.
 - **Blasting needs no roll** and happens after the damage. So a character
   in the blast loses its cover only for the next attack, not for the one that
   blasted it.
@@ -1383,8 +1383,8 @@ and opening ground.
   it to scorched ground, and ignores anything else, so no list can blast a
   wall. `battlefieldOf(map, blasted)` is the battlefield as it stands, and
   the server, the board, the recap and a replay all read it.
-- **What blasts is data:** `blasts` on Fireball and on the fire flask (the
-  3×3, `area`), and on Demolish (the square it's aimed at, `target`, §23.2).
+- **What blasts is data:** `blasts` on Fireball, Dynamite and the fire flask
+  (the 3×3, `area`), and on Demolish (the square it's aimed at, `target`, §23.2).
   `blastedBy` is the cover something would clear, and both the resolver and
   the turn sheet's preview use it.
 - **The `blasted` event** names the squares and who blasted them. It comes
@@ -1426,7 +1426,7 @@ first, so mastery moved from C4 to C5.
   |---|---:|
   | Fought in it (once, however many of that character were mustered) | 2 |
   | Each attack: a shot, an aimed shot, a strike, or a reaction on overwatch or guard | 3 |
-  | Each ability used: Cleave, Shield wall, Fireball, Heal, Raise, and the options of §23.2 | 5 |
+  | Each ability used: any of every faction's, and the options of §23.2 | 5 |
   | Each item used | 3 |
 
 - **An action earns the same whatever it rolls.** A miss earns as much as a
@@ -3676,7 +3676,8 @@ playtest, and a playtest of three is a handful of battles. So the balance
 harness fights hundreds: `npm run ra-balance` plays whole co-op battles from
 the muster to their end through the command pipeline, the planner (§29.7)
 playing the team as well as the warbands, and reports for each scenario —
-team size, enemy, mission, battlefield, difficulty, size, fog — how often the
+team size, the team's faction, enemy, mission, battlefield, difficulty, size,
+fog — how often the
 team wins (with a 95% interval), the round it ends in, how much of each side
 falls, and round by round how many of the team are still standing.
 
@@ -3715,7 +3716,8 @@ changes, the first three for Hold Out alone and the rest for every mode.
   point of HP by it (a team character's HP is worth two thirds as much), and the
   board's bars, the unit boxes and the muster sheet read it too. Hold the
   Centre, a duel, a free-for-all and Solo's Hold the Centre are as they were.
-- **The team wears 1 armour against the Realm.** When the warbands are the
+- **The team wears 1 armour against the Realm** (but, since §33, not a
+  Miner of its own). When the warbands are the
   Realm's — the Renegades, as the team knows them, and as the player-facing
   copy says (a random enemy is resolved as the battle is created, so it is
   already known to the rules), every hit a warband lands on one of the team's
@@ -3937,6 +3939,101 @@ Swarm in co-op.
 - **A timed-out muster** gets the first allowed faction's ready-made squad.
 - **Mastery** is earned by any character, so the profile lists every faction's.
 
+## 33. The Miners: a third faction (B6)
+
+Playtesting said the Realm's characters feel flimsy: an Archer or a Mage goes
+down to two good blows. The Miners are the other side of the coin to the
+Swarm — dwarves out of the deep mines, with pickaxes and dynamite, each one
+**tougher** than the Realm's character it stands in for, hitting **as hard and
+no harder**, and costing **a little more** for the HP. They are mustered from
+the setup's faction toggles (§32) and fought in co-op as the host's pick or
+drawn at Random (§29.3), with nothing new in either.
+
+### 33.1 What it's like
+
+- **Fewer of them, each tougher.** Every Miner has 9–15 HP, against the
+  Realm's 5–12, so a ready-made squad fields one character fewer than the
+  Realm's at every budget — two at 50 points, four at 120 — and, from 70
+  points up, more HP in all. A knock-out scores a fifth of what was downed
+  (§13.7), so each one is worth more too.
+- **The same damage.** No Miner weapon does more than the Realm's 4; the
+  Sapper's Dynamite does 4 to a 3×3 at once, where a fireball does 3 and
+  leaves 2 more burning.
+- **Dearer for it.** Points go up by about what the HP is worth: +5 for a
+  character three HP sturdier, +10 for a fragile one (an Archer's or a Mage's
+  part) made four HP sturdier, since that nearly doubles how long it lasts.
+- **Slower.** Short legs: 5 squares an AP, the Stonewarden 4, against the
+  Realm's 6. No Miner climbs better than most, and only the Prospector sees
+  further.
+
+### 33.2 The characters
+
+| Character | Points | HP | Move | Weapon | Ability | In place of |
+|---|---|---|---|---|---|---|
+| Miner | 20 | 11 | 5 | Pickaxe: melee, 4 | Demolish | Man-at-arms (15, 8 HP) |
+| Stonewarden | 30 | 15 | 4, sight 15 | War pick: melee, 4 | Shield wall | Knight (25, 12 HP) |
+| Prospector | 30 | 10 | 5, sight 25 | Crossbow: 80%, range 16, 3 | Aimed shot | Archer (20, 6 HP) |
+| Sapper | 40 | 9 | 5 | Throwing picks: 70%, range 8, 3 | Dynamite | Mage (30, 5 HP) |
+| Runepriest | 30 | 10 | 5 | Rune hammer: melee, 2 | Heal, Raise | Cleric (25, 7 HP) |
+
+- **Miner:** the front line. Its own ability is the Knight's rank-1 option,
+  **Demolish** — hacking through a square of low cover beside it and striking
+  everyone else next to that square for 2.
+- **Stonewarden:** the anchor, behind a slab of stone, with the Knight's
+  **Shield wall**.
+- **Prospector:** a steadier, shorter-ranged shot than the Archer, with
+  **Aimed shot**.
+- **Sapper:** **Dynamite** (3 AP, cooldown 3) is thrown at a square it can
+  see within 8, hitting every character in the 3×3 round it for 4, friend or
+  foe, with no roll, then blasting away the low cover there (§22). It leaves
+  no effect. Between throws it flings picks.
+- **Runepriest:** the Cleric's **Heal** and **Raise** on a body that can
+  stand nearer the front.
+
+The ready-made squads: 50 Miner, Prospector · 60 Stonewarden, Prospector ·
+70 two Miners, Prospector · 80 Stonewarden, Miner, Prospector · 90
+Stonewarden, Miner, Sapper · 100 Stonewarden, two Miners, Prospector · 110
+Stonewarden, Miner, Prospector, Runepriest · 120 Stonewarden, Miner,
+Prospector, Sapper.
+
+### 33.3 How it's built
+
+- **Data.** Five characters and one ability in `characters.ts`, and
+  `FACTIONS.miners` with a ready-made squad for every rung of `BUDGETS`, held
+  there by the test that holds every faction's. The tests also hold its
+  promise: 9–15 HP, no harder a weapon than the Realm's, fewer bodies at every
+  budget.
+- **Reused abilities.** Demolish, Shield wall, Aimed shot, Heal and Raise were
+  never the Realm's alone: every rule reads the ability, not who has it.
+- **Dynamite** is Fireball's shape with its own numbers: the check and the act
+  for the two are one `case`, reading `ABILITIES`, and it's told as a
+  `dynamite` event beside `fireball` wherever that one is — the log, the
+  board's lines and cues, the recap, the battle record, fog and a hidden
+  enemy. The computer needed one line in `ACTION_AIMS`.
+- **Figures** are modelled in code like the rest (§26.5), from a `dwarf` body
+  in `kit.mjs` — `body`, crouched short, with a barrel chest and a beard —
+  and a shared `pick` and `dynamiteStick`. The stick tumbles as it flies, and
+  lands in a blast of fire and flung rock that shakes the battlefield as a
+  fireball does.
+- **Balance** (§30.12): the harness fights the Miners as an enemy by default,
+  and `--teams` (the workflow's *teams*) has the team muster a faction other
+  than the Realm, so a Miners team can be set against a Realm one on the same
+  seeds. Its first run (200 battles a scenario, Hold Out on the Sacked Fort)
+  found the Miners the hardest enemy at every team size — a Realm team won
+  11%, 42% and 48% of the time against them for one, two and three players,
+  against 54%, 68% and 69% against the Realm — and a Miners team the
+  strongest against the Realm (82%, 73%, 94%).
+- **Armour** (§30.13): Hold Out's team wears its armour against the Realm
+  alone, as before the Miners, and a Miner of the team wears none: it's tough
+  enough without it. A second run, with armour against the Miners too and
+  none for a Miner against the Realm, overshot both ways — a Realm team won
+  57%, 77% and 85% against the Miners, a Miners team 78%, 98% and 99% — so the
+  armour against the Miners was taken back out, leaving a Miners team at
+  37%, 25% and 32% against the Realm rather than 82%, 73% and 94%.
+  `armourOf` is what one character wears: `damageTo`, the planner and the
+  fighter card all read it. No battle under way can have a Miner in it, so
+  this needs no rules version.
+
 ---
 
 ## Appendix: Working title
@@ -4014,3 +4111,4 @@ Realm, its sibling in the same world.
 | 1.52 | Measuring balance (§30.12): `npm run ra-balance` and the *Realm Arena balance* workflow fight hundreds of co-op battles with the planner playing both sides and report win rates, how long the team lasts and how each round goes. |
 | 1.53 | The rebalance (§30.13, command version 7): melee hits 80% of the time, cover counts double against a shot from further than 10 squares, the Mage Bolt is 80% to a range of 12, in Hold Out against the Realm the team takes 1 less from every hit, two players' Hold Out lasts 13 rounds instead of 15, a Cleric's Heal is once a turn instead of on a cooldown and its Raise is on a four-turn cooldown instead of once a battle, and in Hold Out the team has 50% more HP against warbands a step smaller. A battle keeps the rules it was created under. |
 | 1.54 | A Cleric's Heal and a Broodmother's Regrowth can be aimed at the healer itself, as a healing draught can (§13.6, §31.2). Only what a move may be aimed at grows, so no command version. |
+| 1.55 | The Miners, a third faction (§33, B6): five dwarves — the Miner, the Stonewarden, the Prospector, the Sapper and the Runepriest — each tougher and a little dearer than the Realm character it stands in for, hitting as hard; and Dynamite, the Sapper's blast of 4 over a 3×3, which leaves no effect. |

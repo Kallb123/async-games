@@ -16,9 +16,12 @@ on:
       players:
         description: Team sizes, comma-separated (1 is Solo)
         default: '1,2,3'
+      teams:
+        description: Factions the team musters from (realm, swarm, miners)
+        default: 'realm'
       enemies:
-        description: Enemy factions (realm, swarm)
-        default: 'realm,swarm'
+        description: Enemy factions (realm, swarm, miners)
+        default: 'realm,swarm,miners'
       missions:
         description: Missions (holdOut, holdTheCentre)
         default: 'holdOut'
@@ -84,6 +87,7 @@ jobs:
         env:
           RUNS: ${{ inputs.runs }}
           PLAYERS: ${{ inputs.players }}
+          TEAMS: ${{ inputs.teams }}
           ENEMIES: ${{ inputs.enemies }}
           MISSIONS: ${{ inputs.missions }}
           MAPS: ${{ inputs.maps }}
@@ -95,7 +99,7 @@ jobs:
         # Each shard's own summary would repeat the merged one, so it's kept to the log.
         run: |
           GITHUB_STEP_SUMMARY= npm run ra-balance -- \
-            --runs "$RUNS" --players "$PLAYERS" --enemies "$ENEMIES" --missions "$MISSIONS" \
+            --runs "$RUNS" --players "$PLAYERS" --teams "$TEAMS" --enemies "$ENEMIES" --missions "$MISSIONS" \
             --maps "$MAPS" --difficulties "$DIFFICULTIES" --sizes "$SIZES" --fog "$FOG" \
             --seed "$SEED" --shard "$SHARD" --out "samples-${{ matrix.shard }}.json"
 

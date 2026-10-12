@@ -8,11 +8,11 @@ import type { IGameCommand } from "@/utils/apiModels/gameCommand";
 import { runCommand } from "@/utils/games/commandPipeline";
 import { gameCommandVersion } from "@/utils/ui/games";
 import type { IGameDataDocument } from "@/utils/mongodb/GameData";
-import { readyMadeSquad, REALM } from "./characters";
+import { FACTIONS, readyMadeSquad } from "./characters";
 import { battlefieldById } from "./maps";
 import { meta } from "./meta";
 import type { MasterySnapshot } from "./mastery";
-import { battleOf as battleOfState, budgetOf, RealmArenaAct, RealmArenaEndTurn, RealmArenaGameType, RealmArenaMuster } from "./RealmArenaLogic";
+import { battleOf as battleOfState, budgetOf, playableFactions, RealmArenaAct, RealmArenaEndTurn, RealmArenaGameType, RealmArenaMuster } from "./RealmArenaLogic";
 import { buildInitialRealmArenaState, RealmArenaGameDataModel, type IRealmArenaGameData, type RealmArenaSettings } from "./RealmArenaModels";
 import type { IRealmArenaGameDataResponse } from "./apiModels";
 import { pathTo } from "@/utils/games/battlefield/pathfinding";
@@ -75,7 +75,8 @@ export const endTurnBy = (sender: string, keepStill: number[] = []) => cmd(Realm
 
 /** The ready-made squad for a seat, where a timed-out muster would put it. */
 export function readyMadePicks(game: RealmArenaTestGame, seat: number): MusterPick[] {
-    const squad = readyMadeSquad(REALM, budgetOf(game.specificGameState));
+    // The battle's first faction, as a muster that names none musters from (B6).
+    const squad = readyMadeSquad(FACTIONS[playableFactions(game.specificGameState)[0]], budgetOf(game.specificGameState));
     return readyMadeMuster(battlefieldById(game.specificGameState.map), seat, squad);
 }
 

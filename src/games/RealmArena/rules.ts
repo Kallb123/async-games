@@ -33,7 +33,7 @@ import { canSee } from "@/utils/games/battlefield/lineOfSight";
 import { DEFAULT_CLIMB, pathCost, pathTo, reachFrom, type MoveRules, type Reach } from "@/utils/games/battlefield/pathfinding";
 import { coordsOf, distance, facingTowards, HALF_HEIGHT, isNeighbour, riseOf, squareAt, type Area, type Battlefield, type Cover, type Facing, type Square } from "@/utils/games/battlefield/terrain";
 import {
-    ABILITIES, AFFLICTIONS, CHARACTERS, EFFECT_IDS, EFFECTS, HOLD_OUT_ENEMY_STEPS, isCharacterId, isItemId, isOptionId, ITEMS, kitOf, OPTIONS, squadPoints,
+    ABILITIES, AFFLICTIONS, CHARACTERS, EFFECT_IDS, EFFECTS, factionOf, HOLD_OUT_ENEMY_STEPS, isCharacterId, isItemId, isOptionId, ITEMS, kitOf, OPTIONS, squadPoints,
     type Ability, type AbilityId, type Affliction, type CharacterId, type Effect, type EffectId, type Faction, type FactionId, type Item, type ItemId, type OptionId, type PlayerCount, type Weapon,
 } from "./characters";
 import { addTally, NO_TALLY, type Ranks, type Tally } from "./mastery";
@@ -84,7 +84,7 @@ export const MELEE_ACCURACY = 80;
 export const FAR_SHOT_DISTANCE = 10;
 /** Hold Out's team characters have this many times their table HP, rounded up (`teamHp`). */
 export const TEAM_HP_FACTOR = 1.5;
-/** What the Realm's hits take off a hit on Hold Out's team, never leaving less than 1 (`damageTo`, `BattleState.armoured`). */
+/** What the Realm's hits take off a hit on Hold Out's team, never leaving less than 1 (`armourOf`, `BattleState.armoured`). */
 export const ARMOUR = 1;
 
 /** The mission's scoring area, by the id a map gives its objective (§13.7). */
@@ -300,7 +300,7 @@ export type Action =
     | { kind: "hunker" | "watch" | "shieldWall" | "purify" | "burst"; fighter: number }
     | { kind: "cleave"; fighter: number; targets: number[] }
     /** A demolish is aimed at the square of low cover it blasts. */
-    | { kind: "fireball" | "throw" | "demolish"; fighter: number; at: Square };
+    | { kind: "fireball" | "dynamite" | "throw" | "demolish"; fighter: number; at: Square };
 
 export type ShotResult = "hit" | "graze" | "miss";
 
@@ -316,6 +316,8 @@ export type BattleEvent =
      */
     | { kind: "struck"; fighter: number; target: number; damage: number; reaction: boolean; chance?: number; roll?: number; missed?: true }
     | { kind: "fireball"; fighter: number; at: Square; targets: number[]; damage: number }
+    /** A Sapper's Dynamite, landing as a fireball does but leaving nothing alight (§33.2). Its `blasted` follows. */
+    | { kind: "dynamite"; fighter: number; at: Square; targets: number[]; damage: number }
     | { kind: "downed"; fighter: number; by: number }
     /**
      * A Cleric's Heal; or, by `via`, a healing draught given by `fighter` — to
@@ -439,15 +441,25 @@ export const warbandSteps = (mission: string | undefined, rulesVersion: number |
 export const armouredTeam = (mission: string | undefined, rulesVersion: number | undefined, enemy: FactionId | undefined): boolean => stoutTeam(mission, rulesVersion) && enemy === "realm";
 
 /**
+ * The armour one of the team's characters wears where the team is armoured
+ * (`ARMOUR`), or 0: none for a warband's, and none for a Miner, which is tough
+ * enough without it (§33.3).
+ */
+export function armourOf(state: Pick<BattleState, "armoured">, fighter: Pick<Fighter, "owner" | "character">): number {
+    return state.armoured && !isWarband(fighter.owner) && factionOf(fighter.character) !== "miners" ? ARMOUR : 0;
+}
+
+/**
  * What a blow from `by` does to `target`: its own `blow` — by default its
- * weapon's damage — less `ARMOUR`, never under 1, where the team is armoured
- * and a warband's blow lands on one of the team's. Every hit, ability and
+ * weapon's damage — less the armour `target` wears (`armourOf`), never under
+ * 1, where a warband's blow lands on one of the team's. Every hit, ability and
  * splash of the enemy's counts; burning, which isn't dealt by a blow, and the
  * team's own friendly fire don't. Nothing, for a blow that does nothing. The
  * one place armour is taken off, for the rules, the planner and the board.
  */
-export function damageTo(state: Pick<BattleState, "armoured" | "balanced">, by: Pick<Fighter, "owner" | "character" | "option">, target: Pick<Fighter, "owner">, blow = weaponOf(state, by).damage): number {
-    return state.armoured && blow > 0 && isWarband(by.owner) && !isWarband(target.owner) ? Math.max(1, blow - ARMOUR) : blow;
+export function damageTo(state: Pick<BattleState, "armoured" | "balanced">, by: Pick<Fighter, "owner" | "character" | "option">, target: Pick<Fighter, "owner" | "character">, blow = weaponOf(state, by).damage): number {
+    const armour = isWarband(by.owner) ? armourOf(state, target) : 0;
+    return armour > 0 && blow > 0 ? Math.max(1, blow - armour) : blow;
 }
 
 /** What a character of Hold Out's team is mustered with: its table HP times `TEAM_HP_FACTOR`, rounded up. */
@@ -1035,7 +1047,8 @@ export function check(battle: BattleState, player: string, action: unknown): Che
         case "purify":
             return ability("purify", () => purified(state, actor).length > 0 ? undefined : "Nobody beside them needs it");
         case "fireball":
-            return ability("fireball", () => aimRefusal(state, actor, at, ABILITIES.fireball.range));
+        case "dynamite":
+            return ability(kind, () => aimRefusal(state, actor, at, ABILITIES[kind].range));
         case "heal":
         case "regrowth":
             return ability(kind, () => healRefusal(state, actor, target, false, ABILITIES[kind].range));
@@ -1408,15 +1421,19 @@ export function act(state: BattleState, player: string, action: Action, roll: Ro
             actor.effects.shieldWall = EFFECTS.shieldWall.count;
             events.push({ kind: "shieldWall", fighter: actor.id });
             break;
-        case "fireball": {
-            // Every character in the area, friend or foe — the Mage too, if it's
-            // that close — and no roll (§13.6). Whoever it doesn't down is left
-            // burning: it doesn't roll, so it always does (§20.2). Then the
-            // low cover it landed on is gone (§22).
-            const { damage, effect } = ABILITIES.fireball;
-            run.land(actor, areaAround(state.field, action.at), damage, effect,
-                targets => ({ kind: "fireball", fighter: actor.id, at: action.at, targets, damage }));
-            run.blast(actor, blastedBy(state.field, ABILITIES.fireball, action.at));
+        case "fireball":
+        case "dynamite": {
+            // Every character in the area, friend or foe — the thrower too, if
+            // it's that close — and no roll (§13.6). Whoever a fireball doesn't
+            // down is left burning: it doesn't roll, so it always does (§20.2);
+            // dynamite leaves nothing behind (§33.2). Then the low cover it
+            // landed on is gone (§22).
+            const kind = action.kind;
+            const ability: Ability = ABILITIES[kind];
+            const damage = ability.damage ?? 0;
+            run.land(actor, areaAround(state.field, action.at), damage, ability.effect,
+                targets => ({ kind, fighter: actor.id, at: action.at, targets, damage }));
+            run.blast(actor, blastedBy(state.field, ability, action.at));
             break;
         }
         case "heal":

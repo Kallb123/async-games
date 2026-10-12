@@ -69,6 +69,12 @@ describe("nextAction's puzzles (§29.11)", () => {
         expect(planned(battle(OPEN, [bloater, knight, archer]))).toEqual({ kind: "burst", fighter: bloater.id });
     });
 
+    it("throws a Sapper's dynamite among three enemies (§33.2)", () => {
+        const sapper = ready(0, AI, "sapper", at(OPEN, 2, 4));
+        const enemies = [at(OPEN, 8, 3), at(OPEN, 8, 4), at(OPEN, 8, 5)].map((square, i) => ready(i + 1, "a", "manAtArms", square, { hp: 4 }));
+        expect(planned(battle(OPEN, [sapper, ...enemies]))).toMatchObject({ kind: "dynamite", fighter: sapper.id });
+    });
+
     it("tears into an enemy beside a Ravager with Rend, and mends a hurt ally with Regrowth (§31.2)", () => {
         const ravager = ready(0, AI, "ravager", at(OPEN, 6, 4));
         const enemy = ready(1, "a", "archer", at(OPEN, 7, 4));
@@ -183,8 +189,8 @@ describe("nextAction never cheats (§29.11)", () => {
 });
 
 describe("nextAction's pace (§29.7)", () => {
-    // The Swarm's warband is six characters to the Realm's four (§31.1).
-    it.each(["realm", "swarm"] as const)("plans a %s warband's turn on the Four-Gate Fort in under 250 ms", faction => {
+    // The Swarm's warband is six characters to the Realm's four (§31.1), the Miners' three (§33.1).
+    it.each(["realm", "swarm", "miners"] as const)("plans a %s warband's turn on the Four-Gate Fort in under 250 ms", faction => {
         // Three of the team's ready-made squads and one warband. The team ends
         // each of its turns where it stands, so every one of its characters is
         // on watch and every move the warband weighs has a way round to find:

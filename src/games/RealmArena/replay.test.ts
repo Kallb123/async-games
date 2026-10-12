@@ -125,6 +125,7 @@ describe("Realm Arena replay", () => {
             blasted: ["fighter", "squares"],
             demolished: ["at", "damage", "fighter", "targets"],
             burst: ["damage", "fighter", "targets"],
+            dynamite: ["at", "damage", "fighter", "targets"],
             marked: ["fighter", "target"],
             raised: ["fighter", "hp", "target"],
             hunkered: ["fighter"],

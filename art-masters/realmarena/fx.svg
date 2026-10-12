@@ -3,11 +3,12 @@
   Realm Arena's battle visuals (docs/games/realm-arena.md §26). Top row, a
   96px cell each in `MISSILE_ART` order, then the slash: what flies points
   right, its front at the cell's right edge; a flask or pot tumbles, so it's
-  upright in the middle. Bottom row, 192x96 each: the ring of flame, the
-  thunder flash and the Bloater's splash of acid, lying flat as the board's squares do. Rendered to
+  upright in the middle, as is a stick of dynamite. Bottom row, 192x96 each:
+  the ring of flame, the thunder flash, the Bloater's splash of acid and
+  dynamite's blast, lying flat as the board's squares do. Rendered to
   public/art/realmarena/fx.png by `npm run ra-marks`.
 -->
-<svg xmlns="http://www.w3.org/2000/svg" width="768" height="192" viewBox="0 0 768 192">
+<svg xmlns="http://www.w3.org/2000/svg" width="864" height="192" viewBox="0 0 864 192">
   <defs>
     <radialGradient id="fire-core" cx="0.5" cy="0.5" r="0.5">
       <stop offset="0" stop-color="#fff7d6"/>
@@ -50,6 +51,14 @@
       <stop offset="0.85" stop-color="#4f8a17" stop-opacity="0.4"/>
       <stop offset="1" stop-color="#2f5a0c" stop-opacity="0"/>
     </radialGradient>
+    <radialGradient id="blast-glow" cx="0.5" cy="0.55" r="0.5">
+      <stop offset="0" stop-color="#fffbe8" stop-opacity="0.95"/>
+      <stop offset="0.35" stop-color="#ffc94a" stop-opacity="0.85"/>
+      <stop offset="0.7" stop-color="#8a7a68" stop-opacity="0.55"/>
+      <stop offset="1" stop-color="#4b4038" stop-opacity="0"/>
+    </radialGradient>
+    <!-- A chip of rock flung out by a blast, centred on the origin. -->
+    <path id="chip" d="M-6 -3 L-1 -7 L6 -4 L5 3 L-2 6 L-7 2 Z"/>
     <!-- A splash of acid, its foot on the origin, flung up. -->
     <path id="splash" d="M-7 0 C-9 -8 -4 -12 -2 -20 C-1 -24 3 -24 3 -20 C4 -13 9 -8 7 0 Z"/>
     <radialGradient id="flash-glow" cx="0.5" cy="0.55" r="0.5">
@@ -126,8 +135,19 @@
       <path d="M62 40 C66 36 72 35 77 37" fill="none" stroke="#fff" stroke-width="3.5" stroke-opacity="0.75"/>
     </g>
 
-    <!-- Slash: a blade's bright crescent cut down across the cell, top right to bottom left. -->
+    <!-- Dynamite, tumbling: a red stick bound in twine, its fuse fizzing at the top. -->
     <g transform="translate(672 0)">
+      <rect x="37" y="30" width="22" height="56" rx="6" fill="#c4322a" stroke="#24150f" stroke-width="4"/>
+      <path d="M42 36 V80" stroke="#e8685c" stroke-width="4"/>
+      <path d="M37 46 H59 M37 70 H59" stroke="#d8c08a" stroke-width="4"/>
+      <path d="M48 30 C48 22 54 20 52 12" fill="none" stroke="#24150f" stroke-width="7"/>
+      <path d="M48 30 C48 22 54 20 52 12" fill="none" stroke="#8a6a44" stroke-width="3"/>
+      <circle cx="52" cy="10" r="7" fill="#ffe27a" stroke="#f0761c" stroke-width="3"/>
+      <path d="M52 0 V4 M60 4 L57 7 M44 4 L47 7 M62 11 H58" stroke="#ffe27a" stroke-width="3"/>
+    </g>
+
+    <!-- Slash: a blade's bright crescent cut down across the cell, top right to bottom left. -->
+    <g transform="translate(768 0)">
       <path d="M84 10 C78 46 54 74 12 86 C44 70 64 46 70 14 Z" fill="#ffffff" stroke="#24150f" stroke-width="4"/>
       <path d="M78 16 C72 44 54 66 26 80" fill="none" stroke="#c9d6e6" stroke-width="3"/>
       <path d="M90 30 C86 44 80 54 72 62 M62 8 C58 18 54 24 48 30" fill="none" stroke="#ffffff" stroke-width="3" stroke-opacity="0.75"/>
@@ -199,6 +219,24 @@
         <circle cx="80" cy="54" r="5"/>
         <circle cx="110" cy="60" r="4"/>
         <circle cx="96" cy="66" r="3"/>
+      </g>
+    </g>
+
+    <!-- Dynamite's blast: a flash and a cloud of dust across the ground, rock chips flung out round its edge. -->
+    <g transform="translate(576 96)">
+      <ellipse cx="96" cy="52" rx="92" ry="42" fill="url(#blast-glow)"/>
+      <g fill="#ffcf5a" stroke="#24150f" stroke-width="3">
+        <path d="M96 50 L84 24 L100 36 L110 14 L114 40 L138 30 L124 50 L150 58 L122 62 L130 84 L106 68 L96 90 L88 68 L62 80 L72 60 L42 56 L70 46 L56 28 Z"/>
+      </g>
+      <path d="M96 50 L90 38 L100 44 L106 34 L108 48 L120 46 L110 54 L118 64 L104 60 L96 70 L90 60 L78 64 L82 54 L72 50 L84 46 Z" fill="#fffbe8"/>
+      <g fill="#8d877c" stroke="#24150f" stroke-width="3">
+        <use href="#chip" transform="translate(28 40) rotate(20)"/>
+        <use href="#chip" transform="translate(166 38) rotate(-30)"/>
+        <use href="#chip" transform="translate(18 66) scale(0.8)"/>
+        <use href="#chip" transform="translate(176 70) rotate(60) scale(0.9)"/>
+        <use href="#chip" transform="translate(52 86) rotate(-15)"/>
+        <use href="#chip" transform="translate(142 88) rotate(35) scale(1.1)"/>
+        <use href="#chip" transform="translate(96 14) rotate(45) scale(0.8)"/>
       </g>
     </g>
   </g>
