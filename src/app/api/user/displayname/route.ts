@@ -4,6 +4,7 @@ import { readJsonBody } from '@/utils/api/requestBody';
 import { clientIp, consumeRateLimit } from '@/utils/rateLimit';
 import { DISPLAY_NAME_RULE, isValidDisplayName } from '@/utils/users/displayName';
 import { publicHandle } from '@/utils/ui/players';
+import { forgetCachedUser } from '@/utils/users/directoryCache';
 
 // Renaming yourself is cheap for the player and noisy for everyone else — the
 // name is on every seat list, every history line and every push their table
@@ -92,6 +93,9 @@ export async function POST(request: NextRequest) {
     await (await clerkClient()).users.updateUserMetadata(userId, {
         publicMetadata: { displayName: next || null },
     });
+    // The server's memory of how other players see this one (directoryCache)
+    // would otherwise keep the old name for up to its TTL, on this instance.
+    forgetCachedUser(userId);
 
     return NextResponse.json({ displayName: next });
 }

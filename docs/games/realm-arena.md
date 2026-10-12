@@ -1,6 +1,6 @@
 # Realm Arena — Game Design Document
 
-**Status:** v1.48. Split out of Defender of the Realm in its third round of
+**Status:** v1.53. Split out of Defender of the Realm in its third round of
 design, when one concept became two games
 ([`defender-of-the-realm.md`](./defender-of-the-realm.md) §17). It's being
 built first (§10). §11 records every answer. §13 has the battle rules and the
@@ -643,18 +643,21 @@ As proposed in v0.3 (defaults taken):
 
 - **Chance to hit.** Each weapon has an accuracy (a bow, 80%). Half cover
   takes off 20 and full cover 40. High ground adds 10. A flanked target (no
-  cover between you) loses its cover. It's shown as one percentage before you
-  commit.
+  cover between you) loses its cover. A shot from further than 10 squares
+  away counts the target's cover double, so half cover takes off 40 and full
+  cover 80 (§30.13). It's shown as one percentage before you commit.
 - **Range.** A weapon can't shoot past its range, and there's no fall-off to
-  work out. Ranges are in the character table (§13.6), scaled to the bigger
-  board.
+  work out in the open; but cover counts double against a shot from further
+  than 10 squares (§30.13). Ranges are in the character table (§13.6), scaled
+  to the bigger board.
 - **Grazes.** A shot that misses by 10 or less grazes, for half damage. An 80%
   shot is then 80% hit, 10% graze and 10% clean miss.
 - **Damage is fixed per weapon.** A sword always does 4, so the only luck is
   hit, graze or miss. Flanking adds +1 damage, instead of XCOM's critical
   hits. Characters have about 5–12 HP.
 - **Melee** needs to be next to the target, within a quarter of its height
-  (§25.2), and always hits, with no roll.
+  (§25.2), and hits 80% of the time (§30.13): it lands for its full damage or
+  misses, with no graze. Until command version 7 it always hit, with no roll.
 
 ### 13.4 Reactions: overwatch and guard
 
@@ -687,8 +690,9 @@ As proposed in v0.3 (defaults taken), with AP costs added:
   and a cooldown of two or three turns.
 - **At 0 HP a character is down**: out of the battle, and its points count for
   whoever knocked it out (§13.7).
-- **A Cleric can raise a downed ally** next to them, once per battle, at half
-  HP. Being raised doesn't take back the points already scored.
+- **A Cleric can raise a downed ally** next to them, at half HP, and again four
+  turns later (§30.13). Being raised doesn't take back the points already
+  scored. Until command version 7 it was once per battle.
 - **After the battle everyone is fine.** There's no permanent death (§7).
 
 ### 13.6 The first faction and its characters
@@ -702,8 +706,8 @@ games are named for. It would also be Defender of the Realm's first faction.
 | **Knight** | Slow and very tough | 4 | 12 | Mace, melee, 4 | **Shield wall:** allies next to the Knight count as in half cover until its next turn (2 AP, 3 turns) | 25 |
 | **Archer** | Long range; the overwatch specialist | 6 | 6 | Bow, 80%, range 20, 3 | **Aimed shot:** +20% to hit (3 AP, 2 turns) | 20 |
 | **Scout** | Fastest and fragile; the flanker | 8 | 6 | Knives, melee, 3 | **Sneak:** move without setting off reactions (2 AP a move, no cooldown) | 20 |
-| **Mage** | Fragile; hits an area | 6 | 5 | Bolt, 70%, range 10, 3 | **Fireball:** 3 damage to every character in a 3×3 area, friend or foe, up to 12 squares away, with no roll (3 AP, 3 turns) | 30 |
-| **Cleric** | Support | 6 | 7 | Staff, melee, 2 | **Heal:** restore 4 HP to an ally they can see within 12 squares (2 AP, 2 turns). **Raise:** once per battle (3 AP) | 25 |
+| **Mage** | Fragile; hits an area | 6 | 5 | Mage Bolt, 80%, range 12, 3 | **Fireball:** 3 damage to every character in a 3×3 area, friend or foe, up to 12 squares away, with no roll (3 AP, 3 turns) | 30 |
+| **Cleric** | Support | 6 | 7 | Staff, melee, 2 | **Heal:** restore 4 HP to themselves or an ally they can see within 12 squares (2 AP, once a turn, no cooldown). **Raise:** bring a downed ally back at half HP (3 AP, 4 turns) | 25 |
 
 **The budget:** 100 points each for two players, 80 for three, and 70 each for
 four (free-for-all or teams). That's 4–6 characters at two players and 3–4 at
@@ -722,9 +726,9 @@ open. All are first guesses for playtesting, kept in `characters.ts` and
 - **"Next to" is touching, side or corner**, unless high cover fills both
   corners between the two squares. It's what melee, guard, a healing draught
   and raising need. A heal is aimed as a fireball is: at an ally in sight
-  within 12 squares.
-- **Flanking's +1 damage is for shots.** Melee always hits, with no cover to
-  lose, so it doesn't get it.
+  within 12 squares, or at the Cleric itself.
+- **Flanking's +1 damage is for shots.** Melee has no cover to lose (a strike
+  is made from next door), so it doesn't get it.
 - **A graze does half damage, rounded up**, so it always does something. A
   chance to hit stays between 0% and 100%, but the graze band counts from the
   chance before it stops at 0: a shot at −10% can't even graze.
@@ -738,7 +742,7 @@ open. All are first guesses for playtesting, kept in `characters.ts` and
 - **Healing is for an ally that is hurt**, and never takes it past full HP.
 - **Raising** needs the fallen ally's square to be one a character can stand
   on, with nobody standing there. The raised character acts from its owner's
-  next turn. Each Cleric raises once per battle.
+  next turn. A Cleric's Raise has a cooldown of four turns (§30.13).
 - **Downing your own character** (a fireball's friendly fire) scores nobody
   anything.
 - **A cooldown of *n* turns** counts down at the start of each of its owner's
@@ -3665,6 +3669,157 @@ is down, is a ceiling in fog and absent while a random enemy is unseen, and
 goes once the battle is over (`coop.test.ts`, and the null viewer's response
 pinned in `hiddenHands.test.ts`).
 
+### 30.12 Measuring balance
+
+Hold Out's numbers — the wave spacing, the squads, the rally — are tuned by
+playtest, and a playtest of three is a handful of battles. So the balance
+harness fights hundreds: `npm run ra-balance` plays whole co-op battles from
+the muster to their end through the command pipeline, the planner (§29.7)
+playing the team as well as the warbands, and reports for each scenario —
+team size, the team's faction, enemy, mission, battlefield, difficulty, size,
+fog — how often the
+team wins (with a 95% interval), the round it ends in, how much of each side
+falls, and round by round how many of the team are still standing.
+
+- **A floor and a comparison, not a player's odds.** The planner plays the
+  team by its own score with no plan beyond the next action; people should do
+  better. What it measures well is a change: battle *k* of a scenario rolls
+  from seed *k*, so the same seeds before and after a change differ only
+  where the rules do (and where a warband's turn met its two-second deadline).
+- **On demand in CI.** The *Realm Arena balance* workflow takes the same
+  choices as inputs, splits the battles across runners, and puts the merged
+  report on the run's summary page, keeping every battle's sample as an
+  artifact (`npm run ra-balance -- --merge` re-reads them).
+- **Where it lives.** `scripts/lib/realmArenaBalance.ts` (the battle and the
+  statistics), `scripts/realmarena-balance.ts` (the command line and the
+  workers), `.github/workflows/realmarena-balance.yml`.
+- **What it has found.** The first experiments — which changes make Hold Out
+  winnable, and by how much — are in
+  [`realm-arena-balance.md`](./realm-arena-balance.md).
+
+### 30.13 The rebalance (command version 7)
+
+Hold Out was unwinnable (§30.12, and [`realm-arena-balance.md`](./realm-arena-balance.md)):
+the team lost before the first wave, because melee always hit and an attack
+costs 2 of a character's 4 AP, so a Ravager or a Knight took out a fragile
+character in one enemy turn, and the team had no way to get anyone back. Eight
+changes, the first three for Hold Out alone and the rest for every mode.
+
+**Hold Out only**
+
+- **The team has 50% more HP.** Every character of the team (never a
+  warband's) is mustered with its table HP × 1.5, rounded up (`teamHp`:
+  Man-at-arms 12, Knight 18, Archer 9, Scout 9, Mage 8, Cleric 11), kept on the
+  fighter as `maxHp`. Every full HP the rules read is `maxHpOf(fighter)`: the
+  heals, Purify and the draught stop at it, a Raise gives back half of it
+  (rounded up), the rally is half of it (rounded down), the computer values a
+  point of HP by it (a team character's HP is worth two thirds as much), and the
+  board's bars, the unit boxes and the muster sheet read it too. Hold the
+  Centre, a duel, a free-for-all and Solo's Hold the Centre are as they were.
+- **The team wears 1 armour against the Realm.** When the warbands are the
+  Realm's — the Renegades, as the team knows them, and as the player-facing
+  copy says (a random enemy is resolved as the battle is created, so it is
+  already known to the rules), every hit a warband lands on one of the team's
+  characters does `ARMOUR` (1) less, never under 1 (`damageTo`, the one place it's taken off — rules, planner and previews all read it — switched on by
+  `BattleState.armoured`, built by `battleFrom` from the mission, the enemy and
+  the battle's rules version). It counts for everything an enemy deals by a
+  blow: weapon hits and their grazes (a graze is half the blow, then armoured),
+  Cleave, Rend, a guard's strike, a Fireball's or a Demolish's splash and a
+  flask. It does not count for burning, which no blow deals, or for the team's
+  own friendly fire; the Swarm's hits, 2 and 3 a go, are not armoured at all.
+  The planner's odds, expected harm and guard previews read the reduced damage,
+  and a hit event carries what was dealt, but an area event carries the
+  blast's own damage, so the battle record's tally of a blast on armoured
+  characters runs one high per target. **The faction stays hidden.** A random
+  enemy's faction is secret from the team until it's seen (§29.3). The rules
+  apply armour whatever the board knows, but the board builds its battle from
+  the enemy only where the response names it (`enemy` is left off until seen),
+  so the fighter card's "Armour 1" and every preview appear only once the
+  faction is known — and every preview of an enemy's damage needs an enemy in
+  view, which is what makes it known. Nothing is added to the wire.
+- **Two players' Hold Out lasts 13 rounds, not 15.** With the team tougher
+  and the warbands smaller, a pair needs no longer a battle than three players
+  have (the balance doc found 13 rounds worth a lot to two). `battleRounds`
+  takes the battle's `BattleKind` (mission and rules version) and answers
+  `HOLD_OUT_PAIR_ROUNDS` (13) for exactly two players of a Hold Out created
+  under `BALANCE_VERSION`: not for Solo, which reads a duel's 15, a duel, Hold
+  the Centre, or a battle from before it. Everything that asks reads that one
+  length (`battleRoundsOf(gs)`): the ending, the wave schedule and the next-wave
+  count, the response's round counter, the setup line, the battle record and
+  the balance harness. The waves still land at rounds 4, 7, 10 and 13, the last
+  being the last round, so a battle of 13 ends once the wave of round 13 has had
+  its round.
+- **The computer's warbands muster one step smaller.** `warbandBudget` takes a
+  further `HOLD_OUT_ENEMY_STEPS` (−1) rung down the budget ladder (§30.5), so
+  on Normal the warbands of a 2- or 3-player Hold Out muster 70 points, not
+  80. The ladder stops at its ends, so Easy on a Small battle musters 50. It's
+  the same budget the first muster and every wave refills to (`warbandSquad`),
+  so the scoreboard's count of the next wave follows it.
+
+**Every mode**
+
+- **Melee hits 80% of the time.** A melee strike rolls against
+  `MELEE_ACCURACY` (80), through the same roll a shot takes: recorded in
+  `recordedRolls` in the order it's drawn, handed back on a replay. The roll is
+  a hit or a miss: no graze, no flanking bonus. What is on the target adds to
+  it as it does to a shot — Hunter's mark's +15% "for every attacker" and
+  Corroded's +10% — but cover, height and smoke don't: they are ranged
+  things, and whoever strikes is next door. Everything that strikes one
+  enemy with its weapon's reach rolls: a weapon's attack, each of a Cleave's two
+  blows (a roll each), a Shield bash (which stuns only on a hit), a Rend, and a
+  guard's reaction. What lands on an area without a roll — a Burst, a Demolish's
+  splash, a fireball, a flask — still does. A miss is a `struck` event with
+  `missed` and no damage; the log says "and missed", the board says "Miss",
+  and the recap files it as a miss. The odds are read where a shot's are: the
+  turn sheet, the target list, a guard's preview of a move (`strikeChance`,
+  `hitChance`, `reactionPreviews`) and the planner's expected harm.
+- **Cover counts double at range.** In `shotOdds`, a shot from further than
+  `FAR_SHOT_DISTANCE` (10) squares — measured as the range check measures it,
+  so exactly 10 is not far — counts the target's cover double: half cover
+  −40, full cover −80, a Knight's shield wall's half cover included. A target
+  in the open is no safer at a distance, which is the point: out of cover is
+  exposed, in cover is much safer. Hunkering down already doubles cover, and
+  the two don't stack: the multiplier is ×2 if hunkered or far, never ×4.
+  Every ranged shot has it — bow, Mage Bolt, Frost bolt, acid, an aimed or a
+  crippling shot, overwatch — with no per-weapon flag, and so do the planner
+  and the turn sheet, which says "cover doubled at range" when the far shot
+  doubled something (`ShotOdds.farCover`: not in the open, not when a
+  hunkered target's was doubled already).
+- **The Mage Bolt.** The Mage's own weapon is the Mage Bolt: 80% to hit and a
+  range of 12, not the Bolt's 70% and 10. (The Frost bolt option, which
+  replaces it, is as it was: 70%, range 10.) A battle from before the
+  rebalance keeps the old Bolt, the weapon the rules read for it being
+  `weaponOf(state, fighter)`, the only way to read a weapon; the board's weapon lines for it read the same.
+- **Heal is once a turn.** No cooldown, but a Cleric can't Heal twice in one of
+  its owner's turns: `Ability.oncePerTurn`, written on the fighter as
+  `usedThisTurn` and wiped as its owner's next turn begins (`startTurn`). The
+  turn sheet reads "Used this turn". Regrowth is as it was.
+- **Raise is on a four-turn cooldown**, not once a battle: it counts down as
+  every cooldown does (§13.6), and the character it raised acts from its
+  owner's next turn as before.
+
+**Versioning.** These change what a move means, so the game goes to command
+version 7 (`BALANCE_VERSION`). A stale client is told to reload
+(`docs/command-versions.md`). Unlike the rules versioned by the command
+(growing waves, the rally), these have to be the same for every move of a
+battle — a melee strike can't start missing in the middle of one — so a battle
+is stamped with the version it was **created** under
+(`specificGameState.rulesVersion`, kept in the settings a replay rebuilds it
+from, on the wire for the board's previews, and in an undo snapshot). A battle
+without the stamp, or with a lower one, plays by the old rules to the end:
+melee always hits and rolls nothing, two players' Hold Out of 15 rounds, cover counted once at any range, the Mage's Bolt
+at 70% and range 10, Heal on a two-turn cooldown, Raise once per battle, and no
+`maxHp`, armour or smaller warbands.
+`battleFrom` reads the stamp into `BattleState.balanced`, which the rules,
+the planner and the board all read; the abilities' old limits are
+`UNBALANCED_LIMITS` in `rules.ts`, as `abilityRules` reads them, since the
+`ABILITIES` table is the current rules. What a stale battle's turn sheet *says*
+(the table's descriptions) is the current wording.
+
+**Tests.** `balance.test.ts` pins each rule against a battle with the rules and
+one without; `rules.test.ts`, `coop.test.ts`, `stats.test.ts`, `undo.test.ts`
+and `hiddenHands.test.ts` follow them.
+
 ---
 
 ## 31. The Swarm: a second faction (B6)
@@ -3710,8 +3865,8 @@ rest of B6.
   nobody anything — and its knock-out's points are nobody's either. It needs
   an enemy beside it.
 - **Broodmother:** the leader. **Regrowth** (2 AP, cooldown 2) is a shorter
-  Heal: 3 HP to an ally it can see within 8 squares, clearing what a heal
-  clears.
+  Heal: 3 HP to itself or an ally it can see within 8 squares, clearing what
+  a heal clears.
 
 **Corroded:** +10% to every shot at the character, overwatch included, for
 two of its turns; it counts down as every effect does (§20.1). It's healed —
@@ -3859,6 +4014,11 @@ Prospector, Sapper.
   and a shared `pick` and `dynamiteStick`. The stick tumbles as it flies, and
   lands in a blast of fire and flung rock that shakes the battlefield as a
   fireball does.
+- **Balance** (§30.12): the harness fights the Miners as an enemy by default,
+  and `--teams` (the workflow's *teams*) has the team muster a faction other
+  than the Realm, so a Miners team can be set against a Realm one on the same
+  seeds. Hold Out's armour (§30.13) stays the Realm's alone: the Miners hit as
+  hard, but there are fewer of them.
 
 ---
 
@@ -3934,4 +4094,7 @@ Realm, its sibling in the same world.
 | 1.49 | The team rallies, and the next wave is told (§30.11): everyone of the team standing regains half their HP as each Hold Out wave lands (command version 6), the scoreboard says how many the next wave brings, and the warbands' zones are lit the round before it. |
 | 1.50 | More Hold Out achievements (§30.4): *Lone Wolf* for winning it in Solo, *Hold the Keep* on the Sacked Fort, *Broken Tide* for downing the whole last wave before the last round is over, and *Unbroken* with every one of the team's characters standing. |
 | 1.51 | The review plays itself (§26.2): Play in the review dock steps through the match on its own, the recap screen replays from the player's last turn, and a co-op End turn's step carries its parts — the End turn, each of the warband's actions and the hand-off, each with what the viewer was told and the board as they saw it after — so the enemy's turn plays one action at a time. Moves walk along their told path and the view frames each move from start to end, or over the stretch seen of one that crossed the edge of sight (§26.1, §26.2); the playback cap is four and a half seconds. Stances, watches and reactions say what they are over the character ("Hunker down", "Shield wall", "Overwatch", "On guard", "Guard"), and a followed step with nothing the viewer can place shows a faint "?" over the board (§26.1, §26.2). | When nothing says where to look, the view rests on the player's own side rather than the whole board: the board opens on their squad (the whole team in co-op), and a review step that has nothing to follow or is spread over more than half the battlefield goes there too; a turn beginning's fresh AP no longer counts as an action to follow.
-| 1.52 | The Miners, a third faction (§33, B6): five dwarves — the Miner, the Stonewarden, the Prospector, the Sapper and the Runepriest — each tougher and a little dearer than the Realm character it stands in for, hitting as hard; and Dynamite, the Sapper's blast of 4 over a 3×3, which leaves no effect. |
+| 1.52 | Measuring balance (§30.12): `npm run ra-balance` and the *Realm Arena balance* workflow fight hundreds of co-op battles with the planner playing both sides and report win rates, how long the team lasts and how each round goes. |
+| 1.53 | The rebalance (§30.13, command version 7): melee hits 80% of the time, cover counts double against a shot from further than 10 squares, the Mage Bolt is 80% to a range of 12, in Hold Out against the Realm the team takes 1 less from every hit, two players' Hold Out lasts 13 rounds instead of 15, a Cleric's Heal is once a turn instead of on a cooldown and its Raise is on a four-turn cooldown instead of once a battle, and in Hold Out the team has 50% more HP against warbands a step smaller. A battle keeps the rules it was created under. |
+| 1.54 | A Cleric's Heal and a Broodmother's Regrowth can be aimed at the healer itself, as a healing draught can (§13.6, §31.2). Only what a move may be aimed at grows, so no command version. |
+| 1.55 | The Miners, a third faction (§33, B6): five dwarves — the Miner, the Stonewarden, the Prospector, the Sapper and the Runepriest — each tougher and a little dearer than the Realm character it stands in for, hitting as hard; and Dynamite, the Sapper's blast of 4 over a 3×3, which leaves no effect. |

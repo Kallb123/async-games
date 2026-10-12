@@ -74,6 +74,10 @@ const COMMANDS_BY_GAME_TYPE: Record<string, readonly string[]> = {
         "SACAcceptTrade",
         "SACWithdrawTrade",
     ],
+    // docs/undo.md adds WorldDominationUndo, taking back a deployment, a cash-in,
+    // an occupation or the end of the attacks, and WorldDominationEndTurn, the
+    // one way to close the hold a fortify, a skipped fortify or the last setup
+    // placement opens.
     WorldDominationGameType: [
         "WorldDominationDeployArmies",
         "WorldDominationCashInCards",
@@ -82,6 +86,8 @@ const COMMANDS_BY_GAME_TYPE: Record<string, readonly string[]> = {
         "WorldDominationEndAttackPhase",
         "WorldDominationFortify",
         "WorldDominationSkipFortify",
+        "WorldDominationEndTurn",
+        "WorldDominationUndo",
     ],
     SolitaireGameType: [
         "SolitaireDraw",

@@ -227,11 +227,17 @@ function toEvents(
 	// Ending a turn is normally just plumbing and earns no recap row. A player
 	// who conquered this turn does receive a card, though, which is a result the
 	// table can see in their public hand count and is worth carrying into the
-	// recap (and therefore the turn notification). This applies equally to a
-	// fortify and to the otherwise-silent Skip Fortify command.
+	// recap (and therefore the turn notification). The card is drawn when the
+	// hold a fortify or a skipped fortify opens is closed (docs/undo.md §5), so
+	// it is WorldDominationEndTurn that carries it — and, for a game recorded
+	// before the hold, the fortify and the otherwise-silent Skip Fortify
+	// command that ended the turn themselves. A fortify taken back never drew
+	// one: the shared recap engine drops it and its undo together.
 	const cardsBefore = playerByUserId(prevState, command.senderId)?.cardCount ?? 0;
 	const cardsAfter = playerByUserId(nextState, command.senderId)?.cardCount ?? 0;
-	const endsTurn = command.className === "WorldDominationFortify" || command.className === "WorldDominationSkipFortify";
+	const endsTurn = command.className === "WorldDominationEndTurn"
+		|| command.className === "WorldDominationFortify"
+		|| command.className === "WorldDominationSkipFortify";
 	if (endsTurn && cardsAfter > cardsBefore) {
 		events.push({
 			...base,

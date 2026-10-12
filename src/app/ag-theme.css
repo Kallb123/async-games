@@ -161,7 +161,7 @@ button {
 }
 
 /* The "new game" + avatar circles on the right of the dashboard's topbar,
-   and the skeleton pair standing in for them in app/loading.tsx. */
+   and the skeleton pair standing in for them in components/HomeLoading.tsx. */
 .ag-topbar-actions {
     display: flex;
     gap: 0.5rem;
@@ -458,6 +458,25 @@ button {
 .ag-field-label {
     display: block;
     margin-bottom: 8px;
+}
+
+/* A row of labelled controls that share the width and wrap on a phone (the
+   admin report's window and filter choices): each `label` stacks its caption
+   over a `.ag-select` or `.ag-input`. */
+.ag-field-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    margin-top: var(--ag-stack-gap);
+}
+.ag-field-row > label {
+    flex: 1 1 150px;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    font: 700 12px var(--ag-font);
+    color: var(--ag-ink-soft);
 }
 
 /* ---- Grouped list card with dashed dividers ---- */
@@ -2109,6 +2128,11 @@ a.ag-list-row, a.ag-list-row-main {
 .ag-build-cost { display: block; font: 600 10.5px/1.3 var(--ag-font); color: var(--ag-ink-soft); margin-top: 1px; }
 .ag-build-tag { font: 800 12.5px var(--ag-font); color: var(--ag-terracotta); white-space: nowrap; }
 .ag-build-tag--muted { color: var(--ag-ink-softer); font-weight: 700; font-size: 11px; }
+/* A BuildRow's aside (an InfoButton for its tag) rides over the row's right edge, beside the tag. */
+.ag-build-row-wrap { position: relative; }
+.ag-build-row-wrap > .ag-build-row { padding-right: 46px; }
+.ag-build-aside { position: absolute; top: 50%; right: 12px; display: flex; transform: translateY(-50%); }
+.ag-build-aside .ag-info-btn { margin-left: 0; }
 
 .ag-action-grid { display: flex; gap: 8px; }
 .ag-action-grid > * { flex: 1; }
@@ -2213,6 +2237,7 @@ a.ag-list-row, a.ag-list-row-main {
     cursor: pointer;
 }
 .ag-info-btn:hover { border-color: var(--ag-terracotta); color: var(--ag-terracotta); }
+.ag-info-btn--help { font-style: normal; }
 
 /* ---- Maritime trade picker ---- */
 .ag-trade-section { margin-bottom: 14px; }
@@ -2785,29 +2810,33 @@ button.ag-chat-gif { cursor: pointer; }
 }
 
 /* ---- GameResult frequency bar chart (BarChart) ---- */
+/* Two rows shared by every column: the bars' tracks over the category labels.
+   Each column takes both rows as a subgrid, so the label row is as tall as the
+   longest label and every bar stands on the same baseline — a label that wraps
+   to two lines ("Man-at-arms") can't lift its own bar above the others. */
 .ag-barchart-plot {
     position: relative;
-    display: flex;
-    align-items: flex-end;
-    gap: 4px;
+    display: grid;
+    grid-template-rows: minmax(0, 1fr) auto;
+    grid-auto-flow: column;
+    grid-auto-columns: minmax(0, 1fr);
+    column-gap: 4px;
     height: 160px;
 }
 .ag-barchart-col {
-    flex: 1;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    height: 100%;
+    display: grid;
+    grid-row: span 2;
+    grid-template-rows: subgrid;
+    justify-items: center;
     min-width: 0;
 }
 /* The bar's height is a percentage, so it needs a track of its own to measure
-   against: the column's height less the category label's and less the padding
-   that holds the value riding on top of the tallest bar. Sized against the
-   whole column instead, a tall bar asks for more room than is left over and is
+   against: the plot's height less the label row's and less the padding that
+   holds the value riding on top of the tallest bar. Sized against the whole
+   column instead, a tall bar asks for more room than is left over and is
    shrunk back to the gap — which flattens every bar near the maximum to the
    same height. */
 .ag-barchart-track {
-    flex: 1;
     min-height: 0;
     width: 100%;
     padding-top: 16px;
@@ -2855,6 +2884,7 @@ button.ag-chat-gif { cursor: pointer; }
 }
 .ag-barchart-label {
     margin-top: 6px;
+    text-align: center;
     font: 600 9px var(--ag-font);
     color: var(--ag-ink-softer);
 }
@@ -5403,6 +5433,11 @@ html:has(.ag-pull) { overscroll-behavior-y: contain; }
 .ag-ra-odds { pointer-events: none; }
 .ag-ra-odds rect { fill: color-mix(in oklch, var(--ra-night) 88%, transparent); stroke: var(--ag-gold); stroke-width: 0.3; }
 .ag-ra-odds text { font: 800 3.1px var(--ag-font); fill: var(--ag-gold); text-anchor: middle; dominant-baseline: central; }
+/* The cover a lined-up move's destination gives, a shield on each side that covers:
+   an outline with a full fill for full cover, and a left half for half. */
+.ag-ra-cover { pointer-events: none; }
+.ag-ra-cover-shield { fill: color-mix(in oklch, var(--ra-night) 80%, transparent); stroke: var(--ag-gold); stroke-width: 0.4; stroke-linejoin: round; }
+.ag-ra-cover-fill { fill: var(--ag-gold); }
 /* Hit text (§26.1): what an action did, rising off the figure it happened to
    and fading. Nothing here is keyframed: RealmArenaFx moves the text, the bursts,
    the slashes and the missiles a frame at a time, on the playback's one clock,
@@ -5656,6 +5691,25 @@ html:has(.ag-pull) { overscroll-behavior-y: contain; }
 .ag-ra-targets-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
 .ag-ra-targets-row b { font-weight: 800; color: var(--ag-gold); }
 
+/* ---- The home page, before anything has decided which screen it is ----
+   `/` is one static page for everyone (`app/page.tsx`), so its HTML holds both
+   screens, each in an `ag-home-screen` wrapper that dissolves (`display:
+   contents`) so the screen inside lays out as if it were the page's own.
+   `HomeScreen` marks the wrappers `--guess` while it doesn't know which is
+   wanted — in the prerendered HTML and through hydration — and the choice is
+   made here, from the attribute the inline script sets on `<html>` when Clerk's
+   cookie says someone is signed in. No attribute, or no JavaScript at all, is the
+   landing page. Once `HomeScreen` has decided it renders one wrapper without
+   `--guess`, and none of this applies. */
+.ag-home-screen { display: contents; }
+/* `HomeScreen`'s marker for the top of the page: a real box, so Next's scroll
+   on navigation has something to land on, but out of flow (and out of the
+   desktop grid) so it takes up no room. */
+.ag-home-top { position: absolute; top: 0; left: 0; width: 1px; height: 1px; pointer-events: none; }
+.ag-home-screen--guess.ag-home-dashboard { display: none; }
+html[data-ag-signed-in="1"] .ag-home-screen--guess.ag-home-dashboard { display: contents; }
+html[data-ag-signed-in="1"] .ag-home-screen--guess.ag-home-landing { display: none; }
+
 /* ============================================================= *
  *  Desktop expansion — design §16.
  *
@@ -5724,7 +5778,12 @@ html:has(.ag-pull) { overscroll-behavior-y: contain; }
 
        The last row is the slack: it carries the run-off the app column used to
        pad, which the rail's dark ground now has to reach through. */
-    .ag-app:has(.ag-desk) {
+    /* While the home page is still two screens in one (`ag-home-screen`, below),
+       `.ag-desk` is in the document for the landing visitor too, hidden. `:has()`
+       can't see `display: none`, so the grid asks the same question the
+       wrappers' own rules do: is the dashboard the one showing? Yes for the
+       signed-in attribute, and yes once only the dashboard is left. */
+    .ag-app:has(.ag-desk):where(html[data-ag-signed-in="1"] *, :not(:has(.ag-home-landing.ag-home-screen--guess))) {
         /* Full bleed. The rail is chrome, and chrome belongs against the edge
            of the window: capping the column here instead centred it, which put
            a sliver of cream down the outside of the rail at every width just
@@ -5757,7 +5816,7 @@ html:has(.ag-pull) { overscroll-behavior-y: contain; }
        grid drops the item off stretch and down to its fit-content size — which
        here is one turn card wide. */
     .ag-desk-col,
-    .ag-app:has(.ag-desk) > .ag-footer {
+    .ag-app:has(.ag-desk):where(html[data-ag-signed-in="1"] *, :not(:has(.ag-home-landing.ag-home-screen--guess))) > .ag-footer {
         width: 100%;
         max-width: var(--ag-queue-width);
         justify-self: center;
@@ -5773,7 +5832,7 @@ html:has(.ag-pull) { overscroll-behavior-y: contain; }
        warning strip is the root layout's, mounted beside the screen rather than
        inside it (see `layout.tsx`). It still decides for itself which screens
        it belongs on — this only says where it sits once it is there. */
-    .ag-app:has(.ag-desk) > .ag-footer { grid-area: footer; }
+    .ag-app:has(.ag-desk):where(html[data-ag-signed-in="1"] *, :not(:has(.ag-home-landing.ag-home-screen--guess))) > .ag-footer { grid-area: footer; }
 
     /* ---- The rail ---- */
     .ag-rail {

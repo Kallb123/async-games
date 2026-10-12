@@ -17,6 +17,13 @@ export interface BuildRowProps {
     /** This row's own command is in flight. */
     pending?: boolean;
     onClick: () => void;
+    /**
+     * A small control that belongs to the row but isn't its action — an
+     * `InfoButton` explaining the tag. It sits over the row's right edge as the
+     * row's sibling, not inside it (a button can't hold a button), so tapping it
+     * never fires `onClick`. The tag leaves room for it.
+     */
+    aside?: React.ReactNode;
 }
 
 /**
@@ -31,10 +38,11 @@ export interface BuildRowProps {
  * them in a plain `.ag-build-list`, which is left to the caller — sheets
  * interleave other controls (a toggle, a hint) between their rows.
  */
-export default function BuildRow({ icon, name, cost, tag, tagMuted, disabled, active, pending, onClick }: BuildRowProps) {
-    return (
+export default function BuildRow({ icon, name, cost, tag, tagMuted, disabled, active, pending, onClick, aside }: BuildRowProps) {
+    const row = (
         <button
             type="button"
+            data-perf-region="build-row"
             className={`ag-build-row${disabled ? ' ag-build-row--disabled' : ''}${active ? ' ag-build-row--active' : ''}${pending ? ' ag-pending-skin' : ''}`}
             disabled={disabled}
             onClick={onClick}
@@ -47,4 +55,5 @@ export default function BuildRow({ icon, name, cost, tag, tagMuted, disabled, ac
             <span className={`ag-build-tag${tagMuted ? ' ag-build-tag--muted' : ''}`}>{tag}</span>
         </button>
     );
+    return aside ? <div className="ag-build-row-wrap">{row}<span className="ag-build-aside">{aside}</span></div> : row;
 }

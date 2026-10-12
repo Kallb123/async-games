@@ -6,6 +6,7 @@ import { useAchievementToaster } from "@/components/AchievementToaster";
 import { reloadForStaleSession } from "./fetchWithSessionRetry";
 import { useIsAuthorised } from "./useAuthGuard";
 import { BOARD_EVENTS } from "./usePushEvents";
+import { gameDataUrl, GAME_DATA_CACHE_MS } from "./prefetchGameData";
 import { useRefreshableData } from "./useRefreshableData";
 import type { IGameDataResponse } from "@/utils/apiModels/GameDataApi";
 import { gameHasOutOfTurnPlays, resultPath } from "@/utils/ui/games";
@@ -13,6 +14,21 @@ import { gameHasOutOfTurnPlays, resultPath } from "@/utils/ui/games";
 /** What `/api/game/[gameid]` answers with. Nothing reads its `success` flag. */
 interface IGameDataBody<T> {
     gameData: T;
+}
+
+/** The longest `whenMainThreadIdle` waits for a quiet moment before reporting anyway. */
+const IDLE_WAIT_MS = 3000;
+
+/**
+ * Runs `callback` once the main thread has a gap, so work queued at paint (the
+ * board's effects, its first layout) has finished and a tap would be handled at
+ * once. `requestIdleCallback` where there is one (capped, so a board that never
+ * stops animating still reports); elsewhere (Safari) a task queued after the
+ * current one, which also lets whatever is already queued run first.
+ */
+function whenMainThreadIdle(callback: () => void) {
+    if (typeof requestIdleCallback === 'function') requestIdleCallback(callback, { timeout: IDLE_WAIT_MS });
+    else setTimeout(callback, 0);
 }
 
 /**
@@ -53,6 +69,14 @@ export function boardCanMove(game: IGameDataResponse | null | undefined, viewerI
  * board never swaps itself out for a skeleton, so the only thing either would
  * drive here is that one bar.
  *
+ * **A return to a board paints from the cache.** A board fetched for this
+ * player less than `GAME_DATA_CACHE_MS` ago — by an earlier visit, a command's
+ * own response, or a prefetch from the dashboard row (`prefetchGameData`) — is on
+ * screen from the first render, and the entry fetch runs at once beneath it
+ * (`loading` is true meanwhile, which is the top-bar bar). It is a provisional
+ * paint: a move sent from it names the board it was built on, so the server
+ * refuses it if the game has moved (see `useSubmitCommand`).
+ *
  * **A failed fetch never moves a player off a board they can see.** It used to:
  * any failure that wasn't a 404 pushed them home, so a single background poll
  * losing its connection — a phone changing network, a session cookie
@@ -82,9 +106,9 @@ export function useGameData<T extends IGameDataResponse>(gameId: string) {
     const { showToast } = useToast();
 
     const { data, setData, isLoading, isRefreshing, status, refresh } = useRefreshableData<IGameDataBody<T>>(
-        `/api/game/${gameId}`,
+        gameDataUrl(gameId),
         BOARD_EVENTS,
-        { pollWhileWatching: (body) => boardCanMove(body?.gameData, user?.id) },
+        { pollWhileWatching: (body) => boardCanMove(body?.gameData, user?.id), cacheFor: GAME_DATA_CACHE_MS },
     );
 
     // Null until the first response lands, rather than `{} as T`. The cast was
@@ -106,13 +130,22 @@ export function useGameData<T extends IGameDataResponse>(gameId: string) {
         if (unlockedHere?.length) offer(unlockedHere.map(unlock => ({ ...unlock, gameId })));
     }, [unlockedHere, gameId, offer]);
 
+    // `game_board_painted` is the frame the board first reached the screen.
+    // `game_usable` is later: the first moment after that paint when the main
+    // thread is free to answer a tap — the board's hydration, layout and
+    // effects have run — so it is the paint plus whatever the board still had
+    // to chew through. Every board mounts its controls in the same commit as
+    // its first `gameData` (a cached paint included, which accepts a command
+    // just as a confirmed one does), so this one place covers every game. A
+    // first-match guide or tour covering the board is the player's to dismiss
+    // and is deliberately not waited for: that would time the player, not the app.
     const reportedUsable = useRef(false);
     useEffect(() => {
         if (gameData && !reportedUsable.current) {
             reportedUsable.current = true;
             requestAnimationFrame(() => requestAnimationFrame(() => {
                 window.__agPerformanceMark?.('game_board_painted');
-                window.__agPerformanceMark?.('game_usable');
+                whenMainThreadIdle(() => window.__agPerformanceMark?.('game_usable'));
             }));
         }
     }, [gameData]);
@@ -162,7 +195,7 @@ export function useGameData<T extends IGameDataResponse>(gameId: string) {
         if (gameData === null && !isLoading && status !== null && !strandedRef.current) {
             strandedRef.current = true;
             // Still 401 after every retry renewed the token and asked again: the
-            // cookie needs the handshake only a document request gets. One
+            // cookie needs Clerk started afresh, which only a page load does. One
             // reload, and the player lands back on the board they were opening
             // rather than on a dashboard that is about to fail the same way.
             // `false` means this tab has already spent its reload on this

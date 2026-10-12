@@ -37,29 +37,46 @@ export const REQUEST_TIMEOUT_MS = 20000;
  * true once the retry delay has elapsed (the caller unmounted or superseded this
  * request in the meantime) — callers should treat null the same as any other
  * failure.
+ *
+ * A caller that reports its timings passes `timing` (`{ startedAt: 0 }`), which
+ * is filled in as the request goes: which attempt the response came from, and what the retry cost.
  */
 export async function fetchWithSessionRetry(
     input: string,
     isCancelled: () => boolean,
     refreshSession?: () => Promise<void>,
-    isRetry = false,
+    timing?: SessionFetchTiming,
 ): Promise<Response | null> {
-    let res: Response;
+    const first = performance.now();
+    if (timing) timing.startedAt = first;
+    const res = await attempt(input);
+    if (res?.status !== 401) return res;
+
+    await refreshSession?.();
+    await new Promise((resolve) => setTimeout(resolve, AUTH_RETRY_DELAY_MS));
+    if (isCancelled()) return null;
+    if (timing) {
+        timing.startedAt = performance.now();
+        timing.retryMs = timing.startedAt - first;
+    }
+    return attempt(input);
+}
+
+/** What `fetchWithSessionRetry` did on the way to its answer, for the performance report. */
+export interface SessionFetchTiming {
+    /** `performance.now()` as the attempt that produced the response began: the browser's record of it starts after. */
+    startedAt: number;
+    /** Set only when the session had to be renewed: how long the refused attempt, the renewal and the wait cost. */
+    retryMs?: number;
+}
+
+async function attempt(input: string): Promise<Response | null> {
     try {
-        res = await fetch(input, { signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS) });
+        return await fetch(input, { signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS) });
     } catch (error) {
         console.error(`fetchWithSessionRetry: ${input} failed`, error);
         return null;
     }
-
-    if (res.status === 401 && !isRetry) {
-        await refreshSession?.();
-        await new Promise((resolve) => setTimeout(resolve, AUTH_RETRY_DELAY_MS));
-        if (isCancelled()) return null;
-        return fetchWithSessionRetry(input, isCancelled, refreshSession, true);
-    }
-
-    return res;
 }
 
 /**
@@ -86,11 +103,13 @@ let reloadFired = false;
  * Reloads the page, once, to renew a session cookie that nothing on the client
  * can fix — and reports whether it did.
  *
- * Only a *document* request passes through `clerkMiddleware`, and only the
- * middleware can answer an expired cookie with Clerk's handshake and set a
- * fresh one. An in-app navigation is an RSC request, so it cannot: a player in
- * this state gets nowhere by being sent to another screen, which is why
- * "just refresh the page" is what has always fixed it by hand.
+ * A page load starts Clerk afresh in the browser, and Clerk then mints a new
+ * session cookie from the signed-in client it still holds, which a fetch from a
+ * long-running tab doesn't always manage. (The middleware no longer has a hand
+ * in it: it only runs on the API, so a document request gets no handshake.) An
+ * in-app navigation doesn't start Clerk afresh, so a player in this state gets
+ * nowhere by being sent to another screen, which is why "just refresh the page"
+ * is what has always fixed it by hand.
  *
  * Strictly once per tab per stale session, guarded twice over: a marker written
  * *before* the reload, which survives it and is given back only by a fetch that

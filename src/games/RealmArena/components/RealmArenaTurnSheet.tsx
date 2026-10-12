@@ -1,14 +1,16 @@
 'use client'
-import React from 'react';
+import React, { useState } from 'react';
 import ActionButton from '@/components/ui/ActionButton';
 import BuildRow from '@/components/ui/BuildRow';
+import InfoButton from '@/components/ui/InfoButton';
+import InfoModal from '@/components/ui/InfoModal';
 import ListRow from '@/components/ui/ListRow';
 import PendingTag from '@/components/ui/PendingTag';
 import Stat from '@/components/ui/Stat';
 import { ABILITIES, CHARACTERS, EFFECTS, type AbilityId, type Affliction } from '@/games/RealmArena/characters';
 import { ITEM_ART } from '@/games/RealmArena/art';
-import { ATTACK_AP, HUNKER_AP, REACTION_COST, abilitiesOf, allied, check, fighterById, hasEffect, healedEffects, isStanding, itemOf, shotEffect, shotOdds, smokeSquares, weaponOf, type Action, type BattleState, type Fighter } from '@/games/RealmArena/rules';
-import { abilityWait, AREA_BLAST, whoseName } from '@/games/RealmArena/ui';
+import { ATTACK_AP, HUNKER_AP, REACTION_COST, abilitiesOf, allied, check, damageTo, fighterById, hasEffect, healedEffects, isStanding, itemOf, maxHpOf, shotEffect, shotOdds, smokeSquares, strikeChance, weaponOf, type Action, type BattleState, type Fighter, type OddsBreakdown } from '@/games/RealmArena/rules';
+import { abilityWait, AREA_BLAST, oddsLines, whoseName } from '@/games/RealmArena/ui';
 import { rangeSquares, shotOf, targetsOf, type TargetKind } from '@/games/RealmArena/tactics';
 import { ABILITY_MARK, CHARACTER_MARK, weaponLine, weaponMark } from '@/games/RealmArena/roster';
 import { HEAL_HP, INSTANT_KINDS, isAtSquare, landsOf, type Aim, type InstantKind, type TurnDraft } from '@/games/RealmArena/useTurnDraft';
@@ -38,11 +40,11 @@ const AIM_HINT: Readonly<Record<Aim, string>> = {
     raise: 'Tap a downed ally next to them.',
     throw: 'Tap a shaded square to throw it there: where it lands is shaded red, and catches friend and foe alike.',
     draught: 'Tap them, or a hurt ally next to them, to give the draught.',
-    shieldBash: 'Tap an enemy next to them. It always hits, and stuns.',
+    shieldBash: 'Tap an enemy next to them to see the odds. A hit stuns them.',
     cripplingShot: 'Tap an enemy to see the odds. A hit slows them.',
     huntersMark: 'Tap an enemy they can see within 12 squares.',
     demolish: 'Tap the low cover next to them to blast it away. Everyone else beside it is struck, friend or foe.',
-    rend: 'Tap an enemy next to them. It always hits.',
+    rend: 'Tap an enemy next to them to see the odds.',
     regrowth: `Tap a hurt ally they can see within ${ABILITIES.regrowth.range} squares.`,
 };
 
@@ -119,7 +121,7 @@ export function RealmArenaAim({ draft, battle, player, nameFor, pendingTarget, o
     return (
         <>
             <LinedUp draft={draft} battle={battle} name={name} pending={pendingTarget === LINED_UP} disabled={busy} />
-            <TargetList draft={draft} name={name} disabled={busy} onFocus={onFocus} />
+            <TargetList draft={draft} battle={battle} name={name} disabled={busy} onFocus={onFocus} />
         </>
     );
 }
@@ -133,7 +135,7 @@ export function RealmArenaAim({ draft, battle, player, nameFor, pendingTarget, o
 export default function RealmArenaTurnSheet({ draft, battle, player, pendingTarget }: RealmArenaTurnSheetProps) {
     const { fighter, aim } = draft;
     const character = CHARACTERS[fighter.character];
-    const weapon = weaponOf(fighter);
+    const weapon = weaponOf(battle, fighter);
     const busy = pendingTarget !== null;
     const needs = (ap: number) => fighter.ap < ap ? `Needs ${ap} AP` : undefined;
     const reachable = (kind: TargetKind, least = 1) =>
@@ -195,21 +197,75 @@ export default function RealmArenaTurnSheet({ draft, battle, player, pendingTarg
 
 interface TargetListProps {
     draft: TurnDraft;
+    battle: BattleState;
     name: (id: number) => string;
     disabled: boolean;
     onFocus: (fighter: Fighter) => void;
 }
 
+/** The signed percentage a factor moves a chance by: +20%, −40%. */
+const signedPercent = (amount: number) => `${amount < 0 ? '−' : '+'}${Math.abs(amount)}%`;
+
+interface OddsInfoProps {
+    /** Who it's about, as the sheet names them. */
+    target: string;
+    /** What the attacker starts from: "Bow accuracy", "Melee accuracy". */
+    baseLabel: string;
+    odds: OddsBreakdown;
+    onClose: () => void;
+}
+
+/**
+ * Why a target's chance to hit is what the row says: the accuracy it starts
+ * from and each thing that moved it (`oddsLines`), then where it came to. The
+ * numbers are the ones `targetOptions` already worked out, not a second sum.
+ */
+function OddsInfo({ target, baseLabel, odds, onClose }: OddsInfoProps) {
+    const lines = oddsLines(odds, baseLabel);
+    const doubled = lines.some(line => line.note);
+    return (
+        <InfoModal title={`Hitting ${target}`} onClose={onClose} closeLabel="Close">
+            <div className="ag-list">
+                {lines.map((line, i) => (
+                    <ListRow
+                        key={line.label}
+                        title={line.label}
+                        sub={line.note}
+                        action={<span className="ag-build-tag">{i === 0 ? `${line.amount}%` : signedPercent(line.amount)}</span>}
+                    />
+                ))}
+            </div>
+            <div className="ag-stat-row">
+                <Stat value={`${odds.chance}%`} label="Hit" />
+                {odds.grazeChance !== undefined && <Stat value={`${odds.grazeChance}%`} label="Graze" />}
+            </div>
+            {doubled && <p className="ag-hint ag-hint--tight">Cover is doubled once, however many things would double it.</p>}
+        </InfoModal>
+    );
+}
+
 /**
  * Everyone the armed action could be aimed at, each with their HP and — at an
- * enemy — the chance to hit them. Picking one lines it up and brings the
- * board to them; picking a cleave's target again lets it go, and stays put.
+ * enemy — the chance to hit them, with a "?" that opens what that chance is
+ * made of. Picking one lines it up and brings the board to them; picking a
+ * cleave's target again lets it go, and stays put.
  */
-function TargetList({ draft, name, disabled, onFocus }: TargetListProps) {
+function TargetList({ draft, battle, name, disabled, onFocus }: TargetListProps) {
+    const [why, setWhy] = useState<number | null>(null);
     if (draft.options.length === 0) return null;
+    const asked = draft.options.find(({ target }) => target.id === why);
+    const weapon = weaponOf(battle, draft.fighter);
     return (
         <div className="ag-build-list">
-            {draft.options.map(({ target, chance }) => {
+            {asked?.odds && (
+                <OddsInfo
+                    target={capitalise(name(asked.target.id))}
+                    baseLabel={asked.odds.grazeChance !== undefined ? `${weapon.name} accuracy` : 'Melee accuracy'}
+                    odds={asked.odds}
+                    onClose={() => setWhy(null)}
+                />
+            )}
+            {draft.options.map(({ target, chance, odds }) => {
                 const aimed = draft.targets.includes(target.id);
                 const pick = () => {
                     draft.pick(target.id);
@@ -220,11 +276,12 @@ function TargetList({ draft, name, disabled, onFocus }: TargetListProps) {
                         key={target.id}
                         icon={CHARACTER_MARK[target.character]}
                         name={capitalise(name(target.id))}
-                        cost={`${target.hp}/${CHARACTERS[target.character].hp} HP`}
+                        cost={`${target.hp}/${maxHpOf(target)} HP`}
                         tag={chance !== undefined ? `${chance}% to hit` : aimed ? 'Aiming' : 'Pick'}
                         disabled={disabled}
                         active={aimed}
                         onClick={pick}
+                        aside={odds && <InfoButton variant="help" label={`Why ${chance}% to hit ${name(target.id)}`} onClick={() => setWhy(target.id)} />}
                     />
                 );
             })}
@@ -295,7 +352,6 @@ function Detail({ draft, battle, name, ap, target }: DetailProps) {
     const { fighter, aim } = draft;
     const hint = (text: React.ReactNode) => <p className="ag-hint">{text}</p>;
     const Name = (id: number) => capitalise(name(id));
-    const strike = weaponOf(fighter).damage;
 
     if (draft.path) return <MoveDetail draft={draft} name={name} ap={ap} />;
     if (draft.area) {
@@ -311,9 +367,14 @@ function Detail({ draft, battle, name, ap, target }: DetailProps) {
             {draft.blasts?.length ? ` Blasts away ${pluralize(draft.blasts.length, 'square')} of low cover.` : ''}
         </>);
     }
-    if (aim === 'cleave') return hint(`Strikes ${andList(draft.targets.map(name))} for ${strike} each.`);
+    if (aim === 'cleave') {
+        const chances = draft.targets.map(id => { const hit = fighterById(battle, id); return hit ? `${strikeChance(battle, hit)}%` : ''; });
+        const damages = draft.targets.map(id => { const hit = fighterById(battle, id); return hit ? damageTo(battle, fighter, hit) : 0; });
+        const each = new Set(damages).size === 1 ? `${damages[0]} each` : andList(damages.map(String));
+        return hint(`Strikes ${andList(draft.targets.map(name))} for ${each}, at ${andList(chances)} to hit.`);
+    }
     if (!target) return null;
-    const max = CHARACTERS[target.character].hp;
+    const max = maxHpOf(target);
     if (aim === 'heal' || aim === 'regrowth' || aim === 'draught') {
         const hp = Math.min(HEAL_HP[aim] ?? 0, max - target.hp);
         const cleared = healedEffects(target).map(effect => EFFECTS[effect].state);
@@ -327,11 +388,12 @@ function Detail({ draft, battle, name, ap, target }: DetailProps) {
     }
 
     const health = `${Name(target.id)} · ${target.hp}/${max} HP`;
-    if (aim === 'shieldBash') return hint(`${health} · always hits, for ${ABILITIES.shieldBash.damage}, and stuns them.`);
-    if (aim === 'rend') return hint(`${health} · always hits, for ${ABILITIES.rend.damage}.`);
+    const lands = strikeChance(battle, target);
+    if (aim === 'shieldBash') return hint(`${health} · ${lands}% to hit, for ${damageTo(battle, fighter, target, ABILITIES.shieldBash.damage)}, and a hit stuns them.`);
+    if (aim === 'rend') return hint(`${health} · ${lands}% to hit, for ${damageTo(battle, fighter, target, ABILITIES.rend.damage)}.`);
     const shot = shotOf(aim);
     const odds = shot && shotOdds(battle, fighter, target, shot);
-    if (!shot || !odds) return hint(`${health} · a strike always hits, for ${strike}.`);
+    if (!shot || !odds) return hint(`${health} · ${lands}% to hit, for ${damageTo(battle, fighter, target)}.`);
     const effect = shotEffect(fighter, shot);
     return (
         <>
@@ -340,7 +402,7 @@ function Detail({ draft, battle, name, ap, target }: DetailProps) {
                 <Stat value={`${odds.grazeChance}%`} label="Graze" />
                 <Stat value={odds.grazeChance > 0 ? `${odds.damage} / ${odds.grazeDamage}` : odds.damage} label="Damage" />
             </div>
-            {hint(`${health} · ${odds.flanked ? 'flanked, +1 damage' : `${odds.cover} cover`}${hasEffect(target, 'hunkered') ? ', hunkered down' : ''}${smokeSquares(battle).has(target.square) ? ', in smoke' : ''}${effect ? ` · a hit leaves them ${EFFECTS[effect].state}` : ''}`)}
+            {hint(`${health} · ${odds.flanked ? 'flanked, +1 damage' : `${odds.cover} cover`}${hasEffect(target, 'hunkered') ? ', hunkered down' : ''}${smokeSquares(battle).has(target.square) ? ', in smoke' : ''}${odds.farCover ? ', cover doubled at range' : ''}${effect ? ` · a hit leaves them ${EFFECTS[effect].state}` : ''}`)}
         </>
     );
 }
@@ -366,12 +428,12 @@ function MoveDetail({ draft, name, ap }: Pick<DetailProps, 'draft' | 'name' | 'a
                 ? <p className="ag-hint">{aim === 'sneak' ? 'A sneak sets off nobody.' : 'Nobody on watch sees this move.'}</p>
                 : (
                     <div className="ag-list">
-                        {reactions.map(({ watcher, kind, odds, damage }) => (
+                        {reactions.map(({ watcher, kind, chance, damage }) => (
                             <ListRow
                                 key={watcher.id}
                                 icon="⚠"
                                 title={capitalise(name(watcher.id))}
-                                sub={kind === 'guard' ? `On guard · strikes for ${damage}` : `On overwatch · ${odds?.chance ?? 0}% to hit for ${damage}`}
+                                sub={`${kind === 'guard' ? 'On guard' : 'On overwatch'} · ${chance}% to hit for ${damage}`}
                             />
                         ))}
                     </div>

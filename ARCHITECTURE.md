@@ -62,7 +62,8 @@ src/
 │   ├── newgame/                # game library + per-game setup screens
 │   │   ├── page.tsx            # library grid
 │   │   └── <game>/page.tsx     # one setup screen per game
-│   ├── games/<game>/[gameid]/  # the live board screen for each game
+│   ├── games/<game>/[gameid]/  # the live board screen for each game — a static
+│   │                           #   shell (layout.tsx re-exports games/staticShell.ts)
 │   └── api/                    # server endpoints (see §5, §6)
 │       ├── game/               # taketurn, command, end, list endpoints, [gameid]
 │       ├── newgame/<game>/     # create an invitation for a game
@@ -793,15 +794,17 @@ exactly like a build or a roll — validated, stamped, recorded on
 The ten-second hold before a turn ends reuses `followUpCommand` from the
 paragraph above: the game simply declines to return one it would otherwise
 have returned.
-Race Cars, Banned Islet, Outbreak, Train Time, Dice Cities, Fires Out and
-Realm Arena have since opted in the same way, by hand (`RaceCarsUndo`,
-`BannedIsletUndo`, `OutbreakUndo`, `TrainTimeUndo`, `DiceCitiesUndo`,
-`FiresOutUndo`, `RealmArenaUndo`); Banned Islet, Outbreak, Fires Out and Realm
-Arena need no hold, because their turns only ever end
-on the player's own End turn, while a Train
-Time claim and a Dice Cities purchase hold their turn open as Race Cars' legs
-do. The ten-second window and the turn-clock staleness test the last two share
-live in `src/utils/games/undo.ts`.
+Race Cars, Banned Islet, Outbreak, Train Time, Dice Cities, Fires Out, Realm
+Arena and World Domination have since opted in the same way, by hand
+(`RaceCarsUndo`, `BannedIsletUndo`, `OutbreakUndo`, `TrainTimeUndo`,
+`DiceCitiesUndo`, `FiresOutUndo`, `RealmArenaUndo`, `WorldDominationUndo`);
+Banned Islet, Outbreak, Fires Out and Realm Arena need no hold, because their
+turns only ever end on the player's own End turn, while a Train Time claim, a
+Dice Cities purchase and a World Domination fortify (or skipped fortify, or
+last setup placement — which is why its end-of-turn card draw waits for
+`WorldDominationEndTurn`, in `CheckEndTurn`) hold their turn open as Race Cars'
+legs do. The ten-second window and the turn-clock staleness test the last
+three share live in `src/utils/games/undo.ts`.
 
 The route checks the deserialised command against `COMMANDS_BY_GAME_TYPE` in
 `src/utils/games/gameCommands.ts` before executing it: every `Execute` casts the
@@ -1100,8 +1103,16 @@ game — is documented fully in
 
 ## 10. Auth & access gating
 
-- **Clerk** provides authentication. `src/middleware.ts` wraps the app in
-  `clerkMiddleware()`; the root layout wraps everything in `<ClerkProvider>`.
+- **Clerk** provides authentication. `src/middleware.ts` runs
+  `clerkMiddleware()` on the API only — pages authorise on the client, and a
+  page request would pay Clerk's handshake redirect for nothing — so no page
+  or layout may call `auth()` / `currentUser()` (a guard test,
+  `src/middleware.test.ts`, fails if one can). The home and join pages guess
+  which screen to paint first from Clerk's `__client_uat` cookie (the rule is
+  in `src/utils/users/clientUat.ts`; `/join` reads it on the server through
+  `signedInHint.ts`, `/` in the browser); Clerk corrects the guess on the
+  client.
+  The root layout wraps everything in `<ClerkProvider>`.
 - API routes read the session with `await auth()` / `currentUser()` from
   `@clerk/nextjs/server` and reject unauthenticated requests.
 - **Access gating.** Beyond sign-in, the app checks `user.publicMetadata.unlocked`.
@@ -1115,26 +1126,41 @@ game — is documented fully in
   same `GameLibrary` browser the signed-in library uses, pointed at sign-up —
   instead of a bounce to `/login`. Locked-out accounts still go to
   `/unlockaccess`.
-- **Which screen a two-audience route shows is decided on the server.** `/` and
-  `/join` are the two screens with something to show a visitor who has no
+- **Which screen a two-audience route shows is decided before Clerk loads.** `/`
+  and `/join` are the two screens with something to show a visitor who has no
   account, and so the two whose *audience* has to be settled before they
-  render. Each is a server page that reads the session with `await auth()` and
-  hands the answer to the client component below it: `/` renders either
-  `components/Dashboard.tsx` or `components/Landing.tsx`, and `/join` passes
-  `initiallySignedIn` into `JoinForm`, whose guest lockup and signed-in code
-  box share one component and most of their state. The browser can't tell the
-  two audiences apart until Clerk has loaded, and deciding it there meant each
-  screen showed the wrong thing until it had: `/` flashed the dashboard's
-  skeletons at a visitor with no account before replacing them with the
-  landing page, and `/join` — the one route strangers arrive at cold, from a
-  link in a chat app — rendered nothing at all. Both screens still mount
-  `useAuthGuard({ allowSignedOut: true })` and correct themselves from Clerk,
-  for the session the cookie claims and the browser then rejects. `auth()`
-  makes a route dynamic, which is what buys the right first paint; `/join`
-  already was, for the lobby lookup its `generateMetadata` does. Whatever the
-  guest form starts out holding — its random Adjective+Animal name, the die
-  face beside it — is drawn on the server and passed down too, because server
-  HTML and the browser's first render have to agree on it.
+  render. Both guess from Clerk's `__client_uat` cookie (the rule is
+  `signedInHintFrom` in `src/utils/users/clientUat.ts` — not `auth()`, which
+  would need Clerk's middleware on the page; see above); they differ in where.
+  `/join` is a server page: `signedInHint()` reads the cookie on the server and
+  passes `initiallySignedIn` into `JoinForm`, whose guest lockup and signed-in
+  code box share one component and most of their state. Whatever the guest form
+  starts out holding — its random Adjective+Animal name, the die face beside it
+  — is drawn on the server and passed down too, because server HTML and the
+  browser's first render have to agree on it. `/join` is dynamic for that, and
+  for the lobby lookup its `generateMetadata` does.
+
+  `/` is **static** (`○` in the build table; served from the CDN, no function
+  render on a cold open or a navigation home), so it can't read the request. Its
+  HTML holds both `components/Dashboard.tsx` and `components/Landing.tsx`, each
+  in an `ag-home-screen` wrapper; an inline script (`SIGNED_IN_PRE_PAINT_SCRIPT`,
+  tested against the same rule) sets `data-ag-signed-in` on `<html>` when the
+  cookie says signed in, and `ag-theme.css` shows the dashboard for that and the
+  landing page otherwise, JavaScript off included. `HomeScreen` renders both
+  until hydration, then keeps the one the cookie names (and, once Clerk has
+  loaded, the one Clerk names) without remounting it. Nothing in the page may read
+  the request (`cookies()`, `headers()`, `auth()`) or it turns dynamic again, and
+  nothing may carry a root `app/loading.tsx`: a loading file is a Suspense
+  boundary, and one round a page this big is sent as skeleton plus a hidden block
+  swapped in later (see `components/HomeLoading.tsx`).
+
+  Deciding it in the browser *after Clerk loads* is what each used to avoid: `/`
+  flashed the dashboard's skeletons at a visitor with no account before
+  replacing them with the landing page, and `/join` — the one route strangers
+  arrive at cold, from a link in a chat app — rendered nothing at all. Both
+  screens still mount `useAuthGuard({ allowSignedOut: true })` and correct
+  themselves from Clerk, for the session the cookie claims and the browser then
+  rejects.
 - **Admin tooling.** A third flag, `publicMetadata.admin`, gates the support
   screen at `/admin` and every route under `/api/admin/**` (`requireAdmin` in
   `src/utils/api/adminRequest.ts`; `isAdmin` in `src/utils/ui/players.ts` is the
@@ -1233,7 +1259,26 @@ description or theme colour is exactly what those two files exist to prevent.
   Every fetch also restarts the poll's countdown (`usePushEvents`'
   `restartPoll`), so a refresh from anywhere else — the dashboard's pull to
   refresh (`PullToRefresh`), a push, a foreground return — is not followed by
-  a poll asking the same thing a moment later.
+  a poll asking the same thing a moment later. A fetch whose url (or viewer)
+  has changed under it is superseded, not re-run: its body is dropped, and the
+  new url is fetched.
+- **A short-lived in-memory cache, for the two screens that opt in.**
+  `useRefreshableData` takes `cacheFor` (ms); `useGameData` sets 30 s and
+  `useDashboard` 15 s, and nothing else opts in. `src/utils/hooks/dataCache.ts`
+  holds the bodies — memory only, keyed by signed-in user and url, 20 at most,
+  least recently used out first — and `useDataCacheOwner` (mounted in
+  `Providers`) empties it on sign-out, a locked account or a different
+  account. A return to a screen within its `cacheFor` paints the cached body
+  at once (`isLoading` false) and the entry fetch still runs beneath it, as
+  `isRefreshing`. A fetch and every `setData` write it back; a failed answer is
+  never stored and a 403/404 drops the entry. `GameLink` (the dashboard's
+  your-turn cards, waiting rows and the rail's game rows) calls
+  `prefetchGameData` on pointer-down, mouse hover and focus, which fills the
+  same cache through the same request (the screen's entry fetch joins one
+  still in flight). A cached board is provisional: until a request answers it,
+  `useSubmitCommand` sends `expectedCommandCount` in every game, not only the
+  out-of-turn ones, so the server refuses a move built on a board that has
+  moved. See `docs/loading-performance-plan.md`, Phases 1.3 and 1.4.
 - **An expired session is a ladder, not a failure.** A tab that has been idle
   comes back with a session token that expired while nothing was running to
   renew it, and every request 401s until something asks Clerk for another.
@@ -1243,10 +1288,10 @@ description or theme colour is exactly what those two files exist to prevent.
   that, `useRefreshableData`'s backoff repeats that whole dance three more
   times; and if a *board* is still empty at the end of it,
   `reloadForStaleSession` reloads the page **once**. That last rung is the only
-  thing that fixes a cookie Clerk can't renew in place, because only a document
-  request passes through `clerkMiddleware` and gets its handshake — an in-app
-  navigation is an RSC request and cannot, which is why sending the player to
-  another screen has never helped. It is one shot per tab, guarded twice: the
+  thing that fixes a cookie Clerk can't renew in place, because only a page load
+  starts Clerk afresh in the browser — an in-app navigation is an RSC request
+  and does not, which is why sending the player to another screen has never
+  helped. It is one shot per tab, guarded twice: the
   marker lives in `sessionStorage`, is written before the reload and is given
   back only by a fetch that then succeeds, and a document that has fired its
   reload keeps that answer while it is being replaced — the old page goes on
@@ -1447,7 +1492,10 @@ in one new folder, `src/games/<Game>/`. Roughly:
    `src/app/newgame/<game>/` and a board screen under
    `src/app/games/<game>/[gameid]/` that just import from `src/games/<Game>/`
    (App Router requires `page.tsx` to live under `src/app/**`, so these can't
-   move into the game folder themselves). Reuse `GameSetupLayout`,
+   move into the game folder themselves). The board folder also takes the
+   one-line `layout.tsx` that serves it as a cached static shell — see
+   `src/app/games/staticShell.ts` for why, and for the rule that keeps it safe:
+   nothing in a board route reads the viewer or the game on the server. Reuse `GameSetupLayout`,
    `UserInviteList`, and `TurnTimerSelect` for setup.
 6. *(Optional)* Add a replay `IReplayAdapter` for turn recap — see
    `docs/turn-recap-and-planning.md`.
@@ -1551,7 +1599,7 @@ one-liner fails with a message naming the exact file and line to add.
     [`docs/robustness-review.md`](./docs/robustness-review.md) says what they
     cover and, as importantly, what they don't.
   - **Client-hook tests** render the hook through `react-dom/server`, because
-    Vitest runs in `environment: "node"` here and there is no jsdom or
+    Vitest runs in `environment: "node"` here and there is no
     `@testing-library/react` to reach for. A two-line `Harness` component calls
     the hook and returns `null`; `renderToString` runs it; the test asserts on
     what the hook handed back. Stub whatever it fetches from (`useUser`,
@@ -1562,7 +1610,12 @@ one-liner fails with a message naming the exact file and line to add.
     it does cover render-phase state, which is where a `setState` that never
     settles turns into React's "Too many re-renders". Prefer a plain unit test over an
     extracted pure function (`useAnimatedList`'s `planList`) where the logic
-    will come out; reach for this when it won't.
+    will come out; reach for this when it won't. A hook whose *effects* are the
+    thing under test (a fetch that starts on mount, a url that changes under
+    it) is the exception: put `// @vitest-environment jsdom` at the top of the
+    file, render it with `createRoot` from `react-dom/client` inside React's
+    `act`, and stub `fetch` with a promise per request so the test decides when
+    each one answers. Start from `useRefreshableData.cache.test.ts`.
   - **Structural guards** scan the source for what should exist per game, then
     assert every shared file that should reference it does — so a new game is
     checked automatically with no hand-maintained list to keep in sync:

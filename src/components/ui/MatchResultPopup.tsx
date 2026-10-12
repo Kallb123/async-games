@@ -2,7 +2,7 @@
 
 import { Modal } from 'react-bootstrap';
 import Link from 'next/link';
-import moment from 'moment';
+import { formatTimeAgo } from "@/utils/ui/time";
 import GameResultStats from "@/components/ui/GameResultStats";
 import Skeleton, { SkeletonRow } from "@/components/ui/Skeleton";
 import { useGameResult } from "@/utils/hooks/useGameResult";
@@ -50,7 +50,7 @@ export default function MatchResultPopup({ gameId, outcome, onClose }: MatchResu
                     : (
                         <>
                             <div className="ag-list-row-sub" style={{ marginBottom: 10 }}>
-                                {moment(result.endedAt).fromNow()} · {pluralize(result.totalTurns, lengthUnit(result.playerIds.length))}
+                                {formatTimeAgo(result.endedAt)} · {pluralize(result.totalTurns, lengthUnit(result.playerIds.length))}
                             </div>
                             {result.stats.length > 0
                                 ? <GameResultStats groups={result.stats} players={result.players} />

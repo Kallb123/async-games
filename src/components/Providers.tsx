@@ -5,6 +5,7 @@ import { ToastProvider } from './ToastContext';
 import AchievementToaster from './AchievementToaster';
 import BottomBanner from './BottomBanner';
 import NotificationDeclinedPopup from './NotificationDeclinedPopup';
+import { useDataCacheOwner } from '@/utils/hooks/useDataCacheOwner';
 import { useServiceWorker } from '@/utils/hooks/useServiceWorker';
 import { useCapacitorBackButton } from '@/utils/hooks/useCapacitorBackButton';
 import { useCapacitorSplashScreen } from '@/utils/hooks/useCapacitorSplashScreen';
@@ -18,6 +19,9 @@ export default function Providers({ children }: { children: ReactNode }) {
     // This is the only client component wrapping every screen, so it is the one
     // place either can be mounted once rather than per page.
     useServiceWorker();
+    // Empties the tab's in-memory data cache whenever the signed-in player
+    // changes or signs out, so one player's boards can't be shown to the next.
+    useDataCacheOwner();
     // Native Android shell only: makes the back button/gesture navigate the
     // app instead of exiting it. No-ops outside Capacitor.
     useCapacitorBackButton();

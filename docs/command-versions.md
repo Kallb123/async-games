@@ -87,6 +87,15 @@ async Execute(gameData: IGameData): Promise<ICommandOutcome> {
 Replay needs nothing else — the recorded move already holds its version, and
 the command running it is the same class.
 
+### When a rule must hold for a whole match
+
+Branching on `commandVersion(this)` changes a rule from the next move on. A
+rule that can't change halfway through a match — how often a blow lands, how
+much HP a character has — is read from a version stamped on the game when it's
+created instead, so a match started before the change plays the old rules to
+the end and replays by them. Realm Arena's `rulesVersion` is the example
+([`games/realm-arena.md`](./games/realm-arena.md) §30.13).
+
 When an old branch is no longer worth keeping, drop it and raise the game's
 `GameMeta.oldestReplayableCommandVersion`. `buildTimeline` then refuses (by
 throwing) any game whose log holds a command older than that, or newer than the

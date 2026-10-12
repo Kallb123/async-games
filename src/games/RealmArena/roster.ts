@@ -8,6 +8,7 @@
 
 import { ABILITIES, CHARACTERS, EFFECTS, FACTIONS, OPTIONS, type AbilityId, type CharacterId, type FactionId, type OptionId, type Weapon } from "./characters";
 import { nextRankXp, rankOf } from "./mastery";
+import { MELEE_ACCURACY } from "./rules";
 
 /**
  * The placeholder figure each character stands as until PR 9's marked figures
@@ -43,7 +44,7 @@ export function factionRosterLine(id: FactionId): string {
 
 /** A weapon in one line: "80% · range 20 · 3 damage", and what it leaves on a hit: "· slowed on a hit". */
 export function weaponLine(weapon: Weapon): string {
-    if (weapon.kind === "melee") return `Melee · ${weapon.damage} damage`;
+    if (weapon.kind === "melee") return `Melee · ${MELEE_ACCURACY}% · ${weapon.damage} damage`;
     const leaves = weapon.effect ? ` · ${EFFECTS[weapon.effect].name.toLowerCase()} on a hit` : "";
     return `${weapon.accuracy}% · range ${weapon.range} · ${weapon.damage} damage${leaves}`;
 }

@@ -1,7 +1,7 @@
 'use client'
 
 import { IInvitationResponse } from "@/utils/mongodb/InvitationData";
-import moment from 'moment';
+import { formatTimeAgo } from "@/utils/ui/time";
 import Link from "next/link";
 import ListSection from "@/components/ui/ListSection";
 import { lobbyPath } from "@/utils/games/lobby";
@@ -30,7 +30,7 @@ export default function OutgoingInviteList({ invites, isLoading, onChanged }: Ou
     }
 
     return (
-        // Shape mirrored (label, icon, row count) in app/loading.tsx's homepage
+        // Shape mirrored (label, icon, row count) in components/HomeLoading.tsx's homepage
         // skeleton — keep the two in sync if this changes.
         <ListSection
             label="Awaiting response"
@@ -55,7 +55,7 @@ export default function OutgoingInviteList({ invites, isLoading, onChanged }: Ou
                             <span style={{ color: "var(--ag-ink-soft)", fontWeight: 500 }}> · {invite.gameFriendlyName}</span>
                         </div>
                         <div className="ag-list-row-sub">
-                            Sent {moment(invite.timestamp).fromNow()}
+                            Sent {formatTimeAgo(invite.timestamp)}
                             {/* Says the row goes somewhere: every other row in
                                 this list is a dead end, so a lobby's has to
                                 offer the trip rather than leave it to be

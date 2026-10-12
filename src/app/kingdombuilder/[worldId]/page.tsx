@@ -1,6 +1,7 @@
 'use client'
 
 import { use, useEffect, useMemo, useState, type CSSProperties } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 
 import BoardZoom from "@/components/ui/BoardZoom";
@@ -259,10 +260,10 @@ export default function KingdomBuilderWorldPage({ params }: { params: Promise<{ 
                 <Section label="Your settlements" isLoading={isLoading}>
                     <div className="ag-build-list">
                         {mySettlements.map((settlement, index) => (
-                            <button className="ag-btn ag-btn--light ag-btn--block" type="button" key={settlement.settlementId}
-                                onClick={() => router.push(`/kingdombuilder/${worldId}/${settlement.settlementId}`)}>
+                            <Link className="ag-btn ag-btn--light ag-btn--block" key={settlement.settlementId}
+                                href={`/kingdombuilder/${worldId}/${settlement.settlementId}`}>
                                 Open settlement {index + 1}
-                            </button>
+                            </Link>
                         ))}
                     </div>
                     {open.size > 0 && (

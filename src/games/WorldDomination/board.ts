@@ -2,6 +2,8 @@
 // world map, its adjacency graph, and the rules maths (reinforcement counts,
 // card-set values, connectivity) from docs/games/worlddomination.md.
 import { buildSymmetricAdjacency, isAdjacentIn } from "@/utils/games/adjacencyGraph";
+import { clonePlayerStates } from "@/utils/games/mongoMaps";
+import type { IWorldDominationPlayerState, IWorldDominationSpecificGameState } from "./WorldDominationModels";
 
 export type WorldDominationPhase = 'setup' | 'reinforce' | 'attack' | 'fortify';
 
@@ -282,4 +284,70 @@ export function connectedThroughOwnedTerritories(
         }
     }
     return visited.has(to);
+}
+
+/**
+ * How many snapshots the stack keeps. A reinforcement can be placed one army at
+ * a time, so unlike the one-purchase games this has to reach back over a whole
+ * run of taps — and a cash-in, an occupation, or the attack phase's close
+ * pushes onto the same run. Ten covers a full reinforcement of single-army
+ * taps; each level is roughly 5 KB of JSON on every save (the card deck and
+ * every hand are in it), and the stack is emptied by every battle and every
+ * hand-off, so it never builds up. Dropping the oldest only ever costs reach.
+ */
+export const UNDO_STACK_DEPTH = 10;
+
+// ─── Whole-state cloner ───────────────────────────────────────────────────────
+// Lives here rather than in WorldDominationModels.ts (which re-exports it) so
+// WorldDominationLogic.ts can take undo snapshots with it: the models import
+// the game type from the GameLogic barrel, which imports the logic, so a
+// runtime import the other way round would be a cycle. This file is the one
+// both already import without importing each other, and takes the state's
+// types with `import type` so it never loads the models at runtime (the same
+// move Train Time's board.ts and Fires Out's rules.ts made for their cloners).
+
+function cloneCard(c: IWorldDominationCard): IWorldDominationCard {
+    return { id: c.id, type: c.type, territoryId: c.territoryId };
+}
+
+function clonePlayerState(ps: IWorldDominationPlayerState): IWorldDominationPlayerState {
+    return {
+        cards: ps.cards.map(cloneCard),
+        eliminated: ps.eliminated,
+        conqueredTerritoryThisTurn: ps.conqueredTerritoryThisTurn,
+        totalArmiesDeployed: ps.totalArmiesDeployed,
+    };
+}
+
+// Deep-clones a World Domination game state into independent plain objects,
+// rebuilding the player map in `userIdList` order (see clonePlayerStates) —
+// mirrors SAC's cloneSACState (see SettlementsAndCities/board.ts) for the same
+// reason: the board (here, the shuffled territory deal + card deck) is
+// randomised at creation and can't be reconstructed later, so turn recap
+// replays from a persisted snapshot instead. It is also the snapshot an undo
+// pushes (docs/undo.md §7), which is why it carries the three undo fields the
+// way it does: a snapshot never nests a stack.
+export function cloneWorldDominationState(
+    gs: IWorldDominationSpecificGameState,
+    userIdList: string[],
+): IWorldDominationSpecificGameState {
+    return {
+        territories: gs.territories.map((t): IWorldDominationTerritory => ({ owner: t.owner, armies: t.armies })),
+        playerStates: clonePlayerStates(gs.playerStates, userIdList, clonePlayerState),
+        phase: gs.phase,
+        reinforcementsRemaining: gs.reinforcementsRemaining,
+        pendingOccupation: gs.pendingOccupation ? { ...gs.pendingOccupation } : null,
+        fortifyUsed: gs.fortifyUsed,
+        cardSetsCashedIn: gs.cardSetsCashedIn,
+        cardDeck: gs.cardDeck.map(cloneCard),
+        lastBattle: gs.lastBattle ? { ...gs.lastBattle, attackerDice: [...gs.lastBattle.attackerDice], defenderDice: [...gs.lastBattle.defenderDice] } : null,
+        // Never nested: a snapshot of a snapshot's stack is bytes for nothing,
+        // and the anchor means nothing outside the state that owns it.
+        undoStack: [],
+        undoAnchorId: null,
+        // `?? null` for a game that predates the hold. A snapshot is only ever
+        // taken before a command that holds nothing, so restoring one closes
+        // whatever countdown there was.
+        autoEndTurnAt: gs.autoEndTurnAt ?? null,
+    };
 }

@@ -54,6 +54,11 @@ export function runtimeImports(file: string): string[] {
         .map(match => match.slice(1).find(specifier => specifier !== undefined)!);
 }
 
+/** Whether a module opens with the `'use client'` directive. */
+export function isClientModule(file: string): boolean {
+    return /^\s*['"]use client['"]/.test(readFileSync(file, "utf8"));
+}
+
 /**
  * The file a specifier names, from the file importing it — or undefined for a
  * bare package, and for anything that doesn't resolve to a file here.

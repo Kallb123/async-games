@@ -4,12 +4,23 @@ import Skeleton, { SkeletonRow, SkeletonTurnCard } from "@/components/ui/Skeleto
 import WhatsNew from "@/components/ui/WhatsNew";
 
 /**
- * `page.tsx` calls `auth()` to decide between `Dashboard` and `Landing`,
- * which makes `/` dynamic — Next shows this instantly on navigation while
- * that decision is made server-side, instead of leaving the click looking
- * like it did nothing until the response streams back.
+ * What Next shows instantly on a navigation to a route that has to be built
+ * for the request, instead of leaving the click looking like it did nothing
+ * until the response streams back. Each of those routes re-exports this as its
+ * own `loading.tsx` (`lobby/`, `kingdombuilder/`, `games/kingdombuilder/`,
+ * `profile/[userId]/`); `/join` has a shaped-to-it one of its own.
  *
- * Shaped after `Dashboard`, the more common destination, so the handover
+ * There is deliberately no `app/loading.tsx`. A loading file is a Suspense
+ * boundary round everything below it, and React only inlines a boundary that
+ * fits in about 13kB: a bigger page is sent as this fallback plus the real
+ * thing in a hidden block, swapped in by a script a third of a second after the
+ * first paint — and never, with JavaScript off. Home is prerendered, far over
+ * that, and picks its own screen before first paint (`HomeScreen`), so a root
+ * boundary put a dashboard skeleton in front of every landing-page visitor.
+ * It did the same to every other static page. Give a route a `loading.tsx`
+ * only if it is built per request.
+ *
+ * Shaped after `Dashboard`, the most common destination, so the handover
  * doesn't jump: the same `.ag-desk` shell and all four of its regions, so a
  * wide window lays this out exactly where the real screen will be, the same
  * `AppRail` (with no games to switch between yet), the "your move" hero and a
@@ -30,7 +41,7 @@ import WhatsNew from "@/components/ui/WhatsNew";
  * waits on no request, so there is nothing for a placeholder to stand in for,
  * and it holds open the region the grid puts under the queue.
  */
-export default function Loading() {
+export default function HomeLoading() {
     return (
         <main className="ag-desk">
             <AppRail busy />

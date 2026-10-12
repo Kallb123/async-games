@@ -77,9 +77,11 @@ export type Affliction = Exclude<EffectId, typeof STANCES[number]>;
 export const AFFLICTIONS = EFFECT_IDS.filter((effect): effect is Affliction => !(STANCES as readonly EffectId[]).includes(effect));
 
 /**
- * A melee weapon needs its target next to it and always hits; a ranged one
- * rolls (§13.3), and may leave an effect on whoever it hits — only on a hit,
- * not a graze (§20.2), and on overwatch as much as on the owner's turn.
+ * A melee weapon needs its target next to it and rolls a flat 80% to hit
+ * (`MELEE_ACCURACY`, §13.3) — it either lands or it doesn't, with no graze; a
+ * ranged one rolls against its own accuracy, and may leave an effect on
+ * whoever it hits — only on a hit, not a graze (§20.2), and on overwatch as
+ * much as on the owner's turn.
  */
 export type Weapon =
     | { name: string; kind: "melee"; damage: number }
@@ -91,8 +93,14 @@ export interface Ability {
     ap: number;
     /** Turns before it can be used again: set on use, and counted down at the start of each of its owner's turns (§13.5). */
     cooldown: number;
-    /** Usable once per battle at most, whatever the cooldown (the Cleric's Raise). */
+    /** Usable once per battle at most, whatever the cooldown (the Bloater's Burst). */
     oncePerBattle?: true;
+    /**
+     * Usable once per turn of its owner's at most, whatever the cooldown (the
+     * Cleric's Heal): the use is written on the fighter and wiped as its
+     * owner's next turn begins (`Fighter.usedThisTurn`).
+     */
+    oncePerTurn?: true;
     /** Added to a shot's chance to hit (Aimed shot). */
     hitBonus?: number;
     /** How far away, in squares, it can be aimed (Fireball, Dynamite, Hunter's mark, Heal, Regrowth). */
@@ -118,18 +126,25 @@ export const ABILITIES = {
     aimedShot: { name: "Aimed shot", ap: 3, cooldown: 2, hitBonus: 20, description: "A shot at +20% to hit" },
     sneak: { name: "Sneak", ap: 2, cooldown: 0, description: "Move without setting off overwatch or guard" },
     fireball: { name: "Fireball", ap: 3, cooldown: 3, range: 12, damage: 3, effect: "burning", blasts: "area", description: "Hits every character in a 3×3 area, friend or foe, sets them burning, and blasts away the low cover there" },
-    heal: { name: "Heal", ap: 2, cooldown: 2, range: 12, hp: 4, description: "Restore 4 HP to an ally it can see within 12 squares, and clear burning, slowed, stunned and corroded" },
-    raise: { name: "Raise", ap: 3, cooldown: 0, oncePerBattle: true, description: "Bring a downed ally next to them back at half HP, once per battle" },
+    heal: { name: "Heal", ap: 2, cooldown: 0, oncePerTurn: true, range: 12, hp: 4, description: "Restore 4 HP to itself or an ally it can see within 12 squares, and clear burning, slowed, stunned and corroded. Once a turn" },
+    raise: { name: "Raise", ap: 3, cooldown: 4, description: "Bring a downed ally next to them back at half HP" },
     shieldBash: { name: "Shield bash", ap: 2, cooldown: 3, damage: 2, effect: "stunned", description: "Strike one enemy next to them for 2, and stun it" },
     demolish: { name: "Demolish", ap: 2, cooldown: 2, damage: 2, blasts: "target", description: "Blast away one square of low cover next to them, and strike everyone else beside it for 2, friend or foe" },
     cripplingShot: { name: "Crippling shot", ap: 3, cooldown: 2, effect: "slowed", description: "A shot that slows on a hit" },
     huntersMark: { name: "Hunter's mark", ap: 1, cooldown: 2, range: 12, effect: "marked", description: "Mark an enemy it can see within 12 squares: +15% to hit it, for every attacker" },
     purify: { name: "Purify", ap: 2, cooldown: 3, hp: 2, description: "Clear burning, stunned, slowed, marked and corroded from itself and each ally next to it, and give each 2 HP" },
     rend: { name: "Rend", ap: 3, cooldown: 3, damage: 6, description: "Tear into one enemy next to them for 6" },
-    regrowth: { name: "Regrowth", ap: 2, cooldown: 2, range: 8, hp: 3, description: "Restore 3 HP to an ally it can see within 8 squares, and clear burning, slowed, stunned and corroded" },
+    regrowth: { name: "Regrowth", ap: 2, cooldown: 2, range: 8, hp: 3, description: "Restore 3 HP to itself or an ally it can see within 8 squares, and clear burning, slowed, stunned and corroded" },
     burst: { name: "Burst", ap: 1, cooldown: 0, oncePerBattle: true, damage: 3, effect: "corroded", description: "Burst, splashing acid on everyone next to it for 3, friend or foe, and corroding them. The Bloater is downed" },
     dynamite: { name: "Dynamite", ap: 3, cooldown: 3, range: 8, damage: 4, blasts: "area", description: "Thrown at a 3×3 area within 8 squares: 4 damage to every character in it, friend or foe, and it blasts away the low cover there" },
 } as const satisfies Record<AbilityId, Ability>;
+
+/**
+ * The abilities that strike one enemy (or, a Cleave, two) with the character's
+ * own weapon reach, and so roll to hit as a melee weapon's strike does: the one
+ * list the rules' `rollsToHit` and the stats sheet both read.
+ */
+export const STRIKING_ABILITIES: ReadonlySet<string> = new Set<AbilityId>(["cleave", "shieldBash", "rend"]);
 
 export interface Character {
     name: string;
@@ -167,7 +182,7 @@ export const CHARACTERS: Readonly<Record<CharacterId, Character>> = {
     },
     mage: {
         name: "Mage", plural: "Mages", role: "Fragile; hits an area", movement: 6, hp: 5,
-        weapon: { name: "Bolt", kind: "ranged", damage: 3, accuracy: 70, range: 10 }, abilities: ["fireball"], points: 30,
+        weapon: { name: "Mage Bolt", kind: "ranged", damage: 3, accuracy: 80, range: 12 }, abilities: ["fireball"], points: 30,
     },
     cleric: {
         name: "Cleric", plural: "Clerics", role: "Support", movement: 6, hp: 7,
@@ -336,6 +351,8 @@ export type Difficulty = "easy" | "normal" | "hard";
 
 export const BATTLE_SIZE_NAMES: Readonly<Record<BattleSize, string>> = { small: "Small", normal: "Normal", large: "Large" };
 export const DIFFICULTY_NAMES: Readonly<Record<Difficulty, string>> = { easy: "Easy", normal: "Normal", hard: "Hard" };
+/** Every difficulty, easiest first. */
+export const DIFFICULTY_IDS = Object.keys(DIFFICULTY_NAMES) as Difficulty[];
 
 /** Each player's points to muster with in a normal-sized battle, which shrinks as players are added (§13.6). */
 const NORMAL_BUDGET: Readonly<Record<PlayerCount, Budget>> = { 2: 100, 3: 80, 4: 70 };
@@ -346,7 +363,15 @@ const SIZE_RUNGS: Readonly<Record<BattleSize, number>> = { small: -2, normal: 0,
 /** How many rungs of `BUDGETS` a warband stands from the players' budget, by difficulty (§30.5). */
 const DIFFICULTY_RUNGS: Readonly<Record<Difficulty, number>> = { easy: -1, normal: 0, hard: 2 };
 
-const rung = (budget: Budget, steps: number): Budget => BUDGETS[BUDGETS.indexOf(budget) + steps];
+/**
+ * How many rungs further down the ladder Hold Out's warbands muster, and their
+ * waves refill to, once the team is tougher (`BALANCE_VERSION`): one step
+ * smaller than the difficulty alone puts them.
+ */
+export const HOLD_OUT_ENEMY_STEPS = -1;
+
+/** The budget `steps` rungs of `BUDGETS` from this one, stopping at the ladder's bottom and top. */
+const rung = (budget: Budget, steps: number): Budget => BUDGETS[Math.min(BUDGETS.length - 1, Math.max(0, BUDGETS.indexOf(budget) + steps))];
 
 /** Each player's points to muster with (§13.6, §30.5): the party's normal budget, moved by the battle's size. */
 export function musterBudget(playerCount: number, coop: boolean, size: BattleSize = "normal"): Budget {
@@ -355,10 +380,12 @@ export function musterBudget(playerCount: number, coop: boolean, size: BattleSiz
 
 /**
  * Each co-op warband's points (§30.5): the players' budget, moved by the
- * difficulty. A warband always musters its faction's ready-made squad for it.
+ * difficulty, and by `steps` more rungs where the battle asks (Hold Out's
+ * `HOLD_OUT_ENEMY_STEPS`). A warband always musters its faction's ready-made
+ * squad for it.
  */
-export function warbandBudget(playerCount: number, size: BattleSize = "normal", difficulty: Difficulty = "normal"): Budget {
-    return rung(musterBudget(playerCount, true, size), DIFFICULTY_RUNGS[difficulty]);
+export function warbandBudget(playerCount: number, size: BattleSize = "normal", difficulty: Difficulty = "normal", steps = 0): Budget {
+    return rung(musterBudget(playerCount, true, size), DIFFICULTY_RUNGS[difficulty] + steps);
 }
 
 /** A faction's ready-made squad for a budget: none for one off the ladder, which only a client could hold. */

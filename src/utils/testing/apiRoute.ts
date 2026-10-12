@@ -104,6 +104,9 @@ export async function resetApiRouteStubs() {
     reactionData = await import('@/utils/mongodb/ReactionData');
     kingdomBuilderWorldData = await import('@/games/KingdomBuilder/KingdomBuilderWorldModel');
     nextServer = await import('next/server');
+    // A module-level cache of Clerk users would otherwise carry one test's
+    // players, under their ids, into the next test's.
+    (await import('@/utils/users/directoryCache')).__resetDirectoryCacheForTests();
 
     signedInUserId = null;
     clerkUsers = [];
@@ -431,14 +434,14 @@ export function storedGame(gameId: string): StoredGame | undefined {
  * and race the way two real requests do — which is what the version check in
  * `save` below is there to settle.
  */
-function hydrate(stored: StoredGame): IGameDataDocument {
+function hydrate(stored: StoredGame, projection?: Record<string, 1>): IGameDataDocument {
     const gameType = (stored.gameType as { gameType?: string } | undefined)?.gameType;
     const model = gameType ? mongo.gameDataModelFor(gameType) : undefined;
     if (!model) {
         throw new Error(`Seeded game ${stored.gameId} has no registered gameType ('${gameType}')`);
     }
 
-    const document = model.hydrate(asStored(stored)) as IGameDataDocument;
+    const document = model.hydrate(asStored(stored), projection) as IGameDataDocument;
     // The one write path a game route has (trySave), standing in for the
     // driver: the schema sets optimisticConcurrency, so a save asserts the
     // version it loaded and bumps it, and the loser of a race gets the
@@ -554,7 +557,11 @@ function findSweepCandidatesFromStore(filter: Record<string, unknown>) {
 // player is in and hasn't been dropped from —
 // find({ userIdList: userId, complete: false, 'gameState.droppedPlayers': { $ne: userId } }).exec()
 // — and the turn-timer sweep's candidate read above, which is the one with an $or.
-function findManyFromStore(filter: Record<string, unknown>) {
+//
+// An inclusion `projection` is honoured, as the driver would: the document comes
+// back holding only those paths, so a dashboard row that reads one it didn't ask
+// for sees what production would show it.
+function findManyFromStore(filter: Record<string, unknown>, projection?: Record<string, 1>) {
     if (filter?.$or) return findSweepCandidatesFromStore(filter);
 
     const userId = filter?.userIdList;
@@ -566,7 +573,7 @@ function findManyFromStore(filter: Record<string, unknown>) {
     const matches = [...games.values()].filter(stored =>
         (stored.userIdList as string[]).includes(userId) && stored.complete === complete
         && !((stored.gameState as { droppedPlayers?: string[] } | undefined)?.droppedPlayers ?? []).includes(userId));
-    return { exec: async () => matches.map(hydrate) };
+    return { exec: async () => matches.map(stored => hydrate(stored, projection)) };
 }
 
 // ---------------------------------------------------------------- Chat

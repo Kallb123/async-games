@@ -9,9 +9,9 @@
 import { DEFAULT_CLIMB } from "@/utils/games/battlefield/pathfinding";
 import { FULL_HEIGHT } from "@/utils/games/battlefield/terrain";
 import { pluralize } from "@/utils/ui/text";
-import { ABILITIES, CHARACTERS, EFFECTS, ITEM_IDS, ITEMS, OPTIONS, type Ability, type AbilityId, type Affliction, type CharacterId, type Item, type ItemId, type OptionId, type Weapon } from "./characters";
+import { ABILITIES, CHARACTERS, EFFECTS, FACTIONS, ITEM_IDS, ITEMS, OPTIONS, STRIKING_ABILITIES, type Ability, type AbilityId, type Affliction, type CharacterId, type Item, type ItemId, type OptionId, type Weapon } from "./characters";
 import { CHARACTER_IDS, optionsFor } from "./roster";
-import { ACTION_POINTS, ATTACK_AP, FLANK_BONUS, GRAZE_BAND, ROLL_SIDES, sightOf } from "./rules";
+import { ACTION_POINTS, ARMOUR, ATTACK_AP, FLANK_BONUS, GRAZE_BAND, FAR_SHOT_DISTANCE, MELEE_ACCURACY, ROLL_SIDES, sightOf, TEAM_HP_FACTOR } from "./rules";
 
 /** One thing a character can do, or an item it can use, as a row of the stats table. */
 export interface ActionStats {
@@ -87,8 +87,10 @@ const ABILITY_USE: Readonly<Record<AbilityId, AbilityUse>> = {
 const NONE = "—";
 const ALWAYS = "Always";
 const NEXT_TO = "Next to";
-/** The cooldown of something used once a battle: Raise, and every item. */
+/** The cooldown of something used once a battle: Burst, and every item. */
 const ONCE = "Once";
+/** The cooldown of something used once a turn, whatever else: the Cleric's Heal. */
+const PER_TURN = "1/turn";
 
 /** What an effect does, in a line: "Burning: 1 damage a turn, 2 turns". */
 function effectLine(effect: Affliction): string {
@@ -116,10 +118,10 @@ function extrasOf(thing: Pick<Ability, "hp" | "effect" | "blasts">, onAHit: bool
     ].filter((line): line is string => line !== undefined);
 }
 
-/** A weapon's reach and odds: "Next to" and always for a melee one, its range and accuracy for a ranged one. */
+/** A weapon's reach and odds: "Next to" and the melee 80% for a melee one, its range and accuracy for a ranged one. */
 function weaponReach(weapon: Weapon, hitBonus = 0): Pick<ActionStats, "range" | "hit"> {
     return weapon.kind === "melee"
-        ? { range: NEXT_TO, hit: ALWAYS }
+        ? { range: NEXT_TO, hit: `${MELEE_ACCURACY}%` }
         : { range: `${weapon.range}`, hit: `${Math.min(ROLL_SIDES, weapon.accuracy + hitBonus)}%` };
 }
 
@@ -138,13 +140,14 @@ function abilityStats(id: AbilityId, weapon: Weapon, kind: string, key: string =
         : reach === "move" ? "A move"
         : "Self";
     // A strike or a shot is at the weapon's odds; anything else that lands on
-    // someone — a fireball, a bash, a mark — never rolls.
-    const hit = strikes ? weaponReach(weapon, ability.hitBonus).hit : ability.damage !== undefined || ability.effect ? ALWAYS : NONE;
+    // someone — a fireball, a mark — never rolls.
+    const hit = strikes || STRIKING_ABILITIES.has(id) ? weaponReach(weapon, ability.hitBonus).hit
+        : ability.damage !== undefined || ability.effect ? ALWAYS : NONE;
     return {
         key, name: ability.name, kind, ap: `${ability.ap}`,
         damage: `${ability.damage ?? (strikes ? weapon.damage : NONE)}`,
         range, hit,
-        cooldown: ability.oncePerBattle ? ONCE : ability.cooldown > 0 ? `${ability.cooldown}` : NONE,
+        cooldown: ability.oncePerBattle ? ONCE : ability.oncePerTurn ? PER_TURN : ability.cooldown > 0 ? `${ability.cooldown}` : NONE,
         extras: extrasOf(ability, strikes && weapon.kind === "ranged", note,
             reach === "move" ? `${ability.ap} AP for each AP a move would cost` : undefined),
         description: ability.description,
@@ -222,4 +225,6 @@ export const ALL_UNITS: readonly UnitRef[] = [
 /** The fine print under a stats table: what the hit chances leave out, and what every shot shares. */
 export const STATS_FOOTNOTE = `Each character has ${ACTION_POINTS} AP a turn. Hit chances are before cover, height, marks and smoke. `
     + `A shot that misses by ${GRAZE_BAND}% or less grazes for half damage, and one at a target with no cover does ${FLANK_BONUS} more. `
-    + `Range is in squares. CD is the cooldown: used on one of the character's turns, it can be used again that many of its turns later. Once means once a battle.`;
+    + `A shot from further than ${FAR_SHOT_DISTANCE} squares counts the target's cover double (hunkering down doubles it too, but never twice over). A strike next to the target hits ${MELEE_ACCURACY}% of the time, with no graze. `
+    + `In Hold Out, the team's characters have ${Math.round((TEAM_HP_FACTOR - 1) * 100)}% more HP than the table says, and against ${FACTIONS.realm.enemyName} every hit on them does ${ARMOUR} less (never under 1). `
+    + `Range is in squares. CD is the cooldown: used on one of the character's turns, it can be used again that many of its turns later. Once means once a battle, and 1/turn once a turn.`;

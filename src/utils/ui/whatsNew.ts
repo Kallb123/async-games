@@ -87,6 +87,38 @@ export const WHATS_NEW: WhatsNewGroup[] = [
                 game: "realmarena",
             },
             {
+                title: "Realm Arena: Clerics and Broodmothers can heal themselves",
+                detail: "A Cleric's Heal and a Broodmother's Regrowth can now be aimed at the healer itself, not only at an ally — handy when the healer is the one taking the hits.",
+                game: "realmarena",
+            },
+            {
+                title: "Realm Arena: see the cover you're moving into, and why a shot's odds are what they are",
+                detail: "Line up a move and the square you'd end on shows a shield on each side that gives cover: a whole one for full cover, half a shield for half. And every target now has a ? beside its chance to hit, which breaks the number down: the weapon's own accuracy, then what cover, height, smoke, range and the rest add or take off.",
+                game: "realmarena",
+            },
+            {
+                title: "Home page and games load faster",
+                detail: "Going back to a game or to the home page now shows it straight away, from what you saw a moment ago, and brings it up to date underneath. A game also starts loading the moment you touch its card, before you let go. The server is quicker too, above all when you check back often: players' names and pictures are no longer looked up afresh every time, and the home page reads only what it shows rather than every game you've ever finished. A new name or picture can take up to five minutes to reach other players.",
+            },
+            {
+                title: "Quicker to open",
+                detail: "Opening the app, or a game from a notification, no longer waits on an extra sign-in check before the page starts to arrive. The home page and a game's screen now come ready-made instead of being built for you each time you open them, so they show up straight away.",
+            },
+            {
+                title: "Realm Arena rebalanced: tougher Hold Out defenders, melee can miss, cover matters more at range, a longer-reaching Mage",
+                detail: "In Hold Out your characters now have 50% more HP, and against the Renegades every hit on them does 1 less. The enemy warbands muster one step smaller, and a two-player Hold Out lasts 13 rounds instead of 15. In every battle a blow in melee hits 80% of the time rather than always, a target's cover counts double against a shot from further than 10 squares (so those in cover are much safer at a distance, and those in the open no safer), the Mage's Bolt becomes the Mage Bolt (80% to hit, 12 squares), a Cleric can Heal every turn (once a turn, no waiting), and Raise can be used again four turns after the last one instead of once a battle. Battles already under way keep the rules they started with.",
+                game: "realmarena",
+            },
+            {
+                title: "Open a game from home in a new tab",
+                detail: "Your turn cards and finished games on the home page are proper links now: press and hold, or middle-click, to open one in a new tab. And a game's screen starts loading as soon as its card is on screen, before you tap it.",
+            },
+            {
+                title: "World Domination and Fires Out: a few seconds to take a move back",
+                detail: "World Domination: put armies in the wrong territory, cashed in cards you meant to hold, or moved too many into a conquest? Tap Undo and put it right — battles are dice, so those stay. And when you fortify or skip fortifying, your turn now waits ten seconds before it passes, so you can still change your mind. Fires Out's End turn now does the same: tap it straight after a move you regret and it waits ten seconds, with Undo and Pass now beside the countdown, before the fire advances.",
+                game: "worlddomination",
+            },
+            {
                 title: "Realm Arena: watch the battle play back",
                 detail: "Open Review actions and press Play to watch the match play itself forward, every action animated over the board in turn — characters walking along the path they took — with the view following each one, a move framed from where it began to where it ended — and in a co-op battle, each of the enemy's moves played out one at a time rather than all at once. The \"since you were last here\" screen has a button to replay everything from your last turn. The board now opens on your own squad, and comes back to it rather than zooming out across the whole map when there's nothing in particular to look at. Hunkering down, shield walls, overwatch and guard now say so over the character, and a step that happened out of sight shows a faint question mark over the map.",
                 game: "realmarena",
@@ -95,44 +127,25 @@ export const WHATS_NEW: WhatsNewGroup[] = [
                 title: "Board zooming keeps up with your fingers, and Realm Arena zooms in closer",
                 detail: "Pinching to zoom a big board — Realm Arena's battlefield above all, but World Domination, Outbreak, Race Cars and the rest too — used to redraw the whole map on every frame, so it lagged well behind your fingers while scrolling around stayed smooth. The map now just stretches while you pinch, looking a touch soft until you let go, when it sharpens at its new zoom. In Realm Arena, picking a target from the list now zooms in close on your character and the target rather than out across the map, and selecting a character frames the nearer half of where it could move instead of most of it.",
             },
-            {
-                title: "Realm Arena: Hold Out on the Sacked Fort",
-                detail: "Hold Out has a battlefield of its own. Your team starts in a ruined keep in the middle of the map, and the enemy closes in from every edge, where each fresh wave lands too. Its walls are full of gaps, so there's no corner to sit in. The host picks it, or the gate forts, when setting up.",
-                game: "realmarena",
-            },
-            {
-                title: "Realm Arena: Hold Out and achievements",
-                detail: "Choose a new co-op mission and survive repeated enemy waves: fallen warband fighters return every third round, and your team wins by keeping anyone standing to the end. Realm Arena now has five achievements too, for veterans and co-op teams that win together, bring everybody home or survive Hold Out.",
-                game: "realmarena",
-            },
-            {
-                title: "Realm Arena: points for an assist",
-                detail: "In a free-for-all, wounding a character is worth it even when somebody else finishes it off: whoever downs it still scores the knock-out, and every other player who hurt it since it last stood up scores half that, rounded up.",
-                game: "realmarena",
-            },
-            {
-                title: "Realm Arena battle results: the points race, damage by character and more",
-                detail: "A finished battle's results chart every player's score round by round, with a skull on their line wherever one of their characters fell, and each squad's health beside it. A bar chart shows the damage each kind of character dealt, split by whose it was, and a table sets out everything each squad did — knock-outs, damage dealt and taken, healing, shots landed, reactions on watch — with each player's top fighter named.",
-                game: "realmarena",
-            },
-            {
-                title: "Eleven more achievements for Settlements & Cities and Dice Cities",
-                detail: "Win Settlements & Cities without a city, without grain, or away from every 6 and 8 — or Dice Cities on restaurants alone, or spending your very last coin on the final landmark. And try holding one of every card in the Dice Cities market.",
-            },
-            {
-                title: "New achievements for Settlements & Cities and Dice Cities",
-                detail: "Win a Settlements & Cities game without building a road after setup, or without gathering or trading for any wool, or a Dice Cities Docks game as the only player without the Dock.",
-            },
-            {
-                title: "Profile tabs",
-                detail: "Your profile is split into Results, Achievements and Friends tabs, so each is a tap away instead of a long scroll. Friends only appear on your own profile.",
-            },
         ],
     },
     {
         label: "Bug fixes",
         icon: "🔧",
         items: [
+            {
+                title: "Results bar charts keep every bar on the same baseline",
+                detail: "On a game's results page, a bar whose name was too long for one line — Realm Arena's Man-at-arms, say — wrapped its label and stood its bar up above the others, so it looked taller or shorter than it was. Every bar now starts from the same line, with the names sitting underneath.",
+            },
+            {
+                title: "Realm Arena's setup screen shows how big each difficulty's warbands are",
+                detail: "The co-op Difficulty choices said a Normal warband musters as many points as each of you, but in Hold Out the warbands now muster a step smaller than that. Each difficulty now names the points its warbands and your squads muster, for the mission and battle size you've picked.",
+                game: "realmarena",
+            },
+            {
+                title: "Coming back home starts you at the top of the page",
+                detail: "Leaving a game for the home page could land you partway down your games — or right at the bottom, on the notifications warning — instead of at the top. Home now always opens at the top.",
+            },
             {
                 title: "Realm Arena's battle plays back steadily, one action at a time",
                 detail: "On phones, and in the Android app most of all, the battlefield could flicker black and judder while Hold Out's next spawn zones glowed, while an attack's damage flashed on an HP bar, or while a turn played back. Those effects no longer make the phone redraw the map over and over, so the board stays steady and still looks the same. Watching a turn play back, each action now waits for the map to finish zooming to it before it plays, and the map rests for half a second after it before moving on to the next.",
@@ -165,19 +178,6 @@ export const WHATS_NEW: WhatsNewGroup[] = [
                 title: "Kingdom Builder armies fight the scouts they meet",
                 detail: "A rival army could share a tile with your scouts and their settlers or caravans and do nothing at all, since scouts counted as a full escort. Scouts are now cheap rather than untouchable: an army with soldiers in it fights any scouts on its tile, alone or escorting, and once the last scout falls it takes the settlers and caravans they guarded. Both sides get the fight in their Battles list.",
                 game: "kingdombuilder",
-            },
-            {
-                title: "Turn recaps leave out moves that were taken back",
-                detail: "Undoing a move now removes both the move and the Undo from the recap and your next-turn notification. Plain passes stay quiet too, while a turn that pays out a card still tells you about the card.",
-            },
-            {
-                title: "Banned Islet's water meter climbs at the right pace",
-                detail: "The flood rate on the water meter ran too steep, so the island went under faster than it should: from level 4 up it flooded one tile too many every turn, and the last two levels flooded six. The meter now reads 2, 2, 3, 3, 3, 4, 4, 5, 5 and then the skull, so Legendary opens on three tiles a turn rather than four. Games already under way switch to the new rates on their next flood.",
-                game: "bannedislet",
-            },
-            {
-                title: "Every join link shows a picture when you share it",
-                detail: "Sharing a join link for a game that didn't have its own preview image yet — Kingdom Builder, for one — unfurled in the chat with a broken picture or none at all. A game without its own card now shows the general Async Games one instead.",
             },
         ],
     },

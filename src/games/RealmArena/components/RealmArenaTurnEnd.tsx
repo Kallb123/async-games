@@ -4,7 +4,7 @@ import ActionButton from '@/components/ui/ActionButton';
 import OptionSection from '@/components/ui/OptionSection';
 import OptionToggleRow from '@/components/ui/OptionToggleRow';
 import UndoButton from '@/components/ui/UndoButton';
-import { isStanding, REACTION_COST, weaponOf, type Fighter } from '@/games/RealmArena/rules';
+import { isStanding, REACTION_COST, shoots, type Fighter } from '@/games/RealmArena/rules';
 import { fighterName } from '@/games/RealmArena/ui';
 import { CHARACTER_MARK } from '@/games/RealmArena/roster';
 
@@ -69,7 +69,7 @@ export function RealmArenaWatchSwitches({ fighters, player, keepStill, onKeepSti
         <OptionSection label="When your turn ends" footer={footer}>
             {watchers.map(fighter => {
                 const still = keepStill.includes(fighter.id);
-                const stance = weaponOf(fighter).kind === 'ranged' ? 'overwatch' : 'guard';
+                const stance = shoots(fighter) ? 'overwatch' : 'guard';
                 return (
                     <OptionToggleRow
                         key={fighter.id}

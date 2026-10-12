@@ -1,4 +1,4 @@
-import type { IWorldDominationGameData } from "@/games/WorldDomination/WorldDominationModels";
+import type { IWorldDominationGameData, IWorldDominationSpecificGameState } from "@/games/WorldDomination/WorldDominationModels";
 import {
     TERRITORIES,
     isAdjacent,
@@ -7,6 +7,8 @@ import {
     isValidCardSet,
     cardSetValue,
     startingArmiesForPlayerCount,
+    cloneWorldDominationState,
+    UNDO_STACK_DEPTH,
     IWorldDominationCard,
 } from "@/games/WorldDomination/board";
 import type { IGameData } from "@/utils/mongodb/GameData";
@@ -17,6 +19,8 @@ import { DiceRoll } from "@/utils/games/DiceRoll";
 import { v4 as uuidv4, NIL as NIL_UUID } from 'uuid';
 import { playerHistory, userToken } from "@/utils/games/history";
 import { isDropped, registerPlayerDropoutAdapter } from "@/utils/games/playerDropout";
+import { markDirty } from "@/utils/games/markDirty";
+import { UNDO_WINDOW_MS, holdOpenFor, undoEntryFor } from "@/utils/games/undo";
 
 // ═══════════════════════════════════════════════════════════════════════════════
 //  WORLD DOMINATION
@@ -30,6 +34,63 @@ const INVALID: ICommandOutcome = { validMove: false, turnOver: false };
 // here, applied both to blocking further reinforce-phase deploys and to
 // blocking the attack phase from closing out).
 const MUST_CASH_IN_THRESHOLD = 5;
+
+// ─── Undo (docs/undo.md) ────────────────────────────────────────────────────
+//
+// The ninth game to take a move back. What a World Domination player can take
+// back is anything that spends armies or cards they already hold at a known
+// value, on a spot they chose: a deployment, a card cash-in, the army count
+// they move into a territory they have just conquered, and the move from the
+// attack phase to the fortify phase. Nothing about any of those is random.
+// Combat is dice, so WorldDominationAttack never pushes — and, as in Realm
+// Arena, it also EMPTIES the stack: otherwise a deployment made after a battle
+// would sit on top of the snapshots from before it, and undoing that chain
+// would reach a board from before the roll — a second go at it.
+//
+// A fortify, a skipped fortify and the last setup placement each end the turn,
+// so they hold it (§5) rather than hand it off: they push their snapshot, set
+// `autoEndTurnAt` and report no turn change, and WorldDominationEndTurn — the
+// board's "Pass now", and what it sends by itself when the countdown runs out
+// — closes the hold. The end-of-turn card draw (riskEndTurn, from the hidden
+// deck) therefore happens only on that hand-off, in CheckEndTurn, never inside
+// the move that is being held: taking a fortify back can't reveal or return a
+// card. Only an attack can end the game, which is never undoable.
+//
+// World Domination's turn-timeout adapter (turnTimeout.ts) closes a live hold
+// with WorldDominationEndTurn but leaves every other expired turn to the cron's
+// plain step, which moves `currentTurn` on and restarts the clock with no
+// command. So each entry records the turn clock it was pushed in, and a turn the
+// timer moved on leaves it stale — Train Time's and Dice Cities' shape. Every
+// command but WorldDominationEndTurn and WorldDominationUndo refuses while a
+// hold is open: the move that ends the turn is already played, and anything more
+// would be played on top of a turn that is only waiting to be handed on (a
+// second fortify, say).
+
+/** Forgets every snapshot and closes any hold, on every hand-off. */
+function clearUndo(gs: IWorldDominationSpecificGameState): void {
+    gs.undoStack = [];
+    gs.undoAnchorId = null;
+    gs.autoEndTurnAt = null;
+}
+
+/**
+ * Pushes `before` — the state cloned after a command's validation and before
+ * its first mutation — for WorldDominationUndo to restore, and moves the anchor
+ * onto the command. With `hold`, also opens the §5 countdown the turn waits on.
+ * A stack that is stale (not this player's, in this turn, with nothing since)
+ * is started afresh rather than built on, or an old entry would come back
+ * within reach.
+ */
+function commitUndo(riskData: IWorldDominationGameData, command: IGameCommand, before: IWorldDominationSpecificGameState, hold = false): void {
+    const gs = riskData.specificGameState;
+    const kept = undoEntryFor(riskData, command.senderId) ? (gs.undoStack ?? []) : [];
+    gs.undoStack = [...kept, { by: command.senderId, turnStartedAt: riskData.lastTurnTimestamp, state: before }].slice(-UNDO_STACK_DEPTH);
+    gs.undoAnchorId = command.id;
+    // Explicitly null for a move that holds nothing, so a deadline a timed-out
+    // turn left behind can never be read as this move's own.
+    gs.autoEndTurnAt = hold ? new Date(Date.now() + UNDO_WINDOW_MS).toISOString() : null;
+    markDirty(riskData);
+}
 
 // ─── Turn/phase helpers ─────────────────────────────────────────────────────
 
@@ -106,12 +167,18 @@ export class WorldDominationGameType implements IGameType {
         const gs = riskData.specificGameState;
         if (!commandOutcome.turnOver) return;
 
+        // Whatever hold was open closes with the turn, and the snapshots behind
+        // it go too: the anchor has already made them unreachable, so they
+        // would only ride along on every save until the next move.
+        clearUndo(gs);
+
         if (gs.phase === 'setup') {
             worldDominationAdvanceSetup(riskData);
             return;
         }
-        // Only a Fortify-phase command (WorldDominationFortify / WorldDominationSkipFortify) reports
-        // turnOver outside setup — see those commands' Execute().
+        // Only WorldDominationEndTurn reports turnOver outside setup — the hold
+        // a Fortify or a SkipFortify opens is closed by it, so the end-of-turn
+        // card draw happens here and never inside the move being held.
         riskEndTurn(riskData);
     }
 
@@ -142,6 +209,8 @@ export class WorldDominationDeployArmies implements IGameCommand {
     territoryId: number = 0;
     count: number = 1;
     readonly className = 'WorldDominationDeployArmies';
+    // Taken back by WorldDominationUndo (docs/undo.md). Nothing here is random.
+    readonly undoable = true;
 
     myString() { return `World Domination DeployArmies territory=${this.territoryId} count=${this.count}`; }
 
@@ -153,7 +222,7 @@ export class WorldDominationDeployArmies implements IGameCommand {
         // top-up pool that must be placed before combat can resume.
         const canDeployNow = gs.phase === 'setup' || gs.phase === 'reinforce'
             || (gs.phase === 'attack' && gs.reinforcementsRemaining > 0);
-        if (!canDeployNow) return INVALID;
+        if (!canDeployNow || holdOpenFor(riskData, this.senderId)) return INVALID;
         if (gs.pendingOccupation) return INVALID;
 
         const ps = gs.playerStates.get(this.senderId);
@@ -164,6 +233,7 @@ export class WorldDominationDeployArmies implements IGameCommand {
         const territory = gs.territories[this.territoryId];
         if (!territory || territory.owner !== this.senderId) return INVALID;
 
+        const before = cloneWorldDominationState(gs, riskData.userIdList);
         territory.armies += this.count;
         gs.reinforcementsRemaining -= this.count;
         ps.totalArmiesDeployed += this.count;
@@ -173,14 +243,13 @@ export class WorldDominationDeployArmies implements IGameCommand {
             `placed ${this.count} arm${this.count === 1 ? 'y' : 'ies'} on ${TERRITORIES[this.territoryId].name}`,
         ));
 
-        if (gs.reinforcementsRemaining === 0) {
-            if (gs.phase === 'setup') {
-                return { validMove: true, turnOver: true };
-            }
-            if (gs.phase === 'reinforce') {
-                gs.phase = 'attack';
-            }
+        // The last of a setup allotment ends the player's setup turn, which
+        // holds (§5) rather than hands off: WorldDominationEndTurn closes it.
+        const endsSetupTurn = gs.reinforcementsRemaining === 0 && gs.phase === 'setup';
+        if (gs.reinforcementsRemaining === 0 && gs.phase === 'reinforce') {
+            gs.phase = 'attack';
         }
+        commitUndo(riskData, this, before, endsSetupTurn);
         return { validMove: true, turnOver: false };
     }
 }
@@ -196,6 +265,8 @@ export class WorldDominationCashInCards implements IGameCommand {
     senderUsername: string = 'Unknown';
     cardIds: string[] = [];
     readonly className = 'WorldDominationCashInCards';
+    // Taken back by WorldDominationUndo (docs/undo.md). Nothing here is random.
+    readonly undoable = true;
 
     myString() { return `World Domination CashInCards cards=${this.cardIds.join(',')}`; }
 
@@ -204,6 +275,7 @@ export class WorldDominationCashInCards implements IGameCommand {
         const gs = riskData.specificGameState;
 
         if (gs.phase !== 'reinforce' && gs.phase !== 'attack') return INVALID;
+        if (holdOpenFor(riskData, this.senderId)) return INVALID;
         const ps = gs.playerStates.get(this.senderId);
         if (!ps) return INVALID;
         // In the attack phase, cashing in is only for the mandatory overflow
@@ -217,6 +289,7 @@ export class WorldDominationCashInCards implements IGameCommand {
         if (cards.length !== 3) return INVALID;
         if (!isValidCardSet(cards)) return INVALID;
 
+        const before = cloneWorldDominationState(gs, riskData.userIdList);
         const value = cardSetValue(gs.cardSetsCashedIn);
         gs.cardSetsCashedIn++;
         const idSet = new Set(this.cardIds);
@@ -232,6 +305,7 @@ export class WorldDominationCashInCards implements IGameCommand {
         }
 
         riskData.gameState.history.unshift(playerHistory(this.senderId, `cashed in a card set for ${value} armies${bonusText}`));
+        commitUndo(riskData, this, before);
         return { validMove: true, turnOver: false };
     }
 }
@@ -272,6 +346,7 @@ export class WorldDominationAttack implements IGameCommand {
         if (gs.phase !== 'attack') return INVALID;
         if (gs.pendingOccupation) return INVALID;
         if (gs.reinforcementsRemaining > 0) return INVALID;
+        if (holdOpenFor(riskData, this.senderId)) return INVALID;
 
         const from = gs.territories[this.fromTerritoryId];
         const to = gs.territories[this.toTerritoryId];
@@ -288,6 +363,12 @@ export class WorldDominationAttack implements IGameCommand {
         // single army) — a common async-World Domination simplification, since there's no
         // synchronous defender to prompt for a choice (docs §4.2).
         const defenderDiceCount = Math.min(2, to.armies);
+
+        // Dice. Never undoable, and it empties the stack too (see the block
+        // above): nothing from before this roll may be reachable after it.
+        gs.undoStack = [];
+        gs.undoAnchorId = null;
+        markDirty(riskData);
 
         const attackerDice = this.recordedAttackerDice
             ?? Array.from({ length: this.attackerDiceCount }, () => DiceRoll(6));
@@ -374,6 +455,8 @@ export class WorldDominationOccupyTerritory implements IGameCommand {
     senderUsername: string = 'Unknown';
     armies: number = 1;
     readonly className = 'WorldDominationOccupyTerritory';
+    // Taken back by WorldDominationUndo (docs/undo.md). Nothing here is random.
+    readonly undoable = true;
 
     myString() { return `World Domination OccupyTerritory armies=${this.armies}`; }
 
@@ -382,16 +465,21 @@ export class WorldDominationOccupyTerritory implements IGameCommand {
         const gs = riskData.specificGameState;
 
         if (gs.phase !== 'attack' || !gs.pendingOccupation) return INVALID;
+        if (holdOpenFor(riskData, this.senderId)) return INVALID;
         const { fromTerritoryId, toTerritoryId, minArmies } = gs.pendingOccupation;
         const from = gs.territories[fromTerritoryId];
         if (!from || from.owner !== this.senderId) return INVALID;
         if (this.armies < minArmies || this.armies > from.armies - 1) return INVALID;
 
+        // Taking it back restores `pendingOccupation`; the conquest itself, and
+        // the roll behind it, stay made — the snapshot is taken after the battle.
+        const before = cloneWorldDominationState(gs, riskData.userIdList);
         from.armies -= this.armies;
         gs.territories[toTerritoryId].armies = this.armies;
         gs.pendingOccupation = null;
 
         riskData.gameState.history.unshift(playerHistory(this.senderId, `moved ${this.armies} armies into ${TERRITORIES[toTerritoryId].name}`));
+        commitUndo(riskData, this, before);
         return { validMove: true, turnOver: false };
     }
 }
@@ -406,6 +494,8 @@ export class WorldDominationEndAttackPhase implements IGameCommand {
     senderId: string = 'Unknown';
     senderUsername: string = 'Unknown';
     readonly className = 'WorldDominationEndAttackPhase';
+    // Taken back by WorldDominationUndo (docs/undo.md). Nothing here is random.
+    readonly undoable = true;
 
     myString() { return `World Domination EndAttackPhase`; }
 
@@ -418,14 +508,17 @@ export class WorldDominationEndAttackPhase implements IGameCommand {
         if (gs.reinforcementsRemaining > 0) return INVALID;
         const ps = gs.playerStates.get(this.senderId);
         if (!ps || ps.cards.length >= MUST_CASH_IN_THRESHOLD) return INVALID;
+        if (holdOpenFor(riskData, this.senderId)) return INVALID;
 
+        const before = cloneWorldDominationState(gs, riskData.userIdList);
         gs.phase = 'fortify';
         riskData.gameState.history.unshift(playerHistory(this.senderId, `ended their attacks`));
+        commitUndo(riskData, this, before);
         return { validMove: true, turnOver: false };
     }
 }
 
-// ─── Fortify (single move, ends the turn) ───────────────────────────────────
+// ─── Fortify (single move, ends the turn — held, then WorldDominationEndTurn) ─
 
 @serializable
 export class WorldDominationFortify implements IGameCommand {
@@ -438,6 +531,8 @@ export class WorldDominationFortify implements IGameCommand {
     toTerritoryId: number = 0;
     armies: number = 1;
     readonly className = 'WorldDominationFortify';
+    // Taken back by WorldDominationUndo (docs/undo.md). Nothing here is random.
+    readonly undoable = true;
 
     myString() { return `World Domination Fortify ${this.fromTerritoryId}->${this.toTerritoryId} armies=${this.armies}`; }
 
@@ -445,7 +540,10 @@ export class WorldDominationFortify implements IGameCommand {
         const riskData = gameData as IWorldDominationGameData;
         const gs = riskData.specificGameState;
 
-        if (gs.phase !== 'fortify' || gs.fortifyUsed) return INVALID;
+        // The hold, not `fortifyUsed`, is what refuses a second fortify: that
+        // flag is only ever left set by a hold, and a hold the turn timer
+        // passed on must not lock out the player who inherits the phase.
+        if (gs.phase !== 'fortify' || holdOpenFor(riskData, this.senderId)) return INVALID;
         const from = gs.territories[this.fromTerritoryId];
         const to = gs.territories[this.toTerritoryId];
         if (!from || !to) return INVALID;
@@ -455,6 +553,7 @@ export class WorldDominationFortify implements IGameCommand {
             return INVALID;
         }
 
+        const before = cloneWorldDominationState(gs, riskData.userIdList);
         from.armies -= this.armies;
         to.armies += this.armies;
         gs.fortifyUsed = true;
@@ -463,7 +562,9 @@ export class WorldDominationFortify implements IGameCommand {
             this.senderId,
             `fortified ${TERRITORIES[this.toTerritoryId].name} with ${this.armies} armies from ${TERRITORIES[this.fromTerritoryId].name}`,
         ));
-        return { validMove: true, turnOver: true };
+        // Ends the turn, so it holds: WorldDominationEndTurn hands it on.
+        commitUndo(riskData, this, before, true);
+        return { validMove: true, turnOver: false };
     }
 }
 
@@ -477,6 +578,8 @@ export class WorldDominationSkipFortify implements IGameCommand {
     senderId: string = 'Unknown';
     senderUsername: string = 'Unknown';
     readonly className = 'WorldDominationSkipFortify';
+    // Taken back by WorldDominationUndo (docs/undo.md). Nothing here is random.
+    readonly undoable = true;
 
     myString() { return `World Domination SkipFortify`; }
 
@@ -484,10 +587,98 @@ export class WorldDominationSkipFortify implements IGameCommand {
         const riskData = gameData as IWorldDominationGameData;
         const gs = riskData.specificGameState;
 
-        if (gs.phase !== 'fortify' || gs.fortifyUsed) return INVALID;
+        if (gs.phase !== 'fortify' || holdOpenFor(riskData, this.senderId)) return INVALID;
 
+        const before = cloneWorldDominationState(gs, riskData.userIdList);
+        // Spent, as a fortify's is, so the board offers nothing more to do
+        // while the turn is held.
+        gs.fortifyUsed = true;
         riskData.gameState.history.unshift(playerHistory(this.senderId, `skipped fortifying`));
+        commitUndo(riskData, this, before, true);
+        return { validMove: true, turnOver: false };
+    }
+}
+
+// ─── End the turn (closes the hold a fortify, a skip or the last setup placement opened) ───
+
+/**
+ * Closes the hold a turn-ending move opened: the board's "Pass now", and what
+ * it sends by itself when the countdown runs out. Valid only while that hold is
+ * open — `autoEndTurnAt` and the snapshot behind it are server state the move
+ * wrote, so this can't be used to skip a turn that hasn't been played. The
+ * hand-off itself is CheckEndTurn's: setup advance, or the end-of-turn card
+ * draw and the next player's reinforcements.
+ */
+@serializable
+export class WorldDominationEndTurn implements IGameCommand {
+    id: uuidString = uuidv4() as uuidString;
+    timestamp: string = new Date().toISOString();
+    gameId: uuidString = NIL_UUID as uuidString;
+    senderId: string = 'Unknown';
+    senderUsername: string = 'Unknown';
+    readonly className = 'WorldDominationEndTurn';
+
+    myString() { return 'ended their turn'; }
+
+    async Execute(gameData: IGameData): Promise<ICommandOutcome> {
+        if (!holdOpenFor(gameData as IWorldDominationGameData, this.senderId)) return INVALID;
+        // No line of its own: the move that opened the hold already said what the turn was.
         return { validMove: true, turnOver: true };
+    }
+}
+
+// A game recorded before turns were held for undo (docs/undo.md §5) has no
+// WorldDominationEndTurn after the moves that hold today: a fortify, a skipped
+// fortify or the last setup placement ended the turn there and then. The replay
+// engine asks this before each recorded command
+// (IReplayAdapter.closeUnrecordedHold), and while a hold is open, any command
+// but its holder's own end turn or undo means the log never closed it — so it
+// is closed the way those rules did, with a WorldDominationEndTurn from the
+// player holding it, which hands the turn on exactly as the move itself used
+// to (the setup advance, or the card draw and the next player's reinforcements).
+// A hold this game's own rules opened is closed by a recorded
+// WorldDominationEndTurn, so for those this never fires.
+export function worldDominationUnrecordedHoldEnd(gs: IWorldDominationSpecificGameState, holderId: string, next: IGameCommand | null): WorldDominationEndTurn | null {
+    if (!gs.autoEndTurnAt || (gs.undoStack ?? []).at(-1)?.by !== holderId) return null;
+    // Null: the log has run out with the hold still open, and the replay only
+    // asks when the live game has handed on, so nothing here keeps it open.
+    if (next && next.senderId === holderId && (next.className === 'WorldDominationEndTurn' || next.className === 'WorldDominationUndo')) return null;
+    return new WorldDominationEndTurn();
+}
+
+// ─── Undo ─────────────────────────────────────────────────────────────────────
+
+@serializable
+export class WorldDominationUndo implements IGameCommand {
+    id: uuidString = uuidv4() as uuidString;
+    timestamp: string = new Date().toISOString();
+    gameId: uuidString = NIL_UUID as uuidString;
+    senderId: string = 'Unknown';
+    senderUsername: string = 'Unknown';
+    readonly className = 'WorldDominationUndo';
+
+    myString() { return 'took back their last move'; }
+
+    async Execute(gameData: IGameData): Promise<ICommandOutcome> {
+        const riskData = gameData as IWorldDominationGameData;
+        const gs = riskData.specificGameState;
+
+        // A snapshot is only good for the command directly behind it, in the
+        // turn it was taken in, and only for the player who took it
+        // (docs/undo.md §4).
+        const entry = undoEntryFor(riskData, this.senderId);
+        if (!entry) return INVALID;
+
+        gs.undoStack.pop();
+        const { undoStack: _undoStack, undoAnchorId: _undoAnchorId, ...restored } = entry.state;
+        // `autoEndTurnAt` comes back with the rest, closing a hold. No
+        // `currentTurn` to put back: the hold never let the turn go.
+        Object.assign(gs, restored);
+        gs.undoAnchorId = this.id;
+
+        riskData.gameState.history.unshift(playerHistory(this.senderId, 'took back their last move'));
+        markDirty(gameData);
+        return { validMove: true, turnOver: false };
     }
 }
 
@@ -508,5 +699,9 @@ registerPlayerDropoutAdapter({
     canDrop(gameData) {
         return (gameData as IWorldDominationGameData).specificGameState.phase !== 'setup';
     },
+    // A drop is recorded in gameData.gameState (playerDropout.ts), not in
+    // specificGameState, and changes nothing on the board, so no snapshot can
+    // put a dropped seat back. The undo stack is left alone: clearing it would
+    // close another player's live hold without a hand-off.
     dropPlayer() {},
 });

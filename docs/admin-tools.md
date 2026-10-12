@@ -547,19 +547,37 @@ API route at all — a client screen behind the same `isAdmin` gate is enough.
 ## Performance telemetry
 
 `/admin` → `AdminPerformance` is the observation point for the loading performance
-plan. It shows seven-day median, p75 and p95 values per metric and route. The
+plan. It shows median, p75 and p95 values per metric and route, over the last seven
+days unless the page says otherwise: it can start the window at 24 hours, 7 or 30 days
+ago or at a date and time (`since`), and keep only samples sent by one build or a later
+one (`build`, picked from the newest builds the report lists), which is how a
+checkpoint leaves out the app from before a deploy. The
 browser records Core Web Vitals plus navigation intent, route commit, Clerk
 authorisation, first JSON, dashboard usability, board paint/interactivity,
 response bytes and image load duration. Dashboard and game responses also expose
 `Server-Timing` for authentication, Mongo connection/query, response building,
 reaction lookup and JSON serialisation; the client records those spans beside the
-journey.
+journey. `names` is the time spent resolving player names (the Clerk directory
+lookup), nested inside the span it ran in — `response` on a game,
+`player_directory` on the dashboard — rather than taken out of it, and a
+`names_cache` entry carries the directory cache's hit and miss counts as a
+`desc` (visible in devtools, not recorded). The dashboard also times its unread
+chat counts (`unread_chat`) and Kingdom Builder worlds (`kb_worlds`).
+
+A document load's `TTFB` is also split into the phases the browser reports for
+it — `TTFB_waiting`, `TTFB_cache`, `TTFB_dns`, `TTFB_connection` and
+`TTFB_request` — plus `sw_startup`, how long the navigation waited on the
+service worker (`workerStart` → `fetchStart`, present only when a worker took
+part). They are all milliseconds, cold loads only, and say whether a slow first
+byte was a redirect (counted in `TTFB_waiting`), the service worker or the
+network and server.
 
 Samples deliberately contain no user or game identifier, player name, hand,
 chat, or command body. Dynamic path segments are replaced by route templates,
 inputs are allow-listed and bounded, the endpoint requires a signed-in player,
 and Mongo expires samples after 30 days. The report reads at most 20,000 samples
-from the latest seven days so opening the admin screen cannot grow without bound.
+from the window (seven days unless `since` says otherwise) so opening the admin screen
+cannot grow without bound; the capped reads keep the newest samples.
 
 Run `npm run build && npm run performance:budget` to check the deterministic CI
 budget for the largest route JavaScript payload and required image. Browser/API

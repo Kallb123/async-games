@@ -76,7 +76,7 @@ export default function BottomBanner() {
     }
 
     return (
-        <div className="ag-banner" ref={measure} role="region" aria-label={label}>
+        <div className="ag-banner" data-perf-region="banner" ref={measure} role="region" aria-label={label}>
             {offer}
         </div>
     );

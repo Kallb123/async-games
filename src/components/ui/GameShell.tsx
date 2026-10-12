@@ -153,7 +153,7 @@ export default function GameShell({ title, subtitle, backHref = '/', options, ri
 
     return (
         <div className={`ag-game${className ? ` ${className}` : ''}`}>
-            <div className="ag-game-topbar">
+            <div className="ag-game-topbar" data-perf-region="topbar">
                 <Link className="ag-game-topbar-btn" href={backHref} aria-label="Back"><BackArrow /></Link>
                 <div className="ag-game-topbar-main">
                     <div className="ag-game-topbar-title">{title}</div>
@@ -193,7 +193,7 @@ export default function GameShell({ title, subtitle, backHref = '/', options, ri
             {tutorial && intro && tourOnScreen(tutorial, intro) && <GameTutorialOverlay run={tutorial} onClose={intro.close} />}
             {children}
             {log && (showLog ? (
-                <div ref={logPanelRef}>
+                <div ref={logPanelRef} data-perf-region="log">
                     <MatchHistory {...log} busy={busy} onClose={() => setShowLog(false)} />
                 </div>
             ) : (

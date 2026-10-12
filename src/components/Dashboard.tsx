@@ -13,13 +13,19 @@ import PullToRefresh from "@/components/ui/PullToRefresh";
 import Link from "next/link";
 import KingdomBuilderWorldList from "@/components/KingdomBuilderWorldList";
 import { useEffect, useRef } from "react";
+import { DASHBOARD_COMPLETED_LIMIT } from "@/utils/apiModels/GameDataApi";
 
 /**
  * The signed-in home screen. `HomeScreen` decides who gets this and who gets
- * `Landing` — starting from the session cookie the server read, so a visitor
- * with no account never sees these skeletons flash past on their way to the
- * landing page, and someone with games waiting sees them in the first paint
- * rather than after Clerk has loaded in the browser.
+ * `Landing` — starting from Clerk's signed-in cookie, read in the browser, so a
+ * visitor with no account never sees these skeletons flash past on their way to
+ * the landing page, and someone with games waiting sees them in the first paint
+ * rather than after Clerk has loaded.
+ *
+ * It is prerendered with no viewer and can be mounted for a moment for a visitor
+ * who turns out not to be signed in (while `HomeScreen` is still guessing), so
+ * nothing here may act before Clerk says who is looking: the fetch and the
+ * notification registration both wait on `useIsAuthorised`.
  *
  * The guard stays for the locked-out account it sends to /unlockaccess; the
  * signed-out case is `HomeScreen`'s, so this never renders `Landing` itself.
@@ -33,7 +39,7 @@ import { useEffect, useRef } from "react";
  *
  * `.ag-desk` itself dissolves at that breakpoint (`display: contents`) so the
  * grid can also place the notification footer, which the root layout renders
- * beside this screen rather than inside it. Keep `app/loading.tsx` in step with
+ * beside this screen rather than inside it. Keep `components/HomeLoading.tsx` in step with
  * this shape.
  */
 export default function Dashboard() {
@@ -48,7 +54,7 @@ export default function Dashboard() {
     }, [isLoading]);
 
     return (
-        <main className="ag-desk">
+        <main className="ag-desk" data-perf-region="dashboard">
             <FcmTokenComp />
             {/* A pull asks the same one fetch the poll does, and so starts the
                 poll's countdown again (see `useRefreshableData`). */}
@@ -68,7 +74,7 @@ export default function Dashboard() {
 
             <aside className="ag-desk-col ag-desk-col--side">
                 <OutgoingInviteList invites={dashboard.outgoing} isLoading={isLoading} onChanged={refresh} />
-                <MyCompleteList games={dashboard.completed} isLoading={isLoading} limit={10} />
+                <MyCompleteList games={dashboard.completed} isLoading={isLoading} limit={DASHBOARD_COMPLETED_LIMIT} />
 
                 <div className="ag-section ag-btn-row" style={{ marginTop: 8 }}>
                     <Link href="/newgame" aria-label="New game" className="ag-cta ag-cta--dark">

@@ -116,15 +116,16 @@ const copyOf = (records: ReadonlyMap<string, FightingRecord>) => new Map([...rec
  * Watches a battle's replay, a step at a time, and keeps its record. `seats`
  * is the turn order, and `sides` the battle's (`battleFrom`, §29.6): who is
  * whose ally, for friendly fire and knock-outs, and in co-op the warbands'
- * one column. Absent in a free-for-all.
+ * one column. Absent in a free-for-all. `rounds` is how long the battle lasts
+ * (`battleRoundsOf`), which depends on more than the seats.
  *
  * Undo: the one thing an undoable action can add to a record is healing — it
  * hurts nobody and rolls nothing (docs/undo.md). So the recorder keeps the
  * records as they stood before each action the game's own undo stack still
  * holds, and puts them back when one is taken back.
  */
-export function battleRecorder(seats: readonly string[], sides?: BattleState["sides"]) {
-    const lastRound = battleRounds(seats.length) - 1;
+export function battleRecorder(seats: readonly string[], sides?: BattleState["sides"], rounds = battleRounds(seats.length)) {
+    const lastRound = rounds - 1;
     const sided = { sides };
     /** The record's columns, and the one an owner's deeds go in. */
     const columns = sides ? [...seats, ENEMY_SIDE] : [...seats];

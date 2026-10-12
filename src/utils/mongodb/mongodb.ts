@@ -49,6 +49,12 @@ export async function dbConnect() {
   if (!cached.promise) {
     const opts = {
       bufferCommands: false,
+      // A request fires its reads in parallel (dashboard, board), and on a new
+      // instance each needs a fresh handshake; the driver default lets only two
+      // handshake at once. No minPoolSize: connect() doesn't wait for it, and
+      // the driver holds it against every replica-set member, so it would
+      // only keep idle sockets open on the secondaries we never read from.
+      maxConnecting: 3,
     };
     cached.promise = mongoose.connect(MONGODB_URI, opts).then((mongoose) => {
       return mongoose;

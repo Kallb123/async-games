@@ -2,7 +2,7 @@
 import React from 'react';
 import Section from '@/components/ui/Section';
 import { CHARACTERS } from '@/games/RealmArena/characters';
-import { ACTION_POINTS, isStanding, type BattleState, type Fighter } from '@/games/RealmArena/rules';
+import { ACTION_POINTS, isStanding, maxHpOf, type BattleState, type Fighter } from '@/games/RealmArena/rules';
 import RealmArenaCrosshair from './RealmArenaCrosshair';
 import { RealmArenaStatusList } from './RealmArenaEffects';
 import { apPips, canAct, effectsOn, fighterName, hpFraction, watchStatus } from '@/games/RealmArena/ui';
@@ -56,7 +56,7 @@ export default function RealmArenaUnits({ battle, player, colourFor, acting, sho
                             mark={standing ? CHARACTER_MARK[fighter.character] : '✕'}
                             colour={standing ? colourFor(fighter.owner) : undefined}
                             name={fighterName(fighters, fighter)}
-                            sub={`${fighter.hp}/${CHARACTERS[fighter.character].hp} HP`}
+                            sub={`${fighter.hp}/${maxHpOf(fighter)} HP`}
                             selected={fighter.id === selectedId}
                             dim={done || !standing}
                             onClick={() => onSelect(fighter.id)}

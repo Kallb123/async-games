@@ -1,7 +1,7 @@
 'use client'
 
 import { IGameResponse } from "@/utils/apiModels/GameDataApi";
-import Link from "next/link";
+import GameLink from "@/components/ui/GameLink";
 import { useState } from "react";
 import { opponentsById } from "@/utils/ui/players";
 import { gamePath } from "@/utils/ui/games";
@@ -53,7 +53,7 @@ export default function TheirTurnList({ games, isLoading }: TheirTurnListProps) 
     }
 
     return (
-        // Shape mirrored (label, icon, row count) in app/loading.tsx's homepage
+        // Shape mirrored (label, icon, row count) in components/HomeLoading.tsx's homepage
         // skeleton — keep the two in sync if this changes.
         <ListSection
             label="Waiting on others"
@@ -68,11 +68,11 @@ export default function TheirTurnList({ games, isLoading }: TheirTurnListProps) 
                 return (
                     <div key={game.gameId} className="ag-list-row">
                         <div style={{ width: 8, height: 8, borderRadius: "50%", background: "oklch(0.7 0.05 60)", flex: "none" }} />
-                        <Link href={gamePath(game.url, game.gameId)} className="ag-list-row-main">
+                        <GameLink gameId={game.gameId} href={gamePath(game.url, game.gameId)} className="ag-list-row-main">
                             <div style={{ font: "600 13px/1.35 var(--ag-font)" }}>
                                 {game.friendlyName} · <span style={{ color: "var(--ag-ink-soft)" }}>{opponentName}&apos;s turn</span>
                             </div>
-                        </Link>
+                        </GameLink>
                         {timeLeft && <span className="ag-list-row-time">{timeLeft}</span>}
                         <UnreadChatBadge count={game.unreadChatCount ?? 0} />
                         <button

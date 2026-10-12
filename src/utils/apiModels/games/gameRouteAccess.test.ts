@@ -14,7 +14,7 @@ import { API_ROOT, apiRoutesMatchingSource } from "@/utils/testing/apiRoutes";
 // Discovered by walking the tree rather than listed by hand, so a route added
 // tomorrow is covered without anyone remembering to add it here.
 
-// The four ways a route legitimately establishes it may touch the game it
+// The five ways a route legitimately establishes it may touch the game it
 // fetched:
 //
 //  - the explicit membership check the sibling routes use;
@@ -25,19 +25,23 @@ import { API_ROOT, apiRoutesMatchingSource } from "@/utils/testing/apiRoutes";
 //  - proving the caller is the scheduler rather than a player at all, which is
 //    the turn-timer cron: it acts on games nobody asked it about, on behalf of
 //    no user, and isAuthorisedCron is the only thing that may let it (see
-//    finding 11 in docs/robustness-review.md — that check used to fail open).
+//    finding 11 in docs/robustness-review.md — that check used to fail open);
+//  - reading it through readGameForViewer(), which refuses a non-player itself
+//    (pinned below, since the check is no longer in the route's own source).
 const MEMBERSHIP_GATES = [
+    /readGameForViewer\(/,
     /userIdList\.includes\(\s*(?:auth\w*\.)?userId\s*\)/,
     /currentTurn\s*!==?=\s*(?:auth\w*\.)?userId|(?:auth\w*\.)?userId\s*!==?=\s*\w*\.currentTurn/,
     /findOne\(\s*\{[^}]*userIdList:\s*(?:auth\w*\.)?userId/,
     /isAuthorisedCron\(/,
 ];
 
-// Both ways a route gets hold of one game: its own query, or the shared
+// The ways a route gets hold of one game: its own query, the shared
 // requireLiveGame() guard (which does the same findOne, plus "does it exist"
-// and "is it still being played"). A route using the helper still has to
-// establish membership itself — the helper knows nothing about the caller.
-const singleGameRoutes = apiRoutesMatchingSource(/GameDataModel\.findOne|requireLiveGame\(/)
+// and "is it still being played"), or readGameForViewer(), the player's view
+// GET /api/game/[gameid] answers with. A route using requireLiveGame still has
+// to establish membership itself — that helper knows nothing about the caller.
+const singleGameRoutes = apiRoutesMatchingSource(/GameDataModel\.findOne|requireLiveGame\(|readGameForViewer\(/)
     .map((file) => path.relative(API_ROOT, file));
 
 describe("routes that fetch one game", () => {
@@ -46,6 +50,12 @@ describe("routes that fetch one game", () => {
         // suite below would pass vacuously.
         expect(singleGameRoutes.length).toBeGreaterThanOrEqual(9);
         expect(singleGameRoutes).toContain(path.join("game", "[gameid]", "route.ts"));
+    });
+
+    it("readGameForViewer refuses anyone not in the game before building their view", () => {
+        const source = readFileSync(path.join(API_ROOT, "..", "..", "utils", "games", "readGame.ts"), "utf8");
+        expect(source).toMatch(/if \(!gameData\.userIdList\.includes\(userId\)\) return \{ status: 403 \}/);
+        expect(source.indexOf("userIdList.includes(userId)")).toBeLessThan(source.indexOf("CreateDataResponse("));
     });
 
     it.each(singleGameRoutes)("%s establishes the caller is in the game", (relativePath) => {

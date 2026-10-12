@@ -8,7 +8,8 @@ import { v4 as uuidv4 } from 'uuid';
 import { userIdListToNamesAndMap } from "@/utils/users/clerk";
 import { WorldDominationGameType } from "@/utils/apiModels/GameLogic";
 import { shuffle } from "@/utils/games/shuffle";
-import { clonePlayerStates, mongoMap } from "@/utils/games/mongoMaps";
+import { mongoMap } from "@/utils/games/mongoMaps";
+import { undoEntryFor, type IClockedUndoEntry } from "@/utils/games/undo";
 import { rollOffTurnOrder } from "@/utils/games/rollOff";
 import {
     TERRITORIES,
@@ -18,6 +19,7 @@ import {
     IWorldDominationTerritory,
     IWorldDominationCard,
     WorldDominationPhase,
+    cloneWorldDominationState,
 } from "./board";
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -83,43 +85,36 @@ export interface IWorldDominationSpecificGameState {
     cardSetsCashedIn: number;
     cardDeck: IWorldDominationCard[];
     lastBattle: IWorldDominationLastBattle | null;
+    /**
+     * Snapshots of the whole state, newest last, pushed by the undoable commands
+     * before they mutate anything (docs/undo.md §7). They carry every hand and
+     * the deck, so they never leave the server: absent from the response by
+     * construction. Capped at UNDO_STACK_DEPTH (WorldDominationLogic.ts).
+     * Absent (`?? []`) on a game that predates undo.
+     */
+    undoStack: IWorldDominationUndoEntry[];
+    /**
+     * The id of the last command that pushed or popped a snapshot; the undo
+     * refuses unless it is still the tail of commandHistory (§4). Absent on a
+     * game that predates undo.
+     */
+    undoAnchorId: string | null;
+    /**
+     * Set while a move that ends the turn — a fortify, a skipped fortify, the
+     * last setup placement — is held open for UNDO_WINDOW_MS so it can still be
+     * taken back (§5). ISO, null the rest of the time. Absent on a game that
+     * predates undo.
+     */
+    autoEndTurnAt: string | null;
 }
 
-function cloneCard(c: IWorldDominationCard): IWorldDominationCard {
-    return { id: c.id, type: c.type, territoryId: c.territoryId };
-}
+/** One snapshot on the stack: who pushed it, the turn clock it was pushed in, and the state before the move. */
+export type IWorldDominationUndoEntry = IClockedUndoEntry<IWorldDominationSpecificGameState>;
 
-function clonePlayerState(ps: IWorldDominationPlayerState): IWorldDominationPlayerState {
-    return {
-        cards: ps.cards.map(cloneCard),
-        eliminated: ps.eliminated,
-        conqueredTerritoryThisTurn: ps.conqueredTerritoryThisTurn,
-        totalArmiesDeployed: ps.totalArmiesDeployed,
-    };
-}
-
-// Deep-clones a World Domination game state into independent plain objects,
-// rebuilding the player map in `userIdList` order (see clonePlayerStates) —
-// mirrors SAC's cloneSACState (see SettlementsAndCities/board.ts) for the same
-// reason: the board (here, the shuffled territory deal + card deck) is
-// randomised at creation and can't be reconstructed later, so turn recap
-// replays from a persisted snapshot instead.
-export function cloneWorldDominationState(
-    gs: IWorldDominationSpecificGameState,
-    userIdList: string[],
-): IWorldDominationSpecificGameState {
-    return {
-        territories: gs.territories.map((t): IWorldDominationTerritory => ({ owner: t.owner, armies: t.armies })),
-        playerStates: clonePlayerStates(gs.playerStates, userIdList, clonePlayerState),
-        phase: gs.phase,
-        reinforcementsRemaining: gs.reinforcementsRemaining,
-        pendingOccupation: gs.pendingOccupation ? { ...gs.pendingOccupation } : null,
-        fortifyUsed: gs.fortifyUsed,
-        cardSetsCashedIn: gs.cardSetsCashedIn,
-        cardDeck: gs.cardDeck.map(cloneCard),
-        lastBattle: gs.lastBattle ? { ...gs.lastBattle, attackerDice: [...gs.lastBattle.attackerDice], defenderDice: [...gs.lastBattle.defenderDice] } : null,
-    };
-}
+// `cloneWorldDominationState` moved to board.ts (docs/undo.md): the undo
+// snapshot in WorldDominationLogic.ts needs it at runtime, and importing it
+// from here would be a cycle through the GameLogic barrel.
+export { cloneWorldDominationState };
 
 export function buildInitialWorldDominationState(gameData: IWorldDominationGameData): IWorldDominationSpecificGameState {
     return cloneWorldDominationState(gameData.initialSpecificGameState, gameData.userIdList);
@@ -167,6 +162,9 @@ WorldDominationInvitationSchema.methods.CreateGame = async function(
         cardSetsCashedIn: 0,
         cardDeck: shuffle(buildWorldDominationCardDeck()),
         lastBattle: null,
+        undoStack: [],
+        undoAnchorId: null,
+        autoEndTurnAt: null,
     };
 
     const gameData: IWorldDominationGameData = {
@@ -228,6 +226,13 @@ function makeWorldDominationStateSchemaDef() {
         cardSetsCashedIn: Number,
         cardDeck: [{ id: String, type: { type: String }, territoryId: { type: Number, default: null } }],
         lastBattle: Schema.Types.Mixed,
+        // ─── Undo (docs/undo.md) ────────────────────────────────────────────
+        // `state` is a whole snapshot, which holds a Map: Mixed, like the other
+        // games' stacks. The initial-state copy shares this def and keeps them
+        // empty.
+        undoStack: [{ by: String, turnStartedAt: String, state: Schema.Types.Mixed }],
+        undoAnchorId: { type: String, default: null },
+        autoEndTurnAt: { type: String, default: null },
     };
 }
 
@@ -257,7 +262,10 @@ WorldDominationGameDataSchema.methods.CreateDataResponse = async function(viewer
         endReason: doc.endReason,
         endDetail: doc.endDetail,
         forfeitedBy: doc.forfeitedBy,
-        specificGameState: gameStateToResponse(doc.specificGameState, userIdNameMap, viewerId),
+        // `canUndo` is worked out here, from the command log and the turn clock
+        // the stack's entries are checked against, rather than inside
+        // gameStateToResponse, which is handed neither (docs/undo.md §8).
+        specificGameState: gameStateToResponse(doc.specificGameState, userIdNameMap, viewerId, undoEntryFor(doc, viewerId) !== null),
         recapAvailable: !!doc.initialSpecificGameState,
     };
 };
@@ -267,6 +275,10 @@ export function gameStateToResponse(
     userIdNameMap: { [key: string]: string },
     // Their hand in full; everyone else a count. Null = nobody's hand.
     viewerId: string | null,
+    // Whether the viewer has a move of their own they can still take back
+    // (`undoEntryFor`, which needs the command log). False for a replayed step,
+    // which never offers undo.
+    canUndo: boolean = false,
 ): IWorldDominationSpecificGameStateResponse {
     const playerStates: IWorldDominationSpecificGameStateResponse['playerStates'] = {};
     const playerStatesSource = mongoMap(gs.playerStates);
@@ -318,6 +330,13 @@ export function gameStateToResponse(
         cardSetsCashedIn: gs.cardSetsCashedIn,
         cardDeckSize: gs.cardDeck.length,
         lastBattle,
+        // The snapshot behind an undo carries every hand and the deck, so
+        // neither `undoStack` nor `undoAnchorId` is ever copied across — this
+        // object is built field by field and only these two are added. Both are
+        // the viewer's own: the hold is theirs alone, and false/null for
+        // everyone else and for a viewerless replay.
+        canUndo,
+        autoEndTurnAt: canUndo ? (gs.autoEndTurnAt ?? null) : null,
     };
 }
 

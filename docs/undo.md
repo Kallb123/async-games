@@ -9,11 +9,13 @@ the hold, the board's Undo button and countdown, and this documentation. The
 pilot is **placing settlements and roads** — all four of them: the two setup
 placements and the two main-phase builds. Every other game, and every other
 Settlements & Cities command, is out of scope here and gains nothing until
-someone opts it in a line at a time (§14, §16). Six more games have since
+someone opts it in a line at a time (§14, §16). Seven more games have since
 opted in by hand: Race Cars (§16, "The second game"), Banned Islet (§16,
 "The third game"), Outbreak (§16, "The fourth game"), Train Time (§16,
 "The fifth game"), Dice Cities (§16, "The sixth game"), Fires Out (§16,
-"The seventh game") and Realm Arena (§16, "The eighth game").
+"The seventh game"), Realm Arena (§16, "The eighth game") and World
+Domination (§16, "The ninth game") — nine games in all, counting
+Settlements & Cities.
 
 So everything below now describes code rather than a plan, and the design
 reasoning — §4's rejected options, §5's rejected server-side holds — is kept
@@ -220,8 +222,8 @@ it. This is the case AGENTS.md's "a second copy is the signal to extract the
 first one" is *not* about: the pattern repeats, the code doesn't.
 
 Solitaire is not the second copy. The second *multiplayer* game is, and §16 says
-what that one should trigger — because at the five or six games that plausibly
-want undo, a real abstraction does appear, and it isn't this one.
+what that one should trigger — because at the handful of games that plausibly
+want undo (nine, as it turned out), a real abstraction does appear, and it isn't this one.
 
 ### Which command can be undone — the anchor
 
@@ -315,6 +317,14 @@ Ten seconds at the end of a turn in a game whose turn timers start at ten
 minutes is not a cost worth optimising away, and "Pass now" is there for a
 player who disagrees — available identically in both cases, which is what keeps
 it from becoming the tell instead. §8 records what is left.
+
+The same hold serves a game whose turn only ever ends on the player's own tap,
+with no server-side hold at all: Fires Out's End turn runs the Advance Fire, so
+it can never be undone and nothing about it can be held server-side, yet a
+player who taps it a moment after a move they regret should still get the ten
+seconds. That is the manual hold alone, and `useManualEndTurnHold`
+(`src/utils/hooks/`) is the one place it lives — Settlements & Cities and
+Fires Out both go through it (§11, §16).
 
 ### Rejected: holding it server-side
 
@@ -664,7 +674,15 @@ a five-line pure formatter.
   that screen uses.
 - **A manual *End turn* after an undoable move** sets a local deadline of
   `Date.now() + UNDO_WINDOW_MS` and shows the same two controls (§5), rather
-  than sending straight away.
+  than sending straight away. That is `useManualEndTurnHold(canUndo, myTurn,
+  gs.autoEndTurnAt)` — it returns the deadline to count toward (the server's
+  when it set one, else its own), what the End turn button calls, and a
+  `clear`. Once tapped, the hold runs to its end even if `canUndo` turns false
+  under it — a teammate's out-of-turn play in Settlements & Cities moves the
+  anchor, and the player still asked for the turn to end. The local deadline
+  is dropped the moment `myTurn` is false, so a turn that has moved on cannot
+  leave a stale deadline to fire a later End turn at once. It was written inline in
+  Settlements & Cities' turn sheet until Fires Out wanted the same thing.
 - **Nothing off-turn.** Off-turn the panel is already inert behind
   `ReadOnlyPanel`, and `canUndo` is false for a viewer who is not the mover.
 
@@ -872,8 +890,8 @@ asserting on.
 - **Other games.** Nothing here is wired into any other game. Dice Cities' card
   purchases, Train Time's route claims, Banned Islet's and Outbreak's actions
   and World Domination's troop movements (not its combat) are all plausible
-  candidates — and all but the last have since opted in (§16). None of them needs the engine to change again to *work* — but at
-  that many, the six copies stop being a pattern and start being duplication.
+  candidates — and all of them have since opted in (§16). None of them needs the engine to change again to *work* — but at
+  that many, the copies stop being a pattern and start being duplication.
   §16 says what to promote, when, and what the pilot does now so that promotion
   is mechanical.
 - **Redo.** No.
@@ -913,28 +931,28 @@ plausible excuse.
 So: what gets promoted, when, and what does the pilot do now so that promotion
 is mechanical rather than a rewrite.
 
-### What six games would actually share
+### What nine games would actually share
 
 Per game, an undo is seven pieces. Only some of them repeat.
 
-| Piece | At six games |
+| Piece | At nine games |
 |---|---|
 | `clone<Game>State` | **Already exists in seven of eleven games**, with the same `(gs, userIdList)` signature — Banned Islet, Outbreak, Train Time, World Domination, Race Cars, Fires Out and Settlements & Cities all export one, because the replay engine already wanted it. Stays per-game; there is nothing to share that isn't already shared. |
-| `undoStack` / `undoAnchorId` on the state | **Identical six times.** The fields hold opaque state; nothing about them is game-shaped. |
-| The push at the top of each undoable command | **Identical six times** but for the cloner it names. |
-| The undo command | **Identical six times** but for the cloner and the cast. This is the one that matters. |
-| `canUndo` on the response | **One expression, six times.** |
+| `undoStack` / `undoAnchorId` on the state | **Identical nine times.** The fields hold opaque state; nothing about them is game-shaped. |
+| The push at the top of each undoable command | **Identical nine times** but for the cloner it names. |
+| The undo command | **Identical nine times** but for the cloner and the cast. This is the one that matters. |
+| `canUndo` on the response | **One expression, nine times.** |
 | Which commands are undoable | **Never shareable.** It is a rules judgement, and the roadmap proves it: movement but not combat, a purchase but not the draw that follows it. |
 | The ten-second hold | **Partly.** Two games auto-end a turn today — Settlements & Cities via `sacFinishTurn`'s follow-up, Dice Cities via `settleRoll`/`noActionsAvailable` returning `turnOver` from three call sites — and they do it in two different shapes. The others may never need it. |
 
 ### The one to promote: the undo command
 
-Not because of line count — six hand-written commands are about 150 lines
+Not because of line count — the hand-written commands are about 150 lines
 against roughly 110 for a generic one plus its registrations, which is a wash.
 Because of **invariant count**. The undo command is where the anchor check, the
 "is this your move" check, the depth cap and the `markModified` live, and those
 four decide whether a player can rewind somebody else's move or a move that
-consumed randomness. Six copies of that is how the fifth one ends up subtly
+consumed randomness. Nine copies of that is how a later one ends up subtly
 different from the first, and nothing fails until somebody notices in a game.
 
 The shape is not a new idea in this repo, which is the point:
@@ -976,21 +994,21 @@ through the PR.
    game type that registers an undo adapter — is a change to a security
    boundary, and **it is the locksmith's call, not the caveman's.** Raise it
    with them when game #2 lands, not in a PR description.
-2. **Dice Cities had no `cloneDiceCitiesState`.** It was the one of the six that
+2. **Dice Cities had no `cloneDiceCitiesState`.** It was the one of the games that
    never needed one: its replay adapter rebuilds the opening state from the
    creation parameters (`buildInitialDiceCitiesState(userIdList, enabledDocks,
    bankTotal, theme)`) rather than cloning a stored snapshot. Its undo started
    with writing that cloner, in the shape of the other seven (§16, "The sixth
    game").
 
-### What stays per-game even at six
+### What stays per-game even at nine
 
 - **The cloner.** Already per-game, already written, already tested by replay.
-- **Which commands opt in.** Six different rules answers; the only shared part
+- **Which commands opt in.** Nine different rules answers; the only shared part
   is the CI guard that no `undoable` command executes into a `recorded` field,
   which becomes one test over every game instead of six.
 - **The hold.** Two shapes across two games is not enough to know what the
-  abstraction is, and four of the six may never auto-end a turn at all. If it
+  abstraction is, and several of the nine may never auto-end a turn at all. If it
   does generalise, the field probably belongs on the base `IGameData` beside
   `lastTurnTimestamp` rather than in each game's state — the base engine already
   owns `currentTurn` and the timer — but that is a bigger change than this
@@ -1426,8 +1444,16 @@ command rather than between commands: every move in Fires Out is one
   game — the seventh rescue, or the chop that brings the building down — is
   settled by `CheckGameOver` outside `specificGameState` and pushes nothing,
   the winning Helicopter Lift once more.
-- **No hold (§5)**, no `currentTurn` to restore: a turn only ever ends on the
-  player's own End turn. The stack is emptied by `applyEndTurn` rather than
+- **The hold is client-side (§5's manual End turn)**, no `currentTurn` to
+  restore: a turn only ever ends on the player's own End turn, which is itself
+  random (the Advance Fire) and so is never undoable and never held by the
+  server — there is no `autoEndTurnAt` and no command or wire change. Tapping
+  End turn while `canUndo` opens a ten-second hold instead of sending
+  (`useManualEndTurnHold`, in the board screen); the sheet shows `UndoHold`
+  with **Pass now** (sends the `endTurn` at once), **Undo** (a `FiresOutUndo`,
+  which also closes the hold) and the countdown, whose end sends the `endTurn`
+  by itself. While it runs the rows and the board take no further action. With
+  nothing to undo, End turn sends at once. The stack is emptied by `applyEndTurn` rather than
   `CheckEndTurn`, because a solo crew's hand-off from one figure to the next
   never gets as far as `CheckEndTurn` (it returns `turnOver: false`); and by
   the dropout adapter, because a snapshot taken before a player left would
@@ -1518,3 +1544,135 @@ action's kind but what the action set off.
   `.ag-action-grid` row — End turn is always on the sheet during a battle turn,
   as in Fires Out. Taking an action back also clears the results card that
   showed what it did.
+
+### The ninth game: World Domination
+
+Train Time's and Dice Cities' shape — a turn-ending move that holds, a clocked
+stack — but the first where several moves *before* the
+turn-ender are undoable too, so the stack is deep (a run of placements), and the
+first where the line between undoable and not is the game's whole premise:
+**combat is dice, and combat never comes back.**
+
+- **What is undoable.** `WorldDominationDeployArmies` (setup, reinforce and the
+  top-up an attack-phase cash-in leaves), `WorldDominationCashInCards`,
+  `WorldDominationOccupyTerritory`, `WorldDominationEndAttackPhase`,
+  `WorldDominationFortify` and `WorldDominationSkipFortify`. Each spends armies
+  or cards the player already holds, at a value read off the board, on spots
+  they chose. A cash-in draws nothing — the cards are in the hand and the set
+  pays what `cardSetsCashedIn` says — and it is no tell to take it back: the
+  table was already told what the set paid. The source scan in
+  `src/games/WorldDomination/undo.test.ts` holds the list to those six, and the
+  guard beside it holds them to no `recorded…` field.
+- **What is not, and why.** `WorldDominationAttack` rolls, so it never pushes —
+  and, as in Realm Arena (§16, above), it also **empties the stack**, not just
+  moves the anchor. A deployment made after a battle would otherwise sit on top
+  of the snapshots from before it, and undoing that chain would put the board
+  back to before the roll: a second go at it. After a battle the only thing
+  reachable is what was played *since* it — the occupation of a conquest, say,
+  whose snapshot is taken after the battle, so undoing it restores
+  `pendingOccupation` while the conquest, the dice and `lastBattle` stay made.
+  Only an attack can end the game (the last territory, scored by `CheckGameOver`
+  outside any snapshot), so there is no winning-move exception to make. The end
+  turn and the undo command themselves are not moves.
+- **The hold (§5).** A fortify, a skipped fortify and the last placement of a
+  setup allotment each end the turn, and each is a deliberate choice. Instead of
+  `turnOver: true` they push, set `autoEndTurnAt` and return `turnOver: false`;
+  `WorldDominationEndTurn`, valid only while `holdOpenFor` says the hold is the
+  sender's own, is the board's *Pass now* and what it sends by itself when the
+  countdown runs out. `CheckEndTurn` then does what the move used to do — the
+  setup advance, or `riskEndTurn` — and empties the stack and the deadline on
+  every hand-off. Every other command refuses while a hold is open
+  (`holdOpenFor` at the top of each), so the move can't be added to: a second
+  fortify, a deployment into a spent setup allotment. A skipped fortify now marks
+  `fortifyUsed` as a fortify does, so the board offers nothing while it holds;
+  the guards read the *hold*, not that flag, so a hold the turn timer moved past
+  can't lock out the player who inherits the phase.
+- **The end-of-turn card draw happens after the hold.** `riskEndTurn` draws from
+  the hidden deck when the player conquered this turn. It runs only from
+  `CheckEndTurn` after `WorldDominationEndTurn`, never inside the held move, so
+  taking a fortify back can neither reveal a card nor leave one in a hand it
+  has to come out of. The recap shows the card on the end turn, and still on the
+  fortify or skip of a game recorded before the hold.
+- **The turn timer closes a held turn.** A player who closed the app inside the
+  hold would otherwise leave it open: the cron's plain step gave the next seat a
+  spent setup pool (and every later pass repeated it, so setup never finished),
+  or the fortify phase with their reinforcements and the conqueror's card draw
+  skipped. So World Domination registers a turn-timeout adapter that builds one
+  command, `WorldDominationEndTurn`, while `holdOpenFor` says the hold is live —
+  recorded like any other, so a replay sees it too — and nothing otherwise.
+  `plainAdvanceOtherwise` makes that "nothing" fall back to the plain advance, as
+  if no adapter were registered (`noAdapter`, not `declined`), so every other
+  expired turn does what it always did. That is also why each entry still records
+  the `lastTurnTimestamp` it was pushed in, as Train Time's and Dice Cities' do:
+  `liveUndoEntry` (through `undoEntryFor` / `holdOpenFor`) refuses one the clock
+  has moved past. A push onto an entry that isn't live (not the pusher's, or from
+  an earlier turn) starts a fresh stack rather than building on it, and always
+  writes `autoEndTurnAt` — null for a move that holds nothing — so a deadline a
+  timed-out turn left behind can never be read as the next move's own. The
+  adapter makes `/api/game/taketurn` refuse the game, which is wanted: its plain
+  step would bypass the hold and the card draw. The dropout adapter leaves the
+  stack alone: a drop is recorded in `gameState`, not `specificGameState`, and
+  changes nothing on the board, so no snapshot can put a seat back, and clearing
+  would close another player's live hold without a hand-off. A hold is closed
+  only by the board (the countdown), by *Pass now*, or by that adapter when the
+  turn timer expires, so a player who leaves mid-hold keeps the next seat waiting
+  until their own timer runs out — the same backstop §9 accepts for every game
+  with a hold.
+- **Depth.** `UNDO_STACK_DEPTH` is ten, in `board.ts`: a reinforcement can be
+  placed one army at a time, so unlike the one-purchase games this has to reach
+  back over a whole run of taps, with a cash-in and the end of the attacks on
+  the same run. Each level is roughly 5 KB of JSON on every save; battles and
+  hand-offs empty the stack, so it never builds up. Dropping the oldest only
+  ever costs reach.
+- **The cloner moved.** `cloneWorldDominationState` moved from
+  `WorldDominationModels.ts` to `board.ts`, as Train Time's did: the logic
+  needs it at runtime and the models import the logic through the `GameLogic`
+  barrel, so importing it the other way would be a cycle. `board.ts` takes the
+  state's types with `import type`; the models re-export it. The snapshot is the
+  whole state (`undoStack: []`, `undoAnchorId: null` in the literal so a snapshot
+  never nests one), and the schema's `undoStack` entries hold it as `Mixed`,
+  with `?? []` at every read for a game stored before undo.
+- **Hidden information.** Every hand and the card deck are in each snapshot and
+  none of it is ever sent: `gameStateToResponse` builds its return field by field
+  and gains `canUndo` and `autoEndTurnAt` alone, worked out by `CreateDataResponse`
+  from the command log and the turn clock (`undoEntryFor`), both false/null for
+  everyone but the mover. A replayed step never offers it. `hiddenHands.test.ts`
+  and `undo.test.ts` pin it: no `undoStack`, no `undoAnchorId`, no card from
+  the snapshot or the deck on the wire for any viewer. One leak is accepted:
+  taking back a cash-in leaves its public "(+2 bonus armies on <territory>)"
+  history line, so the table learns one territory card the player still holds.
+  That is the player's own information, given away by their own choice to cash
+  in and then undo, and it is accepted.
+- **Replay and old logs.** A game recorded before the hold ended its turn inside
+  the fortify, the skip or the last setup placement, so its log has no
+  `WorldDominationEndTurn`. Replayed under today's rules the hold would never
+  close and every later move would be refused. The replay adapter's
+  `closeUnrecordedHold` (`worldDominationUnrecordedHoldEnd`) closes it the way
+  the old rules did — a `WorldDominationEndTurn` from the holder, before any
+  recorded command but the holder's own end turn or undo — and leaves no step or
+  line of its own. The same goes for a log that *ends* on one of those moves —
+  an in-flight game from before the hold — where no later command exists to close
+  it: once the loop is done, if the live game's `currentTurn` has moved on from the
+  replay's, the replay closes the hold the same way and the last step shows the
+  hand-off (and the card it drew). A hold still open live has the same player on
+  turn in both, so it is left alone; the hook is shared with Settlements & Cities
+  and takes a null `next` for this case. Commands carry `recordedTurnStartedAt`
+  like every game's, so a clocked entry goes stale in a replay at the point it
+  did live.
+- **Command version 2.** `commandVersion` in World Domination's `meta.ts` went
+  from 1 to 2 (`docs/command-versions.md`). A tab still running the old bundle
+  would send a Fortify, a SkipFortify or a last setup placement that used to end
+  the turn and now only holds it, with no countdown on its screen; the bump has
+  it reload instead. Recorded commands of version 1 or none replay as before,
+  through `closeUnrecordedHold` above.
+- **Recap and charts.** The shared recap engine drops an undo together with the
+  command it reversed, so a deployment, cash-in, occupation or fortify taken back
+  leaves no row. World Domination has no marker-style result chart to take back:
+  its two charts read `armies` and `totalArmiesDeployed` straight off each step's
+  state, and an undo restores both with the snapshot.
+- **The board.** While a hold is open, `UndoHold` (Pass now, Undo, the countdown,
+  and `WorldDominationEndTurn` sent by itself at zero) is the whole turn sheet and
+  the map takes no taps. Otherwise `UndoButton` shares an `.ag-action-grid` row
+  with *Done attacking*, *Skip fortifying* and the *Cancel* of a half-made
+  attack or fortify, and sits alone in a row under the deploy, occupy and dice
+  sheets. An undo clears whatever territory was selected on the map.

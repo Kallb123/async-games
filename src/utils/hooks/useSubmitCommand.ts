@@ -5,6 +5,8 @@ import type { IGameDataResponse, uuidString } from "@/utils/apiModels/GameDataAp
 import { gameCommandVersion, gameHasOutOfTurnPlays } from "@/utils/ui/games";
 import { isGuest, type NamedUser } from "@/utils/ui/players";
 import { recordGuestMoved } from "@/utils/hooks/useGuestMoved";
+import { isDataUnconfirmed } from "@/utils/hooks/dataCache";
+import { gameDataUrl } from "@/utils/hooks/prefetchGameData";
 
 // A command is a write, so it gets longer than a read before being given up
 // on — but it still gets one. See the `signal` below.
@@ -27,11 +29,13 @@ export type SubmitCommand = (
 
 /**
  * The `expectedCommandCount` a command sent from this board carries: the
- * board's `commandCount` in a game with out-of-turn plays, and nothing in any
- * other — or before the board has loaded. See `useSubmitCommand`.
+ * board's `commandCount` in a game with out-of-turn plays, and — in any game —
+ * while the board is `unconfirmed`, a cached paint that no request has answered
+ * yet (`useRefreshableData`'s `cacheFor`). Nothing otherwise, or before the
+ * board has loaded. See `useSubmitCommand`.
  */
-export function expectedCommandCountFor(board: IGameDataResponse | null): number | undefined {
-    return board && gameHasOutOfTurnPlays(board.gameType) ? board.gameState.commandCount : undefined;
+export function expectedCommandCountFor(board: IGameDataResponse | null, unconfirmed = false): number | undefined {
+    return board && (unconfirmed || gameHasOutOfTurnPlays(board.gameType)) ? board.gameState.commandCount : undefined;
 }
 
 /**
@@ -101,7 +105,14 @@ function reloadForNewRules(sent: string): boolean {
  * rendered from as `expectedCommandCount`, and the route refuses it with a 409
  * if the game has moved on since (docs/out-of-turn-actions.md §5.7) — which
  * the resync below turns into the new board. In every other game nothing moves
- * on your own turn but you, so nothing is sent.
+ * on your own turn but you, so nothing is sent — except while the board is a
+ * cached paint no request has answered yet (`useGameData` paints a recently
+ * fetched board straight away and revalidates beneath it, see `dataCache.ts`):
+ * then it is sent in every game, so a move built on a board that has since
+ * moved on (a turn timer ran out, a seat was dropped) is refused the same way
+ * rather than trusted. The route's check is the same for every game; only
+ * whether the client asks for it differs. Once the entry fetch answers, the
+ * board is confirmed and nothing is sent again.
  */
 export function useSubmitCommand<T>(
     gameId: uuidString,
@@ -123,6 +134,10 @@ export function useSubmitCommand<T>(
     // A number rather than the board, so a poll that brings back the same
     // board doesn't rebuild `submitCommand` for every screen holding it.
     const expectedCommandCount = expectedCommandCountFor(board);
+    // What a command carries instead while the board is a cached paint that
+    // hasn't been answered yet: read when the command is sent, not rendered
+    // from, because the board doesn't change when the answer lands unchanged.
+    const boardCommandCount = board?.gameState.commandCount;
     const version = commandVersionFor(board);
     const gameUrl = board?.gameType.url;
 
@@ -146,7 +161,8 @@ export function useSubmitCommand<T>(
         command.version = version;
         // Assigned even when undefined, which JSON.stringify leaves out — so a
         // command object a board sends twice can't carry the first count along.
-        command.expectedCommandCount = expectedCommandCount;
+        command.expectedCommandCount = expectedCommandCount
+            ?? (isDataUnconfirmed(user.id, gameDataUrl(gameId)) ? boardCommandCount : undefined);
         // No `senderUsername`: the route resolves the sender's name from the
         // authenticated caller before Execute runs, so naming ourselves here
         // would only be a value the server throws away.
@@ -190,7 +206,7 @@ export function useSubmitCommand<T>(
             setSubmitting(false);
             setPendingTarget(null);
         }
-    }, [user, gameId, setGameData, getGameData, expectedCommandCount, version, gameUrl]);
+    }, [user, gameId, setGameData, getGameData, expectedCommandCount, boardCommandCount, version, gameUrl]);
 
     return { submitCommand, submitting, pendingTarget };
 }

@@ -180,7 +180,7 @@ describe("targetOptions", () => {
 });
 
 describe("hpPreview", () => {
-    const strike = weaponOf(manAtArms).damage;
+    const strike = weaponOf({}, manAtArms).damage;
 
     it("takes a strike off each character a cleave is lined up on", () => {
         const draft: Draft = { aim: "cleave", square: null, targets: [near.id, nearToo.id] };

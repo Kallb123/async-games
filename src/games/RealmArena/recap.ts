@@ -148,7 +148,8 @@ function actionKind(events: readonly BattleEvent[]): { type: string; glyph: stri
     if (has(event => (event.kind === "shot" || event.kind === "struck") && event.damage > 0)) return { type: RA_HIT, glyph: "🎯" };
     // A Demolish that struck someone beside the cover hit them, as a strike does (§23.2).
     if (has(event => (event.kind === "demolished" || event.kind === "burst") && event.targets.length > 0)) return { type: RA_HIT, glyph: "💥" };
-    if (has(event => event.kind === "shot")) return { type: RA_MISS, glyph: "🎯" };
+    // A strike that rolled and missed is a miss as a shot is.
+    if (has(event => event.kind === "shot" || (event.kind === "struck" && event.missed === true))) return { type: RA_MISS, glyph: "🎯" };
     if (has(event => event.kind === "raised")) return { type: RA_RAISED, glyph: "✚" };
     const healed = events.find((event): event is Extract<BattleEvent, { kind: "healed" }> => event.kind === "healed");
     if (healed) return { type: RA_HEALED, glyph: healed.via === "draught" ? ITEM_GLYPH.healingDraught : "✚" };

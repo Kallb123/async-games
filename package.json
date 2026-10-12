@@ -12,6 +12,8 @@
     "lint": "eslint --max-warnings 0",
     "test": "vitest run",
     "test:e2e": "playwright test",
+    "perf:journeys": "playwright test -c playwright.perf.config.ts",
+    "perf:explain": "tsx scripts/explain-queries.ts",
     "icons": "tsx scripts/generate-icons.mjs",
     "kb-worlds": "tsx scripts/kb-worlds.mjs",
     "version:bump": "node scripts/bump-version.mjs",
@@ -19,6 +21,7 @@
     "optimise-art": "node scripts/optimise-art.mjs",
     "ra-marks": "node scripts/realmarena-marks.mjs",
     "ra-characters": "tsx scripts/realmarena-characters.mjs",
+    "ra-balance": "tsx scripts/realmarena-balance.ts",
     "performance:budget": "node scripts/check-performance-budget.mjs"
   },
   "dependencies": {
@@ -36,14 +39,14 @@
     "firebase-admin": "^13",
     "framer-motion": "^12",
     "jose": "^6.2.12",
-    "moment": "^2",
     "mongodb": "^7",
     "mongoose": "^9",
     "next": "^16",
     "react": "^19",
     "react-bootstrap": "^2",
     "react-dom": "^19",
-    "uuid": "^14"
+    "uuid": "^14",
+    "web-vitals": "^4.2.4"
   },
   "devDependencies": {
     "@capacitor/cli": "^8.5.0",
@@ -54,6 +57,7 @@
     "@types/react-dom": "^19",
     "eslint": "^9",
     "eslint-config-next": "^16",
+    "jsdom": "^29.1.1",
     "sharp": "^0.34.5",
     "tsx": "^4.23.12",
     "typescript": "^5",

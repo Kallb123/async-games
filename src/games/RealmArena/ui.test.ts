@@ -7,7 +7,8 @@ import { at, fieldOf, hillOf } from "@/utils/games/battlefield/testFixtures";
 import { ACTION_POINTS, isWarband, newFighter, reachOf, warbandOwner, type BattleEvent, type Fighter, type ToldEvent } from "./rules";
 import { ABILITIES, kitOf, type CharacterId } from "./characters";
 import { EFFECT_ART, ITEM_ART, type Missile } from "./art";
-import { abilityWait, actionFollow, aimFocus, coopColourOf, ALLY_COLOUR, ENEMY_COLOUR, TEAM_COLOUR, actionSquares, apPips, friendlySquares, spreadWide, areaRect, battleCues, canAct, effectsOn, eventLines, facingOf, fighterName, fighterStatus, focusOn, handItem, handOut, hpFraction, itemsOf, NO_ITEMS, numberedName, placeTap, reachFocus, reachShading, squadCounts, squadOf, whoseName, FLIGHT_PACE, CLIMB_LEG, DIAGONAL_LEG, flightMs, legWeight, HIT_TEXT_MS, PLAYBACK_MS, WALK_STEP_MS, moveFrame, isUnplaced, type BattleCue, type Placement, waveLineOf, reviewParts, withPartState, partLabel, HP_CHIP_MS, HP_TWEEN_MS, stepped, toldAt, toldOf, type TextCue, IMPACT_MS, KNOCK, LUNGE, SHAKE, SHAKE_MS, WALK_BOB, WALK_HOP, shakeAt, shakesOf, shoveAt, shovesOf, endOf, captionAt, legLengthOn, walkEase, walkerAt, walkerGroundAt, walkCameraAt, walkLift, walkSquares, flightAt, hitTextAt, POP_MS, burstAt, slashAt, progressOf, fadeOutAt, fadeInAt, FLIGHT_ARC, type FxPoints, type CaptionCue, type FallCue, type FlightCue, type SlashCue, type WalkCue } from "./ui";
+import { abilityWait, actionFollow, oddsLines, aimFocus, coopColourOf, ALLY_COLOUR, ENEMY_COLOUR, TEAM_COLOUR, actionSquares, apPips, friendlySquares, spreadWide, areaRect, battleCues, canAct, effectsOn, eventLines, facingOf, fighterName, fighterStatus, focusOn, handItem, handOut, hpFraction, itemsOf, NO_ITEMS, numberedName, placeTap, reachFocus, reachShading, squadCounts, squadOf, whoseName, FLIGHT_PACE, CLIMB_LEG, DIAGONAL_LEG, flightMs, legWeight, HIT_TEXT_MS, PLAYBACK_MS, WALK_STEP_MS, moveFrame, isUnplaced, type BattleCue, type Placement, waveLineOf, reviewParts, withPartState, partLabel, HP_CHIP_MS, HP_TWEEN_MS, stepped, toldAt, toldOf, type TextCue, IMPACT_MS, KNOCK, LUNGE, SHAKE, SHAKE_MS, WALK_BOB, WALK_HOP, shakeAt, shakesOf, shoveAt, shovesOf, endOf, captionAt, legLengthOn, walkEase, walkerAt, walkerGroundAt, walkCameraAt, walkLift, walkSquares, flightAt, hitTextAt, POP_MS, burstAt, slashAt, progressOf, fadeOutAt, fadeInAt, FLIGHT_ARC, type FxPoints, type CaptionCue, type FallCue, type FlightCue, type SlashCue, type WalkCue } from "./ui";
+import type { OddsBreakdown } from "./rules";
 import type { IRealmArenaStepOutcome, RealmArenaPartState } from "./apiModels";
 
 /** Squares as "col,row", sorted, to read a test's expectations by. */
@@ -1876,6 +1877,7 @@ describe("eventLines as sentences", () => {
     it("tells who healed whom, and what a draught was given to", () => {
         expect(bobSees({ kind: "healed", fighter: 3, target: 0, hp: 3 })).toBe("Alice's Cleric healed Alice's Archer for 3");
         expect(bobSees({ kind: "healed", fighter: 3, target: 3, hp: 3, via: "purify" })).toBe("Alice's Cleric purified itself for 3");
+        expect(bobSees({ kind: "healed", fighter: 3, target: 3, hp: 4 })).toBe("Alice's Cleric healed itself for 4");
         expect(bobSees({ kind: "healed", fighter: 0, target: 0, hp: 3, via: "draught" })).toBe("Alice's Archer drank a healing draught for 3");
         expect(bobSees({ kind: "healed", fighter: 0, target: 2, hp: 3, via: "draught" })).toBe("Alice's Archer gave Alice's Mage a healing draught for 3");
     });
@@ -2072,5 +2074,34 @@ describe("the board's caption", () => {
             });
             expect(endOf(cues)).toBeLessThanOrEqual(PLAYBACK_MS);
         });
+    });
+});
+
+describe("oddsLines", () => {
+    it("words the base, each factor and the hold, and the lines add up to the chance", () => {
+        const odds: OddsBreakdown = {
+            base: 80,
+            factors: [
+                { kind: "cover", amount: -80, cover: "full", doubled: "far", shield: false },
+                { kind: "effect", amount: 15, effect: "marked" },
+            ],
+            raw: 15,
+            chance: 15,
+        };
+        const lines = oddsLines(odds, "Bow accuracy");
+        expect(lines.map(({ label, note }) => [label, note])).toEqual([
+            ["Bow accuracy", undefined],
+            ["Full cover", "doubled: far shot, over 10 squares"],
+            ["Target is marked", undefined],
+        ]);
+        expect(lines.reduce((total, line) => total + line.amount, 0)).toBe(odds.chance);
+        const held = oddsLines({ base: 80, factors: [{ kind: "cover", amount: -90, cover: "full", doubled: "far", shield: false }], raw: -10, chance: 0 }, "Bow accuracy");
+        expect(held.at(-1)).toEqual({ label: "Held between 0% and 100%", amount: 10 });
+        expect(held.reduce((total, line) => total + line.amount, 0)).toBe(0);
+    });
+
+    it("names a shield wall's cover and a hunkered target's doubling", () => {
+        const [, cover] = oddsLines({ base: 80, factors: [{ kind: "cover", amount: -40, cover: "half", doubled: "hunkered", shield: true }], raw: 40, chance: 40 }, "Bow accuracy");
+        expect(cover).toEqual({ label: "Shield wall (counts as half cover)", note: "doubled: hunkered down", amount: -40 });
     });
 });

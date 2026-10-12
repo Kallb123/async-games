@@ -6,6 +6,14 @@
 //  - keep something of ours to show when the network is gone, instead of the
 //    browser's error page inside the app frame.
 //
+// Having a handler in the way of every navigation has a cost of its own: the
+// browser can't send the request until the worker has booted, which on a cold
+// phone is hundreds of ms. Navigation preload gives that time back — see the
+// `activate` and `fetch` handlers. Enabling it outlives this file: if a worker
+// without the preload ever replaces this one (a rollback), it must call
+// `self.registration.navigationPreload.disable()` in its own `activate`, or
+// every navigation will fetch the page twice — once for a preload nobody reads.
+//
 // Push is NOT handled here. That stays in `firebase-messaging-sw.js`, which
 // Firebase registers at its own scope the first time a device asks for a
 // token. Two workers, one job each — merging them would mean this file could
@@ -30,6 +38,11 @@ self.addEventListener('activate', (event) => {
             .then((keys) => Promise.all(
                 keys.filter((key) => key !== CACHE).map((key) => caches.delete(key))
             ))
+            // Lets the browser send a navigation's request while this worker is
+            // still starting up, rather than after. Not every browser has it, and
+            // one may refuse; either way the worker activates as before, since
+            // preload is only an optimisation.
+            .then(() => self.registration.navigationPreload?.enable().catch(() => {}))
             .then(() => self.clients.claim())
     );
 });
@@ -44,8 +57,13 @@ self.addEventListener('fetch', (event) => {
     if (event.request.mode !== 'navigate') {
         return;
     }
+    // The preload response is always consumed when there is one: a preload the
+    // handler never reads is a second request for the same page, thrown away.
+    // It is the same network request `fetch(event.request)` would have made,
+    // only started earlier, so a failed one is the same "network is gone" and
+    // falls through to the offline page below.
     event.respondWith(
-        fetch(event.request).catch(async () =>
+        (async () => (await event.preloadResponse) ?? fetch(event.request))().catch(async () =>
             // `Response.error()` rather than `undefined` for the case where the
             // precache never landed: a network error is what the browser would
             // have shown anyway, whereas `undefined` throws.

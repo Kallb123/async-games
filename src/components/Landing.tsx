@@ -40,7 +40,7 @@ export default function Landing() {
     const gameCount = availableGames().length;
 
     return (
-        <main>
+        <main data-perf-region="landing">
             <div className="ag-topbar">
                 <Brand />
                 <Link href="/login" className="ag-pill-action">Sign in</Link>

@@ -225,11 +225,14 @@ After ending all attacks, a player may perform **one single fortification maneuv
 *   There must be an unbroken chain of adjacent, friendly-controlled territories connecting $A$ and $B$.
 *   Move any desired number of armies from $A$ to $B$, provided **at least 1 army remains** behind in territory $A$.
 *   Once fortification is executed or passed, Phase 3 ends.
+*   The move that ends the turn (the fortification, or skipping it) is held for ten seconds so it can be taken back with **Undo**; *Pass now* hands the turn on at once. See [`docs/undo.md`](../undo.md), "The ninth game: World Domination".
 
 ---
 
 ### 4.4 End-of-Turn Card Draw
 If a player successfully conquered **at least one enemy territory** during their turn, they draw **one** Risk card from the top of the draw deck. (A player receives at most 1 card per turn regardless of how many territories were conquered).
+
+The card is drawn only once the hand-off goes through, after that ten-second hold, so taking the fortification back can never reveal or hand over a card (see [`docs/undo.md`](../undo.md), "The ninth game: World Domination").
 
 ---
 

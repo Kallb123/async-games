@@ -1,6 +1,15 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
-import { gameStateToResponse as worldDominationStateToResponse } from "@/games/WorldDomination/WorldDominationModels";
+// CreateDataResponse names the players through Clerk; the test hands it the names.
+vi.mock("@/utils/users/clerk", async (importOriginal) => ({
+    ...(await importOriginal<typeof import("@/utils/users/clerk")>()),
+    userIdListToNamesAndMap: async (userIdList: string[]) => ({
+        usernameList: userIdList.map(userId => ({ u1: "Alice", u2: "Bob" })[userId] ?? userId),
+        userIdNameMap: { u1: "Alice", u2: "Bob" },
+    }),
+}));
+
+import { gameStateToResponse as worldDominationStateToResponse, WorldDominationGameDataModel } from "@/games/WorldDomination/WorldDominationModels";
 import type { IWorldDominationSpecificGameState } from "@/games/WorldDomination/WorldDominationModels";
 import {
     makeState as makeWorldDominationState,
@@ -161,6 +170,88 @@ describe("World Domination's response", () => {
         expect(wire).toContain("alice-secret-card");
         expect(wire).not.toContain("bob-secret-card");
         expect(wire).not.toContain("bob-second-card");
+    });
+
+    it("keeps the undo snapshot — every hand and the deck — off the wire, whoever asks", () => {
+        // docs/undo.md §8: a held move's snapshot is a whole state, so it holds
+        // Bob's hand and the deck. Only `canUndo` and `autoEndTurnAt` go out.
+        const deckCard = { id: "top-of-the-deck", type: "wild" as const, territoryId: null };
+        const gs = worldDominationState();
+        gs.cardDeck = [deckCard];
+        gs.undoStack = [{ by: "u1", turnStartedAt: "2026-10-01T08:00:00.000Z", state: { ...gs, cardDeck: [deckCard] } }];
+        gs.undoAnchorId = "last-command";
+        gs.autoEndTurnAt = "2026-10-01T08:00:10.000Z";
+
+        for (const viewerId of ["u1", "u2", null]) {
+            const response = worldDominationStateToResponse(gs, NAMES, viewerId, viewerId === "u1");
+            const wire = JSON.stringify(response);
+            expect(wire).not.toContain("undoStack");
+            expect(wire).not.toContain("undoAnchorId");
+            expect(wire).not.toContain("last-command");
+            expect(wire).not.toContain("top-of-the-deck");
+            expect(response.autoEndTurnAt).toBe(viewerId === "u1" ? gs.autoEndTurnAt : null);
+            expect(response.canUndo).toBe(viewerId === "u1");
+        }
+    });
+
+    it("sends undo only to the mover, through the real gate, and never the snapshot", async () => {
+        // CreateDataResponse works `canUndo` out itself (undoEntryFor, against the
+        // command log and the turn clock), so this builds the game it reads rather
+        // than handing gameStateToResponse the answer. The snapshot's own copy of
+        // Bob's hand and deck carry ids found nowhere else.
+        const TURN_STARTED = "2026-10-01T08:00:00.000Z";
+        const snapshotBobCard = { id: "snapshot-bob-card", type: "artillery" as const, territoryId: 11 };
+        const snapshotDeckCard = { id: "snapshot-deck-card", type: "wild" as const, territoryId: null };
+        const gs = worldDominationState();
+        gs.cardDeck = [{ id: "live-deck-card", type: "wild" as const, territoryId: null }];
+        gs.undoStack = [{
+            by: "u1",
+            turnStartedAt: TURN_STARTED,
+            state: {
+                ...gs,
+                cardDeck: [snapshotDeckCard],
+                playerStates: new Map([["u1", worldDominationPlayer({ cards: [ALICE_CARD] })], ["u2", worldDominationPlayer({ cards: [snapshotBobCard] })]]),
+            },
+        }];
+        gs.undoAnchorId = "last-command";
+        gs.autoEndTurnAt = "2026-10-01T08:00:10.000Z";
+        const doc = {
+            gameType: { className: "WorldDominationGameType", url: "worlddomination" },
+            userIdList: ["u1", "u2"],
+            turnTimer: "1d",
+            currentTurn: "u1",
+            lastTurnTimestamp: TURN_STARTED,
+            gameState: { turnOrder: ["u1", "u2"], history: [], commandHistory: [{ id: "earlier-command" }, { id: "last-command" }] },
+            specificGameState: gs,
+            initialSpecificGameState: gs,
+            complete: false,
+            winner: "",
+        };
+        const respond = (viewerId: string | null) =>
+            WorldDominationGameDataModel.schema.methods.CreateDataResponse.call(doc, viewerId);
+
+        for (const viewerId of ["u1", "u2", null]) {
+            const response = await respond(viewerId);
+            expect(response.specificGameState.canUndo).toBe(viewerId === "u1");
+            expect(response.specificGameState.autoEndTurnAt).toBe(viewerId === "u1" ? gs.autoEndTurnAt : null);
+            const wire = JSON.stringify(response);
+            expect(wire).not.toContain("undoStack");
+            expect(wire).not.toContain("undoAnchorId");
+            expect(wire).not.toContain("last-command");
+            expect(wire).not.toContain("snapshot-bob-card");
+            expect(wire).not.toContain("snapshot-deck-card");
+            expect(wire).not.toContain("live-deck-card");
+            // Bob's live hand is his own to see; nobody else's.
+            if (viewerId !== "u2") {
+                expect(wire).not.toContain("bob-secret-card");
+                expect(wire).not.toContain("bob-second-card");
+            }
+        }
+
+        // Anything run since the move closes the gate for the mover as well.
+        doc.gameState.commandHistory.push({ id: "a-later-command" });
+        expect((await respond("u1")).specificGameState.canUndo).toBe(false);
+        expect((await respond("u1")).specificGameState.autoEndTurnAt).toBeNull();
     });
 
     it("shows nobody's hand when nobody in particular is asking", () => {
@@ -726,10 +817,10 @@ describe("Realm Arena's random co-op enemy", () => {
             : one.id === far.id ? one : { ...one, hp: 0 });
         expect(realmArenaBattle(game).fighters.filter(one => isRealmArenaStanding(one)).length).toBe(3);
 
-        const ended = Object.assign(realmArenaEndTurn(game.currentTurn), { recordedEnemyActions: [{ kind: "rend", fighter: ravager.id, target: archer.id }] }) as RealmArenaEndTurn;
+        const ended = Object.assign(realmArenaEndTurn(game.currentTurn), { recordedEnemyActions: [{ kind: "rend", fighter: ravager.id, target: archer.id }], recordedRolls: [1] }) as RealmArenaEndTurn;
         const { outcome } = await playRealmArena(game, ended);
         expect(outcome.validMove).toBe(true);
-        expect((outcome as IRealmArenaOutcome).events).toContainEqual({ kind: "struck", fighter: ravager.id, target: archer.id, damage: 6, reaction: false });
+        expect((outcome as IRealmArenaOutcome).events).toContainEqual({ kind: "struck", fighter: ravager.id, target: archer.id, damage: 6, reaction: false, chance: 80, roll: 1 });
         expect(gs.coop?.enemySeen).toBe(true);
         for (const viewer of ["a", "b"]) expect(realmArenaStateToModel(gs, viewer, null).enemy).toBe("swarm");
         // The enemy's turn is told once it's over, by when the team knows whom it fights.
@@ -759,7 +850,7 @@ describe("Realm Arena's random co-op enemy", () => {
         expect(Object.keys(hidden).sort()).toEqual([
             "battleRounds", "blasted", "budget", "canUndo", "clouds", "coop",
             "difficulty", "fighters", "fog", "ghosts", "map", "mastery", "mission", "mustered",
-            "myMuster", "nextWave", "phase", "round", "scores", "size",
+            "myMuster", "nextWave", "phase", "round", "rulesVersion", "scores", "size",
         ]);
         // What the host chose in the open: every viewer's, the null viewer's included.
         expect(hidden).toMatchObject({ difficulty: "hard", size: "large" });

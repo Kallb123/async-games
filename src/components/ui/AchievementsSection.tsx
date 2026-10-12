@@ -1,6 +1,6 @@
 'use client'
 
-import moment from "moment";
+import { formatDayMonth } from "@/utils/ui/time";
 import AchievementIcon from "@/components/ui/AchievementIcon";
 import DisclosureSection from "@/components/ui/DisclosureSection";
 import ListRow from "@/components/ui/ListRow";
@@ -65,7 +65,7 @@ function AchievementRow({ row }: { row: ProfileAchievementRow }) {
     // give. Locked: how far along, or a dash for a match achievement, which is
     // earned in one go and has no "3 / 5".
     const status = row.unlocked
-        ? (row.unlockedAt ? `${moment(row.unlockedAt).format("D MMM")}${row.href ? " ›" : ""}` : "✓")
+        ? (row.unlockedAt ? `${formatDayMonth(row.unlockedAt)}${row.href ? " ›" : ""}` : "✓")
         : row.progress ?? "—";
     return (
         <ListRow

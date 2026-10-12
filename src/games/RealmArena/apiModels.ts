@@ -32,6 +32,12 @@ export interface IRealmArenaSpecificGameStateResponse {
     size?: StoredBattleSize;
     /** The factions each player may muster from (B6): at least one, in `FACTION_IDS` order. Only during the muster. */
     factions?: FactionId[];
+    /**
+     * The rules version the battle plays by (`IRealmArenaSpecificGameState.rulesVersion`),
+     * so the board previews odds as the server will roll them; absent for a
+     * battle from before `BALANCE_VERSION`.
+     */
+    rulesVersion?: number;
     /** Whether the battle is fought in fog of war (§27). */
     fog: boolean;
     /** Whether the players fight together against the computer's warbands (§29), so are one side (§29.6). */

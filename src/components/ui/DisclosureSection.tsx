@@ -24,7 +24,7 @@ interface DisclosureSectionProps {
  */
 export default function DisclosureSection({ title, level = "block", children }: DisclosureSectionProps) {
     return (
-        <details className="ag-disclosure">
+        <details className="ag-disclosure" data-perf-region="disclosure">
             <summary className="ag-section ag-section-head">
                 <h2 className={level === "block" ? "ag-block-title" : "ag-section-label"}>{title}</h2>
                 <span className="ag-disclosure-chevron" aria-hidden="true">&rsaquo;</span>

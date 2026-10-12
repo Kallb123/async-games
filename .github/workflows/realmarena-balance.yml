@@ -1,0 +1,146 @@
+name: Realm Arena balance
+
+# Hundreds of co-op battles with the computer playing both sides
+# (scripts/realmarena-balance.ts), added up into win rates, how long the team
+# lasts and how each round goes. On demand only: run it on a branch before and
+# after a change to the numbers, with the same seeds, and compare the two
+# summaries. The report is the run's summary page, and every battle's sample is
+# kept as an artifact for a closer look (`npm run ra-balance -- --merge …`).
+
+on:
+  workflow_dispatch:
+    inputs:
+      runs:
+        description: Battles per scenario
+        default: '200'
+      players:
+        description: Team sizes, comma-separated (1 is Solo)
+        default: '1,2,3'
+      enemies:
+        description: Enemy factions (realm, swarm)
+        default: 'realm,swarm'
+      missions:
+        description: Missions (holdOut, holdTheCentre)
+        default: 'holdOut'
+      maps:
+        description: Hold Out battlefields (sackedFort, gate)
+        default: 'sackedFort'
+      difficulties:
+        description: Difficulties (easy, normal, hard)
+        default: 'normal'
+      sizes:
+        description: Battle sizes (small, normal, large)
+        default: 'normal'
+      fog:
+        description: Fog of war (off, on, or off,on)
+        default: 'off'
+      seed:
+        description: First seed; battle k of each scenario rolls from seed + k
+        default: '1'
+      shards:
+        description: Runners to split the battles across
+        default: '4'
+
+permissions:
+  contents: read
+
+jobs:
+  plan:
+    name: Plan shards
+    runs-on: ubuntu-latest
+    outputs:
+      shards: ${{ steps.shards.outputs.shards }}
+    steps:
+      - id: shards
+        env:
+          SHARDS: ${{ inputs.shards }}
+        run: |
+          if ! [[ "$SHARDS" =~ ^[0-9]+$ ]] || [ "$SHARDS" -lt 1 ] || [ "$SHARDS" -gt 20 ]; then
+            echo "shards must be a whole number from 1 to 20"
+            exit 1
+          fi
+          echo "shards=$(jq -cn --argjson n "$SHARDS" '[range(1; $n + 1)]')" >> "$GITHUB_OUTPUT"
+
+  battles:
+    name: Battles (shard ${{ matrix.shard }})
+    needs: plan
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: ${{ fromJSON(needs.plan.outputs.shards) }}
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: '24'
+          cache: 'npm'
+      - run: npm ci --prefer-offline --no-audit --fund=false
+
+      - name: Fight
+        # The inputs reach the script through the environment, never pasted
+        # into the shell, and the script refuses anything it doesn't know.
+        env:
+          RUNS: ${{ inputs.runs }}
+          PLAYERS: ${{ inputs.players }}
+          ENEMIES: ${{ inputs.enemies }}
+          MISSIONS: ${{ inputs.missions }}
+          MAPS: ${{ inputs.maps }}
+          DIFFICULTIES: ${{ inputs.difficulties }}
+          SIZES: ${{ inputs.sizes }}
+          FOG: ${{ inputs.fog }}
+          SEED: ${{ inputs.seed }}
+          SHARD: ${{ matrix.shard }}/${{ inputs.shards }}
+        # Each shard's own summary would repeat the merged one, so it's kept to the log.
+        run: |
+          GITHUB_STEP_SUMMARY= npm run ra-balance -- \
+            --runs "$RUNS" --players "$PLAYERS" --enemies "$ENEMIES" --missions "$MISSIONS" \
+            --maps "$MAPS" --difficulties "$DIFFICULTIES" --sizes "$SIZES" --fog "$FOG" \
+            --seed "$SEED" --shard "$SHARD" --out "samples-${{ matrix.shard }}.json"
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: realmarena-balance-shard-${{ matrix.shard }}
+          path: samples-${{ matrix.shard }}.json
+          if-no-files-found: ignore
+          retention-days: 30
+
+  report:
+    name: Report
+    needs: battles
+    if: always() && needs.battles.result != 'cancelled'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: '24'
+          cache: 'npm'
+      - run: npm ci --prefer-offline --no-audit --fund=false
+
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: realmarena-balance-shard-*
+          merge-multiple: true
+
+      - name: Merge
+        env:
+          HEADING: Realm Arena balance · ${{ github.ref_name }} @ ${{ github.sha }}
+        run: |
+          shopt -s nullglob
+          files=(samples-*.json)
+          if [ ${#files[@]} -eq 0 ]; then
+            echo "No shard left any samples" | tee -a "$GITHUB_STEP_SUMMARY"
+            exit 1
+          fi
+          npm run --silent ra-balance -- --merge --heading "$HEADING" --out samples.json "${files[@]}" | tee report.md
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: realmarena-balance-report
+          path: |
+            report.md
+            samples.json
+          retention-days: 90

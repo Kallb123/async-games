@@ -4,8 +4,8 @@ import { battlefieldWith, buildBattlefield, TERRAIN, type Battlefield } from "@/
 import { ABILITIES, CHARACTERS, ITEMS, kitOf, musterBudget, OPTIONS, REALM, THROW_RANGE, type CharacterId, type ItemId, type OptionId } from "./characters";
 import { RUINED_FORT } from "./maps/ruinedFort";
 import {
-    abilitiesOf, ACTION_POINTS, act, afflicted, areaAround, blastedBy, blastedIn, centreHolders, centrePoints, check, endTurn, fixedRolls, isBattleOver, moveAp, movementOf, musterPoints, musterRefusal,
-    newFighter, pickOf, purified, reachOf, reactionsTo, readyMadeMuster, shotOdds, shotResult, smokeSquares, standings, startTurn, storedFighter, watchedSquares, weaponOf,
+    abilitiesOf, ACTION_POINTS, act, MELEE_ACCURACY, afflicted, areaAround, blastedBy, blastedIn, centreHolders, centrePoints, check, endTurn, fixedRolls, isBattleOver, moveAp, movementOf, musterPoints, musterRefusal,
+    newFighter, oddsBreakdown, pickOf, purified, reachOf, reactionsTo, readyMadeMuster, shotOdds, shotResult, smokeSquares, standings, strikeChance, startTurn, storedFighter, watchedSquares, weaponOf,
     type Action, type BattleState, type Fighter, type MusterPick,
 } from "./rules";
 
@@ -64,6 +64,63 @@ describe("hitting (§13.3)", () => {
 
     it("doubles the cover of a hunkered target", () => {
         expect(odds(fighter(2, "b", "knight", at(field, 5, 2), { effects: { hunkered: 1 } }))?.chance).toBe(40);
+    });
+
+    describe("the breakdown behind a chance", () => {
+        const sum = (breakdown: ReturnType<typeof oddsBreakdown>) => breakdown.factors.reduce((total, factor) => total + factor.amount, breakdown.base);
+        const kinds = (breakdown: ReturnType<typeof oddsBreakdown>) => breakdown.factors.map(factor => factor.kind);
+
+        it("starts at the weapon's accuracy and lists what moved it, summing to the chance shown", () => {
+            const target = fighter(2, "b", "knight", at(field, 5, 2), { effects: { marked: 2 } });
+            const state = { field, fighters: [archer, target] };
+            for (const kind of ["attack", "aimedShot", "overwatch"] as const) {
+                const breakdown = oddsBreakdown(state, archer, target, kind);
+                expect(breakdown.base).toBe(80);
+                expect(sum(breakdown)).toBe(breakdown.raw);
+                expect(breakdown.chance).toBe(shotOdds(state, archer, target, kind)?.chance);
+                expect(breakdown.grazeChance).toBe(shotOdds(state, archer, target, kind)?.grazeChance);
+            }
+            expect(oddsBreakdown(state, archer, target).factors).toEqual([
+                { kind: "cover", amount: -20, cover: "half", doubled: undefined, shield: false },
+                { kind: "effect", amount: 15, effect: "marked" },
+            ]);
+            expect(kinds(oddsBreakdown(state, archer, target, "aimedShot"))).toEqual(["cover", "effect", "aimedShot"]);
+            expect(kinds(oddsBreakdown(state, archer, target, "overwatch"))).toEqual(["cover", "effect", "overwatch"]);
+        });
+
+        it("says what doubled the cover, once, and where a shield wall stood in for it", () => {
+            const hunkered = fighter(2, "b", "knight", at(field, 5, 2), { effects: { hunkered: 1 } });
+            expect(oddsBreakdown({ field, fighters: [archer, hunkered] }, archer, hunkered).factors)
+                .toEqual([{ kind: "cover", amount: -40, cover: "half", doubled: "hunkered", shield: false }]);
+            const open = fighter(2, "b", "knight", at(field, 5, 3));
+            const wall = fighter(3, "b", "knight", at(field, 6, 3), { effects: { shieldWall: 1 } });
+            const walled = { field, fighters: [archer, open, wall] };
+            expect(oddsBreakdown(walled, archer, open).factors).toEqual([{ kind: "cover", amount: -20, cover: "half", doubled: undefined, shield: true }]);
+            expect(oddsBreakdown(walled, archer, open).chance).toBe(shotOdds(walled, archer, open)?.chance);
+        });
+
+        it("keeps the raw sum when it ran past 0 or 100, and the chance held between", () => {
+            const walled = fieldOf(["..........", "..........", "....#.....", "..........", "..........", ".........."]);
+            const hunkered = fighter(2, "b", "knight", at(walled, 5, 2), { effects: { hunkered: 1 } });
+            const shooter = fighter(1, "a", "mage", at(walled, 2, 5));
+            const breakdown = oddsBreakdown({ field: walled, fighters: [shooter, hunkered] }, shooter, hunkered);
+            expect(breakdown.raw).toBeLessThan(0);
+            expect(breakdown).toMatchObject({ chance: 0, raw: sum(breakdown) });
+            const marked = fighter(2, "b", "knight", at(field, 5, 3), { effects: { marked: 2 } });
+            const strong = oddsBreakdown({ field, fighters: [archer, marked] }, archer, marked, "aimedShot");
+            expect(strong.raw).toBeGreaterThan(100);
+            expect(strong.chance).toBe(100);
+        });
+
+        it("is a strike's for a melee weapon: its accuracy, and what's on the target", () => {
+            const knight = fighter(1, "a", "knight", at(field, 4, 2));
+            const marked = fighter(2, "b", "knight", at(field, 5, 2), { effects: { marked: 2 } });
+            const state = { field, fighters: [knight, marked], balanced: true as const };
+            const breakdown = oddsBreakdown(state, knight, marked);
+            expect(breakdown).toMatchObject({ base: MELEE_ACCURACY, factors: [{ kind: "effect", amount: 15, effect: "marked" }], chance: 95 });
+            expect(breakdown.chance).toBe(strikeChance(state, marked));
+            expect(breakdown.grazeChance).toBeUndefined();
+        });
     });
 
     it("adds 10 from high ground, 20 for an aimed shot, and takes 15 off overwatch", () => {
@@ -235,6 +292,7 @@ describe("act", () => {
         expect(bashed.byId(2).effects.stunned).toBeGreaterThan(0);
         expect(bashed.byId(2).woundedBy).toEqual(["c", "a"]);
         expect(run(state, "a", { kind: "raise", fighter: 3, target: 4 }).byId(3).spent).toEqual(["raise"]);
+        expect(run({ ...state, balanced: true }, "a", { kind: "raise", fighter: 3, target: 4 }).byId(3).cooldowns).toEqual({ raise: 4 });
     });
 
     it("turns a mover to face the way it last stepped, and leaves anyone else facing as they were", () => {
@@ -489,17 +547,33 @@ describe("abilities (§13.5, §13.6)", () => {
         expect(byId(2).hp).toBe(12);
         expect(events).toEqual([{ kind: "healed", fighter: 1, target: 2, hp: 2 }]);
         expect(check({ field, fighters: [fighters[0], { ...fighters[1], hp: 12 }] }, "a", { kind: "heal", fighter: 1, target: 2 })).toEqual({ refused: "Already at full health" });
-        expect(check({ field, fighters }, "a", { kind: "heal", fighter: 1, target: 1 })).toEqual({ refused: "Pick an ally to heal" });
+        expect(check({ field, fighters }, "a", { kind: "heal", fighter: 1, target: 1 })).toEqual({ refused: "Already at full health" });
     });
 
-    it("raise brings a downed ally back at half HP, once per battle", () => {
+    it("heal can be aimed at the Cleric itself", () => {
+        const cleric = fighter(1, "a", "cleric", at(field, 1, 1), { hp: 2, effects: { burning: 2 } });
+        const { byId, events } = run({ field, fighters: [cleric] }, "a", { kind: "heal", fighter: 1, target: 1 });
+        expect(byId(1)).toMatchObject({ hp: 6, effects: {} });
+        expect(events[0]).toEqual({ kind: "healed", fighter: 1, target: 1, hp: 4 });
+    });
+
+    it("raise brings a downed ally back at half HP, and waits out a cooldown of four turns", () => {
         const fighters = [fighter(1, "a", "cleric", at(field, 1, 1)), fighter(2, "a", "knight", at(field, 2, 2), { hp: 0, ap: 0 })];
-        const { byId, events } = run({ field, fighters }, "a", { kind: "raise", fighter: 1, target: 2 });
+        const { byId, events } = run({ field, fighters, balanced: true }, "a", { kind: "raise", fighter: 1, target: 2 });
         expect(byId(2)).toMatchObject({ hp: 6, ap: 0 });
-        expect(byId(1).spent).toEqual(["raise"]);
+        expect(byId(1).spent).toEqual([]);
+        expect(byId(1).cooldowns).toEqual({ raise: ABILITIES.raise.cooldown });
+        expect(ABILITIES.raise.cooldown).toBe(4);
         expect(events).toEqual([{ kind: "raised", fighter: 1, target: 2, hp: 6 }]);
-        const again = { field, fighters: [{ ...byId(1), ap: 4 }, { ...byId(2), hp: 0 }] };
-        expect(check(again, "a", { kind: "raise", fighter: 1, target: 2 })).toEqual({ refused: "Raise has been used this battle" });
+        const again = { field, fighters: [{ ...byId(1), ap: 4 }, { ...byId(2), hp: 0 }], balanced: true as const };
+        expect(check(again, "a", { kind: "raise", fighter: 1, target: 2 })).toEqual({ refused: "Raise isn't ready yet" });
+        // Back in four of its owner's turns.
+        let cleric = { ...byId(1), ap: 4 };
+        for (let turn = 1; turn <= 4; turn++) {
+            cleric = startTurn({ field, fighters: [cleric], balanced: true }, "a").fighters[0];
+            const verdict = check({ field, fighters: [cleric, { ...byId(2), hp: 0 }], balanced: true }, "a", { kind: "raise", fighter: 1, target: 2 });
+            expect(verdict, `turn ${turn}`).toEqual(turn < 4 ? { refused: "Raise isn't ready yet" } : { ap: 3 });
+        }
     });
 
     it("raise needs room for the fallen to stand", () => {
@@ -992,11 +1066,9 @@ describe("items (§21)", () => {
             expect(check({ field, fighters: [{ ...carrier, hp: 6 }] }, "a", { kind: "draught", fighter: 1, target: 1 })).toEqual({ refused: "Already at full health" });
         });
 
-        it("needs a healing draught, which a Cleric's Heal still doesn't stretch to the Cleric itself", () => {
+        it("needs a healing draught", () => {
             const flask = carrying(1, "a", "archer", at(field, 0, 0), "fireFlask", { hp: 2 });
             expect(check({ field, fighters: [flask] }, "a", { kind: "draught", fighter: 1, target: 1 })).toEqual({ refused: "They have no healing draught" });
-            const cleric = fighter(1, "a", "cleric", at(field, 0, 0), { hp: 2 });
-            expect(check({ field, fighters: [cleric] }, "a", { kind: "heal", fighter: 1, target: 1 })).toEqual({ refused: "Pick an ally to heal" });
         });
     });
 
@@ -1070,7 +1142,7 @@ describe("options (§23.2)", () => {
             expect(kitOf("archer", "cripplingShot").abilities).toEqual(["cripplingShot"]);
             expect(kitOf("scout", "huntersMark").abilities).toEqual(["huntersMark"]);
             expect(kitOf("cleric", "purify").abilities).toEqual(["heal", "purify"]);
-            expect(kitOf("mage", "frostBolt")).toEqual({ weapon: { ...CHARACTERS.mage.weapon, name: "Frost bolt", damage: 2, effect: "slowed" }, abilities: ["fireball"] });
+            expect(kitOf("mage", "frostBolt")).toEqual({ weapon: { name: "Frost bolt", kind: "ranged", damage: 2, accuracy: 70, range: 10, effect: "slowed" }, abilities: ["fireball"] });
             for (const option of Object.keys(OPTIONS) as OptionId[]) {
                 const { character } = OPTIONS[option];
                 if (option !== "frostBolt") expect(kitOf(character, option).weapon).toBe(CHARACTERS[character].weapon);
@@ -1240,7 +1312,7 @@ describe("options (§23.2)", () => {
         const target = fighter(2, "b", "knight", at(field, 5, 3));
 
         it("does 2 instead of 3, at the bolt's odds, and slows on a hit", () => {
-            expect(weaponOf(mage)).toMatchObject({ damage: 2, accuracy: 70, range: 10 });
+            expect(weaponOf({}, mage)).toMatchObject({ damage: 2, accuracy: 70, range: 10 });
             const hit = run({ field, fighters: [mage, target] }, "a", { kind: "attack", fighter: 1, target: 2 }, [70]);
             expect(hit.events[0]).toMatchObject({ chance: 70, damage: 3, result: "hit" });
             expect(hit.byId(2)).toMatchObject({ hp: 9, effects: { slowed: 2 } });
@@ -1343,6 +1415,13 @@ describe("the Swarm (§31)", () => {
             expect(byId(1)).toMatchObject({ cooldowns: { regrowth: 2 } });
             const far = fighter(2, "a", "ravager", at(field, 9, 0), { hp: 4 });
             expect(check({ field, fighters: [mother, far] }, "a", { kind: "regrowth", fighter: 1, target: 2 })).toEqual({ refused: "Out of range or out of sight" });
+        });
+
+        it("can be aimed at the Broodmother itself", () => {
+            const mother = fighter(1, "a", "broodmother", at(field, 0, 0), { hp: 3 });
+            const { byId } = run({ field, fighters: [mother] }, "a", { kind: "regrowth", fighter: 1, target: 1 });
+            expect(byId(1)).toMatchObject({ hp: 6, cooldowns: { regrowth: 2 } });
+            expect(check({ field, fighters: [{ ...mother, hp: 8 }] }, "a", { kind: "regrowth", fighter: 1, target: 1 })).toEqual({ refused: "Already at full health" });
         });
     });
 

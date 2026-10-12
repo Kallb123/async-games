@@ -9,6 +9,7 @@ import { ReactionModel } from '@/utils/mongodb/ReactionData';
 import { ChatMessageModel } from '@/utils/mongodb/ChatMessageData';
 import { ChatReadModel } from '@/utils/mongodb/ChatReadData';
 import { AchievementUnlockModel } from '@/utils/mongodb/AchievementUnlockData';
+import { forgetCachedUser } from '@/utils/users/directoryCache';
 
 // Deletes the signed-in player's account: everything of theirs in Mongo, then
 // the Clerk user itself. Clerk holds the account details, the registered device
@@ -96,6 +97,7 @@ export async function POST(request: NextRequest) {
     await AchievementUnlockModel.deleteMany({ userId }).exec();
 
     await (await clerkClient()).users.deleteUser(userId);
+    forgetCachedUser(userId);
 
     return NextResponse.json({ success: true });
 }
