@@ -4,7 +4,7 @@ import { formatReport, percentile, scenarioKey, settingsOf, summarise, summarise
 // The arithmetic behind `npm run ra-balance`: the battles themselves are the
 // engine's, played by the planner, and coop.test.ts already fights whole ones.
 
-const SOLO: BalanceScenario = { players: 1, enemy: "swarm", mission: "holdOut", map: "sackedFort", difficulty: "normal", size: "normal", fog: false };
+const SOLO: BalanceScenario = { players: 1, team: "realm", enemy: "swarm", mission: "holdOut", map: "sackedFort", difficulty: "normal", size: "normal", fog: false };
 
 function sample(fields: Partial<BattleSample>): BattleSample {
     return {
@@ -19,6 +19,7 @@ describe("the balance harness's scenarios", () => {
         expect(scenarioKey(SOLO)).toBe("1 player (Solo) vs Swarm · Hold Out (Sacked Fort)");
         expect(scenarioKey({ ...SOLO, players: 3, enemy: "realm", mission: "holdTheCentre", difficulty: "hard", size: "large", fog: true }))
             .toBe("3 players vs Realm · Hold the Centre · Hard, Large battle, fog");
+        expect(scenarioKey({ ...SOLO, players: 2, team: "miners", enemy: "miners" })).toBe("2 players as Miners vs Miners · Hold Out (Sacked Fort)");
     });
 
     it("sets a battle up as the host's choices would", () => {
@@ -27,6 +28,8 @@ describe("the balance harness's scenarios", () => {
             .toEqual({ fog: true, size: "small", coop: { enemy: "swarm", difficulty: "easy" } });
         // Hold Out on the gate forts stores no map.
         expect(settingsOf({ ...SOLO, map: "gate" }).coop).toEqual({ enemy: "swarm", mission: "holdOut" });
+        // A team of another faction is the one faction its players may muster from.
+        expect(settingsOf({ ...SOLO, team: "miners" })).toMatchObject({ factions: ["miners"] });
     });
 });
 

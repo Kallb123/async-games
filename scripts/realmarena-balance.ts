@@ -3,8 +3,9 @@
 // the fight goes round by round (scripts/lib/realmArenaBalance.ts). Run it
 // before and after a change to the numbers, with the same seeds, and compare.
 //
-//   npm run ra-balance                                   # 100 of each: Solo, 2 and 3 players, against both factions, Hold Out on the Sacked Fort
+//   npm run ra-balance                                   # 100 of each: Solo, 2 and 3 players of the Realm, against every faction, Hold Out on the Sacked Fort
 //   npm run ra-balance -- --runs 300 --players 3 --enemies swarm --difficulties easy,normal,hard
+//   npm run ra-balance -- --teams realm,miners --enemies realm,swarm,miners # each team faction against each enemy
 //   npm run ra-balance -- --missions holdOut,holdTheCentre --maps gate --fog on,off
 //   npm run ra-balance -- --shard 2/4 --out samples-2.json # one quarter of the battles, every sample kept
 //   npm run ra-balance -- --merge samples-*.json          # the report for samples already fought
@@ -45,7 +46,7 @@ function oneOf<T extends string>(name: string, values: string[], allowed: readon
 }
 
 /** What the command line says to fight: each a comma-separated list but the runs and the first seed. */
-type MatrixArgs = Record<"runs" | "seed" | "players" | "enemies" | "missions" | "maps" | "difficulties" | "sizes" | "fog", string>;
+type MatrixArgs = Record<"runs" | "seed" | "players" | "teams" | "enemies" | "missions" | "maps" | "difficulties" | "sizes" | "fog", string>;
 
 /** Every battle the arguments ask for, scenario by scenario, then seed by seed. */
 function jobsFrom(args: MatrixArgs): Job[] {
@@ -55,6 +56,7 @@ function jobsFrom(args: MatrixArgs): Job[] {
     if (!Number.isInteger(firstSeed)) throw new Error("--seed must be a whole number");
     const players = list(args.players).map(Number);
     if (players.some(count => !Number.isInteger(count) || count < 1 || count > 3)) throw new Error("--players must be team sizes from 1 to 3");
+    const teams = oneOf<FactionId>("teams", list(args.teams), FACTION_IDS);
     const enemies = oneOf<FactionId>("enemies", list(args.enemies), FACTION_IDS);
     const missions = oneOf<Mission>("missions", list(args.missions), ["holdOut", "holdTheCentre"]);
     const maps = oneOf<CoopMapChoice>("maps", list(args.maps), ["sackedFort", "gate"]);
@@ -64,8 +66,8 @@ function jobsFrom(args: MatrixArgs): Job[] {
 
     const scenarios = new Map<string, BalanceScenario>();
     for (const mission of missions) for (const map of mission === "holdOut" ? maps : ["gate" as const])
-        for (const enemy of enemies) for (const count of players) for (const difficulty of difficulties) for (const size of sizes) for (const fog of fogs) {
-            const scenario: BalanceScenario = { players: count, enemy, mission, map, difficulty, size, fog };
+        for (const team of teams) for (const enemy of enemies) for (const count of players) for (const difficulty of difficulties) for (const size of sizes) for (const fog of fogs) {
+            const scenario: BalanceScenario = { players: count, team, enemy, mission, map, difficulty, size, fog };
             scenarios.set(scenarioKey(scenario), scenario);
         }
     return [...scenarios.values()].flatMap(scenario => Array.from({ length: runs }, (_, k) => ({ scenario, seed: firstSeed + k })));
@@ -141,6 +143,7 @@ async function main(): Promise<void> {
             runs: { type: "string", default: "100" },
             seed: { type: "string", default: "1" },
             players: { type: "string", default: "1,2,3" },
+            teams: { type: "string", default: "realm" },
             enemies: { type: "string", default: FACTION_IDS.join(",") },
             missions: { type: "string", default: "holdOut" },
             maps: { type: "string", default: "sackedFort" },

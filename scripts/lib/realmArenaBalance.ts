@@ -12,7 +12,7 @@
 // player faces.
 
 import { nextAction, turnMemo } from "../../src/games/RealmArena/ai";
-import { DIFFICULTY_NAMES, BATTLE_SIZE_NAMES, type BattleSize, type Difficulty, type FactionId } from "../../src/games/RealmArena/characters";
+import { DIFFICULTY_NAMES, BATTLE_SIZE_NAMES, FACTIONS, type BattleSize, type Difficulty, type FactionId } from "../../src/games/RealmArena/characters";
 import type { RealmArenaSettings } from "../../src/games/RealmArena/RealmArenaModels";
 import { battleRoundsOf } from "../../src/games/RealmArena/RealmArenaLogic";
 import { ACTION_POINTS, isStanding, isWarband, viewOf, waveArrives } from "../../src/games/RealmArena/rules";
@@ -25,6 +25,8 @@ export type CoopMapChoice = "sackedFort" | "gate";
 export interface BalanceScenario {
     /** The team's size: 1 is Solo (§30.6). */
     players: number;
+    /** The faction every player of the team musters from (B6): its ready-made squad, as the warbands' are theirs. */
+    team: FactionId;
     enemy: FactionId;
     mission: Mission;
     /** Hold Out's battlefield (§30.9); Hold the Centre is always fought on the gate forts. */
@@ -66,19 +68,25 @@ export interface BattleSample {
 
 /** The name a scenario's samples are grouped under, and the report heads it with. */
 export function scenarioKey(s: BalanceScenario): string {
-    const team = s.players === 1 ? "1 player (Solo)" : `${s.players} players`;
+    const seats = s.players === 1 ? "1 player (Solo)" : `${s.players} players`;
+    // A Realm team, as every scenario was before the team could choose, is left unsaid.
+    const team = s.team === "realm" ? seats : `${seats} as ${factionName(s.team)}`;
     const mission = s.mission === "holdOut" ? `Hold Out (${s.map === "sackedFort" ? "Sacked Fort" : "gate fort"})` : "Hold the Centre";
     const extras = [
         s.difficulty !== "normal" ? DIFFICULTY_NAMES[s.difficulty] : undefined,
         s.size !== "normal" ? `${BATTLE_SIZE_NAMES[s.size]} battle` : undefined,
         s.fog ? "fog" : undefined,
     ].filter(Boolean);
-    return `${team} vs ${s.enemy === "swarm" ? "Swarm" : "Realm"} · ${mission}${extras.length ? ` · ${extras.join(", ")}` : ""}`;
+    return `${team} vs ${factionName(s.enemy)} · ${mission}${extras.length ? ` · ${extras.join(", ")}` : ""}`;
 }
+
+/** A faction as a scenario's name says it: "Realm", "Swarm", "Miners". */
+const factionName = (id: FactionId) => FACTIONS[id].name.replace(/^The /, "");
 
 /** What the host would have chosen to set this battle up. */
 export function settingsOf(s: BalanceScenario): RealmArenaSettings {
     return {
+        ...(s.team !== "realm" ? { factions: [s.team] } : {}),
         ...(s.fog ? { fog: true } : {}),
         ...(s.size !== "normal" ? { size: s.size } : {}),
         coop: {
