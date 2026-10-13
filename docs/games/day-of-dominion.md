@@ -1,16 +1,18 @@
 # Day of Dominion — Game Design Document
 
-**Status:** Concept, v0.4. Round 1 (§21.1) settled the name, eight players,
+**Status:** Concept, v0.5. Round 1 (§21.1) settled the name, eight players,
 turns taken one after another, long matches at a pace the host picks,
 several ways to win, five eras each player moves through at their own speed,
 units that upgrade through research, the yields with strategic resources,
 and one military unit a tile. Round 2 (§21.2) added gold as a sixth yield,
 chose city buildings over workers, and made combat strength and advantages
-with no roll. Round 3 (§21.3) reopened the time model: §5 now lays out eight
-ways to run a round and what each would need here. Everything still open is in
-§20: the time model, round 2's new questions
-(D35–D47, none answered yet), two that gold raised (D48–D49), and the rest of
-round 1's. The body is written as if each open recommendation were taken,
+with no roll. Round 3 (§21.3) reopened the time model: §5 lays out eight
+ways to run a round and what each would need here. Round 4 (§21.4) settled the
+map, the biomes (plains and desert added), cities (three apart, two rings,
+borders by culture) and most of the remaining rules; §20.4 lists every
+decision taken. Still open: the time model, round 2's questions (D35–D47), the
+two gold raised (D48–D49), and five for Milestone B and a prototype
+(D29–D34). The body is written as if each open recommendation were taken,
 and marks the spot with the decision's number — except the time model, where
 it still assumes round 1's answer (§5.8 lists what would change).
 **Name:** Day of Dominion
@@ -156,7 +158,7 @@ a turn timer caps every wait.
    eight-player match that runs long. What happens to their seat matters far
    more than it does in a two-week game (§16.3, D32).
 3. **A big match means a big world.** Eight players and 300 rounds want a map
-   of a few thousand hexes, a dozen cities each and armies of dozens of units
+   of a few thousand hexes, ten or so cities each and armies of dozens of units
    (§9.6). That's what puts pressure on turn length (§4.3), on drawing the
    board (§22) and on storing the match (§23.7).
 
@@ -589,6 +591,8 @@ defends.
 | Biome | Food | Prod. | Science | Gold | Move cost | Defence | Notes |
 |---|---:|---:|---:|---:|---:|---:|---|
 | **Grassland** | 2 | 0 | 0 | 0 | 1 | — | The growing land. Irrigation works +1 food (§12.6) |
+| **Plains** | 1 | 1 | 0 | 0 | 1 | — | Open land that both feeds and builds: the all-rounder |
+| **Desert** | 0 | 0 | 0 | 0 | 1 | — | Barren, except beside a river, where it's floodplain: +2 food rather than the usual +1 (§9.3). Where the later resources hide (§9.5) |
 | **Hills** | 1 | 2 | 0 | 0 | 2 | +3 | The working land. +1 sight. A Mine +1 production. A city on a hill defends better (§11.4) |
 | **Forest** | 1 | 1 | 0 | 0 | 2 | +3 | Blocks sight beyond it. A Lumber mill +1 production. Can be cleared to grassland by a city (§12.6) |
 | **Jungle** | 1 | 0 | 1 | 0 | 3 | +3 | Slow, hides units, a source of science. A University +1 science |
@@ -596,7 +600,7 @@ defends.
 | **Coast** (shallow water) | 1 | 0 | 0 | 1 | 1 by sea | — | Workable by any city beside it. A Harbour +1 food, +1 production. The sea's trade is where gold starts |
 | **Ocean** (deep water) | 1 | 0 | 0 | 0 | 1 by sea | — | Workable by a city with a Harbour. Only ocean-going ships and units embarked after Navigation cross it (§9.4) |
 
-Rivers are the eighth, and they aren't a tile at all (§9.3).
+Rivers are the brief's eighth biome, and they aren't a tile at all (§9.3).
 
 Culture and faith come mostly from buildings, wonders and beliefs, not from
 tiles: the land decides how a city feeds and builds itself, and what the
@@ -605,16 +609,18 @@ exception, which is what makes a city in the mountains' shadow a holy place.
 Gold is the same, with the coast as the exception: a harbour town is a trading
 town.
 
-The biome list is a registry (one entry per biome with its yields, cost,
-defence, sight rule and art), so adding plains, desert, tundra or snow later is
-one entry (D10).
+Plains and desert joined the brief's eight in round 4 (D10): on a map of
+thousands of hexes, open land needs more than one look. The biome list is a
+registry (one entry per biome with its yields, cost, defence, sight rule and
+art), so tundra, snow or marsh later is one entry each.
 
 ### 9.3 Rivers
 
 Rivers run along the **edges** between hexes, from high ground to the coast,
 and every river reaches water. They do three things (D13):
 
-- **Food.** A land tile with a river along any of its edges gets +1 food.
+- **Food.** A land tile with a river along any of its edges gets +1 food
+  (+2 for desert: floodplain).
 - **Fresh water.** A city whose centre has a river along an edge, or that
   sits on the coast, can grow bigger (§12.4).
 - **An obstacle.** Moving across a river edge **uses all the unit's
@@ -647,15 +653,15 @@ explored tiles:
 
 | Resource | Found on | Gives the city working it |
 |---|---|---|
-| Wheat | Grassland | +1 food |
-| Cattle | Grassland | +1 production |
+| Wheat | Grassland, plains | +1 food |
+| Cattle | Grassland, plains | +1 production |
 | Deer | Forest | +1 food |
 | Stone | Hills | +1 production |
 | Fish | Coast | +2 food |
 | Whales | Ocean | +1 food, +1 production |
-| Incense | Jungle | +1 faith |
+| Incense | Jungle, desert | +1 faith |
 | Marble | Hills | +1 culture |
-| Gold ore | Hills | +2 gold |
+| Gold ore | Hills, desert | +2 gold |
 | Pearls | Coast | +1 gold, +1 faith |
 
 **Strategic resources** are needed to build and upgrade particular units and
@@ -664,12 +670,12 @@ buildings (decided in round 1). A proposal for the list, one or two an era
 
 | Resource | Revealed by | Found on | Needed for |
 |---|---|---|---|
-| Horses | Horseback Riding | Grassland, hills | Horseman, Knight, Cavalry |
+| Horses | Horseback Riding | Grassland, plains, hills | Horseman, Knight, Cavalry |
 | Iron | Bronze Working | Hills | Swordsman, Knight |
-| Niter | Gunpowder | Grassland, hills | Musketman, Frigate, Cannon |
+| Niter | Gunpowder | Plains, desert, hills | Musketman, Frigate, Cannon |
 | Coal | Steam Power | Hills, forest | Ironclad, Factory |
-| Oil | Combustion | Grassland, jungle, coast | Tank, Destroyer, Battleship |
-| Aluminium | Rocketry | Hills, mountains' foot | The Launch pad and the mission's parts (§18) |
+| Oil | Combustion | Desert, jungle, coast | Tank, Destroyer, Battleship |
+| Aluminium | Rocketry | Hills, desert | The Launch pad and the mission's parts (§18) |
 
 **Revealed by research**: a strategic resource only appears on a player's
 map once they know the tech that reveals it, so a world they thought they
@@ -686,19 +692,24 @@ about.
 
 ### 9.6 Map size
 
-About 180 land hexes a player, plus the water round it (D8). Maps are a
-little **taller than wide**, because the game is played on a phone held
-upright.
+About 180 land hexes a player at the standard size, plus the water round it,
+and the host can pick **small** (about three-quarters the hexes) or **large**
+(about a third more) instead (decided in round 4, D8). Maps are a little
+**taller than wide**, because the game is played on a phone held upright, and
+don't wrap.
 
-| Players | Size (columns × rows) | Hexes | Land, roughly |
+| Players | Standard size (columns × rows) | Hexes | Land, roughly |
 |---:|---|---:|---:|
 | 2 | 24 × 32 | 768 | ~360 |
 | 4 | 34 × 44 | 1,496 | ~720 |
 | 6 | 40 × 52 | 2,080 | ~1,080 |
 | 8 | 46 × 60 | 2,760 | ~1,440 |
 
-That's room for eight to twelve cities each (D20), contested ground between
-them, and islands across the water. It's also large: §22.2 is about drawing
+Cities three hexes apart with two rings each (D20) could pack fifteen or more
+into that, so it's the brakes on sprawl (§12.4), not the map, that decide how
+many are worth having; ten or so is the aim, with contested ground between
+neighbours and islands across the water. A table that wants closer neighbours
+picks small. It's also large: §22.2 is about drawing
 it, and BoardZoom's "fit" step stops being useful past four players (§22.3).
 
 ### 9.7 Generating the map
@@ -710,7 +721,9 @@ the same approach as Kingdom Builder's balance constraints
 - **A couple of large continents and some islands**, with inland lakes.
   Mountain ranges in lines, so they make passes. Rivers from the ranges down
   to the sea.
-- **Starts** at least ten hexes apart, on land that is not jungle or
+- **Deserts** in bands, away from the coasts, with plains between them and
+  the grassland, and rivers through some of them.
+- **Starts** at least ten hexes apart, on land that is not jungle, desert or
   mountains, each with: a river or coast within one tile; at least four
   grassland and two hills or forest within two tiles; horses and iron within
   six; a tribal village within five. Every continent large enough to hold
@@ -895,8 +908,8 @@ None in the first version (D25).
 ### 12.1 Founding
 
 A settler founds a city on the tile it stands on, if the tile is land (not
-mountains), and at least four hexes from any other city: three clear tiles
-between (D20). The city takes the settler's place, with population 1, and
+mountains), and at least three hexes from any other city: two clear tiles
+between (decided in round 4, D20). The city takes the settler's place, with population 1, and
 claims the six tiles around it.
 
 The capital is the first city, and gets +2 science, +2 production, +2
@@ -909,13 +922,19 @@ the rest of the match, whoever holds it (§18).
   **with its culture**: each time the city's culture reaches a threshold, it
   claims the best tile next to its border, by its focus, unless the player has
   pinned one (D18). The threshold rises with each tile.
-- A city works tiles up to **three rings out** (36 tiles and its centre);
-  its border can reach four rings, so a city with a lot of culture holds land
-  it can't work, which keeps rivals off it (D20).
+- A city reaches **two rings out** (18 tiles and its centre), for working and
+  for its border alike (D20). Cities three apart overlap in their second
+  rings, so neighbouring cities — yours or a rival's — compete for the tiles
+  between them, and culture (or gold, below) decides who gets them.
 - A tile belongs to one city. A tile already held by someone else is skipped
   (taking tiles from a rival with culture is a candidate for a culture
   victory, later).
 - **Each citizen works one tile.** The city centre is worked for free.
+- **Specialists.** A citizen with no tile left to work — the city has worked
+  out its land, or its neighbours hold the rest — works in the city instead,
+  for +2 of the city's focus yield (production, science, culture, faith or
+  gold; science on *Balanced* or *Food*). A big city on a small patch of land
+  is a city of specialists.
 - **Citizens are placed automatically** by the city's focus — *Balanced*,
   *Food*, *Production*, *Science*, *Culture*, *Faith* or *Gold* — and the
   player can pin a citizen to a tile (D17).
@@ -976,7 +995,8 @@ food (2, +1 river). Its citizen works the river grassland next door for 3
 more: 6 food against 2 eaten, +4 a round, so population 2 at about round 7
 (it needs 23). At population 2 it works a forest too (+3 a round), so
 population 3 comes at about round 17. By round 100 a well-placed capital is
-around population 8; by round 300, 20 or more.
+around population 8; by round 300, 15–20, working every tile it holds and
+the rest as specialists.
 
 **Sprawl is braked three ways** (D19), without a happiness number:
 
@@ -1375,10 +1395,10 @@ turn, the sheets stay readable through `ReadOnlyPanel`.
 
 ## 20. Decisions to make
 
-Round 1 settled ten decisions, in whole or in part (§21.1), and round 2 three
-more (§21.2). Round 3 reopened one of round 1's (§21.3). What's left is below:
-first the reopened time model, then round 2's questions (still open), then the
-two gold raised, then the rest of round 1's in the order they block work. Each lists its options and a recommendation; the
+Rounds 1, 2 and 4 have settled twenty-six decisions (§20.4 lists them), and
+round 3 reopened the time model. What's left is below: the time model first,
+then round 2's questions, then the two gold raised, then the last of round 1's,
+which wait for Milestone B or a prototype. Each lists its options and a recommendation; the
 recommendation is what the body assumes.
 
 ### 20.1 Reopened in round 3: the time model
@@ -1514,7 +1534,9 @@ sale. Trade routes (f) are a system of their own — trader units, routes,
 pillaging — and wait for a later milestone. *Also:* buying at 3 gold a point
 of production, one purchase a city a round.
 
-**D49. What costs gold every round?** (§10.6, §12.8)
+**D49. What costs gold every round?** (§10.6, §12.8) *Units are settled:*
+round 4 agreed D26, gold upkeep beyond the free allowance. Still open: whether
+buildings cost gold too.
 *Options:* (a) units beyond the free allowance only; (b) units and buildings
 (*Civilization V*/*VI*'s maintenance); (c) nothing: gold is only spent when the
 player chooses.
@@ -1523,103 +1545,38 @@ late turns, a sensible size. Upkeep on buildings is a number on every building
 and a way for a poor empire to get poorer. *Also:* a treasury that runs dry
 disbands a unit, with a round's warning.
 
-### 20.4 Still open from round 1, before the first version's rules
+### 20.4 Decided so far
 
-**D7. Hex orientation and the look** (§9.1, §22).
-*Options:* (a) pointy-topped hexes, squashed to a tilted-table view; (b)
-flat-topped; (c) a flat top-down map with no standing art; (d) true isometric
-hexes with heights.
-*Recommendation:* (a).
+| | Decision | Answer | Round | Where |
+|---|---|---|---|---|
+| D1 | Name | Day of Dominion | 1 | — |
+| D2 | Players | Up to eight (who fills the seats is D45) | 1 | — |
+| D4 | Match length | Up to 300 rounds or more, at a pace the host picks | 1 | §6 |
+| D5 | Victories | Several: domination and a science mission now, culture and religion later | 1 | §18 |
+| D6 | Eras | Five, each player in their own, by research | 1 | §7 |
+| D7 | The look | Pointy-topped hexes, squashed to a tilted-table view | 4 | §22 |
+| D8 | Map size and shape | Sizes by player count, taller than wide, no wrap; the host picks small, standard or large | 4 | §9.6 |
+| D9 | Map generation | Procedural from a seed, with fairness checks | 4 | §9.7 |
+| D10 | Biomes | The brief's eight, plus plains and desert | 4 | §9.2 |
+| D11 | Biome per tile | One biome a tile, no features on top | 4 | §9.2 |
+| D12 | Mountains | Impassable | 4 | §9.2 |
+| D13 | Rivers | Crossing ends the move until Engineering; −5 attacking across; +1 food beside; fresh water for growth | 4 | §9.3 |
+| D14 | Water | Coast early, ocean from Navigation | 4 | §9.4 |
+| D15 | Yields | Food, production, science, culture, faith (religion), gold | 1, 2 | §12.3 |
+| D16 | Tile improvements | City buildings, not workers | 2 | §12.6 |
+| D17 | Citizens | Placed automatically by the city's focus, with pinning | 4 | §12.2 |
+| D18 | Territory | Grows by the city's culture | 4 | §12.2 |
+| D19 | Brakes on size | Fresh-water population caps, rising settler costs, techs and traditions costing more per city past the fourth | 4 | §12.4 |
+| D20 | City spacing | Three hexes apart, two rings | 4 | §12.1–§12.2 |
+| D22 | Production | A queue of five, repeat, progress kept on a switch, an empty queue makes food, automation (buying is D48) | 4 | §12.5 |
+| D23 | Stacking | One military unit a tile, plus one civilian | 1 | §10.1 |
+| D24 | Combat | Strength plus advantages, no roll | 2 | §11.2 |
+| D25 | Upgrades and promotions | Units upgrade through research (how is D41); no promotions in the first version | 1, 4 | §10.3 |
+| D26 | Unit upkeep | Two free units a city, 1 gold a round each beyond (2 from the Industrial era) | 4 | §10.6 |
+| D27 | Capturing cities | Capture only, losing 1 population and a level of walls | 4 | §11.4 |
+| D28 | Movement rules | Zones of control and closed borders at peace | 4 | §10.1, §16.1 |
 
-**D8. Map size and shape** (§9.6).
-*Options:* (a) §9.6's sizes by player count, taller than wide, no wrap; (b) the
-host picks small, standard or large; (c) a map that wraps east to west.
-*Recommendation:* (a), with (b) once balance is known. *Changed by round 1:*
-about 180 land hexes a player, up from 120, for a longer match with more
-cities.
-
-**D9. Map generation** (§9.7).
-*Options:* (a) procedural from a seed, with fairness checks; (b) hand-made maps;
-(c) (a) with several map types.
-*Recommendation:* (a). *Changed by round 1:* a couple of continents and islands,
-not one continent, because five eras want the ocean.
-
-**D10. Which biomes?** (§9.2)
-*Options:* (a) the eight in the brief; (b) + plains and desert; (c) + tundra,
-snow and marsh.
-*Recommendation:* (a), as a registry so (b) is an entry each. With a map of
-thousands of hexes, plains and desert are the most likely first additions.
-
-**D11. One biome a tile, or terrain with features?**
-*Options:* (a) one biome a tile; (b) a base with a feature on top and hills as a
-height.
-*Recommendation:* (a).
-
-**D12. Mountains: impassable, or just expensive?**
-*Options:* (a) impassable; (b) cost 3, ending the move; (c) passable by some
-units.
-*Recommendation:* (a), with mountains giving faith and science to the city
-they belong to (§9.2), so they're worth having in a territory.
-
-**D13. What rivers do** (§9.3).
-*Recommendation:* crossing ends the move until Engineering, −5 attacking across,
-+1 food beside, fresh water for growth.
-
-**D14. Water** (§9.4).
-*Options:* (a) coast only; (b) coast early, ocean from Navigation; (c) no water
-units.
-*Recommendation:* (b). *Changed by round 1:* five eras need the oceans, so (a)
-is no longer enough.
-
-**D17. Who places citizens?** (§12.2)
-*Recommendation:* automatic by focus, with pinning. *Changed by round 1:* the
-focuses now include culture and faith.
-
-**D18. How territory grows** (§12.2).
-*Options:* (a) a tile each time the city grows; (b) a whole ring at once; (c) by
-the city's culture.
-*Recommendation:* (c). *Changed by round 1:* culture is now a yield, so it should
-do the job it does in *Civilization*.
-
-**D19. What brakes growth and sprawl?** (§12.4)
-*Options:* (a) population caps by fresh water and buildings, rising settler
-costs, and techs and traditions costing more for each city past the fourth;
-(b) a happiness yield; (c) nothing.
-*Recommendation:* (a). *Changed by round 1:* the per-city cost on techs and
-traditions is new, because a 300-round match gives a wide empire far longer to
-snowball.
-
-**D20. How close can cities be, and how far do they reach?**
-*Options:* (a) three apart, two rings; (b) four apart, working three rings,
-borders to four; (c) four apart, five rings of border (*Civilization VI*).
-*Recommendation:* (b). *Changed by round 1:* a city grows for 300 rounds, not
-70, and needs the room. Three rings is still a city's land on screen around it.
-
-**D21. Resources.** Bonus resources and strategic ones are settled; how
-strategic ones work is now D42.
-
-**D22. Production rules** (§12.5).
-*Recommendation:* a queue of five, repeat, progress kept on a switch, an empty
-queue turns production into food, and automation. *Changed by round 1:* repeat
-and automation are new, for the longer match. *Changed by round 2:* buying
-with gold is now possible, and is D48.
-
-**D25. Promotions.** Upgrades are settled (D41 is how). Still open: experience
-and promotions. *Recommendation:* none in the first version, the first thing
-after. Upgrades keep promotions once they exist.
-
-**D26. Unit upkeep** (§10.6).
-*Recommendation:* two free units a city, 1 gold each a round beyond (2 from the
-Industrial era). *Changed by round 2:* paid in gold rather than production
-(D49).
-
-**D27. Capturing cities** (§11.4).
-*Recommendation:* capture only, losing 1 population and a level of walls.
-
-**D28. Zones of control and closed borders** (§10.1, §16.1).
-*Recommendation:* both. *Changed by round 1:* closed borders no longer serve
-simultaneous turns, but they still stop a "friend" walking an army to your
-capital before declaring war.
+D21 (resources) became D42, which is still open.
 
 ### 20.5 Still open from round 1, before Milestone B
 
@@ -1719,6 +1676,27 @@ simulator over the rules module before anyone plays a match that lasts months.
    options?" (§5.3–§5.8 answer it; D3 is open again in §20.1.)
 
 ### 21.4 Round 4
+
+The time model (D3) is still undecided. The rest:
+
+1. **D7:** (a), pointy-topped hexes in a tilted-table view.
+2. **D8:** (a) and (b): sizes by player count, taller than wide, no wrap, and
+   the host can pick small, standard or large.
+3. **D9:** (a), procedural from a seed with fairness checks.
+4. **D10:** (b), the brief's eight plus plains and desert. (§9.2, §9.5, §9.7.)
+5. **D11:** (a), one biome a tile.
+6. **D12:** (a), mountains impassable.
+7. **D13:** agreed.
+8. **D14:** (b), coast early, ocean from Navigation.
+9. **D17:** agreed.
+10. **D18:** (c), culture gains tiles.
+11. **D19:** (a).
+12. **D20:** (a), three apart, two rings. (§12.1–§12.2: borders stop at two
+    rings too, neighbours overlap and compete for the tiles between them, and
+    specialists are added for citizens with no tile left to work.)
+13. **D22, D25, D26, D27, D28:** agreed.
+
+### 21.5 Round 5
 
 To come.
 
