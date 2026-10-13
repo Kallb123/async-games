@@ -635,6 +635,13 @@ The gremlin's questions.
   next command back off the same stack. The recap therefore shows neither a
   building that is no longer on the board nor a bookkeeping row about taking
   it back. The same rule serves every game that supports undo.
+- **No step in the review, where a game asks.** The turn recap's timeline has
+  one step per command, so an action taken back would play and then snap back.
+  A replay adapter that sets `omitUndoneSteps` (Realm Arena's does) leaves out of
+  the timeline it returns every undo and every command one took back, using the
+  recap's pairing (`utils/games/undoPairs.ts`). The step after a dropped pair plays from the one
+  before it, which is the same board. `onStep` still sees the whole replay, and
+  the history log keeps the lines. Other games keep every step.
 - **Planning is unaffected.** `plannableCommands` does not list any of the four,
   and does not gain `SACUndo`. A planned move is never saved, so there is
   nothing to take back.
@@ -1539,7 +1546,8 @@ action's kind but what the action set off.
   never sent anyway: `gameStateToModel` builds its return field by field and
   gains `canUndo` alone — the same expression as the other games.
 - **Recap.** The shared recap engine drops an undo together with the command
-  it reversed, so an action taken back leaves no row.
+  it reversed, so an action taken back leaves no row — nor a step in the
+  review (`omitUndoneSteps`, §10).
 - **The button.** `UndoButton`, beside End turn in `RealmArenaTurnEnd`'s
   `.ag-action-grid` row — End turn is always on the sheet during a battle turn,
   as in Fires Out. Taking an action back also clears the results card that

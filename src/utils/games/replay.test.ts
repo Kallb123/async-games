@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildTimeline, computePerTurnEvents, computePerTurnStat, registerReplayAdapter } from "./replay";
+import { buildTimeline, computePerTurnEvents, computePerTurnStat, getReplayAdapter, keepSnapshots, registerReplayAdapter, type ITurnSnapshot } from "./replay";
 import { countTurns } from "./turnCount";
 import { serializable } from "../apiModels/Serialisable";
 import type { ICommandOutcome, IGameCommand, IGameType } from "../apiModels/gameCommand";
@@ -27,7 +27,7 @@ class TestBonusTurnGameType implements IGameType {
     friendlyName = "Test Bonus Turn Game";
     icon = "";
     url = "testbonusturngame";
-    readonly className = "TestBonusTurnGameType";
+    readonly className: string = "TestBonusTurnGameType";
 
     CheckEndTurn(gameData: IGameData, commandOutcome: ICommandOutcome) {
         const state = (gameData as unknown as { specificGameState: ITestGameState }).specificGameState;
@@ -57,7 +57,7 @@ class TestBonusAction implements IGameCommand {
     // Grants the sender another go instead of ending their turn - Amusement
     // Park's doubles bonus, stripped to its essence.
     triggerBonus = false;
-    readonly className = "TestBonusAction";
+    readonly className: string = "TestBonusAction";
 
     myString() {
         return "TestBonusAction";
@@ -338,5 +338,146 @@ describe("a recorded command's rules version", () => {
         // rules would show a game that never happened.
         await expect(buildTimeline(game([versioned("u1", FIRST_COMMAND_VERSION + 1)]), { u1: "u1", u2: "u2" }))
             .rejects.toThrow(/command version 2/);
+    });
+});
+
+// IReplayAdapter.omitUndoneSteps: a game with undo, whose review has no step for
+// an action taken back or for the undo that took it back.
+@serializable
+class TestUndoGameType extends TestBonusTurnGameType {
+    readonly className: string = "TestUndoGameType";
+}
+
+// Takes the sender's last point back — what stands in for a snapshot restore.
+@serializable
+class TestBonusUndo extends TestBonusAction {
+    readonly className: string = "TestBonusUndo";
+
+    async Execute(gameData: IGameData): Promise<ICommandOutcome> {
+        const state = (gameData as unknown as { specificGameState: ITestGameState }).specificGameState;
+        state.scores[this.senderId] -= 1;
+        return { validMove: true, turnOver: false };
+    }
+}
+
+registerReplayAdapter({
+    ...getReplayAdapter("TestBonusTurnGameType")!,
+    className: "TestUndoGameType",
+    omitUndoneSteps: true,
+    plannableCommands: ["TestBonusAction"],
+});
+
+let nextId = 0;
+/** A command with an id of its own, which the pairing of an undo needs. */
+function withId<T extends IGameCommand>(command: T): T {
+    command.id = `c${nextId++}` as uuidString;
+    return command;
+}
+function undoGame(commandHistory: IGameCommand[]): IGameData {
+    return { ...game(commandHistory), gameType: new TestUndoGameType() } as IGameData;
+}
+const scoresOf = (timeline: { snapshots: ITurnSnapshot[] }) =>
+    timeline.snapshots.map(s => (s.specificGameState as ITestGameState).scores.u1);
+const NAMES = { u1: "u1", u2: "u2" };
+
+describe("a game that omits undone steps", () => {
+    it("has no step for an action taken back, nor for the undo", async () => {
+        const undo = withId(new TestBonusUndo());
+        undo.senderId = "u1";
+        const history = [withId(action("u1")), withId(action("u1")), undo, withId(action("u1"))];
+
+        const timeline = await buildTimeline(undoGame(history), NAMES);
+
+        // Opening state, then the first and the last action: the second and the undo are gone.
+        expect(scoresOf(timeline)).toEqual([0, 1, 2]);
+        expect(timeline.snapshots.map(s => s.index)).toEqual([0, 1, 2]);
+        expect(timeline.currentIndex).toBe(2);
+    });
+
+    it("has no step for actions taken back by undos in a row", async () => {
+        const undos = [withId(new TestBonusUndo()), withId(new TestBonusUndo())];
+        undos.forEach(undo => { undo.senderId = "u1"; });
+        const history = [withId(action("u1")), withId(action("u1")), ...undos, withId(action("u1"))];
+
+        const timeline = await buildTimeline(undoGame(history), NAMES);
+
+        // The opening state, then only the last action.
+        expect(scoresOf(timeline)).toEqual([0, 1]);
+        expect(timeline.snapshots.map(s => s.index)).toEqual([0, 1]);
+        expect(timeline.currentIndex).toBe(1);
+    });
+
+    it("pairs each undo with the newest action still standing, across fresh actions between them", async () => {
+        const undos = [withId(new TestBonusUndo()), withId(new TestBonusUndo()), withId(new TestBonusUndo())];
+        undos.forEach(undo => { undo.senderId = "u1"; });
+        const [a, b, c, d] = [withId(action("u1")), withId(action("u1")), withId(action("u1")), withId(action("u1"))];
+        // The second undo takes C back, the third reaches past it to A.
+        const history = [a, b, undos[0], c, undos[1], undos[2], d];
+
+        const timeline = await buildTimeline(undoGame(history), NAMES);
+
+        expect(scoresOf(timeline)).toEqual([0, 1]);
+        expect(timeline.snapshots.map(s => s.index)).toEqual([0, 1]);
+        expect(timeline.currentIndex).toBe(1);
+    });
+
+    it("still shows an observer every step, the undo included", async () => {
+        const undo = withId(new TestBonusUndo());
+        undo.senderId = "u1";
+        const seen: string[] = [];
+
+        await buildTimeline(undoGame([withId(action("u1")), undo]), NAMES, [], step => seen.push(step.command.className));
+
+        expect(seen).toEqual(["TestBonusAction", "TestBonusUndo"]);
+    });
+
+    it("ends on the opening state when everything played was taken back", async () => {
+        const first = withId(action("u1"));
+        const undo = withId(new TestBonusUndo());
+        undo.senderId = "u1";
+
+        const timeline = await buildTimeline(undoGame([first, undo]), NAMES);
+
+        expect(timeline.snapshots).toHaveLength(1);
+        expect(timeline.currentIndex).toBe(0);
+    });
+
+    it("keeps a planned move after the live state, counted on", async () => {
+        const undo = withId(new TestBonusUndo());
+        undo.senderId = "u1";
+        const history = [withId(action("u1")), withId(action("u1")), undo];
+
+        const timeline = await buildTimeline(undoGame(history), NAMES, [withId(action("u1"))]);
+
+        expect(timeline.snapshots.map(s => [s.index, s.planned])).toEqual([[0, false], [1, false], [2, true]]);
+        expect(timeline.currentIndex).toBe(1);
+    });
+
+    it("leaves a game that doesn't opt in alone", async () => {
+        const undo = withId(new TestBonusUndo());
+        undo.senderId = "u1";
+        const history = [withId(action("u1")), undo];
+
+        const timeline = await buildTimeline(game(history), NAMES);
+
+        expect(timeline.snapshots).toHaveLength(3);
+        expect(timeline.currentIndex).toBe(2);
+    });
+});
+
+describe("keepSnapshots", () => {
+    const snap = (index: number, planned = false) => ({ index, planned }) as ITurnSnapshot;
+
+    it("counts what is kept from 0 and points currentIndex at the last real one", () => {
+        const kept = keepSnapshots([snap(0), snap(1), snap(2), snap(3), snap(4, true), snap(5, true)], (_, i) => i === 3);
+        expect(kept.snapshots.map(s => s.index)).toEqual([0, 1, 2, 3]);
+        expect(kept.snapshots.map(s => s.planned)).toEqual([false, false, true, true]);
+        expect(kept.currentIndex).toBe(1);
+    });
+
+    it("always keeps the opening state and every planned snapshot", () => {
+        const kept = keepSnapshots([snap(0), snap(1), snap(2, true)], () => false);
+        expect(kept.snapshots).toHaveLength(2);
+        expect(kept.currentIndex).toBe(0);
     });
 });
