@@ -1,15 +1,18 @@
 # Day of Dominion — Game Design Document
 
-**Status:** Concept, v0.3. Round 1 (§21.1) settled the name, eight players,
+**Status:** Concept, v0.4. Round 1 (§21.1) settled the name, eight players,
 turns taken one after another, long matches at a pace the host picks,
 several ways to win, five eras each player moves through at their own speed,
 units that upgrade through research, the yields with strategic resources,
 and one military unit a tile. Round 2 (§21.2) added gold as a sixth yield,
 chose city buildings over workers, and made combat strength and advantages
-with no roll. Everything still open is in §20: round 2's new questions
+with no roll. Round 3 (§21.3) reopened the time model: §5 now lays out eight
+ways to run a round and what each would need here. Everything still open is in
+§20: the time model, round 2's new questions
 (D35–D47, none answered yet), two that gold raised (D48–D49), and the rest of
 round 1's. The body is written as if each open recommendation were taken,
-and marks the spot with the decision's number.
+and marks the spot with the decision's number — except the time model, where
+it still assumes round 1's answer (§5.8 lists what would change).
 **Name:** Day of Dominion
 **Genre:** Turn-based 4X on a hex map, *Civilization*-style
 **Inspirations:** *Civilization V* and *VI* (hexes, one unit per tile, cities
@@ -26,7 +29,7 @@ host picks; weeks to months of real time depending on the table (§4, D35)
 2. [Design pillars](#2-design-pillars)
 3. [Where it sits among the other games](#3-where-it-sits-among-the-other-games)
 4. [The asynchronous problem: the hand-off budget](#4-the-asynchronous-problem-the-hand-off-budget)
-5. [Time model: one turn at a time](#5-time-model-one-turn-at-a-time)
+5. [Time model: who moves when](#5-time-model-who-moves-when)
 6. [Pace](#6-pace)
 7. [Eras](#7-eras)
 8. [A match from start to finish](#8-a-match-from-start-to-finish)
@@ -184,20 +187,21 @@ Seven things keep a turn here to a few minutes:
 
 ---
 
-## 5. Time model: one turn at a time
+## 5. Time model: who moves when
 
-**Decided in round 1 (D3): turns are taken one after another**, in seat
-order, the way every game here works. One player is active at a time;
-everyone else watches.
+**Reopened in round 3 (D3).** Round 1 chose turns one after another (option A
+below), and the rest of this document is still written that way. Round 3 asked
+what else there is, whether it could run here, and what it would cost. §5.3–
+§5.8 answer that; §20.1 holds the decision.
 
 ### 5.1 What a turn is
 
-At the start of a player's turn, **their empire moves on**: their cities
-collect yields, grow or starve, finish what they were building, their
-research and culture and faith move on, their units heal, and units with
-standing orders walk (§10.5). Then the player plays: moves units, attacks,
-founds cities, sets queues and picks choices. Then they end their turn, and
-the next seat starts.
+Under turns one after another (A), at the start of a player's turn, **their
+empire moves on**: their cities collect yields, grow or starve, finish what
+they were building, their research and culture and faith move on, their units
+heal, and units with standing orders walk (§10.5). Then the player plays: moves
+units, attacks, founds cities, sets queues and picks choices. Then they end
+their turn, and the next seat starts.
 
 After the last seat, **the world moves**: barbarians act (§16.2), and the
 round count goes up.
@@ -221,14 +225,225 @@ time. To everyone else, a turn that ended by itself must look exactly like
 one the player ended by hand, as Settlements & Cities already makes sure,
 since otherwise it says something about that player's empire (§17).
 
-### 5.3 What was set aside
+This works under every option below.
 
-Round 1 weighed simultaneous play (everyone at once; everyone at once at
-peace with players at war taking turns in order) and chose turns one after
-another. That keeps the game on the platform's engine as it is: one active
-seat, the turn timer, the recap, the undo hold, the dropout ladder, all
-unchanged. The cost is the length in §4, and §6's pace and §5.2's turns that
-end themselves are how it's paid.
+### 5.3 The two problems with moving at once
+
+Letting everyone play the same round at the same time is what makes rounds
+fast (§4.1). It brings two problems.
+
+1. **The fastest player wins.** When two players act in the same round and
+   moves happen the moment they're made, whoever acts first wins anything they
+   both wanted: the city site, the attack before the other side retreats.
+   *Civilization*'s own simultaneous mode is known for this.
+2. **The double move.** A round closes when the last player ends it, and the
+   next opens at once. So the player who played *last* in round 10 can play
+   *first* in round 11: two turns in a row, with nobody able to answer in
+   between. Their army attacks, then attacks again, before the defender has
+   seen the first blow. Asynchronously this isn't an exploit someone has to
+   try for: it happens whenever one player checks in after the other, which is
+   half the time.
+
+Both only matter **between players who can affect each other**. Two players
+who can't touch each other can play in any order, at the same time, twice in a
+row, and neither is worse off. Most of the options below are built on that.
+
+"Affect each other" means two things:
+
+- **Fighting:** attacking each other's units and cities. Only players at war.
+- **Racing:** both wanting the same thing first — a city site, a tile, a tribal
+  village, a wonder. Players at peace can race.
+
+### 5.4 The options
+
+**A. One after another.** Every game here works this way. Fair: nobody moves
+twice in a row, nobody races. Slow: a round is eight hand-offs.
+
+**B. All at once, live.** Everyone plays the same round whenever they like,
+and every move happens when it's made. The round closes when everyone has
+ended it. Fast, and it's *Civilization*'s simultaneous mode — so it has both of
+§5.3's problems in full, between everyone.
+
+**C. At war in order, otherwise at once.** *Civilization VI*'s "dynamic turns".
+Each round, players at war with each other, directly or through someone else,
+form a *war group* and take their turns in a fixed order; everyone else plays
+at once, alongside the war groups. Enemies can never double-move each other,
+because they always alternate. Players at peace still race (§5.7 deals with
+that).
+
+**D. Phases by conflict.** C generalised. Each round the server draws a graph
+of who is in conflict with whom and splits the players into as few **phases**
+as it can, so that no two players in conflict share one. Phase 1 plays at
+once, then phase 2, and so on. With conflict meaning *at war*, it's C, but a
+chain of wars takes fewer steps: with A at war with B and B with C, option C
+puts all three in one war group, three turns one after another, while D needs
+only two phases, {A, C} then {B}. With conflict meaning *in contact*
+(borders touching, or units in sight of each other), it also ends peaceful
+races near a border, but as the map fills up nearly everyone is in contact
+with someone and it slides towards A.
+
+**E. Orders, then resolve (WEGO).** Everyone gives their orders for the round
+in secret, at any time; when the last player is done, the server carries them
+all out together. *Diplomacy*, *Frozen Synapse*, *Laser Squad Nemesis*, and
+this repo's own sealed battle plans
+([`defender-of-the-realm.md`](./defender-of-the-realm.md) §13). Perfectly
+fair: nobody moves first, so nobody moves twice and nobody races. The cost is
+the feel: you can't see the result of one attack before ordering the next,
+and the server needs rules for every collision (two units into one tile, an
+attack on a unit that moved away, two players taking the same city).
+
+**F. Live economy, sealed war.** Everything that only touches your own empire
+— cities, research, culture, faith, moving inside your own land or into the
+unknown — happens live, at once. Anything that touches another player — an
+attack, moving into a tile they can see, founding a city or buying a tile near
+them — is sealed, and carried out at the round's end, as in E. A middle way:
+most of a turn feels like *Civilization*, and fights are fair. The cost is a
+rule for exactly what "touches another player" means, and a turn where some
+moves happen now and some later.
+
+**G. Rounds on a deadline.** The round closes at a fixed time — every 6, 12 or
+24 hours — whether everyone has played or not; a player who hasn't has their
+standing orders carried out (§23.5). Kingdom Builder's tick, made coarse.
+Combined with B, C or E. Its gift is a match whose length is known on day one
+(300 rounds at 12 hours is 150 days) and nobody waiting on the slowest
+player. The cost: a busy player misses turns they'd have played, and a
+deadline has to fit eight time zones.
+
+**H. One after another, with prepared turns.** A, but while others play, you
+can **prepare your next turn**: queue moves and choices, as the planning
+engine already lets a player try moves on a copy of the board
+([`turn-recap-and-planning.md`](../turn-recap-and-planning.md)). When your
+turn comes, if nothing you can see has changed in a way that matters — no
+enemy in sight, no prepared move blocked — the server plays it and ends it
+for you. §5.2 taken further. Fair, because it's still one at a time; quick
+when quiet, because a prepared turn costs no hand-off; no help when it isn't.
+It works on top of every other option too.
+
+### 5.5 How fast, and how fair
+
+Eight players, four check-ins a day (about three hours a hand-off, §4.1). The
+slowest of eight players is about 8 hours on average.
+
+| | Round | 300 rounds | Fastest player wins? | Double move? | Feels like |
+|---|---:|---:|---|---|---|
+| **A** One after another | ~24 h | ~300 days | No | No | *Civilization* hotseat |
+| **B** All at once, live | ~8 h | ~100 days | Yes | Yes, between everyone | *Civilization* simultaneous |
+| **C** At war in order | ~8 h at peace; ~10 h with a war; 24 h if everyone is in one war | ~100–130 days | Only in peaceful races (§5.7) | No | *Civilization VI* dynamic turns |
+| **D** Phases by conflict | Between C and A | ~100–200 days | Fewer races than C | No | As C |
+| **E** Orders, then resolve | ~8 h | ~100 days | No | No | *Diplomacy* |
+| **F** Live economy, sealed war | ~8 h | ~100 days | No | No | *Civilization*, with fights at the round's end |
+| **G** On a deadline | Fixed: 6, 12, 24 h | 75–300 days, known in advance | As the option it's combined with | | Play-by-email |
+| **H** Prepared turns | Between A and B, by how quiet the match is | ~150–300 days | No | No | *Civilization* hotseat |
+
+### 5.6 Could the platform do it?
+
+**Today the platform has exactly one active seat.** `currentTurn` is a single
+player, and it runs through the shared code — almost forty files outside the
+games themselves:
+
+- the command route refuses anyone but `currentTurn`, except commands marked
+  playable out of turn, which by design can never end or hand off a turn
+  ([`out-of-turn-actions.md`](../out-of-turn-actions.md));
+- the turn-timer sweep keeps one turn clock a game, and drops or abandons by
+  the one player who's late;
+- one `YourTurn` push, one nudge, and the dashboard's "your turn" lists;
+- replay's turn boundaries, the recap's "since your last turn", and the
+  ten-second undo hold on the hand-off.
+
+So **A and H** run on the engine as it is. H needs a way to keep a prepared
+turn (private to its player, so the `croupier` cares) and the rules for when
+it still stands.
+
+**B, C, D, F and E need several players active at once.** Three ways to get
+there:
+
+1. **Make the engine's active seat a set.** Each active seat has its own turn
+   clock, its own `YourTurn` push and its own "your turn" on the dashboard; a
+   round closes when the set is empty; a one-seat game is a set of one and
+   changes nothing. This is the right shape, and it's a platform feature, not a
+   Day of Dominion one: Realm Arena's team play wants the same "shared turn"
+   ([`realm-arena.md`](./realm-arena.md) §5.2). It's the biggest piece of
+   engine work in this document, and wants its own design document before it's
+   built, with the `gremlin` reviewing it (two players acting on one game at
+   the same moment is new, and the saves have to be safe against each other).
+   Replay keeps working: the command history is already in the order things
+   happened, whoever sent them.
+2. **Leave the engine, as Kingdom Builder did.** Kingdom Builder runs outside
+   the command pipeline altogether — its own models, its own routes
+   (`src/app/api/kingdombuilder/`), its own cron (`cron/kingdombuilder-tick`).
+   That proves a game can, but Day of Dominion would then have to rebuild the
+   command history, replay and recap, undo, the turn timer and the dropout
+   ladder for itself. Not worth it for a turn-based game.
+3. **Stretch the out-of-turn path.** Mark every command playable out of turn,
+   and have an "I'm done" command close the round. It's narrow on purpose, can't
+   end a turn, and the pushes, the timer and the dashboard would all still
+   think one person was up. Not recommended.
+
+On top of a set of active seats:
+
+- **C** needs the war-group scheduler: who's in which group, the order inside
+  it, whose turn it is inside each.
+- **D** needs the graph and the phases: a little more than C.
+- **E** needs sealed orders — hidden from everyone until the round resolves,
+  which is new hidden state for the `croupier` — and a resolution engine that
+  carries all of them out at once and settles every collision. That engine is
+  the hard part. The resolution itself is one server command, which suits
+  replay well.
+- **F** needs both a live path and a sealed one, and the rule for which is
+  which.
+- **G** is the turn timer applied to every active seat at once: with a set of
+  active seats, the sweep already does most of it.
+
+### 5.7 Making C fair
+
+If C is chosen, four rules close the gaps it leaves:
+
+1. **A war group's order never changes while the war lasts.** If B goes first
+   in the first round, B goes first in every round, so the two always
+   alternate. A player joining a group goes last in it.
+2. **The player war is declared on goes first.** War starts the round after
+   it's declared (§16.1), and in that first round the defender moves first: an
+   army massed on the border during the peace doesn't get the first blow as
+   well.
+3. **Claims are settled at the round's end, not first come.** Founding a city
+   and buying a tile — the races that matter most — are made during the turn
+   but happen when the round closes. If two players' claims clash (two cities
+   too close, the same tile), the one with the round's **priority** wins, and
+   priority goes round the table, a seat a round. Tribal villages and empty
+   land stay first come: small races, not worth a rule.
+4. **Every empire moves on at the start of the round, together.** Yields,
+   growth, what completes, research — for everyone at once, so a wonder
+   finishing in two empires in the same round is a tie the priority settles,
+   not a race to log in.
+
+### 5.8 Recommendation
+
+**C, with §5.7's rules, built on a set of active seats (§5.6, way 1) — and H
+and §5.2 on top.** C keeps the moment-to-moment feel of *Civilization*, is
+three times faster than A at eight players, and is fair where it counts:
+enemies always alternate, and races are settled by a rotating priority, not by
+who logs in first. It's also what most *Civilization* players already know.
+
+- **E** is the fairest option and the cleanest on paper, and the runner-up.
+  It's the right choice if the table would rather plan than react. It's a
+  different game to play, though, and its resolution engine is a project of its
+  own.
+- **F** is the most interesting middle way, but "what touches another player"
+  is a rule players will argue with.
+- **G** is worth offering as a host option on top of C: a round deadline, for
+  a table that wants the match's length known in advance.
+- **Start as A.** At two players, C is A whenever the two are at war, and
+  differs only in peace, so Milestone A (§25) can build the game on today's
+  engine while the set of active seats is designed. The game should be written
+  so that "whose turn is it" is asked of a function, not read off
+  `currentTurn`, so C slots in later.
+
+**If C is chosen, this changes elsewhere:** §4.1's table (rounds are about 8–10
+hours, not 24, at eight players); §5.1 (empires move on together at the start
+of the round); §16.1 (the defender moves first); §17 (which war group a player
+is in is known only to the players in it, and the round's priority is public);
+§23.2 (the engine piece, §5.6); §25 (that piece goes into Milestone B); and D33
+(standing orders move at the start of the round).
 
 ---
 
@@ -1161,12 +1376,25 @@ turn, the sheets stay readable through `ReadOnlyPanel`.
 ## 20. Decisions to make
 
 Round 1 settled ten decisions, in whole or in part (§21.1), and round 2 three
-more (§21.2). What's left is below: first round 2's questions (still open),
-then the two gold raised, then the rest of round 1's in the order they block
-work. Each lists its options and a recommendation; the
+more (§21.2). Round 3 reopened one of round 1's (§21.3). What's left is below:
+first the reopened time model, then round 2's questions (still open), then the
+two gold raised, then the rest of round 1's in the order they block work. Each lists its options and a recommendation; the
 recommendation is what the body assumes.
 
-### 20.1 Round 2's questions, still open
+### 20.1 Reopened in round 3: the time model
+
+**D3. Who moves when?** (§5)
+*Options* (§5.4): (A) one after another; (B) all at once, live; (C) at war in
+order, otherwise at once; (D) phases by conflict; (E) orders, then resolve;
+(F) live economy, sealed war; (G) rounds on a deadline, on top of B, C or E;
+(H) one after another with prepared turns, on top of any of them.
+*Recommendation* (§5.8): C, with §5.7's four fairness rules, on a set of
+active seats built as a platform feature — with H and §5.2 on top, G as a host
+option, and Milestone A built as A on today's engine. E is the runner-up.
+*Round 1 chose A;* round 3 reopened it. The body outside §5 still assumes A,
+and §5.8 lists what changes if C is taken.
+
+### 20.2 Round 2's questions, still open
 
 **D35. How long, in real time, can an eight-player match be?** (§4)
 At four check-ins a day, an eight-player round is about a day, so a 300-round
@@ -1275,7 +1503,7 @@ it.
 their own (bases, ranges, interception) on a screen already full; the Modern
 era has tanks, artillery and battleships without them.
 
-### 20.2 Gold: new questions
+### 20.3 Gold: new questions
 
 **D48. What does gold buy?** (§12.8)
 *Options:* any mix of (a) a city's current item outright; (b) tiles; (c) unit
@@ -1295,7 +1523,7 @@ late turns, a sensible size. Upkeep on buildings is a number on every building
 and a way for a poor empire to get poorer. *Also:* a treasury that runs dry
 disbands a unit, with a round's warning.
 
-### 20.3 Still open from round 1, before the first version's rules
+### 20.4 Still open from round 1, before the first version's rules
 
 **D7. Hex orientation and the look** (§9.1, §22).
 *Options:* (a) pointy-topped hexes, squashed to a tilted-table view; (b)
@@ -1393,7 +1621,7 @@ Industrial era). *Changed by round 2:* paid in gold rather than production
 simultaneous turns, but they still stop a "friend" walking an army to your
 capital before declaring war.
 
-### 20.4 Still open from round 1, before Milestone B
+### 20.5 Still open from round 1, before Milestone B
 
 **D29. Diplomacy** (§16.1).
 *Options:* (a) war and peace only; (b) + open borders, research agreements and
@@ -1423,7 +1651,7 @@ in most games.
 turns one at a time there's no shared start of round to move them at, and the
 start of the owner's turn is when they'd look.
 
-### 20.5 Can wait for a prototype
+### 20.6 Can wait for a prototype
 
 **D34. Rendering and art** (§22.2).
 *Recommendation:* prototype at the eight-player map size (2,760 hexes) on a
@@ -1431,7 +1659,7 @@ mid-range phone before anything else is drawn. *Changed by round 1:* the
 eight-player map is three and a half times the size round 1's was, which makes
 a canvas for the ground (§22.2) close to certain.
 
-### 20.6 Other numbers to confirm
+### 20.7 Other numbers to confirm
 
 Sight, movement, the advantages in §11.2, the growth formula, the population
 caps, every strength in §10.2, the pace multipliers, the score table, the four
@@ -1478,9 +1706,19 @@ simulator over the rules module before anyone plays a match that lasts months.
 3. **Combat (D24):** not random combat; it should be strength and advantage
    based. (§11.2.)
 
-§20.1's questions (D35–D47) are still to come, with D48 and D49.
+§20.2's questions (D35–D47) are still to come, with D48 and D49.
 
 ### 21.3 Round 3
+
+1. **The time model (D3), reopened:** "I think I decided D5 [D3] 'one turn at
+   a time' too quickly. Are there other options? Could they be implemented on this
+   platform? Civ has options like simultaneous turns, but it means the fastest
+   clicker has an advantage. In our case the last person to take a turn would
+   take two in a row. Hybrid is another option where players who are at war
+   have to take turns sequentially, otherwise it's all simultaneous. Any other
+   options?" (§5.3–§5.8 answer it; D3 is open again in §20.1.)
+
+### 21.4 Round 4
 
 To come.
 
