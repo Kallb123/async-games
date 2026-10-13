@@ -394,6 +394,33 @@ describe("a game that omits undone steps", () => {
         expect(timeline.currentIndex).toBe(2);
     });
 
+    it("has no step for actions taken back by undos in a row", async () => {
+        const undos = [withId(new TestBonusUndo()), withId(new TestBonusUndo())];
+        undos.forEach(undo => { undo.senderId = "u1"; });
+        const history = [withId(action("u1")), withId(action("u1")), ...undos, withId(action("u1"))];
+
+        const timeline = await buildTimeline(undoGame(history), NAMES);
+
+        // The opening state, then only the last action.
+        expect(scoresOf(timeline)).toEqual([0, 1]);
+        expect(timeline.snapshots.map(s => s.index)).toEqual([0, 1]);
+        expect(timeline.currentIndex).toBe(1);
+    });
+
+    it("pairs each undo with the newest action still standing, across fresh actions between them", async () => {
+        const undos = [withId(new TestBonusUndo()), withId(new TestBonusUndo()), withId(new TestBonusUndo())];
+        undos.forEach(undo => { undo.senderId = "u1"; });
+        const [a, b, c, d] = [withId(action("u1")), withId(action("u1")), withId(action("u1")), withId(action("u1"))];
+        // The second undo takes C back, the third reaches past it to A.
+        const history = [a, b, undos[0], c, undos[1], undos[2], d];
+
+        const timeline = await buildTimeline(undoGame(history), NAMES);
+
+        expect(scoresOf(timeline)).toEqual([0, 1]);
+        expect(timeline.snapshots.map(s => s.index)).toEqual([0, 1]);
+        expect(timeline.currentIndex).toBe(1);
+    });
+
     it("still shows an observer every step, the undo included", async () => {
         const undo = withId(new TestBonusUndo());
         undo.senderId = "u1";
