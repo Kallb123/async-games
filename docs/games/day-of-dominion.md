@@ -1,15 +1,15 @@
 # Day of Dominion — Game Design Document
 
-**Status:** Concept, v0.2. Round 1 (§21.1) settled the name, eight players,
+**Status:** Concept, v0.3. Round 1 (§21.1) settled the name, eight players,
 turns taken one after another, long matches at a pace the host picks,
 several ways to win, five eras each player moves through at their own speed,
-units that upgrade through research, five yields with strategic resources,
-and one military unit a tile. The body below is rewritten around those
-answers. Everything still open is in §20: the decisions left from round 1,
-some with new recommendations because the answers changed them, and
-thirteen new ones the answers raised (D35–D47). The body is still written as
-if each open recommendation were taken, and marks the spot with the
-decision's number.
+units that upgrade through research, the yields with strategic resources,
+and one military unit a tile. Round 2 (§21.2) added gold as a sixth yield,
+chose city buildings over workers, and made combat strength and advantages
+with no roll. Everything still open is in §20: round 2's new questions
+(D35–D47, none answered yet), two that gold raised (D48–D49), and the rest of
+round 1's. The body is written as if each open recommendation were taken,
+and marks the spot with the decision's number.
 **Name:** Day of Dominion
 **Genre:** Turn-based 4X on a hex map, *Civilization*-style
 **Inspirations:** *Civilization V* and *VI* (hexes, one unit per tile, cities
@@ -371,15 +371,15 @@ Every tile is exactly one biome (D11). The biome decides what a city gets
 from working it, what it costs to move into, and how well a unit there
 defends.
 
-| Biome | Food | Prod. | Science | Move cost | Defence | Notes |
-|---|---:|---:|---:|---:|---:|---|
-| **Grassland** | 2 | 0 | 0 | 1 | — | The growing land. Irrigation works +1 food (§12.6) |
-| **Hills** | 1 | 2 | 0 | 2 | +3 | The working land. +1 sight. A Mine +1 production. A city on a hill defends better (§11.4) |
-| **Forest** | 1 | 1 | 0 | 2 | +3 | Blocks sight beyond it. A Lumber mill +1 production. Can be cleared to grassland by a city (§12.6) |
-| **Jungle** | 1 | 0 | 1 | 3 | +3 | Slow, hides units, a source of science. A University +1 science |
-| **Mountains** | — | — | — | impassable | — | Can't be entered or worked (D12). Blocks sight. +1 faith to the city whose territory it's in; an Observatory +1 science (§12.6) |
-| **Coast** (shallow water) | 1 | 0 | 0 | 1 by sea | — | Workable by any city beside it. A Harbour +1 food, +1 production |
-| **Ocean** (deep water) | 1 | 0 | 0 | 1 by sea | — | Workable by a city with a Harbour. Only ocean-going ships and units embarked after Navigation cross it (§9.4) |
+| Biome | Food | Prod. | Science | Gold | Move cost | Defence | Notes |
+|---|---:|---:|---:|---:|---:|---:|---|
+| **Grassland** | 2 | 0 | 0 | 0 | 1 | — | The growing land. Irrigation works +1 food (§12.6) |
+| **Hills** | 1 | 2 | 0 | 0 | 2 | +3 | The working land. +1 sight. A Mine +1 production. A city on a hill defends better (§11.4) |
+| **Forest** | 1 | 1 | 0 | 0 | 2 | +3 | Blocks sight beyond it. A Lumber mill +1 production. Can be cleared to grassland by a city (§12.6) |
+| **Jungle** | 1 | 0 | 1 | 0 | 3 | +3 | Slow, hides units, a source of science. A University +1 science |
+| **Mountains** | — | — | — | — | impassable | — | Can't be entered or worked (D12). Blocks sight. +1 faith to the city whose territory it's in; an Observatory +1 science (§12.6) |
+| **Coast** (shallow water) | 1 | 0 | 0 | 1 | 1 by sea | — | Workable by any city beside it. A Harbour +1 food, +1 production. The sea's trade is where gold starts |
+| **Ocean** (deep water) | 1 | 0 | 0 | 0 | 1 by sea | — | Workable by a city with a Harbour. Only ocean-going ships and units embarked after Navigation cross it (§9.4) |
 
 Rivers are the eighth, and they aren't a tile at all (§9.3).
 
@@ -387,6 +387,8 @@ Culture and faith come mostly from buildings, wonders and beliefs, not from
 tiles: the land decides how a city feeds and builds itself, and what the
 player builds there decides what it believes and makes. Mountains are the
 exception, which is what makes a city in the mountains' shadow a holy place.
+Gold is the same, with the coast as the exception: a harbour town is a trading
+town.
 
 The biome list is a registry (one entry per biome with its yields, cost,
 defence, sight rule and art), so adding plains, desert, tundra or snow later is
@@ -438,6 +440,8 @@ explored tiles:
 | Whales | Ocean | +1 food, +1 production |
 | Incense | Jungle | +1 faith |
 | Marble | Hills | +1 culture |
+| Gold ore | Hills | +2 gold |
+| Pearls | Coast | +1 gold, +1 faith |
 
 **Strategic resources** are needed to build and upgrade particular units and
 buildings (decided in round 1). A proposal for the list, one or two an era
@@ -561,17 +565,18 @@ how (D41):
 
 - When a player researches the next unit in a line, every unit of theirs in
   that line **can be upgraded**, and the old unit can no longer be built.
-- **Upgrading costs a round and the resource, not production.** The unit
-  must be in its owner's territory and not have moved or fought; it spends its
-  round retraining, comes back at full health as the new unit, and needs the
-  new unit's strategic resource to have room (§9.5).
+- **Upgrading costs gold** (§12.8): 2 gold for every point of production the
+  new unit costs more than the old, at least 10. The unit must be in its
+  owner's territory and have movement left; upgrading ends its move, it keeps
+  its health, and it needs the new unit's strategic resource to have room
+  (§9.5).
 - **Upgrade all** does every unit that can be, in one tap.
 - An upgraded unit keeps its promotions, if those exist (D25).
 
-Upgrades costing nothing but time is a strong reward for research, and that's
-deliberate: research is the engine of this game, and the eras are research's
-whole story. The alternative is a production cost paid by the nearest city
-(§20, D41).
+Research makes the upgrade possible, and gold pays for it: a rich empire can
+modernise its army the round the tech lands, a poor one does it a few units at
+a time. That's *Civilization*'s own split, and gold now exists to do it
+(D41).
 
 ### 10.4 Healing
 
@@ -599,7 +604,8 @@ The "Next" button (§19) only stops on units with none of these.
 ### 10.6 Upkeep
 
 Each city keeps two units for free. Every unit beyond the empire's allowance
-costs 1 production a round, taken from the city that built it (D26).
+costs **1 gold a round**, 2 from the Industrial era on, out of the treasury
+(§12.8, D26, D49).
 
 ---
 
@@ -617,9 +623,11 @@ missing.
 - **Ranged.** Only the target takes damage. A ranged unit attacked in melee
   defends with its melee strength.
 
-### 11.2 Damage
+### 11.2 Strength and advantages
 
-From *Civilization VI*, because it's well tested and easy to show:
+Each side's strength is its unit's strength plus its advantages (below).
+The difference between the two sets the damage, by *Civilization VI*'s curve,
+because it's well tested and easy to show:
 
 > damage dealt = 30 × e^(0.04 × (your strength − their strength))
 
@@ -627,7 +635,7 @@ So equal strengths deal 30 each way; 10 more strength deals 45 and takes
 20; 20 more deals 67 and takes 13. A full era's gap (a rifleman at 70 against
 a pikeman at 41) deals 96 and takes 9: an era behind is a long way behind.
 
-| Situation | Modifier |
+| Advantage | Strength |
 |---|---:|
 | Defending on hills, forest or jungle | +3 |
 | Fortified a full round | +4 |
@@ -636,8 +644,16 @@ a pikeman at 41) deals 96 and takes 9: an era behind is a long way behind.
 | Anti-mounted against mounted | +10 |
 | Siege against a city | +10 |
 
-**No random element** (D24): the damage above is the damage dealt, rounded.
-The attack preview (§19) shows exactly what will happen.
+**No random element** (decided in round 2, D24): a fight is decided by each
+side's **strength plus its advantages** — the table above — and nothing else.
+The damage above is the damage dealt, rounded, so the attack preview (§19)
+shows exactly what will happen, and the defender, usually asleep, wins or
+loses on the position, never on a roll.
+
+A worked example: a swordsman (35) attacks a spearman (25) fortified on a
+hill across a river. The spearman's strength is 25 + 3 + 4 = 32, the
+swordsman's 35 − 5 = 30. The spearman deals 32 and takes 28, every time. Bring
+a second unit next to the hill and the swordsman is at 32: even.
 
 ### 11.3 Experience
 
@@ -668,8 +684,8 @@ mountains), and at least four hexes from any other city: three clear tiles
 between (D20). The city takes the settler's place, with population 1, and
 claims the six tiles around it.
 
-The capital is the first city, and gets +2 science, +2 production and +2
-culture (its palace). Every player's capital is an **original capital** for
+The capital is the first city, and gets +2 science, +2 production, +2
+culture and +3 gold (its palace). Every player's capital is an **original capital** for
 the rest of the match, whoever holds it (§18).
 
 ### 12.2 Territory and worked tiles
@@ -686,12 +702,16 @@ the rest of the match, whoever holds it (§18).
   victory, later).
 - **Each citizen works one tile.** The city centre is worked for free.
 - **Citizens are placed automatically** by the city's focus — *Balanced*,
-  *Food*, *Production*, *Science*, *Culture* or *Faith* — and the player can
-  pin a citizen to a tile (D17).
+  *Food*, *Production*, *Science*, *Culture*, *Faith* or *Gold* — and the
+  player can pin a citizen to a tile (D17).
+- **Buying a tile.** A tile next to a city's border can be bought with gold
+  (§12.8), for a price that rises with every tile the city holds: quicker than
+  waiting for culture, and the way to grab the iron before the neighbour's
+  border reaches it.
 
 ### 12.3 Yields
 
-**Decided in round 1 (D15): five yields.**
+**Decided in rounds 1 and 2 (D15): six yields.**
 
 | Yield | Where it goes | Where it mostly comes from |
 |---|---|---|
@@ -700,16 +720,16 @@ the rest of the match, whoever holds it (§18).
 | **Science** | The empire's research (§13) | Citizens, jungle, libraries |
 | **Culture** | The city's borders, and the empire's traditions (§14) | Buildings, the palace, wonders |
 | **Faith** | The empire's religion (§15), and buying religious units | Buildings, mountains, beliefs |
+| **Gold** | The empire's treasury: buying, upgrades, upkeep (§12.8) | Coast, city centres, the palace, markets |
 
 The game calls the religion yield **faith**, which reads more naturally on a
-city ("+3 faith") than "religion" does (D39). There's **no gold**: nothing
-is bought with money, and upkeep is paid in production (§10.6). Faith is the
-only yield that buys things outright (§15).
+city ("+3 faith") than "religion" does (D39). Food and production stay in the
+city that makes them; science, culture, faith and gold go to the empire.
 
 A city gets the yields of every tile it works, plus:
 
 - **Its centre**: the yields of its biome, raised to at least 2 food and 1
-  production, plus 1 science and 1 culture.
+  production, plus 1 science, 1 culture and 1 gold.
 - **Each citizen: +1 science.** Big cities are the scientists.
 - Its buildings (§12.6) and wonders (D46).
 
@@ -758,17 +778,19 @@ around population 8; by round 300, 20 or more.
 - **Repeat** keeps building the last item (a unit, usually) until told
   otherwise.
 - **Switching** keeps the progress on the first item (D22).
+- **Buying.** The first item in the queue can be bought outright with gold
+  (§12.8).
 - **An empty queue** turns production into food (one for every two) until the
   player chooses something. The "Next" button stops at it (§19).
 - **Automate** lets the city choose its next item itself, by a priority the
-  player picks: growth, military, science, culture or faith. An automated city
+  player picks: growth, military, science, culture, faith or gold. An automated city
   never stops the "Next" button.
 - Units appear on the city's tile, or the nearest free one.
 
 ### 12.6 Buildings
 
 Buildings do the job *Civilization*'s workers and tile improvements do
-(D16): instead of walking a unit to every hill to build a mine, the city
+(decided in round 2, D16): instead of walking a unit to every hill to build a mine, the city
 builds one Mine, and every hill it works gives more.
 
 | Era | Building | Tech | Effect |
@@ -784,16 +806,19 @@ builds one Mine, and every hill it works gives more.
 | | Stable | Horseback Riding | Builds the mounted line |
 | | Irrigation works | Irrigation | +1 food on every worked grassland beside a river |
 | Classical | Workshop | Mathematics | +2 production. Builds the siege line |
+| | Market | Currency | +3 gold |
 | | Lumber mill | Construction | +1 production on every worked forest tile |
 | | Temple | Philosophy | Needs a Shrine. +3 faith |
 | | Amphitheatre | Drama | +3 culture |
 | | Aqueduct | Engineering | +6 population cap |
 | Medieval | Castle | Feudalism | Needs Walls. +100 HP, +5 strength |
+| | Bank | Banking | Needs a Market. +4 gold |
 | | University | Education | +4 science, +1 science on every worked jungle tile |
 | | Observatory | Astronomy | +1 science for every mountain in the city's territory |
 | | Cathedral | Theology | Needs a Temple. +4 faith, +1 culture |
 | | Printing house | Printing | +3 culture, +2 science |
 | Industrial | Factory | Industrialisation | Needs coal. +4 production, +1 on every worked hills tile |
+| | Stock exchange | Economics | Needs a Bank. +6 gold |
 | | Public school | Scientific Theory | +4 science |
 | | Museum | Archaeology | +5 culture |
 | | Sewer | Sanitation | +6 population cap |
@@ -817,6 +842,41 @@ A unit or building shows in a city's list once its tech is researched, with
 what's still missing named on the row ("Needs a Stable", "Needs horses: all 4
 in use"). The list teaches the player what to do next.
 
+### 12.8 Gold
+
+**Added in round 2.** Gold goes into the empire's **treasury**, not a city.
+
+**Where it comes from:** worked coast tiles (+1 each), every city centre (+1),
+the palace (+3), Gold ore and Pearls (§9.5), Markets, Banks and Stock
+exchanges (§12.6), and cities set to the *Gold* focus.
+
+**What it buys** (D48):
+
+- **The first item in a city's queue**, outright, for 3 gold for every point of
+  production still needed. One purchase a city a round. Wonders (D46) and the
+  mission's parts (§18) can't be bought: they're races, and money shouldn't
+  win them in one tap.
+- **A tile** next to a city's border (§12.2).
+- **Upgrades** (§10.3).
+- **Upkeep** for units beyond the free allowance (§10.6).
+- **Peace.** A peace proposal can carry gold either way (§16.1).
+
+**No building maintenance** (D49). Buildings cost production once and nothing
+after; upkeep falls on units only. That keeps one more number off every
+building on a small screen, and keeps out *Civilization*'s spiral where a
+poor empire sells the buildings that would have made it rich.
+
+**Running out.** If the treasury would go below zero at the start of a turn,
+the unit past the free allowance that is furthest from home is disbanded, and
+the player is told. The "Next" button warns a round ahead whenever income is
+below zero, so it never comes as a surprise.
+
+**Pace.** Buying prices follow the production costs they replace, so they
+scale with the pace; gold income, like every yield, doesn't (§6.1).
+
+Faith still buys religion's units and buildings (§15); gold buys everything
+else.
+
 ---
 
 ## 13. Research
@@ -838,9 +898,9 @@ settled:
 | Era | Techs (what each mainly unlocks) |
 |---|---|
 | **Ancient** | Pottery (Granary) · Mining (Mine) · Mysticism (Shrine) · Archery (Archer) · Sailing (Harbour, Galley) · Horseback Riding (Stable, Horseman; reveals horses) · Bronze Working (Barracks, Spearman; reveals iron) · Masonry (Walls) · Writing (Library) · Irrigation (Irrigation works) |
-| **Classical** | Iron Working (Swordsman) · Mathematics (Workshop, Catapult) · Construction (Lumber mill, clearing forest) · Shipbuilding (embarking, Quadrireme) · Philosophy (Temple, founding a religion) · Drama (Amphitheatre) · Engineering (Aqueduct, bridges) |
-| **Medieval** | Feudalism (Pikeman, Castle) · Machinery (Crossbowman, Trebuchet) · Chivalry (Knight) · Education (University) · Astronomy (Observatory) · Theology (Cathedral, a second belief for your religion) · Printing (Printing house) · Navigation (ocean, Caravel, Explorer) · Gunpowder (Musketman; reveals niter) |
-| **Industrial** | Metallurgy (Cannon, Frigate, Bastion) · Rifling (Rifleman, Ranger) · Steam Power (Ironclad; reveals coal) · Industrialisation (Factory) · Military Science (Cavalry, Field gun) · Scientific Theory (Public school) · Sanitation (Sewer) · Archaeology (Museum) · Railways (units move twice as far along their own territory) |
+| **Classical** | Iron Working (Swordsman) · Mathematics (Workshop, Catapult) · Construction (Lumber mill, clearing forest) · Shipbuilding (embarking, Quadrireme) · Philosophy (Temple, founding a religion) · Drama (Amphitheatre) · Engineering (Aqueduct, bridges) · Currency (Market) |
+| **Medieval** | Feudalism (Pikeman, Castle) · Machinery (Crossbowman, Trebuchet) · Chivalry (Knight) · Education (University) · Astronomy (Observatory) · Theology (Cathedral, a second belief for your religion) · Printing (Printing house) · Navigation (ocean, Caravel, Explorer) · Gunpowder (Musketman; reveals niter) · Banking (Bank) |
+| **Industrial** | Metallurgy (Cannon, Frigate, Bastion) · Rifling (Rifleman, Ranger) · Steam Power (Ironclad; reveals coal) · Industrialisation (Factory) · Military Science (Cavalry, Field gun) · Scientific Theory (Public school) · Sanitation (Sewer) · Archaeology (Museum) · Railways (units move twice as far along their own territory) · Economics (Stock exchange) |
 | **Modern** | Combustion (Tank, Destroyer; reveals oil) · Ballistics (Artillery, Machine gun) · Replaceable Parts (Infantry, Anti-tank) · Electricity (Power plant) · Radio (Broadcast tower) · Steel (Battleship) · Computers (Research lab) · Rocketry (Launch pad; reveals aluminium) · Satellites (the satellite project) · Space Flight (the mission) |
 
 Each era's techs cost about double the last era's. Railways is a stand-in for
@@ -910,8 +970,8 @@ Faith accumulates across the empire (D39). A proposal for the first version:
    religion within ten hexes. **Missionaries**, bought with faith, convert a
    city outright and go on spreading.
 4. **Buying.** Faith buys Missionaries, Prophets, and religious buildings
-   (Shrine, Temple, Cathedral) outright, which, with no gold, makes it the
-   only way to hurry anything.
+   (Shrine, Temple, Cathedral) outright. Gold can't buy any of these: faith
+   is the only way to a religion.
 
 There's no theological combat in the first version. A religious victory,
 later, would be "your religion is followed by most of the cities of every
@@ -937,7 +997,9 @@ A proposal (D29):
   takes effect **at the start of the next round**, and the other player is told
   at once by push notification. At eight players a round is most of a day, so
   nobody wakes up to find a war started and lost.
-- **Making peace** is a proposal the other player answers on their turn. Peace
+- **Making peace** is a proposal the other player answers on their turn, and
+  can carry gold either way: tribute from the losing side, or a price for
+  peace from the winning one (§12.8). Peace
   lasts at least 15 rounds (scaled by pace) before either side may declare war
   again.
 
@@ -996,7 +1058,7 @@ What is hidden from a rival:
 - strategic resources revealed by a tech they don't have;
 - every unit and city they can't see now, beyond what they last saw;
 - their research (beyond their era, §7.2, and what §13.3's prices imply), city
-  queues, food boxes, culture and faith totals;
+  queues, food boxes, culture, faith and gold totals and incomes;
 - whether a turn ended by itself or by hand (§5.2).
 
 What is shared with every player who has met you: your name and colour, your
@@ -1065,25 +1127,30 @@ bottom.
 1. **Since you were last here.** The recap (§23.6): what grew, what finished,
    what your units did on their orders, what was seen moving, who declared war,
    who entered a new era, who founded a religion.
-2. **The "Next" button.** One button at the foot of the board, always in the
+2. **The empire bar.** Across the top: the treasury and its income each round,
+   science, culture and faith, each tappable for where it comes from. Income
+   below zero shows in the bar before anything else.
+3. **The "Next" button.** One button at the foot of the board, always in the
    same place, naming what needs the player: "Warrior near Ur needs orders",
    "Ur needs something to build", "Pick a tech", "Pick a tradition", "3 units
-   can upgrade". Tapping it focuses the board on that thing and opens its
+   can upgrade (60 gold)". Tapping it focuses the board on that thing and opens its
    sheet. When nothing's left it becomes **End turn**.
-3. **A unit.** Tapping it shades how far it can go this round (as Realm Arena
+4. **A unit.** Tapping it shades how far it can go this round (as Realm Arena
    does) and, for a ranged unit, what it can hit. Tapping a tile inside the
    shading moves it there. Tapping one beyond draws the path with the round it
    arrives on each step, and a second tap confirms. Tapping an enemy shows the
    attack preview: the damage both ways, exactly (§11.2), and Attack. Its sheet
    holds its orders as `BuildRow`s.
-4. **A city.** Its sheet, made of `Section`s: population and the food box, the
+5. **A city.** Its sheet, made of `Section`s: population and the food box, the
    focus (`OptionChoiceSection`), the queue (`BuildRow`s with cost, rounds and
-   what's still missing), automation, and its buildings. Tapping a worked tile
-   pins a citizen.
-5. **Research, traditions and religion.** One sheet each, each a list of
+   what's still missing, and **Buy** with its gold price), automation, and its
+   buildings. Tapping a worked tile pins a citizen; tapping one beyond the
+   border offers to buy it.
+6. **Research, traditions and religion.** One sheet each, each a list of
    `BuildRow`s by era or branch.
-6. **The world.** Everyone you've met: era, score, city count, religion, war or
-   peace, and the buttons to declare war or propose peace.
+7. **The world.** Everyone you've met: era, score, city count, religion, war or
+   peace, and the buttons to declare war or propose peace (with gold, if you
+   like).
 
 Anything with a name has an `InfoButton` opening an `InfoModal`. The game
 guide and the tutorial (§23.8) carry the rest. When it isn't the player's
@@ -1093,12 +1160,13 @@ turn, the sheets stay readable through `ReadOnlyPanel`.
 
 ## 20. Decisions to make
 
-Round 1 settled ten decisions, in whole or in part (§21.1). What's left is
-below: first the new questions round 1 raised, then the rest of round 1's in
-the order they block work. Each lists its options and a recommendation; the
+Round 1 settled ten decisions, in whole or in part (§21.1), and round 2 three
+more (§21.2). What's left is below: first round 2's questions (still open),
+then the two gold raised, then the rest of round 1's in the order they block
+work. Each lists its options and a recommendation; the
 recommendation is what the body assumes.
 
-### 20.1 Round 2: new questions
+### 20.1 Round 2's questions, still open
 
 **D35. How long, in real time, can an eight-player match be?** (§4)
 At four check-ins a day, an eight-player round is about a day, so a 300-round
@@ -1138,8 +1206,8 @@ in a list that's easy to read.
 *Options:* (a) pantheons only; (b) pantheon, founding a religion, passive
 spread and missionaries; (c) (b) plus theological combat, inquisitors and the
 rest. *Also:* call the yield "faith" in the game, or "religion".
-*Recommendation:* (b), and "faith". With no gold, faith buying religious units
-and buildings also gives the game its only way to hurry something.
+*Recommendation:* (b), and "faith". Faith buys religion's units and buildings,
+and gold can't, so a religion is something a player has to choose to build.
 
 **D40. Which five eras, and what does being in one do?** (§7)
 *Options for the five:* (a) Ancient, Classical, Medieval, Industrial, Modern;
@@ -1154,14 +1222,14 @@ and yes to knowledge spreading, which is the catch-up eight players moving at
 their own pace need.
 
 **D41. How do units upgrade?** (§10.3)
-*Options:* (a) for a round of retraining in your own territory and the
-resource, no production; (b) for part of the new unit's production cost, paid
-from a city's production over a few rounds; (c) automatically and free, the
-moment the tech is researched; (d) upgrades are a building or project in the
-city ("Retrain the garrison").
-*Recommendation:* (a), with "Upgrade all". (c) makes research too strong and
-lets an army upgrade in the middle of a war's front; (b) needs gold's job done
-by production, which is awkward because production is a flow, not a purse.
+*Options:* (a) for gold, in your own territory, ending the unit's move
+(*Civilization*); (b) for a round of retraining in your own territory, no
+cost; (c) automatically and free, the moment the tech is researched; (d) as a
+project in a city ("Retrain the garrison"), paid in production.
+*Recommendation:* (a), with "Upgrade all". *Changed by round 2:* with gold in
+the game it's the natural price, and a purse rather than production's flow.
+(c) makes research too strong and lets an army upgrade in the middle of a
+war's front.
 
 **D42. How do strategic resources work?** (§9.5)
 *Options for how much a source gives:* (a) one source unlocks unlimited units;
@@ -1207,21 +1275,25 @@ it.
 their own (bases, ranges, interception) on a screen already full; the Modern
 era has tanks, artillery and battleships without them.
 
-### 20.2 Still open from round 1, before anything is built
+### 20.2 Gold: new questions
 
-**D16. Workers or buildings?** (§12.6)
-*Options:* (a) worker units improve tiles one by one, as in *Civilization*; (b)
-a building in the city improves every worked tile of a biome; (c) no
-improvements at all.
-*Recommendation:* (b). Workers are the busiest busywork in the genre, and the
-eight-player, 300-round shape makes turn length matter more than ever (§4.3).
+**D48. What does gold buy?** (§12.8)
+*Options:* any mix of (a) a city's current item outright; (b) tiles; (c) unit
+upgrades (D41); (d) unit upkeep (D49); (e) peace and other deals (D29); (f)
+trade routes between cities, earning gold.
+*Recommendation:* (a) to (e), with wonders and the mission's parts never for
+sale. Trade routes (f) are a system of their own — trader units, routes,
+pillaging — and wait for a later milestone. *Also:* buying at 3 gold a point
+of production, one purchase a city a round.
 
-**D24. Is combat random?** (§11.2)
-*Options:* (a) deterministic; (b) ±20% variance, rolled and recorded; (c)
-±10%.
-*Recommendation:* (a). The defender is usually asleep, and the platform's
-earlier design rounds settled that the less a player takes part, the less luck
-should decide. The most open question left: some players will miss the swing.
+**D49. What costs gold every round?** (§10.6, §12.8)
+*Options:* (a) units beyond the free allowance only; (b) units and buildings
+(*Civilization V*/*VI*'s maintenance); (c) nothing: gold is only spent when the
+player chooses.
+*Recommendation:* (a). Upkeep on units is the brake that keeps armies, and so
+late turns, a sensible size. Upkeep on buildings is a number on every building
+and a way for a poor empire to get poorer. *Also:* a treasury that runs dry
+disbands a unit, with a round's warning.
 
 ### 20.3 Still open from round 1, before the first version's rules
 
@@ -1301,14 +1373,17 @@ strategic ones work is now D42.
 **D22. Production rules** (§12.5).
 *Recommendation:* a queue of five, repeat, progress kept on a switch, an empty
 queue turns production into food, and automation. *Changed by round 1:* repeat
-and automation are new, for the longer match.
+and automation are new, for the longer match. *Changed by round 2:* buying
+with gold is now possible, and is D48.
 
 **D25. Promotions.** Upgrades are settled (D41 is how). Still open: experience
 and promotions. *Recommendation:* none in the first version, the first thing
 after. Upgrades keep promotions once they exist.
 
 **D26. Unit upkeep** (§10.6).
-*Recommendation:* two free units a city, 1 production each beyond.
+*Recommendation:* two free units a city, 1 gold each a round beyond (2 from the
+Industrial era). *Changed by round 2:* paid in gold rather than production
+(D49).
 
 **D27. Capturing cities** (§11.4).
 *Recommendation:* capture only, losing 1 population and a level of walls.
@@ -1324,7 +1399,9 @@ capital before declaring war.
 *Options:* (a) war and peace only; (b) + open borders, research agreements and
 defensive pacts; (c) + permanent teams set at setup.
 *Recommendation:* (a) first, then (b). *Changed by round 1:* at eight players,
-the case for (b) is much stronger than at four.
+the case for (b) is much stronger than at four. *Changed by round 2:* gold can
+change hands in a peace proposal from the start (§16.1), and gives (b)'s deals
+a currency.
 
 **D30. Barbarians and villages** (§16.2).
 *Options:* (a) static camps that send raiders; (b) camps that appear over time
@@ -1356,10 +1433,13 @@ a canvas for the ground (§22.2) close to certain.
 
 ### 20.6 Other numbers to confirm
 
-Sight, movement, the damage formula and its modifiers, the growth formula, the
-population caps, every strength in §10.2, the pace multipliers, the score
-table, the four units a source supports, the knowledge-spread discount, and the
-per-city cost of techs and traditions. They want a balance pass with a
+Sight, movement, the advantages in §11.2, the growth formula, the population
+caps, every strength in §10.2, the pace multipliers, the score table, the four
+units a source supports, the knowledge-spread discount, the per-city cost of
+techs and traditions, and the gold prices (3 a point of production to buy, 2 a
+point of difference to upgrade, the rising price of a tile). And the damage
+curve itself: *Civilization VI*'s is the starting point, but any curve that
+turns a difference in strength into damage keeps D24's promise. They want a balance pass with a
 simulator over the rules module before anyone plays a match that lasts months.
 
 ---
@@ -1391,7 +1471,18 @@ simulator over the rules module before anyone plays a match that lasts months.
 
 ### 21.2 Round 2
 
-To come: §20.1's new questions first, then D16 and D24.
+1. **Gold (D15, extended):** let's include gold as a resource as well. (Read as a
+   sixth yield, a currency in the treasury, alongside a Gold ore tile resource;
+   §12.8. D48 and D49 follow, and D22, D26, D29, D39 and D41 change.)
+2. **Workers or buildings (D16):** agree with city buildings. (§12.6.)
+3. **Combat (D24):** not random combat; it should be strength and advantage
+   based. (§11.2.)
+
+§20.1's questions (D35–D47) are still to come, with D48 and D49.
+
+### 21.3 Round 3
+
+To come.
 
 ---
 
@@ -1474,7 +1565,8 @@ change for the turn order. What has to change is the size of a match (§23.7).
 The player's commands: `MoveUnit` (a path), `Attack`, `SetUnitOrder`,
 `UpgradeUnit` (and all), `FoundCity`, `SetQueue`, `SetFocus`, `SetAutomation`,
 `PinCitizen`, `ClearForest`, `SetResearch`, `PickTradition`, `PickBelief`,
-`FoundReligion`, `SpreadReligion`, `BuyWithFaith`, `DeclareWar`,
+`FoundReligion`, `SpreadReligion`, `BuyWithFaith`, `BuyWithGold`, `BuyTile`,
+`DeclareWar`,
 `ProposePeace`, `AnswerPeace` and `EndTurn`.
 
 Server-only commands, recorded on the history like `PlayerDropped` so a replay
@@ -1554,7 +1646,7 @@ needs one more than any other here — three to six achievements, a share card
 
 ## 24. Out of scope for the first version
 
-- Gold, trade routes, and buying anything except with faith.
+- Trade routes, and building maintenance (D48, D49).
 - Happiness or amenities (population caps and per-city costs do that job,
   §12.4).
 - Workers and tile improvements (buildings do that job, §12.6).
