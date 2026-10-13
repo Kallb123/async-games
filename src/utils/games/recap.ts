@@ -2,6 +2,7 @@ import { IGameData } from "../mongodb/GameData";
 import { IGameCommand, ICommandOutcome, isRecordedOutOfTurn } from "../apiModels/GameLogic";
 import { buildTimeline, ITimeline, ITurnSnapshot, IReplayStep } from "./replay";
 import { createAdapterRegistry } from "./adapterRegistry";
+import { pairUndos } from "./undoPairs";
 import { snakesAndLaddersRecapAdapter } from "@/games/SnakesAndLadders/recap";
 import { diceCitiesRecapAdapter } from "@/games/DiceCities/recap";
 import { settlementsAndCitiesRecapAdapter } from "@/games/SettlementsAndCities/recap";
@@ -136,24 +137,18 @@ async function replayEvents(
     // The commands played out of turn, by id — which an event carries, and
     // which survives a postProcess merge that a parallel array wouldn't.
     const outOfTurnCommandIds = new Set<string>();
-    // The commands still standing, oldest first: an undo takes the newest off.
-    const liveCommandIds: string[] = [];
+    // What each undo takes back (utils/games/undoPairs.ts), by the undo's id.
+    const undone = pairUndos(steps.map(step => step.command));
     for (const step of steps) {
         // Undo is an editing operation, not something that happened in the
         // game. Its row and every row produced by the command it reverses must
         // therefore disappear from both the recap and the turn notification.
-        // Every undo reverses the newest command still standing (docs/undo.md)
-        // — after one undo, the next reaches one further back, hence a stack.
         // Filtering here also covers an action that produced several rows
         // without every recap adapter reconstructing the same pairing.
-        if (step.command.className.endsWith("Undo")) {
-            const undoneCommandId = liveCommandIds.pop();
-            if (undoneCommandId !== undefined) {
-                events = events.filter(event => event.commandId !== undoneCommandId);
-            }
+        if (undone.has(step.command.id)) {
+            events = events.filter(event => event.commandId !== undone.get(step.command.id));
         } else {
             events.push(...adapter.toEvents(step.prev, step.next, step.command, step.outcome, viewerId));
-            liveCommandIds.push(step.command.id);
         }
         if (isRecordedOutOfTurn(step.command)) {
             outOfTurnCommandIds.add(step.command.id);

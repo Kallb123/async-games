@@ -8,6 +8,7 @@ import { deserializeJSON } from "../apiModels/Serialisable";
 import { isRecordedFollowUpOf, runCommand } from "./commandPipeline";
 import { createAdapterRegistry } from "./adapterRegistry";
 import { playedOnTurnOf } from "./turnCount";
+import { undoneIds } from "./undoPairs";
 import { buildInitialSnakesAndLaddersState, gameStateToModel as snakesAndLaddersStateToModel, ISnakesAndLaddersGameData } from "@/games/SnakesAndLadders/SnakesAndLaddersModels";
 import { buildInitialDiceCitiesState, gameStateToModel as diceCitiesStateToModel, IDiceCitiesGameData } from "@/games/DiceCities/DiceCitiesModels";
 import { LEGACY_BANK_TOTAL_COINS } from "@/games/DiceCities/cards";
@@ -152,6 +153,15 @@ export interface IReplayAdapter {
     // that something happened, and its command's summary what kind of thing,
     // when the log keeps both from them. Every planned step stays.
     omitUntoldSteps?: boolean;
+    // Optional: leave out of the timeline every action that was later undone,
+    // and the undo that took it back — a game with undo (docs/undo.md) whose
+    // review would otherwise play the move and then snap it back. They changed
+    // nothing in the end, so there is nothing to step through. The state after
+    // an undo is the state before the command it reversed, so the step that
+    // follows plays from the one before that command. Pairing is the recap's
+    // (utils/games/undoPairs.ts). `onStep` still sees every step, undos
+    // included, and the history log still holds their lines.
+    omitUndoneSteps?: boolean;
     // Optional: what a step's summary calls its command, for the timeline's
     // viewer — undefined for its own `myString()`. For a game where saying
     // which kind of thing somebody did can tell a viewer more than the log
@@ -379,6 +389,10 @@ registerReplayAdapter({
     // told (§27.2), and a review that stepped through it anyway would say
     // something happened there, and what kind of action it was.
     omitUntoldSteps: true,
+    // An action taken back (docs/undo.md) and its undo are no step either: a
+    // review that played the move and then snapped it back would show a player
+    // something that never counted.
+    omitUndoneSteps: true,
     // And a step kept for what it scored or blasted, or the part of it the
     // viewer saw, doesn't name the action another side took: "fireball" would
     // name the character that threw it, which the log calls one out of sight.
@@ -425,6 +439,18 @@ function assertReplayable(gameData: IGameData): void {
             throw new Error(`Game ${gameData.gameId} holds a ${className} recorded at command version ${version}, outside the ${oldest}–${newest} this server replays`);
         }
     }
+}
+
+// The snapshots `keep` says yes to, counted again from 0 so each `index` is its
+// position, with `currentIndex` on the last real one kept. The opening state and
+// every planned snapshot always stay — the plan stays after the live state.
+export function keepSnapshots(
+    snapshots: ITurnSnapshot[],
+    keep: (snapshot: ITurnSnapshot, position: number) => boolean,
+): Pick<ITimeline, "currentIndex" | "snapshots"> {
+    const kept = snapshots.filter((s, i) => i === 0 || s.planned || keep(s, i));
+    kept.forEach((s, i) => { s.index = i; });
+    return { currentIndex: kept.filter(s => !s.planned).length - 1, snapshots: kept };
 }
 
 // Reconstructs a game's full timeline by replaying its recorded commandHistory
@@ -496,8 +522,12 @@ export async function buildTimeline(
     };
 
     const snapshots: ITurnSnapshot[] = [];
+    // The command behind each snapshot, by position (null for the opening
+    // state) — a snapshot doesn't carry its command's id, and mustn't on the wire.
+    const snapshotCommands: (IGameCommand | null)[] = [];
     let index = 0;
     const snapshot = (command: IGameCommand | null, planned: boolean, outcome?: ICommandOutcome) => {
+        snapshotCommands.push(command);
         const told = outcome && !planned ? adapter.snapshotOutcome?.(outcome, viewerId, state.specificGameState, state.complete) : undefined;
         snapshots.push({
             index: index++,
@@ -687,11 +717,16 @@ export async function buildTimeline(
     // Left out only once every step has been built and observed above, so
     // `onStep` saw the replay whole, each step against the one really before it.
     // A step that told the viewer nothing changed nothing they can see, so if
-    // the live one goes, the last step they were told stands for it.
-    if (adapter.omitUntoldSteps) {
-        const told = snapshots.filter((s, i) => i === 0 || s.planned || s.history.length > snapshots[i - 1].history.length);
-        told.forEach((s, i) => { s.index = i; });
-        return { currentIndex: told.filter(s => !s.planned).length - 1, snapshots: told, resolvedPlannedCommands };
+    // the live one goes, the last step they were told stands for it. One an undo
+    // took back, or the undo itself, left nothing behind at all.
+    if (adapter.omitUntoldSteps || adapter.omitUndoneSteps) {
+        const gone = adapter.omitUndoneSteps ? undoneIds(snapshotCommands.flatMap(c => c ? [c] : [])) : new Set<string>();
+        const undone = (i: number) => { const id = snapshotCommands[i]?.id; return id !== undefined && gone.has(id); };
+        const told = adapter.omitUntoldSteps
+            ? (s: ITurnSnapshot, i: number) => s.history.length > snapshots[i - 1].history.length
+            : () => true;
+        const kept = keepSnapshots(snapshots, (s, i) => !undone(i) && told(s, i));
+        return { ...kept, resolvedPlannedCommands };
     }
 
     return { currentIndex, snapshots, resolvedPlannedCommands };

@@ -301,6 +301,29 @@ describe("Realm Arena — replay and recap", () => {
         }
     });
 
+    it("leaves no step in the review for an action taken back, nor for the undo", async () => {
+        const game = await battle();
+        const [first, second] = own(game, "a");
+        const taken = actBy("a", oneStep(game, first));
+        const undo = undoBy("a");
+        const kept = actBy("a", { kind: "hunker", fighter: second.id });
+        for (const command of [taken, undo, kept]) {
+            expect((await play(game, command)).outcome.validMove).toBe(true);
+        }
+        // Two musters, the move, its undo and the hunker.
+        expect(game.gameState.commandHistory).toHaveLength(5);
+
+        for (const viewer of ["a", "b", null]) {
+            const timeline = await buildTimeline(game, NAMES, [], undefined, viewer);
+            // The opening state, the two musters and the one action that stood.
+            expect(timeline.snapshots).toHaveLength(4);
+            expect(timeline.snapshots.map(snapshot => snapshot.index)).toEqual([0, 1, 2, 3]);
+            expect(timeline.currentIndex).toBe(3);
+            expect(timeline.snapshots.some(snapshot => /took back/.test(snapshot.command?.summary ?? ""))).toBe(false);
+            expect(timeline.snapshots.at(-1)!.specificGameState).toEqual((await responseFor(game, viewer)).specificGameState);
+        }
+    });
+
     it("leaves no recap row for an action taken back, nor for the undo", async () => {
         const game = await battle();
         const move = actBy("a", oneStep(game, own(game, "a")[0]));
