@@ -1,6 +1,6 @@
 # Day of Dominion — Game Design Document
 
-**Status:** Concept, v0.6. Round 1 (§21.1) settled the name, eight players,
+**Status:** Concept, v0.7. Round 1 (§21.1) settled the name, eight players,
 turns taken one after another, long matches at a pace the host picks,
 several ways to win, five eras each player moves through at their own speed,
 units that upgrade through research, the yields with strategic resources,
@@ -9,17 +9,22 @@ chose city buildings over workers, and made combat strength and advantages
 with no roll. Round 3 (§21.3) reopened the time model: §5 lays out eight
 ways to run a round and what each would need here. Round 4 (§21.4) settled the
 map, the biomes (plains and desert added), cities (four apart, working three
-rings, borders by culture to four, as corrected in round 5) and most of the remaining rules; §20.4 lists every
-decision taken. Still open: the time model, round 2's questions (D35–D47), the
-two gold raised (D48–D49), and five for Milestone B and a prototype
-(D29–D34). The body is written as if each open recommendation were taken,
+rings, borders by culture to four, as corrected in round 5) and most of the
+remaining rules. Round 6 (§21.6) settled the victories, culture, religion,
+the eras (Classical to Modern), upgrades, strategic resources, the paces, the
+round limit, and a table with computer players and teams; §20.5 lists every
+decision taken. Still open: the time model (D3), how long a match can run
+(D35), the rest of D40 and D42, wonders and the air (D46–D47), computer
+players and teams (D50–D51), gold (D48–D49), and five for Milestone B and a
+prototype (D29–D34). The body is written as if each open recommendation were taken,
 and marks the spot with the decision's number — except the time model, where
 it still assumes round 1's answer (§5.8 lists what would change).
 **Name:** Day of Dominion
 **Genre:** Turn-based 4X on a hex map, *Civilization*-style
 **Inspirations:** *Civilization V* and *VI* (hexes, one unit per tile, cities
 working the land around them, culture and faith alongside science)
-**Players:** up to 8, competitive (D2, D45)
+**Players:** up to 8, competitive, free-for-all or in teams, with computer
+players able to fill seats (D2, D45)
 **Session shape:** a long match — up to 300 rounds or more — at a pace the
 host picks; weeks to months of real time depending on the table (§4, D35)
 
@@ -471,7 +476,7 @@ it takes to build something.
 
 ### 6.2 Presets
 
-A proposal (D43). Rounds are the expected length of a match that ends on
+Decided in round 6 (D43). Rounds are the expected length of a match that ends on
 the round limit; most matches will be decided before it.
 
 | Pace | Multiplier | About this many rounds | 8 players, four check-ins a day | 8 players, an hour's turn timer |
@@ -491,9 +496,9 @@ At Standard, a player who keeps up should reach each era about here:
 
 | Era | Rounds, roughly |
 |---|---|
-| Ancient | 1–60 |
-| Classical | 60–120 |
-| Medieval | 120–180 |
+| Classical | 1–60 |
+| Medieval | 60–120 |
+| Renaissance | 120–180 |
 | Industrial | 180–240 |
 | Modern | 240–300 |
 
@@ -511,16 +516,18 @@ era (§10.3).
 
 ### 7.1 The five
 
-A proposal (D40): **Ancient, Classical, Medieval, Industrial, Modern.** The
-Renaissance is folded into the end of the Medieval era (gunpowder, ocean
-ships) and the start of the Industrial (rifling, steam), which keeps the
-Modern era for the age of oil and the launch pad. The tech tree is about ten
-techs an era (§13).
+**Decided in round 6 (D40): Classical, Medieval, Renaissance, Industrial,
+Modern.** The match opens in the Classical era — the first cities, bronze and
+iron, the first gods — with no Stone Age to sit through. The Medieval era
+brings castles, knights and the great religions; the Renaissance gunpowder,
+printing, banking and ships that cross the ocean; the Industrial era rifles,
+steam and coal; the Modern era oil, tanks and the launch pad. The tech tree is
+about ten techs an era (§13).
 
 ### 7.2 What being in an era means
 
 A player **enters an era when they research their first tech from it**
-(D40). Being in an era:
+(decided in round 6, D40). Being in an era:
 
 - **Changes how your people look.** City and unit art follow your era, so a
   glance at the board tells you who's ahead.
@@ -547,21 +554,23 @@ behind. Two things soften it:
 
 ## 8. A match from start to finish
 
-1. **Setup.** The host picks the players (up to eight), the pace (§6), the
+1. **Setup.** The host picks the players (up to eight, computer players in any
+   empty seats, and teams if they like, §16.4–§16.5), the pace (§6), the
    map size (which follows from the player count, §9.6), the turn timer, and
    which victories are on (§18), on the shared setup screen
    (`GameSetupLayout`, `TurnTimerSelect`, `UserInviteList`,
    `OptionChoiceSection`).
 2. **Round 1.** Each player has a settler and a warrior on a fair start
    (§9.7), and can see two tiles around them.
-3. **Ancient: settle.** Scouts and warriors explore and find tribal villages
+3. **Classical: settle.** Scouts and warriors explore and find tribal villages
    and barbarian camps (§16.2). The capital builds warriors, settlers and a
    Monument. A pantheon is the first faith choice (§15); the first tradition
    the first culture one (§14).
-4. **Classical and Medieval: grow and meet.** Borders press against each
+4. **Medieval and Renaissance: grow and meet.** Borders press against each
    other. Religions are founded and start to spread. The first wars, usually
-   over a river valley, a hill, or a source of iron. Players start to spread
-   out across the eras.
+   over a river valley, a hill, or a source of iron. Ships cross the ocean in
+   the Renaissance, and the world gets bigger. Players start to spread out
+   across the eras.
 5. **Industrial: the gap opens.** Coal, factories, riflemen. A people a whole
    era ahead can take what they like from one behind, unless that one has
    friends, walls, or a lot of pikemen.
@@ -666,7 +675,7 @@ explored tiles:
 
 **Strategic resources** are needed to build and upgrade particular units and
 buildings (decided in round 1). A proposal for the list, one or two an era
-(D42):
+(D42, still open on the list itself):
 
 | Resource | Revealed by | Found on | Needed for |
 |---|---|---|---|
@@ -674,21 +683,34 @@ buildings (decided in round 1). A proposal for the list, one or two an era
 | Iron | Bronze Working | Hills | Swordsman, Knight |
 | Niter | Gunpowder | Plains, desert, hills | Musketman, Frigate, Cannon |
 | Coal | Steam Power | Hills, forest | Ironclad, Factory |
-| Oil | Combustion | Desert, jungle, coast | Tank, Destroyer, Battleship |
-| Aluminium | Rocketry | Hills, desert | The Launch pad and the mission's parts (§18) |
+| Oil | Combustion | Desert, jungle, coast | Tank, Destroyer, Battleship (2) |
+| Aluminium | Rocketry | Hills, desert | The Launch pad (2) and the mission's parts (3, §18) |
 
 **Revealed by research**: a strategic resource only appears on a player's
 map once they know the tech that reveals it, so a world they thought they
 knew changes under them as they move through the eras (D42). That's hidden
 state per player (§17).
 
-**How much a source gives** (D42): each source a player's cities work
-supports **four units** that need it (or one building). A player with one
-iron mine can field four swordsmen; a fifth needs a second mine. Units
-already built aren't lost when a source is: they just can't heal above half
-until it's back. Every start is guaranteed horses and iron within reach; the
-later resources are deliberately uneven, which is what the later wars are
-about.
+**How much a source gives** (decided in round 6, D42): **holding one source
+unlocks** everything that needs that resource, in any number. A source counts
+when it's inside your borders — your dominion — whether or not a city works
+it. **A few units and buildings need more than one source** of a resource in
+your dominion, which is what makes a second oil field worth a war:
+
+| Needs more than one | Sources in your dominion |
+|---|---|
+| Knight | Horses and iron, one of each |
+| Battleship | 2 oil |
+| Launch pad | 2 aluminium |
+| The mission's parts (§18) | 3 aluminium |
+
+(Starting points to tune; everything else that needs a resource needs one.)
+**Losing a source** doesn't hurt what's already built: units keep fighting
+and buildings keep working. Nothing new that needs it can be built, or
+upgraded to, until you hold enough again. Every start is guaranteed horses and
+iron within reach; the later resources are deliberately uneven, and the
+generator makes sure there's enough aluminium in the world for two or three
+players to reach three sources, which is what the late wars are about.
 
 ### 9.6 Map size
 
@@ -764,16 +786,16 @@ Every military unit belongs to a **line**, and upgrades to the next unit in it
 as research unlocks it (§10.3). A proposal for the roster (D41 for how
 upgrades work, D47 for the air):
 
-| Line | Ancient | Classical | Medieval | Industrial | Modern |
+| Line | Classical | Medieval | Renaissance | Industrial | Modern |
 |---|---|---|---|---|---|
 | **Recon** | Scout 10 | | Explorer 25 | Ranger 45 | |
-| **Melee** | Warrior 20 | Swordsman 35 *iron* | Musketman 55 *niter* | Rifleman 70 | Infantry 85 |
-| **Anti-mounted** | Spearman 25 | | Pikeman 41 | upgrades into Rifleman | Anti-tank 75, built new |
-| **Ranged** | Archer 15/25 | | Crossbowman 30/40 | Field gun 50/60 | Machine gun 70/80 |
-| **Mounted** | Horseman 30 *horses* | | Knight 48 *horses, iron* | Cavalry 62 *horses* | Tank 80 *oil* |
-| **Siege** | | Catapult 15/30 | Trebuchet 18/42 | Cannon 30/55 *niter* | Artillery 50/75 |
+| **Melee** | Warrior 20, then Swordsman 35 *iron* | Man-at-arms 45 *iron* | Musketman 55 *niter* | Rifleman 70 | Infantry 85 |
+| **Anti-mounted** | Spearman 25 | Pikeman 41 | | upgrades into Rifleman | Anti-tank 75, built new |
+| **Ranged** | Archer 15/25 | Crossbowman 30/40 | | Field gun 50/60 | Machine gun 70/80 |
+| **Mounted** | Horseman 30 *horses* | Knight 48 *horses, iron* | | Cavalry 62 *horses* | Tank 80 *oil* |
+| **Siege** | Catapult 15/30 | Trebuchet 18/42 | Cannon 30/55 *niter* | | Artillery 50/75 |
 | **Naval melee** | Galley 25 | | Caravel 45 | Ironclad 60 *coal* | Destroyer 85 *oil* |
-| **Naval ranged** | | Quadrireme 20/30 | | Frigate 45/55 *niter* | Battleship 60/80 *oil* |
+| **Naval ranged** | | Quadrireme 20/30 | Frigate 45/55 *niter* | | Battleship 60/80 *2 oil* |
 
 The numbers are melee strength, or melee/ranged strength for ranged units.
 Ranged units shoot two tiles; siege units fire at +10 against cities and
@@ -786,16 +808,15 @@ at least 2, and costs more for every city the player already has (§12.4).
 
 ### 10.3 Upgrades through research
 
-**Decided in round 1 (D25):** units upgrade through research. A proposal for
-how (D41):
+**Decided in round 1 (D25):** units upgrade through research; **round 6 (D41)**
+settled how:
 
 - When a player researches the next unit in a line, every unit of theirs in
   that line **can be upgraded**, and the old unit can no longer be built.
 - **Upgrading costs gold** (§12.8): 2 gold for every point of production the
   new unit costs more than the old, at least 10. The unit must be in its
   owner's territory and have movement left; upgrading ends its move, it keeps
-  its health, and it needs the new unit's strategic resource to have room
-  (§9.5).
+  its health, and its owner must hold the new unit's resources (§9.5).
 - **Upgrade all** does every unit that can be, in one tap.
 - An upgraded unit keeps its promotions, if those exist (D25).
 
@@ -858,8 +879,9 @@ because it's well tested and easy to show:
 > damage dealt = 30 × e^(0.04 × (your strength − their strength))
 
 So equal strengths deal 30 each way; 10 more strength deals 45 and takes
-20; 20 more deals 67 and takes 13. A full era's gap (a rifleman at 70 against
-a pikeman at 41) deals 96 and takes 9: an era behind is a long way behind.
+20; 20 more deals 67 and takes 13. Two eras' gap (an Industrial rifleman at 70
+against a Medieval pikeman at 41) deals 96 and takes 9: falling behind is a
+long way to fall.
 
 | Advantage | Strength |
 |---|---:|
@@ -888,7 +910,7 @@ None in the first version (D25).
 ### 11.4 Cities in combat
 
 - A city has **200 HP**, +100 with Walls, +100 more with a Castle, +100 more
-  with a Bastion (Industrial). It heals 20 a round.
+  with a Bastion (Renaissance). It heals 20 a round.
 - Its **strength** is the strength of its owner's best melee unit they can
   currently build, −10, or its garrison's if that's higher, +3 on hills, +5
   for each level of walls. So cities keep up with the era their owner is in.
@@ -1029,7 +1051,7 @@ builds one Mine, and every hill it works gives more.
 
 | Era | Building | Tech | Effect |
 |---|---|---|---|
-| Ancient | Monument | — | +2 culture |
+| Classical | Monument | — | +2 culture |
 | | Granary | Pottery | +2 food, +2 population cap |
 | | Mine | Mining | +1 production on every worked hills tile |
 | | Shrine | Mysticism | +2 faith |
@@ -1039,28 +1061,28 @@ builds one Mine, and every hill it works gives more.
 | | Library | Writing | +3 science |
 | | Stable | Horseback Riding | Builds the mounted line |
 | | Irrigation works | Irrigation | +1 food on every worked grassland beside a river |
-| Classical | Workshop | Mathematics | +2 production. Builds the siege line |
-| | Market | Currency | +3 gold |
+| | Workshop | Mathematics | +2 production. Builds the siege line |
+| Medieval | Market | Currency | +3 gold |
 | | Lumber mill | Construction | +1 production on every worked forest tile |
 | | Temple | Philosophy | Needs a Shrine. +3 faith |
 | | Amphitheatre | Drama | +3 culture |
 | | Aqueduct | Engineering | +6 population cap |
-| Medieval | Castle | Feudalism | Needs Walls. +100 HP, +5 strength |
-| | Bank | Banking | Needs a Market. +4 gold |
+| | Castle | Feudalism | Needs Walls. +100 HP, +5 strength |
+| | Cathedral | Theology | Needs a Temple. +4 faith, +1 culture |
+| Renaissance | Bank | Banking | Needs a Market. +4 gold |
 | | University | Education | +4 science, +1 science on every worked jungle tile |
 | | Observatory | Astronomy | +1 science for every mountain in the city's territory |
-| | Cathedral | Theology | Needs a Temple. +4 faith, +1 culture |
 | | Printing house | Printing | +3 culture, +2 science |
-| Industrial | Factory | Industrialisation | Needs coal. +4 production, +1 on every worked hills tile |
+| | Bastion | Metallurgy | Needs a Castle. +100 HP, +5 strength |
 | | Stock exchange | Economics | Needs a Bank. +6 gold |
+| Industrial | Factory | Industrialisation | Needs coal. +4 production, +1 on every worked hills tile |
 | | Public school | Scientific Theory | +4 science |
 | | Museum | Archaeology | +5 culture |
 | | Sewer | Sanitation | +6 population cap |
-| | Bastion | Metallurgy | Needs a Castle. +100 HP, +5 strength |
 | Modern | Power plant | Electricity | +4 production, +2 science |
 | | Research lab | Computers | +6 science |
 | | Broadcast tower | Radio | +6 culture |
-| | Launch pad | Rocketry | Needs aluminium. Lets the city build the mission's parts (§18) |
+| | Launch pad | Rocketry | Needs 2 aluminium. Lets the city build the mission's parts (§18) |
 
 **Clearing forest** is a city project, not a building: with Construction, a
 city can clear a forest tile in its territory. The tile becomes grassland and
@@ -1073,8 +1095,8 @@ Milestone B (D46).
 ### 12.7 What a city can build
 
 A unit or building shows in a city's list once its tech is researched, with
-what's still missing named on the row ("Needs a Stable", "Needs horses: all 4
-in use"). The list teaches the player what to do next.
+what's still missing named on the row ("Needs a Stable", "Needs 2 oil: you
+hold 1"). The list teaches the player what to do next.
 
 ### 12.8 Gold
 
@@ -1126,15 +1148,15 @@ can.
 ### 13.2 The tree
 
 About ten techs an era, fifty in all, ending in Space Flight, which unlocks
-the mission (§18). A sketch, to be drawn up properly once D40's eras are
-settled:
+the mission (§18). A sketch over round 6's eras (D40), to be drawn up
+properly in the balance pass:
 
 | Era | Techs (what each mainly unlocks) |
 |---|---|
-| **Ancient** | Pottery (Granary) · Mining (Mine) · Mysticism (Shrine) · Archery (Archer) · Sailing (Harbour, Galley) · Horseback Riding (Stable, Horseman; reveals horses) · Bronze Working (Barracks, Spearman; reveals iron) · Masonry (Walls) · Writing (Library) · Irrigation (Irrigation works) |
-| **Classical** | Iron Working (Swordsman) · Mathematics (Workshop, Catapult) · Construction (Lumber mill, clearing forest) · Shipbuilding (embarking, Quadrireme) · Philosophy (Temple, founding a religion) · Drama (Amphitheatre) · Engineering (Aqueduct, bridges) · Currency (Market) |
-| **Medieval** | Feudalism (Pikeman, Castle) · Machinery (Crossbowman, Trebuchet) · Chivalry (Knight) · Education (University) · Astronomy (Observatory) · Theology (Cathedral, a second belief for your religion) · Printing (Printing house) · Navigation (ocean, Caravel, Explorer) · Gunpowder (Musketman; reveals niter) · Banking (Bank) |
-| **Industrial** | Metallurgy (Cannon, Frigate, Bastion) · Rifling (Rifleman, Ranger) · Steam Power (Ironclad; reveals coal) · Industrialisation (Factory) · Military Science (Cavalry, Field gun) · Scientific Theory (Public school) · Sanitation (Sewer) · Archaeology (Museum) · Railways (units move twice as far along their own territory) · Economics (Stock exchange) |
+| **Classical** | Pottery (Granary) · Mining (Mine) · Mysticism (Shrine) · Archery (Archer) · Sailing (Harbour, Galley) · Horseback Riding (Stable, Horseman; reveals horses) · Bronze Working (Barracks, Spearman; reveals iron) · Masonry (Walls) · Writing (Library) · Irrigation (Irrigation works) · Iron Working (Swordsman) · Mathematics (Workshop, Catapult) |
+| **Medieval** | Construction (Lumber mill, clearing forest) · Shipbuilding (embarking, Quadrireme) · Philosophy (Temple, founding a religion) · Drama (Amphitheatre) · Engineering (Aqueduct, bridges) · Currency (Market) · Feudalism (Pikeman, Man-at-arms, Castle) · Machinery (Crossbowman, Trebuchet) · Chivalry (Knight) · Theology (Cathedral, a second belief for your religion) |
+| **Renaissance** | Education (University) · Astronomy (Observatory) · Printing (Printing house) · Navigation (ocean, Caravel, Explorer) · Gunpowder (Musketman; reveals niter) · Banking (Bank) · Metallurgy (Cannon, Frigate, Bastion) · Economics (Stock exchange) |
+| **Industrial** | Rifling (Rifleman, Ranger) · Steam Power (Ironclad; reveals coal) · Industrialisation (Factory) · Military Science (Cavalry, Field gun) · Scientific Theory (Public school) · Sanitation (Sewer) · Archaeology (Museum) · Railways (units move twice as far along their own territory) |
 | **Modern** | Combustion (Tank, Destroyer; reveals oil) · Ballistics (Artillery, Machine gun) · Replaceable Parts (Infantry, Anti-tank) · Electricity (Power plant) · Radio (Broadcast tower) · Steel (Battleship) · Computers (Research lab) · Rocketry (Launch pad; reveals aluminium) · Satellites (the satellite project) · Space Flight (the mission) |
 
 Each era's techs cost about double the last era's. Railways is a stand-in for
@@ -1144,7 +1166,7 @@ decision of its own once the Industrial era is being balanced.
 ### 13.3 Knowledge spreads
 
 A tech costs **10% less for every player you've met who already knows it**,
-up to 50% (D40). It's how a player who's fallen behind catches up, and why
+up to 50% (D40, still open on this point). It's how a player who's fallen behind catches up, and why
 meeting people matters. It's also a little hidden state: a player can tell
 roughly how many people they've met know a tech from its price, which is
 fine, and close to what *Civilization IV* showed outright.
@@ -1155,7 +1177,7 @@ What a rival has researched is otherwise hidden (§17), except their era (§7.2)
 
 ## 14. Culture
 
-Culture does two things (D38).
+Culture does two things (decided in round 6, D38).
 
 ### 14.1 Borders
 
@@ -1169,14 +1191,14 @@ permanent bonus, picked from a branch, *Civilization V*'s social policies by
 another name. Each pick costs more than the last, and each city past the
 fourth adds to the cost (§12.4).
 
-Five branches, one opening in each era:
+Five branches, opening as the eras go by:
 
 | Branch | Opens in | For example |
 |---|---|---|
-| **Tradition** (the tall empire) | Ancient | +1 food in the capital; cities grow at 75% of the food |
-| **Expansion** (the wide one) | Ancient | Settlers cost 25% less; new cities start with 2 population |
-| **Piety** | Classical | +2 faith in every city with a Temple |
-| **Order** | Medieval | Units upgrade without losing their round |
+| **Tradition** (the tall empire) | Classical | +1 food in the capital; cities grow at 75% of the food |
+| **Expansion** (the wide one) | Classical | Settlers cost 25% less; new cities start with 2 population |
+| **Piety** | Medieval | +2 faith in every city with a Temple |
+| **Order** | Renaissance | Upgrades cost half the gold |
 | **Enterprise** | Industrial | Factories +2 production |
 
 About five traditions a branch, and finishing a branch gives a bigger bonus.
@@ -1187,7 +1209,7 @@ tourism on top of it (§18).
 
 ## 15. Religion
 
-Faith accumulates across the empire (D39). A proposal for the first version:
+Faith accumulates across the empire. Decided in round 6 (D39):
 
 1. **A pantheon.** The first time a player's faith reaches a threshold, they
    pick a **pantheon belief** from a shared list — "+1 food from forests",
@@ -1260,12 +1282,48 @@ research, defensive pacts, teams — is D29.
 Over a match of months, this will happen in most eight-player games (§4.2), so
 it needs more than one answer (D32):
 
-- **The default: free cities.** A dropped player's cities become neutral,
-  defending themselves and their garrisons, never expanding or attacking, and
-  capturable by anyone. Their units are removed.
-- **A new player can take the seat.** Before their cities turn free, the seat
-  is offered by join code, as an open seat is today (`/join`), so a friend can
-  step in and play on with the empire as it stands.
+1. **A new player can take the seat.** The seat is first offered by join
+   code, as an open seat is today (`/join`), so a friend can step in and play
+   on with the empire as it stands.
+2. **Otherwise a computer player takes it**, once computer players exist
+   (§16.5), unless the host has turned that off.
+3. **Otherwise its cities become free cities**: neutral, defending themselves
+   and their garrisons, never expanding or attacking, and capturable by
+   anyone. Its units are removed.
+
+### 16.4 Teams
+
+**Decided in round 6 (D45): matches can be played in teams.** A proposal for
+how (D51): the host splits the table into two to four teams at setup.
+Teammates are permanently at peace, with open borders between them, see
+what each other sees, and win together (§18). Wars and peace are between
+teams: any member can declare war or propose peace for the team, and it binds
+every member. Seats alternate between teams (A1, B1, A2, B2), as Realm Arena's
+do, so no team moves twice in a row.
+
+### 16.5 Computer players
+
+**Decided in round 6 (D45): computer players can fill seats.** A proposal for
+how (D50):
+
+- **Same rules, same sight.** A computer player sends the same commands a
+  person would, and sees only what its seat can see: it reads the world
+  through the same per-player cut of the state the client gets (§17), so it
+  can't cheat by accident and the `croupier` checks it like any other reader.
+- **Difficulty is bonuses, not cheating.** Harder computer players get more of
+  every yield, as *Civilization*'s do; none ever sees through the fog.
+- **Its turn costs no hand-off.** When a computer player's turn comes, the
+  server plays it straight away — after the response, in the background, as
+  the platform already does work that shouldn't hold a request up — so a seat
+  filled by the computer adds seconds to a round, not hours. At eight players
+  with four people and four computers, a round under turns one after another
+  is about half as long.
+- **It can take over a dropped seat** (§16.3), so a match doesn't lose an
+  empire when someone leaves.
+
+A computer player that plays a fifty-tech, five-yield game with religion,
+culture and war competently is a project as big as the game itself; §25 puts
+it after the game is playable by people.
 
 ---
 
@@ -1314,13 +1372,13 @@ them.
 science now; culture and religion later. The host can turn any of them off
 at setup.
 
-1. **Domination.** Conquer every rival by force. Proposed (D36): hold every
-   original capital, your own included, at the end of any round. A player
+1. **Domination.** Conquer every rival by force: hold every original capital,
+   your own included, at the end of any round (decided in round 6, D36). A player
    whose capital has fallen still plays, and can win it back.
 2. **Science: the mission.** Research Space Flight, then build the mission
-   (D37): a Launch pad (needs aluminium), then three parts in any of your
-   cities with a Launch pad — booster, habitat, engine — each a project that
-   needs oil or aluminium. **Starting the first part tells everyone.** When the
+   (decided in round 6, D37): a Launch pad (needs 2 aluminium), then three
+   parts in any of your cities with a Launch pad — booster, habitat, engine —
+   each a project that needs 3 aluminium in your dominion (§9.5). **Starting the first part tells everyone.** When the
    third is done the mission launches, and **arrives ten rounds later** (scaled
    by pace). If your capital falls before it arrives, the mission is lost. A
    science race with a target the others can hit, and a last ten rounds where
@@ -1329,8 +1387,11 @@ at setup.
    tourism race (§14.2).
 4. **Religion** (later): your religion followed by most of the cities of every
    other player (§15).
-5. **Score at the round limit** (D44). When the last round ends (300 at
-   Standard), the highest score wins.
+5. **Score at the round limit** (decided in round 6, D44). The limit is set by
+   the pace (300 rounds at Standard) and on by default; when the last round
+   ends, the highest score wins. The host can turn it off, and then a match
+   ends only with a victory — worth the setup screen saying so plainly, since
+   a match of months with no end in sight is the one most likely to stall.
 
 | Score | Points |
 |---|---:|
@@ -1342,6 +1403,10 @@ at setup.
 | Each wonder | 5 |
 | Each original capital held (other than your own) | 10 |
 | Each city following your religion | 1 |
+
+**In teams** (§16.4), a team wins together: domination is the team holding
+every original capital, any member's mission wins for the team, and a team's
+score is its members' added up.
 
 Ties go to the later seat. A player with no cities and no settlers left is out:
 their score stands, and they take no more turns.
@@ -1394,10 +1459,11 @@ turn, the sheets stay readable through `ReadOnlyPanel`.
 
 ## 20. Decisions to make
 
-Rounds 1, 2 and 4 have settled twenty-six decisions (§20.4 lists them), and
-round 3 reopened the time model. What's left is below: the time model first,
-then round 2's questions, then the two gold raised, then the last of round 1's,
-which wait for Milestone B or a prototype. Each lists its options and a recommendation; the
+Rounds 1, 2, 4, 5 and 6 have settled thirty-six decisions (§20.5 lists
+them), and round 3 reopened the time model. What's left is below: the time
+model first, then what's left of round 2's questions, the two round 6's
+answers raised (computer players and teams), the two gold raised, and the
+last of round 1's, which wait for Milestone B or a prototype. Each lists its options and a recommendation; the
 recommendation is what the body assumes.
 
 ### 20.1 Reopened in round 3: the time model
@@ -1413,99 +1479,33 @@ option, and Milestone A built as A on today's engine. E is the runner-up.
 *Round 1 chose A;* round 3 reopened it. The body outside §5 still assumes A,
 and §5.8 lists what changes if C is taken.
 
-### 20.2 Round 2's questions, still open
+### 20.2 Still open from round 2
 
 **D35. How long, in real time, can an eight-player match be?** (§4)
-At four check-ins a day, an eight-player round is about a day, so a 300-round
-match is about a year. *Options:* (a) accept it: Day of Dominion is an epic
-played over months, and the turn timer and §5.2 are how a keen table goes
-faster; (b) default eight-player matches to Blitz or Quick pace and a short
-turn timer, so the usual match is one to three months; (c) cap the player
-count lower at the longer paces (say, eight at Blitz and Quick, six at
-Standard, four at Epic); (d) revisit simultaneous turns for big tables.
+At four check-ins a day, an eight-player round is about a day under turns one
+after another, so a 300-round match is about a year. *Options:* (a) accept
+it: Day of Dominion is an epic played over months, and the turn timer and
+§5.2 are how a keen table goes faster; (b) default eight-player matches to
+Blitz or Quick pace and a short turn timer, so the usual match is one to three
+months; (c) cap the player count lower at the longer paces (say, eight at
+Blitz and Quick, six at Standard, four at Epic); (d) let the time model (D3)
+answer it.
 *Recommendation:* (b) with turns that end themselves (§5.2): the setup screen
 shows the expected length of the match as the host picks the pace, the player
-count and the timer, using §4's table, so nobody starts a year-long match by
-accident.
+count, the computer players and the timer, so nobody starts a year-long match
+by accident. *Changed by round 6:* computer seats cost no hand-off (§16.5), so
+a table of four people and four computers runs at about half the length of
+eight people.
 
-**D36. What exactly is domination?** (§18)
-*Options:* (a) hold every original capital (*Civilization VI*); (b) eliminate
-every rival: take every city; (c) hold a share of the world's land or people.
-*Recommendation:* (a). With eight players, (b) means hunting down the last
-fishing village of the eighth player, long after the match was decided.
+**D40, the rest.** Round 6 settled the five eras and when you enter one. Still
+open: what being in an era does (§7.2's art, a public era, barbarians and
+tradition costs), and whether a tech costs less for each player you've met who
+knows it (§13.3). *Recommendation:* both as written.
 
-**D37. What is the science mission?** (§18)
-*Options:* (a) research the last tech and win; (b) a public project after the
-last tech; (c) a Launch pad, three public parts, and a voyage of ten rounds
-during which your capital must hold.
-*Recommendation:* (c). It gives everyone else a target and a deadline, which
-is what makes a science victory something the others can fight.
-
-**D38. What does culture do?** (§14)
-*Options:* (a) borders only; (b) borders and traditions (*Civilization V*'s
-policies); (c) borders and a civics tree alongside the tech tree
-(*Civilization VI*).
-*Recommendation:* (b). A second tree as big as the tech tree is too much to
-show and to balance on a phone; traditions give culture a choice of its own
-in a list that's easy to read.
-
-**D39. What does religion do, and what's the yield called?** (§15)
-*Options:* (a) pantheons only; (b) pantheon, founding a religion, passive
-spread and missionaries; (c) (b) plus theological combat, inquisitors and the
-rest. *Also:* call the yield "faith" in the game, or "religion".
-*Recommendation:* (b), and "faith". Faith buys religion's units and buildings,
-and gold can't, so a religion is something a player has to choose to build.
-
-**D40. Which five eras, and what does being in one do?** (§7)
-*Options for the five:* (a) Ancient, Classical, Medieval, Industrial, Modern;
-(b) Ancient, Medieval, Renaissance, Industrial, Modern (Classical folded into
-Ancient); (c) Classical, Medieval, Renaissance, Industrial, Modern (no
-Ancient). *For entering one:* (a) your first tech from it; (b) a share of its
-techs (say, three); (c) every tech of the era before. *For what it does:* art,
-public era, barbarians, tradition costs (§7.2). *And:* do techs cost less for
-each player you've met who knows them (§13.3)?
-*Recommendation:* (a) Ancient to Modern; (a) your first tech; §7.2's effects;
-and yes to knowledge spreading, which is the catch-up eight players moving at
-their own pace need.
-
-**D41. How do units upgrade?** (§10.3)
-*Options:* (a) for gold, in your own territory, ending the unit's move
-(*Civilization*); (b) for a round of retraining in your own territory, no
-cost; (c) automatically and free, the moment the tech is researched; (d) as a
-project in a city ("Retrain the garrison"), paid in production.
-*Recommendation:* (a), with "Upgrade all". *Changed by round 2:* with gold in
-the game it's the natural price, and a purse rather than production's flow.
-(c) makes research too strong and lets an army upgrade in the middle of a
-war's front.
-
-**D42. How do strategic resources work?** (§9.5)
-*Options for how much a source gives:* (a) one source unlocks unlimited units;
-(b) each source supports a fixed number of units (four); (c) a stockpile that
-grows each round and is spent when a unit is built (*Civilization VI*). *For
-which:* §9.5's six, or fewer. *For seeing them:* always visible, or revealed by
-a tech.
-*Recommendation:* (b), §9.5's six, revealed by a tech. (a) makes the second
-iron mine worthless; (c) is another number to track per resource.
-
-**D43. Which paces?** (§6)
-*Options:* (a) §6.2's four: Blitz, Quick, Standard, Epic; (b) three, without
-Epic; (c) a free multiplier the host sets.
-*Recommendation:* (a), and pace scaling costs, thresholds and durations in
-rounds, never movement or combat.
-
-**D44. Is there a round limit?** (§18)
-*Options:* (a) yes, set by the pace, with the score deciding; (b) yes, but the
-host can turn it off; (c) no: a match ends only with a victory.
-*Recommendation:* (a). Over months, a match with no end is a match nobody
-finishes, and the platform abandons games that stall.
-
-**D45. Who sits at the table?**
-*Options:* (a) 2–8 people; (b) 2–8, with computer players able to fill seats;
-(c) teams.
-*Recommendation:* (a) for the first version. Eight people is a lot to gather,
-and computer players would make every match fill, but an AI that plays
-fifty techs, religion, culture and war is a project as big as the game
-itself. It's the most likely thing to want next.
+**D42, the rest.** Round 6 settled how much a source gives (one unlocks, a few
+things need more). Still open: whether §9.5's six are the right list, and
+whether a strategic resource is revealed by a tech or visible from the start.
+*Recommendation:* the six, revealed by a tech.
 
 **D46. Wonders?** (§12.6)
 *Options:* (a) none; (b) a handful of wonders an era, one-of-a-kind, each with
@@ -1522,7 +1522,33 @@ it.
 their own (bases, ranges, interception) on a screen already full; the Modern
 era has tanks, artillery and battleships without them.
 
-### 20.3 Gold: new questions
+### 20.3 New in round 6: computer players and teams
+
+**D50. Computer players** (§16.5).
+*When:* (a) in the first version; (b) Milestone B; (c) Milestone C, once the
+game is playable by people. *What they see:* (a) only what their seat sees;
+(b) everything, at the harder levels. *Difficulty:* (a) yield bonuses; (b)
+smarter play only. *Dropped seats:* should a computer player take one over
+when no person does (§16.3)?
+*Recommendation:* (c); sees only its seat; yield bonuses; and yes, it takes
+over dropped seats. Two things to get right from Milestone A so the computer
+player slots in later: it must play through the same commands as a person,
+and every rule must be a function the server can call for any seat, not only
+for the one holding the phone.
+
+**D51. Teams** (§16.4).
+*Options for turns:* (a) seats alternate between teams (A1, B1, A2, B2);
+(b) teammates share a turn — which needs several players active at once, the
+same engine piece as D3's options B–F (§5.6). *For what teammates share:* (a)
+sight and open borders; (b) + research; (c) + their treasuries. *For war:*
+(a) teams go to war and make peace as one; (b) each member chooses.
+*For sizes:* two to four teams, even or uneven.
+*Recommendation:* (a) alternating seats, moving to (b) shared turns if the set
+of active seats is built for D3; sight and open borders, nothing more; war and
+peace as a team; two to four teams of even size, with computer players to
+even them out.
+
+### 20.4 Gold: new questions
 
 **D48. What does gold buy?** (§12.8)
 *Options:* any mix of (a) a city's current item outright; (b) tiles; (c) unit
@@ -1544,12 +1570,12 @@ late turns, a sensible size. Upkeep on buildings is a number on every building
 and a way for a poor empire to get poorer. *Also:* a treasury that runs dry
 disbands a unit, with a round's warning.
 
-### 20.4 Decided so far
+### 20.5 Decided so far
 
 | | Decision | Answer | Round | Where |
 |---|---|---|---|---|
 | D1 | Name | Day of Dominion | 1 | — |
-| D2 | Players | Up to eight (who fills the seats is D45) | 1 | — |
+| D2 | Players | Up to eight (computer players and teams: D45) | 1 | — |
 | D4 | Match length | Up to 300 rounds or more, at a pace the host picks | 1 | §6 |
 | D5 | Victories | Several: domination and a science mission now, culture and religion later | 1 | §18 |
 | D6 | Eras | Five, each player in their own, by research | 1 | §7 |
@@ -1574,10 +1600,20 @@ disbands a unit, with a round's warning.
 | D26 | Unit upkeep | Two free units a city, 1 gold a round each beyond (2 from the Industrial era) | 4 | §10.6 |
 | D27 | Capturing cities | Capture only, losing 1 population and a level of walls | 4 | §11.4 |
 | D28 | Movement rules | Zones of control and closed borders at peace | 4 | §10.1, §16.1 |
+| D36 | Domination | Hold every original capital | 6 | §18 |
+| D37 | Science victory | A Launch pad, three public parts, a ten-round voyage your capital must survive | 6 | §18 |
+| D38 | Culture | Borders and traditions | 6 | §14 |
+| D39 | Religion | Pantheon, founding a religion, passive spread and missionaries | 6 | §15 |
+| D40 | Eras | Classical, Medieval, Renaissance, Industrial, Modern; you enter one with your first tech from it (the rest of D40 is open) | 6 | §7 |
+| D41 | Upgrades | For gold, in your own territory, ending the unit's move; "Upgrade all" | 6 | §10.3 |
+| D42 | Strategic resources | One source in your dominion unlocks; a few units and buildings need more than one (the rest of D42 is open) | 6 | §9.5 |
+| D43 | Paces | Blitz, Quick, Standard, Epic | 6 | §6 |
+| D44 | Round limit | Set by the pace; the host can turn it off | 6 | §18 |
+| D45 | Who plays | 2–8, computer players can fill seats, and teams | 6 | §16.4–§16.5 |
 
-D21 (resources) became D42, which is still open.
+D21 (resources) became D42.
 
-### 20.5 Still open from round 1, before Milestone B
+### 20.6 Still open from round 1, before Milestone B
 
 **D29. Diplomacy** (§16.1).
 *Options:* (a) war and peace only; (b) + open borders, research agreements and
@@ -1585,7 +1621,8 @@ defensive pacts; (c) + permanent teams set at setup.
 *Recommendation:* (a) first, then (b). *Changed by round 1:* at eight players,
 the case for (b) is much stronger than at four. *Changed by round 2:* gold can
 change hands in a peace proposal from the start (§16.1), and gives (b)'s deals
-a currency.
+a currency. *Changed by round 6:* (c) is decided — teams are in (D45) — and
+how they work is D51.
 
 **D30. Barbarians and villages** (§16.2).
 *Options:* (a) static camps that send raiders; (b) camps that appear over time
@@ -1600,14 +1637,16 @@ camps is cleared by round 50 and never matters again.
 *Options:* (a) free cities; (b) the seat offered to a new player first, then
 free cities; (c) their empire vanishes.
 *Recommendation:* (b). *Changed by round 1:* in a match of months, someone leaves
-in most games.
+in most games. *Changed by round 6:* with computer players in (D45), a
+computer player takes the seat between a new person and free cities (§16.3,
+D50).
 
 **D33. When do standing orders move?**
 *Recommendation:* at the start of their owner's turn. *Changed by round 1:* with
 turns one at a time there's no shared start of round to move them at, and the
 start of the owner's turn is when they'd look.
 
-### 20.6 Can wait for a prototype
+### 20.7 Can wait for a prototype
 
 **D34. Rendering and art** (§22.2).
 *Recommendation:* prototype at the eight-player map size (2,760 hexes) on a
@@ -1615,7 +1654,7 @@ mid-range phone before anything else is drawn. *Changed by round 1:* the
 eight-player map is three and a half times the size round 1's was, which makes
 a canvas for the ground (§22.2) close to certain.
 
-### 20.7 Other numbers to confirm
+### 20.8 Other numbers to confirm
 
 Sight, movement, the advantages in §11.2, the growth formula, the population
 caps, every strength in §10.2, the pace multipliers, the score table, the four
@@ -1662,7 +1701,7 @@ simulator over the rules module before anyone plays a match that lasts months.
 3. **Combat (D24):** not random combat; it should be strength and advantage
    based. (§11.2.)
 
-§20.2's questions (D35–D47) are still to come, with D48 and D49.
+Round 2 left D35–D47, D48 and D49 to come.
 
 ### 21.3 Round 3
 
@@ -1700,6 +1739,28 @@ The time model (D3) is still undecided. The rest:
    smaller cities, stay, for a city squeezed by its neighbours.)
 
 ### 21.6 Round 6
+
+1. **D36:** (a), hold every original capital.
+2. **D37:** (c), a Launch pad, three public parts and a ten-round voyage.
+3. **D38:** (b), borders and traditions.
+4. **D39:** (b), pantheon, founding a religion, passive spread and
+   missionaries. (The yield's name wasn't answered; the doc keeps "faith".)
+5. **D40:** (c) for the five eras — Classical, Medieval, Renaissance,
+   Industrial, Modern — and (a), you enter an era with your first tech from
+   it. (§6.3, §7, §8, §10.2, §12.6, §13.2 and §14.2 move onto the new eras.
+   What an era does and knowledge spreading are still open.)
+6. **D41:** (a), upgrades for gold.
+7. **D42:** (a), one source unlocks, "but some units or buildings might require
+   multiple to be in your dominion." (§9.5: a source counts inside your
+   borders, worked or not; Knight, Battleship, Launch pad and the mission's
+   parts need more than one. The list of six and whether they're revealed by
+   a tech are still open.)
+8. **D43:** (a), four paces.
+9. **D44:** (b), a round limit the host can turn off.
+10. **D45:** (b) and (c): computer players can fill seats, and teams. (§16.4,
+    §16.5, §18; D50 and D51 follow, and D29 and D32 change.)
+
+### 21.7 Round 7
 
 To come.
 
@@ -1873,7 +1934,7 @@ needs one more than any other here — three to six achievements, a share card
 - Air units and nuclear weapons (D47).
 - Diplomacy beyond war and peace (D29).
 - Culture and religious victories (§18), theological combat (§15).
-- Computer players (D45) and city-states.
+- City-states.
 - Map types beyond continents and islands; wrapping; rotating the view.
 - Themes ([`game-themes.md`](../game-themes.md)).
 
@@ -1883,7 +1944,7 @@ needs one more than any other here — three to six achievements, a share card
 
 Not a plan yet; a plan follows once §20 is answered. The order the pieces want:
 
-**Milestone A — two empires, Ancient and Classical.** Two players, Blitz pace,
+**Milestone A — two empires, Classical and Medieval.** Two players, Blitz pace,
 on the engine as it is.
 1. The hex helper and a board that draws a generated map, with the minimap and
    tap-to-tile, built to D34's prototype.
@@ -1906,8 +1967,9 @@ on the engine as it is.
    wonders, the mission.
 5. Barbarians and tribal villages; taking over a dropped seat.
 
-**Milestone C — after that.** Culture and religious victories, promotions,
-diplomacy, air units, the art pass, and perhaps computer players.
+**Milestone C — after that.** Computer players (§16.5), culture and
+religious victories, promotions, diplomacy, air units, the art pass. Teams
+(§16.4) fit in Milestone B, once there are more than two seats.
 
 **The riskiest parts**, worth a prototype before the rest is built on them:
 drawing a 2,760-hex map smoothly on a phone (§22.2), whether a late-game turn
