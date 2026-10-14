@@ -96,8 +96,10 @@ out. A second copy is the signal to extract the first one.
   middle of the frame — Realm Arena following a long walk — calls
   `useBoardCentre()` a frame at a time from its own playback clock, rather than
   feeding `BoardZoom` a new focus each frame; a player taking hold of the board
-  stops it until the next focus. (The track editor is the one exception, and says why
-  in its own file: it owns every pointer press on its canvas.)
+  stops it until the next focus. (The track editor is one exception, and says why
+  in its own file: it owns every pointer press on its canvas. Realm Arena's 3D
+  experiment, `RealmArenaBoard3D`, is the other until `BoardZoom` can drive a
+  WebGL camera — [`docs/realm-arena-3d.md`](./docs/realm-arena-3d.md) §6.)
   Names printed on a board's art go through `MapLabelLayer`, never a bare
   `MapLabel` per node: it lays every name out in one pass so none of them lands
   on another name, on a node, on a marker beside a node, or off the map — tell
@@ -169,7 +171,7 @@ out. A second copy is the signal to extract the first one.
   "who's playing" invite picker used by every game-setup screen),
   `usePlayback` — the one frame loop for whatever a board plays: a board mounts
   `PlaybackProvider` round what it draws, and everything that moves reads the
-  time with `usePlaybackFrame`, setting its own SVG attributes through a ref
+  time with `usePlaybackFrame`, setting its own SVG attributes (or a WebGL scene) through a ref
   with no React render a frame, rather than running a clock of its own
   ([`docs/isometric-animations.md`](./docs/isometric-animations.md) §4),
   `dataCache` — the tab's in-memory cache of what a screen fetched for the

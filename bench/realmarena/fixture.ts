@@ -27,10 +27,8 @@ import { isStanding, isWarband, lastWaveRound } from "@/games/RealmArena/rules";
 import { battleRoundsOf } from "@/games/RealmArena/RealmArenaLogic";
 import { gameStateToModel, stepOutcomeToModel } from "@/games/RealmArena/RealmArenaModels";
 import type { RealmArenaSettings } from "@/games/RealmArena/RealmArenaModels";
-import { REALM_ARENA_MAPS } from "@/games/RealmArena/maps";
-import type { Battlefield } from "@/utils/games/battlefield/terrain";
 import { seedRolls } from "../../scripts/lib/realmArenaBalance";
-import { SCALED_MAP_ID, registerScaledSackedFort } from "./scaledMap";
+import { registerScaledSackedFort } from "./scaledMap";
 
 const SEED = 7;
 const VIEWER = "a";
@@ -42,8 +40,6 @@ const FIXTURES: Record<string, { settings: RealmArenaSettings; across?: number }
     "holdout-8k": { settings: { size: "large", coop: COOP }, across: 92 },
     "holdout-16k": { settings: { size: "large", coop: COOP }, across: 128 },
 };
-/** The Sacked Fort as the game has it, put back after a scaled one. */
-const SACKED_FORT = REALM_ARENA_MAPS[SCALED_MAP_ID];
 /** The time the clock stands at while the battle is played. */
 const CLOCK = Date.UTC(2026, 9, 14);
 /** How many rounds short of the last wave the battle is set, so the End turns played land it. */
@@ -52,8 +48,8 @@ const OUT = new URL("./fixtures/", import.meta.url);
 
 async function write(name: string) {
     const { settings, across } = FIXTURES[name];
-    if (across) registerScaledSackedFort(across);
-    else (REALM_ARENA_MAPS as Record<string, Battlefield>)[SCALED_MAP_ID] = SACKED_FORT;
+    // Put back once written (an error ends the run anyway).
+    const restore = across ? registerScaledSackedFort(across) : undefined;
     seedRolls(SEED);
     // The clock stood still, so the warbands' planning guard (`WARBAND_DEADLINE_MS`)
     // never cuts a turn short on a busy machine: the fixture is the seed's alone.
@@ -97,6 +93,7 @@ async function write(name: string) {
     writeFileSync(file, json);
     const counts = `${after.fighters.length} figures (${after.fighters.filter(fighter => isWarband(fighter.owner)).length} warband), ${step.parts.length} parts`;
     console.log(`Wrote ${file.pathname}: ${counts}, ${(json.length / 1024).toFixed(0)} KB, sha256 ${createHash("sha256").update(json).digest("hex").slice(0, 12)}`);
+    restore?.();
 }
 
 async function main() {

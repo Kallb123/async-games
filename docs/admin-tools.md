@@ -3,8 +3,8 @@
 Support tooling for whoever runs the app, at `/admin`. Getting a guest back
 into their game when the link they were given is gone, a look at what
 platforms players are actually on, build-time editors for Race Cars circuits
-and Kingdom Builder tilesets, a way to clear out Kingdom Builder worlds, and
-Realm Arena's balance sheet.
+and Kingdom Builder tilesets, a way to clear out Kingdom Builder worlds,
+Realm Arena's balance sheet, and its renderer lab.
 
 ## The problem it solves
 
@@ -535,6 +535,48 @@ an ability added to `ABILITIES` won't type-check until it has a line there.
 
 It reads repo data and persists nothing, so there is no API route behind it,
 only `AdminPage`'s gate.
+
+## Game tools: the Realm Arena renderer lab
+
+`/admin` → **Realm Arena renderer lab** → `/admin/realmarena-renderer`
+
+The rendering bench's battles and scenarios
+([`realm-arena-rendering.md`](./realm-arena-rendering.md) §2), played on
+whatever device opens the page. The bench in a cloud container has no GPU, so
+it can't measure the 3D board's GPU side
+([`realm-arena-3d.md`](./realm-arena-3d.md) §4). This page can: open it on a
+phone.
+
+- **Board:** the isometric board players see, or the three.js experiment.
+- **Battle:** the bench's frozen Hold Out turn (2,916 tiles), the same battle
+  in fog, or on a Sacked Fort grown to 8,464 or 16,384 tiles.
+- **Play:** the enemy turn, turning the view, panning round, selecting, the
+  wave due, or idle. Each is the bench's own scenario
+  (`bench/realmarena/harness.tsx`), run exactly as `npm run ra-bench` runs it.
+- **Results:** each run adds a row with its fps, 95th-percentile frame gap,
+  slow frames, long tasks, longest task, the enemy turn's overrun and, for
+  the 3D board, triangles per frame. These are the bench's own numbers
+  (`bench/realmarena/summary.ts`), less the browser trace, which a page can't
+  read. *Copy as Markdown* copies the table, headed by the device it ran on:
+  screen size, pixel density, the GPU's name as WebGL reports it, and the
+  user agent.
+
+To compare the boards, play each scenario on both, in the same battle, on
+the same phone.
+
+**Built from repo data, no API route.** The page reads the bench's harness
+and fixtures from `bench/realmarena/`, so the app and the bench play the
+same thing. Everything heavy is fetched only when the lab opens: both boards,
+three.js and the fixtures. The `/admin` screens' own JavaScript doesn't carry
+any of it. A scaled battle stands its bigger Sacked Fort in for the real one
+under the same map id while it's on screen, and puts the real one back as the
+lab moves on, so no other Sacked Fort in the tab reads the bigger map. The
+gate is `AdminPage`'s.
+
+### No "What's new" entry
+
+The lab and the 3D board it shows are admin-only; a player never sees either,
+so neither earns a release note.
 
 ## Adding another admin tool
 

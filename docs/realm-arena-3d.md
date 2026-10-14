@@ -86,7 +86,11 @@ container:
 - **GPU-side, not comparable:** the commit time, the GPU process's time, and
   therefore the 3D board's fps.
 
-A real verdict on the GPU side needs a phone (§6).
+A real verdict on the GPU side needs a phone. The admin tools' **Realm
+Arena renderer lab** (`/admin/realmarena-renderer`,
+[`admin-tools.md`](./admin-tools.md)) runs these same scenarios on whatever
+device opens it, either board, any battle, and copies its results as
+Markdown with the device's GPU named.
 
 ## 5. Results
 
@@ -141,13 +145,12 @@ Hold Out battle (`holdout`, 2,916 tiles) and the bigger game's scale
 
 ## 6. Next
 
-1. **Measure on a phone.** This decides it. Either:
-   - run `npm run ra-bench -- --renderers svg,three --headed` on a machine
-     with a GPU, which gives real WebGL numbers on a desktop GPU; or, better,
-   - add a development-only page to the preview deployment that plays the
-     bench's enemy turn on either board with an fps readout, and open it on
-     the phones people play on. The bench page needs nothing of the server,
-     so this is mostly wiring.
+1. **Measure on a phone.** This decides it. Open the renderer lab
+   (`/admin/realmarena-renderer`) on the phones people play on, play each
+   scenario on both boards, and paste the copied results into this
+   document. On a desktop with a GPU,
+   `npm run ra-bench -- --renderers svg,three --headed` gives the same
+   comparison with the trace as well.
 2. **If the phone agrees,** the remaining work before a player sees it:
    - §3's missing pieces;
    - `BoardZoom` as a camera (plan §7.2), in place of the 3D board's own

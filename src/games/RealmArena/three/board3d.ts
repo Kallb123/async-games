@@ -652,6 +652,11 @@ export class Board3D {
     }
 
     // ---- Taps and gestures ----
+    // The board's own, not BoardZoom's: BoardZoom scrolls and scales DOM
+    // content, and what moves here is a WebGL camera. Until BoardZoom can drive
+    // a camera (docs/realm-arena-3d.md §6), these mirror its gestures — drag to
+    // pan, pinch and ctrl-wheel anchored under the fingers — on the shared maths
+    // in src/utils/ui/boardZoom.ts.
 
     private handleGestures(): void {
         const pointers = new Map<number, { x: number; y: number }>();

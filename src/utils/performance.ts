@@ -272,8 +272,8 @@ export function safeRoute(pathname: string): string {
 /** The count, median, p75 and p95 of one group of samples. */
 export interface PerformanceStats { samples: number; median: number; p75: number; p95: number }
 
-/** The value at `fraction` of the way up already-sorted `values` (nearest rank). */
-const percentile = (values: number[], fraction: number) => values[Math.min(values.length - 1, Math.ceil(values.length * fraction) - 1)] ?? 0;
+/** The value at `fraction` of the way up already-sorted `values` (nearest rank): the one way every percentile and median the app reports is taken. */
+export const percentile = (values: number[], fraction: number) => values[Math.min(values.length - 1, Math.ceil(values.length * fraction) - 1)] ?? 0;
 
 /**
  * Samples grouped on whatever `keyOf` returns, each group's stats beside the

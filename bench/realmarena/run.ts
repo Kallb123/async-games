@@ -42,7 +42,8 @@ import { extname, join, normalize } from "node:path";
 import { fileURLToPath } from "node:url";
 import { parseArgs } from "node:util";
 import type { LoadResult, ScenarioResult } from "./BenchApp";
-import { percentile } from "../../scripts/lib/realmArenaBalance";
+import { percentile } from "@/utils/performance";
+import { scenarioSummary } from "./summary";
 
 const REPO = fileURLToPath(new URL("../..", import.meta.url));
 const BENCH = join(REPO, "bench/realmarena");
@@ -345,9 +346,8 @@ const total = (events: TraceEvent[]) => events.reduce((sum, event) => sum + (eve
 /** Nearest rank, as every other percentile in the repo is; NaN for nothing to rank. */
 const median = (values: number[]): number => {
     const ranked = values.filter(Number.isFinite);
-    return ranked.length === 0 ? Number.NaN : percentile(ranked, 0.5);
+    return ranked.length === 0 ? Number.NaN : percentile(ranked.sort((a, b) => a - b), 0.5);
 };
-const sum = (values: number[]) => values.reduce((a, b) => a + b, 0);
 
 /** One run's numbers, by metric. Lower is better for every one but fps. */
 function metrics({ load, result, trace, heapMb }: Run, scenario: Scenario): Record<string, number> {
@@ -358,42 +358,7 @@ function metrics({ load, result, trace, heapMb }: Run, scenario: Scenario): Reco
             "mount render (ms)": load.mountActualMs, "board elements": load.domNodes, "tiles": load.tiles,
         });
     }
-    if (result) {
-        const gaps = result.frameGaps;
-        const tasks = result.longTasks.map(task => task.duration);
-        row["wall (ms)"] = result.wallMs;
-        if (gaps.length > 0) {
-            Object.assign(row, {
-                "fps": gaps.length / (sum(gaps) / 1000),
-                "frame gap p95 (ms)": percentile(gaps, 0.95),
-                "frame gap max (ms)": Math.max(...gaps),
-                "frames over 50ms": gaps.filter(gap => gap > 50).length,
-            });
-        }
-        Object.assign(row, {
-            "long tasks": tasks.length,
-            "blocking (ms)": sum(tasks.map(duration => Math.max(0, duration - 50))),
-            "longest task (ms)": tasks.length ? Math.max(...tasks) : 0,
-            "react commits": result.commits.length,
-            "react render (ms)": sum(result.commits.map(commit => commit.actualMs)),
-            "board elements": result.domNodes,
-        });
-        if (result.gl) {
-            const frames = Math.max(1, result.gl.frames);
-            Object.assign(row, {
-                "WebGL frames drawn": result.gl.frames,
-                "draw calls per frame": result.gl.calls / frames,
-                "triangles per frame": result.gl.triangles / frames,
-            });
-        }
-        if (result.parts.length > 0) {
-            Object.assign(row, {
-                "parts played": result.parts.length,
-                "part overrun mean (ms)": sum(result.parts.map(part => part.wallMs - part.cueMs)) / result.parts.length,
-                "parts timed out": result.parts.filter(part => part.timedOut).length,
-            });
-        }
-    }
+    if (result) Object.assign(row, scenarioSummary(result));
     Object.assign(row, {
         "main thread busy (ms)": trace.mainMs, "· script": trace.scriptMs, "· gc": trace.gcMs, "· style": trace.styleMs,
         "· layout": trace.layoutMs, "· paint": trace.paintMs, "· commit (waits on the GPU for WebGL)": trace.commitMs, "· other": trace.otherMs,
