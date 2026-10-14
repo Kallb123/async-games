@@ -1,6 +1,6 @@
 # Day of Dominion — Game Design Document
 
-**Status:** Concept, v0.9. Round 1 (§21.1) settled the name, eight players,
+**Status:** Concept, v0.10. Round 1 (§21.1) settled the name, eight players,
 turns taken one after another, long matches at a pace the host picks,
 several ways to win, five eras each player moves through at their own speed,
 units that upgrade through research, the yields with strategic resources,
@@ -17,9 +17,11 @@ the eras and resources, and how computer players and teams work — computer
 players from the very first build. Round 8 (§21.8) settled diplomacy (war,
 peace, three agreements and teams of any shape), barbarians, fog of war, and
 what happens to a dropped seat (a computer player takes it). §20.3 lists every
-decision taken. Still open: the time model (D3), how long a match can run
-(D35), whether computer difficulty ever needs bonuses (the rest of D50), and
-the rendering prototype (D34). The body is written as if each open recommendation were taken,
+decision taken. Round 9 (§21.9) settled that the board is drawn on a canvas,
+not in SVG, and asked whether that canvas should be a rendering engine (§22.4).
+Still open: the time model (D3), how long a match can run (D35), whether
+computer difficulty ever needs bonuses (the rest of D50), and which renderer
+draws the canvas (the rest of D34). The body is written as if each open recommendation were taken,
 and marks the spot with the decision's number — except the time model, where
 it still assumes round 1's answer (§5.8 lists what would change).
 **Name:** Day of Dominion
@@ -1535,9 +1537,9 @@ turn, the sheets stay readable through `ReadOnlyPanel`.
 
 ## 20. Decisions to make
 
-Rounds 1, 2 and 4–8 have settled forty-seven decisions (§20.3 lists them),
+Rounds 1, 2 and 4–9 have settled forty-eight decisions (§20.3 lists them),
 and round 3 reopened the time model. What's left is below: the time model,
-two more, and the rendering prototype. Each lists its options and a recommendation; the
+two more, and which renderer draws the board. Each lists its options and a recommendation; the
 recommendation is what the body assumes.
 
 ### 20.1 Reopened in round 3: the time model
@@ -1613,6 +1615,7 @@ computer-against-computer matches can measure how far apart the levels are.
 | D31 | Fog of war | Always on | 8 | §17 |
 | D32 | A player who leaves | A computer player takes the seat; the empire isn't offered to a new person | 7, 8 | §16.3 |
 | D33 | Standing orders | Move at the start of their owner's turn (if D3 brings shared rounds, at the start of the round) | 8 | §10.5 |
+| D34 | Drawing the board | A canvas, not SVG (which renderer is open) | 9 | §22.2, §22.4 |
 | D36 | Domination | Hold every original capital | 6 | §18 |
 | D37 | Science victory | A Launch pad, three public parts, a ten-round voyage your capital must survive | 6 | §18 |
 | D38 | Culture | Borders and traditions | 6 | §14 |
@@ -1634,11 +1637,15 @@ D21 (resources) became D42.
 
 ### 20.4 Can wait for a prototype
 
-**D34. Rendering and art** (§22.2).
-*Recommendation:* prototype at the eight-player map size (2,760 hexes) on a
-mid-range phone before anything else is drawn. *Changed by round 1:* the
-eight-player map is three and a half times the size round 1's was, which makes
-a canvas for the ground (§22.2) close to certain.
+**D34, the rest: which renderer draws the canvas?** (§22.4) Round 9 settled
+that the board is a canvas, not SVG.
+*Options:* (a) the browser's own 2D canvas; (b) a 2D WebGL renderer such as
+PixiJS; (c) a full 2D game engine such as Phaser; (d) a 3D engine.
+*Recommendation:* (b), confirmed by a prototype against (a) at the
+eight-player map size on a mid-range phone, measuring frame time while
+pinching, memory, first paint and bundle weight. Whichever it is, it renders
+only: `BoardZoom` stays the camera (with a new pane-sized-canvas mode), the
+playback clock stays the clock, and taps are found by the hex maths.
 
 ### 20.5 Other numbers to confirm
 
@@ -1787,6 +1794,13 @@ asks of a branch that only changes documents.
 
 ### 21.9 Round 9
 
+1. **D34:** agreed that we will need a canvas, "or we may want to include some
+   actual game rendering engine". (§22.4 weighs the browser's own canvas, a 2D
+   WebGL renderer, a full game engine and a 3D engine; which one is the rest
+   of D34.)
+
+### 21.10 Round 10
+
 To come.
 
 ---
@@ -1828,11 +1842,9 @@ No rotation: the art needs drawing once rather than six times.
   Settlements & Cities' hex maths should move onto it rather than the app
   keeping two (§3).
 - **Drawing 2,760 hexes.** Far too many to be one SVG element each with its art
-  on a phone. The likely shape: the ground (biomes, rivers, borders, fog) drawn
-  to a canvas, only the part in view, from a single tile sheet (as Kingdom
-  Builder's atlas, `npm run kb-atlas`); units, cities, labels and the selection
-  in SVG over it, so `MapLabelLayer`, the playback clock and the tap handling
-  work as they do elsewhere. That's D34's prototype.
+  on a phone, so **the board is drawn on a canvas** (decided in round 9, D34).
+  What draws the canvas — the browser's own 2D canvas or a rendering engine —
+  is §22.4.
 - **Art.** Each biome needs a few variants so the map doesn't look tiled.
   Hand-drawn art goes through `/art-masters` and `npm run optimise-art`. Unit
   figures for five eras and eight lines are about forty figures: Realm Arena's
@@ -1846,6 +1858,56 @@ few pixels wide. The board should open on what needs the player (the "Next"
 button's first item), use `focus` to glide between the things "Next" picks,
 and carry a **minimap** — the explored world in miniature, tap to jump —
 rather than relying on "fit".
+
+### 22.4 The renderer
+
+Round 9 agreed the board needs a canvas, and raised whether it should be an
+actual game rendering engine. What any renderer has to do here:
+
+- draw several thousand hexes of ground, rivers, borders and fog, and the
+  standing art on them, back to front;
+- draw dozens of units and cities over that, moving on the shared playback
+  clock (`usePlayback`), so a rival's moves play back in the recap;
+- stay smooth while a thumb pinches and pans, on a mid-range phone;
+- draw only what's in view, at the zoom it's at, because a canvas the size of
+  the whole map at a deep zoom is far beyond what a phone allows (Kingdom
+  Builder hit iOS Safari's canvas size limit with a much smaller world);
+- cost the board route as little JavaScript as possible, because CI holds
+  every route to a size budget (`scripts/check-performance-budget.mjs`).
+
+**What it must not do** is own the game. The rules live on the server and in
+the shared rules module (§23.3); the renderer is told what to draw and draws
+it. Nor should it own the camera: every board here zooms with `BoardZoom`
+(pinch, the zoom pill, `focus`, `pivot`, `useBoardCentre`), and AGENTS.md
+allows one exception, the track editor, which has to say why in its own file.
+So whichever renderer it is, it draws the window `BoardZoom` says is in view.
+That needs one addition to `BoardZoom`: a way for a child to be a canvas the
+size of the pane rather than the size of the whole board, told the current
+view (zoom and scroll) each frame — the same idea as `useBoardCentre`, the
+other way round. Taps are found by the hex maths (§22.2), not by the
+renderer's own hit-testing, so the same code finds a tile whatever draws it.
+
+**The options:**
+
+| | What it is | For | Against |
+|---|---|---|---|
+| **(a) The browser's 2D canvas** | Hand-written drawing from a tile sheet, as Kingdom Builder's terrain (`useTerrainImage.ts`, `npm run kb-atlas`) | No new dependency; already proven in this repo; a small bundle | Every frame of a pinch redraws thousands of images on the CPU; smoothness at eight players is the open question; effects (fog edges, water, glows) are work by hand |
+| **(b) A 2D WebGL renderer** — PixiJS, the usual choice | A sprite renderer on the phone's GPU: batches thousands of sprites from a sheet into a few draw calls | Smooth at thousands of sprites; fog, water and glows as shaders; culling and sprite sheets built in; it renders and nothing else, so `BoardZoom` and the playback clock stay in charge | A new dependency on the board route's budget; WebGL can lose its context on a phone and has to rebuild; labels and the selection are best kept in SVG over it |
+| **(c) A full 2D game engine** — Phaser and the like | Rendering plus its own game loop, scenes, camera, input, physics, tweens and asset loading | Everything in one box | Most of the box is what this platform already has, or deliberately keeps on the server; its camera and input fight `BoardZoom`, and its loop fights the playback clock; the heaviest bundle |
+| **(d) A 3D engine** — Three.js, Babylon.js | Real 3D: a tilted camera, heights, lighting | The richest look, and rotating the view for free | Every tile, unit and city becomes a 3D model, a far bigger art job than §22.1's; the heaviest on a phone's battery; more than a tilted-table map needs |
+
+*Recommendation:* **(b), confirmed by a prototype against (a).** A 2D GPU
+renderer is the right tool for a sprite-heavy hex map, and one that only
+renders keeps the platform's own pieces in charge of everything else. But
+the prototype should draw the eight-player map both ways on a mid-range phone
+and measure: the frame time while pinching, memory, the first paint, and the
+weight added to the board route. If the browser's own canvas keeps up, it's
+one fewer dependency for the life of the game. A full engine (c) or 3D (d)
+would each be paying for a great deal the game wouldn't use.
+
+Whatever draws it, the engine is loaded only on Day of Dominion's board, and
+the art pipeline doesn't change: tiles and figures still come from
+`/art-masters` and the platform's render scripts as sprite sheets (§22.2).
 
 ---
 
