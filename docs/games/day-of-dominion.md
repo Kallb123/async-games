@@ -1,6 +1,6 @@
 # Day of Dominion — Game Design Document
 
-**Status:** Concept, v0.7. Round 1 (§21.1) settled the name, eight players,
+**Status:** Concept, v0.8. Round 1 (§21.1) settled the name, eight players,
 turns taken one after another, long matches at a pace the host picks,
 several ways to win, five eras each player moves through at their own speed,
 units that upgrade through research, the yields with strategic resources,
@@ -12,11 +12,11 @@ map, the biomes (plains and desert added), cities (four apart, working three
 rings, borders by culture to four, as corrected in round 5) and most of the
 remaining rules. Round 6 (§21.6) settled the victories, culture, religion,
 the eras (Classical to Modern), upgrades, strategic resources, the paces, the
-round limit, and a table with computer players and teams; §20.5 lists every
-decision taken. Still open: the time model (D3), how long a match can run
-(D35), the rest of D40 and D42, wonders and the air (D46–D47), computer
-players and teams (D50–D51), gold (D48–D49), and five for Milestone B and a
-prototype (D29–D34). The body is written as if each open recommendation were taken,
+round limit, and a table with computer players and teams. Round 7 (§21.7) settled wonders, the air, gold, the rest of
+the eras and resources, and how computer players and teams work — computer
+players from the very first build. §20.3 lists every decision taken. Still
+open: the time model (D3), how long a match can run (D35), two small pieces
+of D50 and D51, and five for Milestone B and a prototype (D29–D34). The body is written as if each open recommendation were taken,
 and marks the spot with the decision's number — except the time model, where
 it still assumes round 1's answer (§5.8 lists what would change).
 **Name:** Day of Dominion
@@ -784,7 +784,7 @@ tiles its player has explored (§17).
 
 Every military unit belongs to a **line**, and upgrades to the next unit in it
 as research unlocks it (§10.3). A proposal for the roster (D41 for how
-upgrades work, D47 for the air):
+upgrades work; no air units until a later version, D47):
 
 | Line | Classical | Medieval | Renaissance | Industrial | Modern |
 |---|---|---|---|---|---|
@@ -1088,9 +1088,25 @@ builds one Mine, and every hill it works gives more.
 city can clear a forest tile in its territory. The tile becomes grassland and
 the city gets some production back into its current item.
 
-**Wonders** — one-of-a-kind buildings anyone can race for, each with a
-bonus, and each the culture victory's natural raw material — are proposed for
-Milestone B (D46).
+**Wonders** (decided in round 7, D46): a handful an era, each one of a kind.
+Anyone can build one; the first to finish it has it, and everyone is told.
+Production another player had put into it turns into gold for them, so losing
+the race isn't losing everything. Wonders can't be bought (§12.8), each is
+worth score (§18), and they're what a culture victory will be built on. For
+example, to be balanced with the rest:
+
+| Era | Wonder | For example |
+|---|---|---|
+| Classical | Pyramids | +25% production towards buildings in this city |
+| | Great Library | +3 science, and a free Classical tech |
+| | Colossus | +1 gold on every worked coast tile in this city |
+| Medieval | Great Wall | Enemy units inside your borders move one tile a round |
+| | Hagia Sophia | A free Prophet (§15) |
+| Renaissance | Sistine Chapel | +25% culture in every city |
+| | Forbidden Palace | Halves the per-city cost on techs and traditions (§12.4) |
+| Industrial | Big Ben | Buying costs 25% less gold (§12.8) |
+| | Eiffel Tower | +5 culture, +1 culture in every city |
+| Modern | Hubble Telescope | +6 science, and the mission's parts build 25% faster |
 
 ### 12.7 What a city can build
 
@@ -1106,7 +1122,7 @@ hold 1"). The list teaches the player what to do next.
 the palace (+3), Gold ore and Pearls (§9.5), Markets, Banks and Stock
 exchanges (§12.6), and cities set to the *Gold* focus.
 
-**What it buys** (D48):
+**What it buys** (decided in round 7, D48):
 
 - **The first item in a city's queue**, outright, for 3 gold for every point of
   production still needed. One purchase a city a round. Wonders (D46) and the
@@ -1117,7 +1133,7 @@ exchanges (§12.6), and cities set to the *Gold* focus.
 - **Upkeep** for units beyond the free allowance (§10.6).
 - **Peace.** A peace proposal can carry gold either way (§16.1).
 
-**No building maintenance** (D49). Buildings cost production once and nothing
+**No building maintenance** (decided in round 7, D49). Buildings cost production once and nothing
 after; upkeep falls on units only. That keeps one more number off every
 building on a small screen, and keeps out *Civilization*'s spiral where a
 poor empire sells the buildings that would have made it rich.
@@ -1293,37 +1309,74 @@ it needs more than one answer (D32):
 
 ### 16.4 Teams
 
-**Decided in round 6 (D45): matches can be played in teams.** A proposal for
-how (D51): the host splits the table into two to four teams at setup.
-Teammates are permanently at peace, with open borders between them, see
-what each other sees, and win together (§18). Wars and peace are between
-teams: any member can declare war or propose peace for the team, and it binds
-every member. Seats alternate between teams (A1, B1, A2, B2), as Realm Arena's
-do, so no team moves twice in a row.
+**Decided in round 6 (D45): matches can be played in teams**, and in round 7
+how (D51). The host splits the table into teams at setup. Teammates:
+
+- **share vision**: each sees what every teammate sees;
+- **have open borders** with each other, and are permanently at peace;
+- **go to war together**: any member can declare war or propose peace for the
+  team, and it binds every member;
+- **win together** (§18).
+
+They don't share research or treasuries. How teammates' turns fall — together,
+or one after another — is the time model's job (D3), not the team's. How many
+teams and how big is still to settle (§20.2).
 
 ### 16.5 Computer players
 
-**Decided in round 6 (D45): computer players can fill seats.** A proposal for
-how (D50):
+**Decided in rounds 6 and 7 (D45, D50): computer players can fill seats, and
+they're part of the game from the first build**, playable and testable as
+early as anything else.
 
 - **Same rules, same sight.** A computer player sends the same commands a
   person would, and sees only what its seat can see: it reads the world
   through the same per-player cut of the state the client gets (§17), so it
   can't cheat by accident and the `croupier` checks it like any other reader.
-- **Difficulty is bonuses, not cheating.** Harder computer players get more of
-  every yield, as *Civilization*'s do; none ever sees through the fog.
+- **Difficulty is how well it plays.** The aim is levels told apart by
+  smarter play — how far ahead it looks, how many options it weighs, how long
+  its plans run — not by bonuses. That's the hard part of the whole computer
+  player, and it may not stretch far enough on its own; whether easy and hard
+  ever need yield bonuses as well is left until a computer player is playable
+  (§20.2). None ever sees through the fog.
 - **Its turn costs no hand-off.** When a computer player's turn comes, the
   server plays it straight away — after the response, in the background, as
   the platform already does work that shouldn't hold a request up — so a seat
   filled by the computer adds seconds to a round, not hours. At eight players
   with four people and four computers, a round under turns one after another
   is about half as long.
-- **It can take over a dropped seat** (§16.3), so a match doesn't lose an
+- **It takes over a dropped seat** (§16.3), so a match doesn't lose an
   empire when someone leaves.
 
-A computer player that plays a fifty-tech, five-yield game with religion,
-culture and war competently is a project as big as the game itself; §25 puts
-it after the game is playable by people.
+**How it's built.** Realm Arena already has a computer player
+(`src/games/RealmArena/ai.ts`, [`realm-arena.md`](./realm-arena.md) §29.7),
+and its shape fits here: it's handed the game as its side sees it and nothing
+else; every action it considers is one the rules allow, and it judges each by
+playing it out on a copy and scoring the result; it's deterministic, so the
+same view always gets the same move; and a replay replays the moves it
+recorded rather than asking it again, so it can be improved without changing
+a match already played. Day of Dominion's is bigger — it has an empire to run
+as well as an army to move — so it's several advisers (where to settle, what
+to build, what to research, where to fight) under one score, each small enough
+to test alone.
+
+**Testable from the start.** Because it plays through the same commands,
+computer-against-computer matches run headless in the test suite: whole
+matches, start to finish, on a seed. That's how the rules get tested end to
+end, how a change that breaks a late-game rule gets caught, and how the
+balance pass (§20.6) gets its numbers — hundreds of matches rather than a
+spreadsheet. Milestone A's first playable match is one person against the
+computer (§25).
+
+**A computer seat is new to the platform.** Every seat today is a person —
+even a guest is a real account
+([`account-less-play.md`](../account-less-play.md)) — so names, pushes, the
+dashboard, stats and achievements, the result, the turn timer and the dropout
+ladder all look a seat up as a user. A computer seat needs an id that isn't a
+person, and each of those places has to know to name it, skip it, or not
+time it. It's a much smaller piece than D3's set of active seats, but it's
+shared code, so it wants its own short design note, a `locksmith` pass (nobody
+can sign in as a computer seat, or send commands as one) and a `gremlin` pass
+(its turn runs in the background, and must finish or be picked up again).
 
 ---
 
@@ -1459,11 +1512,10 @@ turn, the sheets stay readable through `ReadOnlyPanel`.
 
 ## 20. Decisions to make
 
-Rounds 1, 2, 4, 5 and 6 have settled thirty-six decisions (§20.5 lists
-them), and round 3 reopened the time model. What's left is below: the time
-model first, then what's left of round 2's questions, the two round 6's
-answers raised (computer players and teams), the two gold raised, and the
-last of round 1's, which wait for Milestone B or a prototype. Each lists its options and a recommendation; the
+Rounds 1, 2 and 4–7 have settled forty-two decisions (§20.3 lists them),
+and round 3 reopened the time model. What's left is below: the time model
+first, then the few still open, then the last of round 1's, which wait for
+Milestone B or a prototype. Each lists its options and a recommendation; the
 recommendation is what the body assumes.
 
 ### 20.1 Reopened in round 3: the time model
@@ -1479,7 +1531,7 @@ option, and Milestone A built as A on today's engine. E is the runner-up.
 *Round 1 chose A;* round 3 reopened it. The body outside §5 still assumes A,
 and §5.8 lists what changes if C is taken.
 
-### 20.2 Still open from round 2
+### 20.2 Still open
 
 **D35. How long, in real time, can an eight-player match be?** (§4)
 At four check-ins a day, an eight-player round is about a day under turns one
@@ -1493,84 +1545,24 @@ answer it.
 *Recommendation:* (b) with turns that end themselves (§5.2): the setup screen
 shows the expected length of the match as the host picks the pace, the player
 count, the computer players and the timer, so nobody starts a year-long match
-by accident. *Changed by round 6:* computer seats cost no hand-off (§16.5), so
-a table of four people and four computers runs at about half the length of
-eight people.
+by accident. Computer seats cost no hand-off (§16.5), so a table of four
+people and four computers runs at about half the length of eight people.
 
-**D40, the rest.** Round 6 settled the five eras and when you enter one. Still
-open: what being in an era does (§7.2's art, a public era, barbarians and
-tradition costs), and whether a tech costs less for each player you've met who
-knows it (§13.3). *Recommendation:* both as written.
+**D50, the rest: do difficulty levels ever need bonuses?** (§16.5) Round 7
+chose smarter play as the way to make a computer player harder, and said it
+might be tricky. *Options:* (a) smarter play only, however far it stretches;
+(b) smarter play first, with yield bonuses added to the hardest (and a
+handicap to the easiest) if the levels turn out too close together.
+*Recommendation:* (b), decided once a computer player is playable and
+computer-against-computer matches can measure how far apart the levels are.
 
-**D42, the rest.** Round 6 settled how much a source gives (one unlocks, a few
-things need more). Still open: whether §9.5's six are the right list, and
-whether a strategic resource is revealed by a tech or visible from the start.
-*Recommendation:* the six, revealed by a tech.
+**D51, the rest: how many teams, and how big?** (§16.4)
+*Options:* (a) two to four teams of even size; (b) any split the host likes;
+(c) two teams only.
+*Recommendation:* (a), with computer players to even out a table that doesn't
+divide.
 
-**D46. Wonders?** (§12.6)
-*Options:* (a) none; (b) a handful of wonders an era, one-of-a-kind, each with
-a bonus; (c) (b) plus national wonders, one per empire.
-*Recommendation:* (b) in Milestone B. They're the obvious use for culture, a
-race every player can see coming, and what a culture victory would be built
-on.
-
-**D47. The sky: air units and nuclear weapons?** (§10.2)
-*Options:* (a) none: the Modern era is fought on land and sea; (b) fighters
-and bombers based in cities, with ranges, but no nuclear weapons; (c) all of
-it.
-*Recommendation:* (a) for the first version. Air units are a game layer of
-their own (bases, ranges, interception) on a screen already full; the Modern
-era has tanks, artillery and battleships without them.
-
-### 20.3 New in round 6: computer players and teams
-
-**D50. Computer players** (§16.5).
-*When:* (a) in the first version; (b) Milestone B; (c) Milestone C, once the
-game is playable by people. *What they see:* (a) only what their seat sees;
-(b) everything, at the harder levels. *Difficulty:* (a) yield bonuses; (b)
-smarter play only. *Dropped seats:* should a computer player take one over
-when no person does (§16.3)?
-*Recommendation:* (c); sees only its seat; yield bonuses; and yes, it takes
-over dropped seats. Two things to get right from Milestone A so the computer
-player slots in later: it must play through the same commands as a person,
-and every rule must be a function the server can call for any seat, not only
-for the one holding the phone.
-
-**D51. Teams** (§16.4).
-*Options for turns:* (a) seats alternate between teams (A1, B1, A2, B2);
-(b) teammates share a turn — which needs several players active at once, the
-same engine piece as D3's options B–F (§5.6). *For what teammates share:* (a)
-sight and open borders; (b) + research; (c) + their treasuries. *For war:*
-(a) teams go to war and make peace as one; (b) each member chooses.
-*For sizes:* two to four teams, even or uneven.
-*Recommendation:* (a) alternating seats, moving to (b) shared turns if the set
-of active seats is built for D3; sight and open borders, nothing more; war and
-peace as a team; two to four teams of even size, with computer players to
-even them out.
-
-### 20.4 Gold: new questions
-
-**D48. What does gold buy?** (§12.8)
-*Options:* any mix of (a) a city's current item outright; (b) tiles; (c) unit
-upgrades (D41); (d) unit upkeep (D49); (e) peace and other deals (D29); (f)
-trade routes between cities, earning gold.
-*Recommendation:* (a) to (e), with wonders and the mission's parts never for
-sale. Trade routes (f) are a system of their own — trader units, routes,
-pillaging — and wait for a later milestone. *Also:* buying at 3 gold a point
-of production, one purchase a city a round.
-
-**D49. What costs gold every round?** (§10.6, §12.8) *Units are settled:*
-round 4 agreed D26, gold upkeep beyond the free allowance. Still open: whether
-buildings cost gold too.
-*Options:* (a) units beyond the free allowance only; (b) units and buildings
-(*Civilization V*/*VI*'s maintenance); (c) nothing: gold is only spent when the
-player chooses.
-*Recommendation:* (a). Upkeep on units is the brake that keeps armies, and so
-late turns, a sensible size. Upkeep on buildings is a number on every building
-and a way for a poor empire to get poorer. *Also:* a treasury that runs dry
-disbands a unit, with a round's warning.
-
-### 20.5 Decided so far
+### 20.3 Decided so far
 
 | | Decision | Answer | Round | Where |
 |---|---|---|---|---|
@@ -1604,16 +1596,22 @@ disbands a unit, with a round's warning.
 | D37 | Science victory | A Launch pad, three public parts, a ten-round voyage your capital must survive | 6 | §18 |
 | D38 | Culture | Borders and traditions | 6 | §14 |
 | D39 | Religion | Pantheon, founding a religion, passive spread and missionaries | 6 | §15 |
-| D40 | Eras | Classical, Medieval, Renaissance, Industrial, Modern; you enter one with your first tech from it (the rest of D40 is open) | 6 | §7 |
+| D40 | Eras | Classical, Medieval, Renaissance, Industrial, Modern; you enter one with your first tech from it; §7.2's effects; knowledge spreads | 6, 7 | §7, §13.3 |
 | D41 | Upgrades | For gold, in your own territory, ending the unit's move; "Upgrade all" | 6 | §10.3 |
-| D42 | Strategic resources | One source in your dominion unlocks; a few units and buildings need more than one (the rest of D42 is open) | 6 | §9.5 |
+| D42 | Strategic resources | §9.5's six, each revealed by a tech; one source in your dominion unlocks; a few units and buildings need more than one | 6, 7 | §9.5 |
 | D43 | Paces | Blitz, Quick, Standard, Epic | 6 | §6 |
 | D44 | Round limit | Set by the pace; the host can turn it off | 6 | §18 |
 | D45 | Who plays | 2–8, computer players can fill seats, and teams | 6 | §16.4–§16.5 |
+| D46 | Wonders | A handful an era, one of a kind | 7 | §12.6 |
+| D47 | The air | No air units or nuclear weapons; left for a later version | 7 | §10.2 |
+| D48 | What gold buys | The current item, tiles, upgrades, unit upkeep, peace | 7 | §12.8 |
+| D49 | What costs gold each round | Units beyond the free allowance only | 7 | §12.8 |
+| D50 | Computer players | From the first build, testable early; see only their seat; harder by smarter play; take over dropped seats (bonuses are open) | 7 | §16.5 |
+| D51 | Teams | Shared vision, open borders, war together; turns are D3's (sizes are open) | 7 | §16.4 |
 
 D21 (resources) became D42.
 
-### 20.6 Still open from round 1, before Milestone B
+### 20.4 Still open from round 1, before Milestone B
 
 **D29. Diplomacy** (§16.1).
 *Options:* (a) war and peace only; (b) + open borders, research agreements and
@@ -1638,15 +1636,17 @@ camps is cleared by round 50 and never matters again.
 free cities; (c) their empire vanishes.
 *Recommendation:* (b). *Changed by round 1:* in a match of months, someone leaves
 in most games. *Changed by round 6:* with computer players in (D45), a
-computer player takes the seat between a new person and free cities (§16.3,
-D50).
+computer player takes the seat between a new person and free cities (§16.3).
+*Changed by round 7:* a computer player taking over is decided (D50); what's
+left is whether a new person is offered the seat first, and whether a host can
+turn the computer off and have free cities instead.
 
 **D33. When do standing orders move?**
 *Recommendation:* at the start of their owner's turn. *Changed by round 1:* with
 turns one at a time there's no shared start of round to move them at, and the
 start of the owner's turn is when they'd look.
 
-### 20.7 Can wait for a prototype
+### 20.5 Can wait for a prototype
 
 **D34. Rendering and art** (§22.2).
 *Recommendation:* prototype at the eight-player map size (2,760 hexes) on a
@@ -1654,16 +1654,18 @@ mid-range phone before anything else is drawn. *Changed by round 1:* the
 eight-player map is three and a half times the size round 1's was, which makes
 a canvas for the ground (§22.2) close to certain.
 
-### 20.8 Other numbers to confirm
+### 20.6 Other numbers to confirm
 
 Sight, movement, the advantages in §11.2, the growth formula, the population
-caps, every strength in §10.2, the pace multipliers, the score table, the four
-units a source supports, the knowledge-spread discount, the per-city cost of
-techs and traditions, and the gold prices (3 a point of production to buy, 2 a
+caps, every strength in §10.2, the pace multipliers, the score table, which
+units and buildings need more than one source of a resource (§9.5), the
+knowledge-spread discount, the per-city cost of techs and traditions, the
+wonders' bonuses, and the gold prices (3 a point of production to buy, 2 a
 point of difference to upgrade, the rising price of a tile). And the damage
 curve itself: *Civilization VI*'s is the starting point, but any curve that
-turns a difference in strength into damage keeps D24's promise. They want a balance pass with a
-simulator over the rules module before anyone plays a match that lasts months.
+turns a difference in strength into damage keeps D24's promise. They want a
+balance pass before anyone plays a match that lasts months, and
+computer-against-computer matches (§16.5) are the simulator for it.
 
 ---
 
@@ -1761,6 +1763,26 @@ The time model (D3) is still undecided. The rest:
     §16.5, §18; D50 and D51 follow, and D29 and D32 change.)
 
 ### 21.7 Round 7
+
+1. **D40:** the rest agreed as written: §7.2's effects, and knowledge spreads.
+2. **D42:** the rest agreed as written, and a strategic resource needs a tech to
+   reveal it.
+3. **D46:** (b), a handful of wonders an era. (§12.6: the first to finish has
+   it, other players' production into it turns to gold, and an example list.)
+4. **D47:** agreed: no air units or nuclear weapons, left for a later version.
+5. **D50:** computer players should be considered from the get-go and testable
+   as early as possible. They should only see what their seat sees.
+   Difficulty via smarter play would be ideal but might be tricky. They should
+   take over dropped players. (§16.5, §25: computer seats in Milestone A,
+   computer-against-computer matches in the tests, and a computer seat as a
+   small platform piece. Whether levels ever need bonuses is open.)
+6. **D51:** turns are likely to be handled separately from teams, via D3.
+   Teams share vision and open borders, and go to war together. (§16.4. How
+   many teams and how big is open.)
+7. **D48:** (a) to (e).
+8. **D49:** (a).
+
+### 21.8 Round 8
 
 To come.
 
@@ -1944,8 +1966,10 @@ needs one more than any other here — three to six achievements, a share card
 
 Not a plan yet; a plan follows once §20 is answered. The order the pieces want:
 
-**Milestone A — two empires, Classical and Medieval.** Two players, Blitz pace,
-on the engine as it is.
+**Milestone A — two empires, Classical and Medieval.** Two seats, Blitz pace,
+on the engine as it is, plus computer seats (§16.5). The first playable match
+is one person against the computer; computer-against-computer matches run in
+the tests from the first rule onwards.
 1. The hex helper and a board that draws a generated map, with the minimap and
    tap-to-tile, built to D34's prototype.
 2. The generator with its fairness checks, and the fog.
@@ -1955,21 +1979,27 @@ on the engine as it is.
    horses and iron.
 6. Combat and capturing cities.
 7. Domination and the round limit; the result screen.
-8. The timeout and dropout adapters; the recap; turns that end themselves.
-9. Guide, tutorial, achievements, share card; then the game library.
+8. The timeout and dropout adapters (a computer player takes a dropped seat);
+   the recap; turns that end themselves.
+9. The computer player, growing alongside each rule above: it settles, builds,
+   researches and fights as each of those arrives, so every rule is played by
+   it before a person plays it.
+10. Guide, tutorial, achievements, share card; then the game library.
 
 **Milestone B — the long match.**
 1. The command history out of the game document, and snapshots (§23.7): a
    platform piece with its own design document.
 2. Up to eight players, the paces, war and peace.
 3. Traditions and religion.
-4. The Medieval, Industrial and Modern eras, ocean, the later resources,
+4. The Renaissance, Industrial and Modern eras, ocean, the later resources,
    wonders, the mission.
-5. Barbarians and tribal villages; taking over a dropped seat.
+5. Barbarians and tribal villages; a new person taking over a dropped seat.
+6. The computer player for the later eras, religion, culture and the mission;
+   difficulty levels.
 
-**Milestone C — after that.** Computer players (§16.5), culture and
-religious victories, promotions, diplomacy, air units, the art pass. Teams
-(§16.4) fit in Milestone B, once there are more than two seats.
+**Milestone C — after that.** Culture and religious victories, promotions,
+diplomacy, air units (D47), the art pass. Teams (§16.4) fit in Milestone B,
+once there are more than two seats.
 
 **The riskiest parts**, worth a prototype before the rest is built on them:
 drawing a 2,760-hex map smoothly on a phone (§22.2), whether a late-game turn
