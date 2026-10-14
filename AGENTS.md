@@ -299,6 +299,12 @@ sheet the board draws its figures from and a team-colour layer it tints per seat
   presentation": the React Compiler rules it enforces (`react-hooks/refs` and
   friends) catch real mistakes that the type checker and the build both let
   through.
+- **Measure a change to how Realm Arena's battlefield is drawn.** Run
+  `npm run ra-bench -- --against main` before calling it faster (or no
+  slower), and put its summary in the PR. It draws the real board over a
+  frozen Hold Out battle on a throttled phone in headless Chromium and needs
+  no build, sign-in or database
+  ([`docs/realm-arena-rendering.md`](./docs/realm-arena-rendering.md) §2).
 - **Review with the crew before committing** (see below). At minimum, run
   `caveman` over any UI, component, hook or game change.
 
