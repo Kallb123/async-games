@@ -144,15 +144,59 @@ Hold Out battle (`holdout`, 2,916 tiles) and the bigger game's scale
 - **React all but drops out:** 31 commits a turn instead of 305, because what
   moves is set on the GPU's instances rather than rendered.
 
+### 5.1 On a phone
+
+Taken 2026-10-14 with the renderer lab (§4) on an Android phone with a Mali-G78
+GPU (the Pixel 6 and Galaxy S21 class), its screen 485×997 CSS pixels at 2.2×
+and refreshing at 90Hz. Each figure is the latest run on each board, and only for the scenarios that
+were played on both boards. The rest are in the lab's *Every run* list.
+
+| | SVG | 3D |
+|---|---:|---:|
+| **Enemy turn, 16k tiles:** fps | 31 | **90** |
+| **Enemy turn, 16k tiles:** frames over 50ms / long tasks | 266 / 86 | **0 / 0** |
+| **Enemy turn, 16k tiles:** worst frame / main thread blocked | 369ms / 1.5s | **35ms / 0** |
+| **Enemy turn, 16k tiles:** how late each part ends, on average | 590ms | **343ms** |
+| **Pan, in fog:** fps / worst frame | 61 / 598ms | **89 / 34ms** |
+| **Select, in fog:** fps / worst frame | 75 / 177ms | **89 / 44ms** |
+| **Turn the view, in fog:** fps / worst frame | 79 / 189ms | **89 / 55ms** |
+| **Wave due and idle, in fog:** long tasks | 0 | 0 |
+
+**What it says.**
+
+- **The GPU question is answered for this phone.** The 3D board holds the
+  screen's 90Hz through every scenario with movement in it, at 16k tiles as
+  in fog: an 11.2ms frame at the 95th percentile. Across all of them it had
+  one frame over 50ms and one long task, both while turning the view. Its
+  71–115k triangles a frame cost the Mali-G78 nothing visible.
+- **The SVG board falls behind where the plan said it would.** It manages 31
+  fps through the 16k enemy turn, with 86 long tasks blocking for 1.5s. Even
+  on the fog battle's 2,916 tiles, it drops frames of 0.2–0.6s while panning,
+  selecting and turning.
+- **The enemy turn finishes sooner on the 3D board.** Each of its 15 parts
+  ends 0.25s nearer to when it was meant to, so the whole turn is 3.7s
+  shorter (40.1s against 43.8s).
+- **One blemish:** one of the two 3D runs of *Turn the view* had a single 62ms
+  long task; its cause isn't known yet. It's worth profiling the quarter
+  turn before a player sees it.
+- **Not measured yet:**
+  - the enemy turn on today's map (`holdout`, 2.9k tiles);
+  - a cheaper phone with a weaker GPU;
+  - an iPhone, where WebGL runs in Safari.
+
+  The 3D board also still draws less than the isometric one (§3), though most
+  of what's missing is overlay, not geometry.
+
 ## 6. Next
 
-1. **Measure on a phone.** This decides it. Open the renderer lab
-   (`/admin/realmarena-renderer`) on the phones people play on. With **Both,
-   to compare** chosen, play each scenario, and paste the copied results into
-   this document. On a desktop with a GPU,
-   `npm run ra-bench -- --renderers svg,three --headed` gives the same
+1. **Measure on a phone.** Done on one (§5.1), and it agrees: the 3D board
+   holds the screen's refresh rate where the SVG one drops frames. Before
+   committing to it, play the lab (`/admin/realmarena-renderer`, **Both, to
+   compare**) once more on a cheaper Android phone and on an iPhone, including
+   the enemy turn on today's map, and add them to §5.1. On a desktop with a
+   GPU, `npm run ra-bench -- --renderers svg,three --headed` gives the same
    comparison with the trace as well.
-2. **If the phone agrees,** the remaining work before a player sees it:
+2. **If those agree too,** the remaining work before a player sees it:
    - §3's missing pieces;
    - `BoardZoom` as a camera (plan §7.2), in place of the 3D board's own
      gestures;
