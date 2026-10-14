@@ -14,6 +14,11 @@
 // `holdout`, in the open, where every figure is drawn, and `holdout-fog`, the
 // same battle in fog of war (§27), where fewer are drawn but the board dims
 // what the squad can't see and the page sweeps its sight lines every part.
+//
+// And two for scale, in the open: `holdout-8k` and `holdout-16k`, the same
+// battle on a Sacked Fort grown to 92 and 128 squares across (8,464 and 16,384
+// tiles, scaledMap.ts), standing in for a bigger game's map. Same seed, same
+// team, same warbands; more ground.
 
 import { mkdirSync, writeFileSync } from "node:fs";
 import { createHash } from "node:crypto";
@@ -21,21 +26,34 @@ import { endTurnBy, makeGame, musterAll, play } from "@/games/RealmArena/testFix
 import { isStanding, isWarband, lastWaveRound } from "@/games/RealmArena/rules";
 import { battleRoundsOf } from "@/games/RealmArena/RealmArenaLogic";
 import { gameStateToModel, stepOutcomeToModel } from "@/games/RealmArena/RealmArenaModels";
+import type { RealmArenaSettings } from "@/games/RealmArena/RealmArenaModels";
+import { REALM_ARENA_MAPS } from "@/games/RealmArena/maps";
+import type { Battlefield } from "@/utils/games/battlefield/terrain";
 import { seedRolls } from "../../scripts/lib/realmArenaBalance";
+import { SCALED_MAP_ID, registerScaledSackedFort } from "./scaledMap";
 
 const SEED = 7;
 const VIEWER = "a";
 const PLAYERS = ["a", "b", "c"];
 const COOP = { enemy: "realm", mission: "holdOut", difficulty: "hard", map: "sackedFort" } as const;
-const FIXTURES = { "holdout": { size: "large", coop: COOP }, "holdout-fog": { fog: true, size: "large", coop: COOP } } as const;
+const FIXTURES: Record<string, { settings: RealmArenaSettings; across?: number }> = {
+    "holdout": { settings: { size: "large", coop: COOP } },
+    "holdout-fog": { settings: { fog: true, size: "large", coop: COOP } },
+    "holdout-8k": { settings: { size: "large", coop: COOP }, across: 92 },
+    "holdout-16k": { settings: { size: "large", coop: COOP }, across: 128 },
+};
+/** The Sacked Fort as the game has it, put back after a scaled one. */
+const SACKED_FORT = REALM_ARENA_MAPS[SCALED_MAP_ID];
 /** The time the clock stands at while the battle is played. */
 const CLOCK = Date.UTC(2026, 9, 14);
 /** How many rounds short of the last wave the battle is set, so the End turns played land it. */
 const ROUNDS_SHORT = 2;
 const OUT = new URL("./fixtures/", import.meta.url);
 
-async function write(name: keyof typeof FIXTURES) {
-    const settings = FIXTURES[name];
+async function write(name: string) {
+    const { settings, across } = FIXTURES[name];
+    if (across) registerScaledSackedFort(across);
+    else (REALM_ARENA_MAPS as Record<string, Battlefield>)[SCALED_MAP_ID] = SACKED_FORT;
     seedRolls(SEED);
     // The clock stood still, so the warbands' planning guard (`WARBAND_DEADLINE_MS`)
     // never cuts a turn short on a busy machine: the fixture is the seed's alone.
@@ -67,7 +85,7 @@ async function write(name: keyof typeof FIXTURES) {
     const fixture = {
         about: "Realm Arena rendering bench fixture: written by bench/realmarena/fixture.ts, drawn by bench/realmarena/BenchApp.tsx. Don't edit by hand.",
         name,
-        recipe: { seed: SEED, players: PLAYERS, settings, roundsShort: ROUNDS_SHORT },
+        recipe: { seed: SEED, players: PLAYERS, settings, roundsShort: ROUNDS_SHORT, ...across ? { across } : {} },
         viewer: VIEWER,
         seats: PLAYERS,
         before,
@@ -83,7 +101,7 @@ async function write(name: keyof typeof FIXTURES) {
 
 async function main() {
     mkdirSync(OUT, { recursive: true });
-    for (const name of Object.keys(FIXTURES) as (keyof typeof FIXTURES)[]) await write(name);
+    for (const name of Object.keys(FIXTURES)) await write(name);
 }
 
 main().catch(error => {

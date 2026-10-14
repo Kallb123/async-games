@@ -14,7 +14,8 @@
 //                      interleaving the two so drift on the machine hits both alike
 //   --scenarios <a,b>  any of load, idle, wave, pan, turn, select, enemy-turn (default: all)
 //   --runs <n>         runs of each scenario per checkout (default 3); medians are reported
-//   --fixture <name>   holdout (default) or holdout-fog, from bench/realmarena/fixtures/
+//   --fixture <name>   holdout (default), holdout-fog, or holdout-8k / holdout-16k (the same
+//                      battle on a Sacked Fort grown to 8,464 / 16,384 tiles), from fixtures/
 //   --cpu <n>          CPU slowdown (default 4, as perf:journeys uses)
 //   --parts <n>        play only the enemy turn's first <n> parts
 //   --label <name>     names the report (default: the time)
@@ -312,7 +313,7 @@ function metrics({ load, result, trace, heapMb }: Run, scenario: Scenario): Reco
     if (scenario === "load") {
         Object.assign(row, {
             "board committed (ms)": load.commitMs, "first frame (ms)": load.firstFrameMs, "art decoded (ms)": load.artMs,
-            "mount render (ms)": load.mountActualMs, "board elements": load.domNodes,
+            "mount render (ms)": load.mountActualMs, "board elements": load.domNodes, "tiles": load.tiles,
         });
     }
     if (result) {

@@ -6,7 +6,10 @@ full wave of around 30 warband enemies, even though only one of them moves at
 a time. This weighs five options, from making the SVG we have cheaper to
 handing the board to a game engine, and recommends a path.
 
-**Status: proposal, with its bench built (§2).** Nothing else here is built. The game design document
+**Status: proposal, with its bench built (§2).** Nothing else here is built.
+§7 reconsiders the options for a bigger game of 8,000 tiles and more, and
+revises the recommendation in §6: PixiJS, with renderer-independent
+groundwork first. The game design document
 ([`games/realm-arena.md`](./games/realm-arena.md)) covers what the player sees.
 [`isometric-animations.md`](./isometric-animations.md) covers how an action
 plays over the board, and §4.7 there first raised canvas. This document covers
@@ -131,6 +134,12 @@ container can run it as it stands.
     warband, and a 15-part enemy turn.
   - `holdout-fog` is the same battle in fog of war: 31 figures in sight, 13
     parts, the dimming and the page's sight-line sweep each part.
+  - `holdout-8k` and `holdout-16k` are the open battle on a Sacked Fort grown
+    to 92 and 128 squares across, 8,464 and 16,384 tiles
+    (`bench/realmarena/scaledMap.ts`). They stand in for a bigger game's map
+    (§7). The bench registers the bigger fort under the Sacked Fort's own id,
+    both while the battle is played and before the board draws, so no code in
+    the game knows.
 
   Generating them is reproducible: the rolls come from a seed, and the clock
   stands still, so the warbands' two-second planning guard never cuts a turn
@@ -510,6 +519,8 @@ as well as a new renderer. It isn't worth it for a quarter-turn board.
 
 ## 6. Recommendation
 
+*For today's maps. §7.5 revises this for a bigger game.*
+
 1. **Measure first (§2).** The bench is built and the baseline is in §2.4.
    Every step after this is judged by `npm run ra-bench -- --against main`.
 2. **Do Option 1 regardless,** led by what the baseline (§2.4) says costs
@@ -549,3 +560,188 @@ Each step is its own PR and is measured on the bench before the next.
 
 Each PR runs the review crew: `caveman` throughout, and `rulebook` for steps
 4 and 7, which change shared pieces and their documentation.
+
+---
+
+## 7. Reconsidered for a bigger game: 8,000 tiles and more
+
+Realm Arena is also the test bed for a bigger game, whose maps could hold
+8,000 ground tiles or more, against today's 1,728–3,072. §4–§6 were weighed
+for today's maps. This section weighs them again at that scale, from the bench
+rather than from first principles.
+
+### 7.1 What the bench says at scale
+
+The scale fixtures (`holdout-8k`, `holdout-16k`, §2.1) play the same battle
+on a Sacked Fort grown to 92 and 128 squares across. The fort sits in the
+middle, ringed by its own terrain (`bench/realmarena/scaledMap.ts`). The team,
+the warbands and the 15-part enemy turn are the same; there is just more
+ground. Medians of two runs each, taken 2026-10-14 at the commit before this
+section:
+
+| | 2,916 tiles | 8,464 tiles | 16,384 tiles |
+|---|---:|---:|---:|
+| Board elements | 2,865 | 5,401 | 7,609 |
+| `load`: first frame / mount render | 1.17s / 335ms | 1.52s / 367ms | 1.96s / 524ms |
+| `load`: JS heap | 7.0 MB | 9.1 MB | 13.8 MB |
+| `enemy-turn`: fps | 31 | 17 | 12 |
+| `enemy-turn`: style + paint per committed frame | 18ms | 40ms | 57ms |
+| `enemy-turn`: blocking time | 9.4s | 19.2s | 27.0s |
+| `enemy-turn`: part overrun | 680ms | 989ms | 1,131ms |
+| `turn`: fps / longest task | 47 / 0.39s | 28 / 0.81s | 13 / 1.26s |
+| `pan`: fps / long tasks | 48 / 13 | 31 / 35 | 30 / 45 |
+| `select`: fps / long tasks | 48 / 11 | 32 / 30 | 24 / 48 |
+
+**The SVG's cost per frame grows with the whole board, not with what
+moves.** Every column plays the same actions over the same few squares, yet
+the style and paint of each frame rose 3.2× as the board grew 2.7× in
+elements. A board
+four times the area plays its enemy turn at 12 fps and freezes for over a
+second each time the view turns.
+
+**These maps flatter the SVG.** Their ground is flat grass merged into one
+pattern, and their terrain is no denser than the Sacked Fort's (9% raised).
+The elements therefore grew only 2.7× for 5.6× the tiles. A bigger game with
+varied ground drawn tile by tile, or more figures, would add elements in
+proportion to the tiles, and the cost with them.
+
+### 7.2 What grows with the map whatever draws it
+
+Some of the work scales with the tiles and has nothing to do with the
+renderer. It has to be fixed on every path, so it's the first work for a
+bigger game:
+
+- **Finding the square under a point is a scan of every square.**
+  `isoSquareAt` loops over the whole board. `hidden()` calls it twice per
+  standing figure whenever the figures change, so the cost is figures × tiles.
+  A tap goes through it too.
+  - Fix: invert the projection to the column under the point, and test only
+    the few squares a height could lift into it. The cost is then the tallest
+    height, not the tile count.
+- **The fog sweep** (`unseenSquares`) traces sight from every friendly
+  character to every square, every part of every turn: tiles × eyes × range.
+  - Fix: sweep only to each eye's range. Update it incrementally as figures
+    move, or move it off the main thread to a worker.
+- **The reach search behind a selection** (`reachFocus`) searches the whole
+  map. Bound it by the character's AP.
+- **Laying out the ground** (`isoRuns`, the grid lines, the plinths, the
+  depth sort) is redone for the whole board on every turn of the view.
+  Chunk it, so a change rebuilds only the chunks it touches.
+- **`BoardZoom`'s three fixed steps are set against the column, not the
+  map.** At 92 across, the deepest step (600%) leaves a square 27px across
+  where today's map gets 46px. That's too small to tap, so the board would
+  want about 1,000%. A content layer 1,000% of the column wide is exactly the
+  size the browser can't lay out and raster quickly. A bigger map needs
+  `BoardZoom` to be a camera (§4, Option 3), with a deeper zoom range set by
+  the map.
+- **Fitted to a phone, the whole map is an overview.** At 92 across, a square
+  is under 5px wide. Drawing every sprite at that size is wasted work. At the
+  fit, the board wants a level of detail: a pre-drawn overview of the ground,
+  with full detail drawn only past a zoom threshold.
+
+### 7.3 What a bigger map asks of the renderer
+
+- **Work in proportion to the screen, not the map.** Draw only what's in the
+  viewport (culling). At the deepest zoom that's a few hundred squares,
+  however big the map.
+- **Zooming that doesn't re-raster.** Any approach that caches the board as
+  pixels (the SVG's layer, Option 2's bitmaps, Option 3's chunk caches) has to
+  draw them again at each new zoom. A GPU that draws every visible sprite at
+  any scale, every frame, doesn't.
+- **Static ground cached in chunks**, rebuilt only where cover is blasted,
+  for the overview, where thousands of tiles are on screen at once.
+- **Depth across thousands of items.** A painter's sort of what's visible is
+  cheap. Resolving it for the whole map, or the per-figure occluder trick of
+  Option 2, isn't.
+- **Fog as a texture.** Today the fog is a shade path per run of unseen
+  squares, which grows with the map. Drawn as a one-texel-per-square
+  visibility texture sampled under the ground, its cost stays flat.
+
+### 7.4 The options again
+
+1. **The cheaper SVG (Option 1)** is not a way to reach 8,000 tiles. Its frame
+   cost grows with the board's element count (§7.1), and turning the view is
+   a full relayout. Virtualising it (rendering only the chunks in view) would
+   bound the elements, but React would reconcile a new set on every pan and
+   pinch. That fights `BoardZoom`'s native scrolling, and depth across chunk
+   edges needs the occluder trick. Keep only what carries over: memoising
+   the page's derived data, and the §7.2 fixes. Pre-tinting, baking the
+   filters and the pan-not-zoom flag serve only the SVG. They are worth one
+   short PR only if today's players need relief before a migration lands.
+2. **The hybrid (Option 2)** turns, at this scale, into a tile cache of
+   terrain bitmaps for every rotation and every zoom. In other words, it
+   becomes half of a canvas renderer, with the SVG figures and their occluders
+   still beside it. Dropped.
+3. **Canvas 2D (Option 3)** can reach 8,000 tiles with culling, chunk caches
+   and a level of detail. Its chunk caches have to be drawn again at every
+   zoom, though, and with no GPU batching, the overview and any later effects
+   (light, particles, fog edges) cost CPU. It was the right size for today's
+   maps. For a bigger game it's the second choice.
+4. **PixiJS (Option 4)** becomes the recommendation. It batches every
+   visible tile and figure on the GPU each frame, at any zoom, with no
+   re-raster. It also brings:
+   - culling (`cullable`, `cullArea`);
+   - cached static chunks for the overview (`cacheAsTexture`, render groups);
+   - free per-sprite `tint` for team colours, so no pre-tinted sheets;
+   - fog as a texture, and particles when they're wanted.
+   The whole library bundled with esbuild is about 160 KB gzipped (550 KB
+   minified, measured), loaded only on a board that needs it. It keeps every
+   shared piece in §3: the one clock (ticker off, rendered from
+   `usePlaybackFrame`), `BoardZoom` as a camera, the scene list, and the DOM
+   button layer for taps and titles.
+5. **Phaser (Option 5)** is still a no. Its tilemap culling and camera matter
+   more at this scale, but it still wants the loop, the camera and the input
+   the repo shares. It's the heaviest at about 360 KB gzipped (measured,
+   Phaser 4). And heights, quarter turns and the depth of raised blocks
+   remain custom work in it.
+
+**Newly worth weighing: three.js, real geometry.** A minimal import is about
+131 KB gzipped (measured). It would use:
+
+- an orthographic camera at the isometric angle;
+- instanced boxes for raised ground and walls, one draw call for thousands;
+- the depth buffer for occlusion.
+
+The depth buffer is the big one: no painter's sort, no walker depth slots and
+no occluder tricks, because a wall hides whoever is behind it by being
+geometry. Heights become real, and the view can turn to any angle, not just a
+quarter. The characters are already modelled in code
+(`art-masters/realmarena/characters`, rendered to sprites by
+`npm run ra-characters`), so they could stand as camera-facing sprites with a
+depth test at first, and as live models later.
+
+The cost is the terrain art: today it's isometric tile sprites, which would
+become textures or models on real geometry. That's a change of look as well
+as of renderer, and a bigger rewrite than Pixi. **Choose it only if the bigger
+game wants a free camera, real elevation or lighting.** That's a design
+decision, best made before the renderer is built rather than after.
+
+### 7.5 The recommendation, revised
+
+1. **Settle the camera first.** Fixed quarter turns of a 2D isometric board
+   lead to PixiJS. A free camera with real elevation and lighting leads to
+   three.js. Everything below holds for both.
+2. **The renderer-independent groundwork, measured as it goes:**
+   - the §7.2 fixes: picking, `hidden()`, the fog sweep, the reach search and
+     chunked layout;
+   - the pure scene list, culled to the viewport, with a `sceneOf(view,
+     state, playback, ms, viewport)` that returns only what's visible;
+   - `BoardZoom`'s camera mode, with a zoom range set by the map rather than
+     the column.
+
+   The SVG board can render from the scene list in the meantime, which proves
+   it before anything replaces the SVG, and the culling helps the SVG too.
+3. **Go straight to the GPU renderer,** skipping Canvas 2D. Build culling and
+   chunked static ground in from the start, plus a level of detail at the fit.
+4. **Gate it on the bench at scale.** `holdout-16k` is the acceptance test:
+   - `enemy-turn` at 50 fps or better, with no long task over 100ms;
+   - `turn` without a visible freeze;
+   - `load` no slower than today's 2,916-tile board;
+   - all of it judged by `npm run ra-bench -- --fixture holdout-16k --against main`.
+5. **Today's players** get one short SVG PR (memoising, and the filters out)
+   only if the migration is more than a few weeks away. Otherwise, nothing
+   more is spent on the SVG.
+
+The order of work in §6.1 changes to match: steps 1 and 2 there (the SVG
+fixes) give way to the §7.2 groundwork, and step 5's painter is PixiJS (or
+three.js) rather than Canvas 2D.

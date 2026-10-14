@@ -27,11 +27,14 @@ import type { IRealmArenaSpecificGameStateResponse, IRealmArenaStepOutcome, Real
 import { ART_SHEETS } from "@/games/RealmArena/art";
 import { battlefieldOf } from "@/games/RealmArena/maps";
 import { battleFrom, isStanding, warbandsFor, type Fighter } from "@/games/RealmArena/rules";
+import { registerScaledSackedFort } from "./scaledMap";
 import { coopColourOf, endOf, friendlySquares, partFollow, reviewParts, STEP_BEAT_MS, unseenSquares } from "@/games/RealmArena/ui";
 
 /** What fixture.ts writes. */
 interface Fixture {
     name: string;
+    /** How it was made: `across` for one played on a scaled Sacked Fort (scaledMap.ts). */
+    recipe?: { across?: number };
     viewer: string;
     seats: string[];
     before: IRealmArenaSpecificGameStateResponse;
@@ -89,6 +92,7 @@ export interface LoadResult {
     mountActualMs: number;
     domNodes: number;
     figures: number;
+    tiles: number;
 }
 
 const params = new URLSearchParams(location.search);
@@ -306,6 +310,8 @@ async function load(): Promise<LoadResult> {
     const response = await fetch(`fixtures/${FIXTURE}.json`);
     if (!response.ok) throw new Error(`no fixture "${FIXTURE}"`);
     const fixture = await response.json() as Fixture;
+    // A scale fixture's battle was played on a bigger Sacked Fort, which everything here must read too.
+    if (fixture.recipe?.across) registerScaledSackedFort(fixture.recipe.across);
     const committed = new Promise<void>(resolve => { control.committed = resolve; });
     // The sheets the board draws from, fetched as it fetches them, and decoded, so every scenario starts with the art in hand.
     const art = Promise.all(Object.values(ART_SHEETS).map(sheet => {
@@ -331,6 +337,7 @@ async function load(): Promise<LoadResult> {
         mountActualMs: control.commits.find(commit => commit.phase === "mount")?.actualMs ?? Number.NaN,
         domNodes: boardNodes(),
         figures: fixture.before.fighters.length,
+        tiles: battlefieldOf(fixture.after.map, fixture.after.blasted).tiles.length,
     };
 }
 
