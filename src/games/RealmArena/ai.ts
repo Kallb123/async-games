@@ -35,7 +35,7 @@ import { battlefieldWith, coordsOf, type Battlefield, type Square } from "@/util
 import { ABILITIES, CHARACTERS, type AbilityId } from "./characters";
 import {
     abilitiesOf, act, allied, areaAround, ATTACK_AP, blastedIn, CENTRE, CENTRE_SCORES_FROM_ROUND, centrePoints, check, fighterById, hasEffect, isStanding, landedSmoke,
-    damageTo, maxHpOf, moveAp, movementOf, reachOf, ROLL_SIDES, shotOdds, strikeChance, watchedSquares, weaponOf, weaponReaches,
+    damageTo, maxHpOf, moveAp, movementOf, reachOf, ROLL_SIDES, shotOdds, squadSight, strikeChance, watchedSquares, weaponOf, weaponReaches,
     type Action, type BattleEvent, type BattleState, type Fighter, type FogGhost, type ShotOdds,
 } from "./rules";
 import { ACTION_AIMS, rangeSquares, reactionPreviews, rollsToHit, shotOf, targetKindOf, targetsOf, type ActionKind } from "./tactics";
@@ -57,6 +57,16 @@ const WEIGHTS = {
     /** Each AP of walking between its characters and the centre, once the centre scores. */
     objective: 1,
 };
+
+/**
+ * What the warband's own characters are worth to it in Hold Out (§30.3), as a
+ * share of the team's: each wave brings back every character it has lost, and
+ * the score doesn't decide the battle, so losing one costs it far less than
+ * the team losing one. Weighed in full, a cheap character would never step up
+ * to a Knight that hits harder than it does, and a warband would ring the
+ * team just out of its reach rather than close in.
+ */
+const HOLD_OUT_OWN_WORTH = 0.25;
 
 /** How much of its Threat a character with no attack left this turn still counts: where it stands, it covers the ground. */
 const SPENT_THREAT = 0.25;
@@ -114,6 +124,10 @@ interface Plan {
     owner: string;
     round: number;
     memo: TurnMemo;
+    /** What its own characters' worth counts for: in full, or in Hold Out `HOLD_OUT_OWN_WORTH` of it. */
+    ownWorth: number;
+    /** Whether the centre scores for it: not in Hold Out, which the team, not the keep, decides (§30.3). */
+    centreCounts: boolean;
     /** How far a character stands from the centre, in movement points. */
     toCentre: (fighter: Fighter) => number;
     /** Every square a move by one of its characters would set off a reaction on (`watchedSquares`): worked out once, when a move first asks. */
@@ -152,11 +166,15 @@ function planFor(view: BattleState, owner: string, round: number, memo: TurnMemo
     const { field } = state;
     // In Hold Out (`hunt` given) the Objective is the team rather than the
     // keep (§30.3): the enemies it sees, else where it last saw them, else
-    // the keep after all. It keeps the keep's urgency, so a warband closes
-    // in gently in the first rounds and in earnest from round
-    // CENTRE_SCORES_FROM_ROUND on (`standingTerms`).
+    // where it hasn't looked for them yet (`searched`), else the keep after
+    // all. It keeps the keep's urgency, so a warband closes in gently in the
+    // first rounds and in earnest from round CENTRE_SCORES_FROM_ROUND on
+    // (`standingTerms`).
     const seenEnemies = state.fighters.filter(fighter => isStanding(fighter) && !allied(state, fighter.owner, owner));
-    const hunted = hunt === undefined ? [] : seenEnemies.length > 0 ? seenEnemies.map(fighter => fighter.square) : hunt.map(ghost => ghost.square);
+    const hunted = hunt === undefined ? []
+        : seenEnemies.length > 0 ? seenEnemies.map(fighter => fighter.square)
+        : hunt.length > 0 ? hunt.map(ghost => ghost.square)
+        : view.fog ? searched(state, owner) : [];
     const objective = hunted.length > 0 ? hunted : field.objectives[CENTRE] ?? [];
     const centre = new Set(objective);
     const huntKey = `${fieldId(memo, field)}:${[...hunted].sort((a, b) => a - b).join()}`;
@@ -167,7 +185,28 @@ function planFor(view: BattleState, owner: string, round: number, memo: TurnMemo
         return Number.isFinite(cost) ? cost : field.width + field.height;
     };
     let watched: ReadonlySet<Square> | undefined;
-    return { state, owner, round, memo, toCentre, watched: () => watched ??= watchedSquares(state, owner) };
+    const holdOut = hunt !== undefined;
+    return {
+        state, owner, round, memo, toCentre, watched: () => watched ??= watchedSquares(state, owner),
+        ownWorth: holdOut ? HOLD_OUT_OWN_WORTH : 1, centreCounts: !holdOut,
+    };
+}
+
+/**
+ * Where a warband in Hold Out looks for a team it neither sees nor remembers
+ * (§30.3): the squares of the keep and of the team's deployment zones that its
+ * side can't see now, where the team is likeliest to be; and once it has all
+ * of those in sight, every square it can't see. So it sweeps on from the keep
+ * rather than standing in it waiting for a team that isn't there.
+ */
+function searched(state: BattleState, owner: string): Square[] {
+    const { field } = state;
+    const seen = squadSight(state, owner);
+    // The sides are in seat order, the team's first, as the deployment zones are (`battleFrom`).
+    const teamZones = Object.keys(state.sides ?? {}).flatMap((player, seat) => allied(state, player, owner) ? [] : field.deployments[seat] ?? []);
+    const likely = [...field.objectives[CENTRE] ?? [], ...teamZones].filter(square => !seen(square));
+    if (likely.length > 0) return likely;
+    return field.tiles.flatMap((tile, square) => tile.terrain.standable && !seen(square) ? [square] : []);
 }
 
 /**
@@ -341,8 +380,8 @@ function judge(plan: Plan, action: Action): number {
     const mover = fighterById(state, action.fighter);
     if (!mover) return value;
     for (const reaction of reactionPreviews(state, mover, action.path)) {
-        if (reaction.kind === "overwatch" && reaction.odds) value -= WEIGHTS.strength * worthOf(mover, expectedDamage(reaction.odds, mover.hp));
-        if (reaction.kind === "guard" && state.balanced) value -= WEIGHTS.strength * worthOf(mover, reaction.chance * Math.min(reaction.damage, mover.hp) / ROLL_SIDES);
+        if (reaction.kind === "overwatch" && reaction.odds) value -= WEIGHTS.strength * plan.ownWorth * worthOf(mover, expectedDamage(reaction.odds, mover.hp));
+        if (reaction.kind === "guard" && state.balanced) value -= WEIGHTS.strength * plan.ownWorth * worthOf(mover, reaction.chance * Math.min(reaction.damage, mover.hp) / ROLL_SIDES);
     }
     return value;
 }
@@ -384,19 +423,22 @@ function rollsFor(state: BattleState, action: Action): { roll: number; weight: n
  * warband's own characters, the terms where it stands changes.
  */
 function score(plan: Plan, battle: BattleState, events: readonly BattleEvent[]): number {
-    const { owner, round } = plan;
+    const { owner, round, ownWorth } = plan;
     const side = (player: string) => allied(battle, player, owner) ? 1 : -1;
     let total = 0;
     for (const event of events) {
-        if (event.kind === "scored") total += side(event.player) * event.points * WEIGHTS.points;
+        // What the team scores, it scores by downing one of the warband's.
+        if (event.kind === "scored") total += side(event.player) * event.points * WEIGHTS.points * (side(event.player) < 0 ? ownWorth : 1);
     }
-    for (const player of new Set(battle.fighters.map(fighter => fighter.owner))) {
-        total += side(player) * centrePoints(battle, player, round) * WEIGHTS.points;
+    if (plan.centreCounts) {
+        for (const player of new Set(battle.fighters.map(fighter => fighter.owner))) {
+            total += side(player) * centrePoints(battle, player, round) * WEIGHTS.points;
+        }
     }
     const enemies = enemiesOf(battle, owner);
     for (const fighter of battle.fighters) {
         if (!isStanding(fighter)) continue;
-        total += side(fighter.owner) * worthOf(fighter, fighter.hp) * WEIGHTS.strength;
+        total += side(fighter.owner) * worthOf(fighter, fighter.hp) * WEIGHTS.strength * (side(fighter.owner) > 0 ? ownWorth : 1);
         if (fighter.owner === owner) total += standingTerms(plan, battle, fighter, enemies);
     }
     return total;
@@ -415,7 +457,7 @@ function standingTerms(plan: Plan, battle: BattleState, fighter: Fighter, enemie
     const { exposure, threat } = harm;
     const armed = fighter.ap >= ATTACK_AP ? 1 : SPENT_THREAT;
     const urgency = Math.min(1, plan.round / CENTRE_SCORES_FROM_ROUND);
-    return -WEIGHTS.exposure * exposure
+    return -WEIGHTS.exposure * plan.ownWorth * exposure
         + WEIGHTS.threat * armed * threat
         - WEIGHTS.objective * urgency * plan.toCentre(fighter) / movementOf(fighter);
 }

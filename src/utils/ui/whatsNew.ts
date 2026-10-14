@@ -134,6 +134,11 @@ export const WHATS_NEW: WhatsNewGroup[] = [
         icon: "🔧",
         items: [
             {
+                title: "Realm Arena's Hold Out warbands come for you",
+                detail: "The computer's warbands in Hold Out could hang back two squares from your characters and never step in, or — in fog of war — march to the keep and wait there all battle while you held an edge it couldn't see, each wave piling in beside the last. They now close in and attack, trading their own fighters freely since every wave replaces them, and when they've lost track of you they go looking where your squads deployed instead of standing about.",
+                game: "realmarena",
+            },
+            {
                 title: "Results bar charts keep every bar on the same baseline",
                 detail: "On a game's results page, a bar whose name was too long for one line — Realm Arena's Man-at-arms, say — wrapped its label and stood its bar up above the others, so it looked taller or shorter than it was. Every bar now starts from the same line, with the names sitting underneath.",
             },
@@ -173,11 +178,6 @@ export const WHATS_NEW: WhatsNewGroup[] = [
                 title: "Settlements & Cities results cover the whole game",
                 detail: "A game that was already under way when turns began pausing for Undo could finish with its victory points and resources charts stopping two rounds in, and no resources table at all. Those games now chart every round, and a player who dropped out keeps the lines and the column they left with instead of falling to nothing. The results page of a game you played in also has a Regenerate results link at the bottom, to work them out again from the game's moves while they're still kept.",
                 game: "settlementsandcities",
-            },
-            {
-                title: "Kingdom Builder armies fight the scouts they meet",
-                detail: "A rival army could share a tile with your scouts and their settlers or caravans and do nothing at all, since scouts counted as a full escort. Scouts are now cheap rather than untouchable: an army with soldiers in it fights any scouts on its tile, alone or escorting, and once the last scout falls it takes the settlers and caravans they guarded. Both sides get the fight in their Battles list.",
-                game: "kingdombuilder",
             },
         ],
     },

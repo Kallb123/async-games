@@ -3274,6 +3274,23 @@ sight of everyone still finds the team. The walk is a search from the team's
 squares made once a plan, rather than the keep's search made once a
 battlefield (§29.7, *What PR 3 settled*), and the time-budget test holds it.
 
+*Since revised, after the playtest found warbands that never came:*
+
+- **It searches, rather than waiting in the keep.** In fog, a warband that
+  neither sees nor remembers anyone hunts the squares of the keep and of the
+  team's deployment zones that its side can't see, and once it has all of
+  those in sight, every square it can't. Before, it walked to the keep and
+  stood there for the rest of the battle while the team held an edge out of
+  its sight, every wave piling in beside the last.
+- **Its own characters are worth a quarter to it** (`HOLD_OUT_OWN_WORTH`):
+  their strength, their Exposure, the overwatch on a move and what the team
+  scores by downing one. Each wave brings back every character it lost and
+  the score doesn't decide the battle, while the team's losses are for good.
+  Weighed in full, a Skitterling never stepped up to a Knight that hits harder
+  than it does, and a warband ringed the team two squares out and stopped.
+- **The keep doesn't score for it.** It decides nothing in Hold Out, and its
+  five points drew a warband away from the team.
+
 **Engine.**
 
 - `coop.mission` from the invitation to the state, checked by the setup route
