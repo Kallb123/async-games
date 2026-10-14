@@ -1,6 +1,6 @@
 'use client'
 import React, { createContext, useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import { centredScroll, easeInOut, exactZoom, FIT_WIDTH, FOCUS_MARGIN_PX, focusZoom, GLIDE_LEAD, GLIDE_MS, glideFrame, pinchOffset, wheelZoomFactor, zoomLevels, type ZoomView } from '@/utils/ui/boardZoom';
+import { centredScroll, drawnView, easeInOut, exactZoom, FIT_WIDTH, FOCUS_MARGIN_PX, focusZoom, GLIDE_LEAD, GLIDE_MS, glideFrame, pinchOffset, viewRegion, wheelZoomFactor, zoomLevels, type ZoomView } from '@/utils/ui/boardZoom';
 import { prefersReducedMotion } from '@/utils/hooks/usePrefersReducedMotion';
 import type { Rect } from '@/utils/ui/mapLabels';
 
@@ -66,7 +66,20 @@ interface BoardZoomProps {
     onFocused?: (key: string) => void;
     /** Keeps the player's place when the board is redrawn under them. Needs `viewBox`. */
     pivot?: BoardZoomPivot | null;
-    /** The board <svg>. */
+    /**
+     * Camera mode, for a board drawn by a camera rather than laid out by the
+     * browser — a WebGL canvas, which can't be made 600% of the column wide.
+     * Needs `viewBox`, and is fixed for the life of the component. The zoom,
+     * the pill, the pinch, the glide and the scrolling are all as they are, but
+     * what is scrolled is an empty spacer of the zoomed board's size, and the
+     * child is not the board `<svg>` but a box pinned to the pane (`sticky`,
+     * filling what the pane shows) that draws whatever part of the board it is
+     * told is in view (`useBoardView`) — never transformed, never laid out
+     * bigger than the pane. A child that takes presses itself, as a canvas
+     * would for a tap, leaves the pan and the pinch to the pane (`touch-action`).
+     */
+    camera?: boolean;
+    /** The board <svg> or, in camera mode, the box the camera draws into. */
     children: React.ReactNode;
 }
 
@@ -90,6 +103,13 @@ const MOVING = 'ag-board-zoom-content--moving';
 interface Glide { settle: () => void; settled: () => boolean }
 
 /**
+ * What a board is drawn on: the pane that scrolls it, the layer a transform
+ * moves (`content`), and — in camera mode, where nothing is transformed — the
+ * feed that tells the camera what is in view instead (`ViewFeed`).
+ */
+interface Surface { pane: HTMLDivElement; content: HTMLDivElement; feed: ViewFeed | null }
+
+/**
  * Draw the board `offset` into the pane at `scale` times its laid-out size.
  * While it's drawn this way it's marked as moving (`MOVING`), which makes it a
  * compositor layer of its own (ag-theme.css) — so each frame scales what's
@@ -98,15 +118,24 @@ interface Glide { settle: () => void; settled: () => boolean }
  * an animation inside the SVG — even paused — has the whole board re-rastered
  * at every frame's scale, which is what makes a pinch stutter. A board names
  * its animated classes under the marker rather than `*`, which would restyle
- * every node on it as each gesture starts and ends.
+ * every node on it as each gesture starts and ends. A camera is told the view
+ * this draws instead.
  */
-function drawAt(content: HTMLDivElement, offset: { x: number; y: number }, scale: number) {
+function drawAt({ content, feed }: Surface, offset: { x: number; y: number }, scale: number) {
+    if (feed) {
+        feed.draw(offset, scale);
+        return;
+    }
     content.style.transform = `translate(${offset.x}px, ${offset.y}px) scale(${scale})`;
     content.classList.add(MOVING);
 }
 
 /** Drop the transform: the board is drawn as laid out again, sharp at its new zoom, and its pulses start over. */
-function release(content: HTMLDivElement) {
+function release({ content, feed }: Surface) {
+    if (feed) {
+        feed.drop();
+        return;
+    }
     content.style.transform = '';
     content.classList.remove(MOVING);
 }
@@ -115,19 +144,26 @@ function release(content: HTMLDivElement) {
  * Hand the board's position over to the transform. For as long as a pinch or a
  * glide is drawing, the pane sits unscrolled and the transform alone places the
  * board: left scrolled, a board scaled down under the scroll position would
- * have the browser clamp it — and the board would lurch mid-gesture.
+ * have the browser clamp it — and the board would lurch mid-gesture. A camera
+ * has no transform to be scrolled under, so its pane stays where it is; the
+ * next `drawAt` tells it where the view is.
  */
-function liftOff(pane: HTMLDivElement, content: HTMLDivElement, offset: { x: number; y: number }) {
-    pane.scrollLeft = 0;
-    pane.scrollTop = 0;
-    drawAt(content, offset, 1);
+function liftOff(surface: Surface, offset: { x: number; y: number }) {
+    if (surface.feed) {
+        surface.feed.hold(offset);
+        return;
+    }
+    surface.pane.scrollLeft = 0;
+    surface.pane.scrollTop = 0;
+    drawAt(surface, offset, 1);
 }
 
 /** And hand it back: no transform, the pane scrolled to `scroll`. */
-function landAt(pane: HTMLDivElement, content: HTMLDivElement, scroll: { x: number; y: number }) {
-    release(content);
-    pane.scrollLeft = scroll.x;
-    pane.scrollTop = scroll.y;
+function landAt(surface: Surface, scroll: { x: number; y: number }) {
+    release(surface);
+    surface.pane.scrollLeft = scroll.x;
+    surface.pane.scrollTop = scroll.y;
+    surface.feed?.sync();
 }
 
 /** The board as it's drawn right now: mid-pinch, the pinch's latest frame; otherwise the zoom and scroll laid out. */
@@ -164,14 +200,15 @@ function focusView(pane: HTMLDivElement, target: FocusTarget, zoom: number): Zoo
  * wherever it was rather than snapping to the new width at a scroll offset
  * that meant something else at the old one and travelling on from there.
  */
-function glide(pane: HTMLDivElement, content: HTMLDivElement, from: ZoomView, to: ZoomView, landed?: () => void): Glide {
-    const paneSize = { x: pane.clientWidth, y: pane.clientHeight };
+function glide(surface: Surface, from: ZoomView, to: ZoomView, landed?: () => void): Glide {
+    const paneSize = { x: surface.pane.clientWidth, y: surface.pane.clientHeight };
     const draw = (t: number) => {
         const frame = glideFrame(from, to, paneSize, t);
-        drawAt(content, frame.offset, frame.zoom / to.zoom);
+        drawAt(surface, frame.offset, frame.zoom / to.zoom);
     };
-    liftOff(pane, content, { x: 0, y: 0 });
-    draw(0);
+    liftOff(surface, { x: 0, y: 0 });
+    // A transformed board is placed before the new width is seen. A camera's canvas isn't laid out at it, and already shows this frame.
+    if (!surface.feed) draw(0);
     let frame = 0;
     let done = false;
     // Told once, however the glide ends: at its lead, or as it's cut short.
@@ -185,7 +222,7 @@ function glide(pane: HTMLDivElement, content: HTMLDivElement, from: ZoomView, to
         if (done) return;
         done = true;
         cancelAnimationFrame(frame);
-        landAt(pane, content, to.scroll);
+        landAt(surface, to.scroll);
         tell();
     };
     const started = performance.now();
@@ -201,10 +238,10 @@ function glide(pane: HTMLDivElement, content: HTMLDivElement, from: ZoomView, to
 }
 
 /** Bring a focus into view on a board already laid out at its zoom: a glide when it's smooth, otherwise (the pill, or reduced motion) it simply lands. */
-function showFocus(pane: HTMLDivElement, content: HTMLDivElement, target: FocusTarget, zoom: number): Glide | null {
-    const to = focusView(pane, target, zoom);
-    if (target.smooth && target.from) return glide(pane, content, target.from, to, target.landed);
-    landAt(pane, content, to.scroll);
+function showFocus(surface: Surface, target: FocusTarget, zoom: number): Glide | null {
+    const to = focusView(surface.pane, target, zoom);
+    if (target.smooth && target.from) return glide(surface, target.from, to, target.landed);
+    landAt(surface, to.scroll);
     target.landed?.();
     return null;
 }
@@ -271,6 +308,105 @@ export function useBoardCentre(): BoardCentre | null {
     return useContext(BoardCentreContext);
 }
 
+/**
+ * The part of the board in the pane right now, in the child's own `viewBox`
+ * units (`viewRegion`): the view a camera draws (camera mode).
+ */
+export type BoardView = Rect;
+
+type BoardViewListener = (view: BoardView) => void;
+
+/** How far the view may move, in pixels, and not be told: well under what a canvas can show. */
+const UNSEEN_PX = 0.05;
+
+/**
+ * Camera mode's view of the board, and who is told of it. A camera board
+ * isn't transformed as it's pinched or glided, so the view is worked out from
+ * where it's drawn — the pane's scroll and the board's laid-out size, or the
+ * offset and scale a pinch, a glide or a follow is drawing between frames
+ * (`drawn`, set by `draw` and `hold`) — and told to each listener when it changes.
+ * No state and no render: a listener is a function a board draws from.
+ */
+class ViewFeed {
+    private readonly listeners = new Set<BoardViewListener>();
+    private last: BoardView | null = null;
+    /** What is being drawn between frames, while a gesture, a glide or a follow is. */
+    private drawn: { offset: { x: number; y: number }; scale: number } | null = null;
+    private bound: { pane: HTMLDivElement; content: HTMLDivElement; viewBox: { width: number; height: number } } | null = null;
+
+    /** Where it reads the view from, set once there is a pane, and whenever the board's size changes. */
+    bind(pane: HTMLDivElement, content: HTMLDivElement, viewBox: { width: number; height: number } | undefined) {
+        this.bound = viewBox ? { pane, content, viewBox } : null;
+    }
+
+    /** Told the view at once if there is one, and on every change after. */
+    subscribe = (listener: BoardViewListener): (() => void) => {
+        this.listeners.add(listener);
+        if (this.last) listener(this.last);
+        return () => { this.listeners.delete(listener); };
+    };
+
+    /** A gesture, a glide or a follow has the view: the pane's scroll is no longer what to read. */
+    hold(offset: { x: number; y: number }) {
+        this.drawn = { offset, scale: 1 };
+    }
+
+    /** The board drawn `offset` into the pane at `scale` times its laid-out size (as `drawAt`). */
+    draw(offset: { x: number; y: number }, scale: number) {
+        this.drawn = { offset, scale };
+        this.sync();
+    }
+
+    /** The view is the pane's again; whoever released it says where it landed (`sync`). */
+    drop() {
+        this.drawn = null;
+    }
+
+    /** The pane scrolled or was resized: told, unless a gesture, a glide or a follow has the view, in which case the pane is not where the board is drawn, and its next frame is told. */
+    moved() {
+        if (!this.drawn) this.sync();
+    }
+
+    /** Works the view out afresh and tells whoever it has changed for. */
+    sync() {
+        const bound = this.bound;
+        if (!bound) return;
+        const { pane, content, viewBox } = bound;
+        const paneSize = { x: pane.clientWidth, y: pane.clientHeight };
+        if (paneSize.x === 0 || paneSize.y === 0) return;
+        // The board's size as laid out, to the fraction of a pixel: a camera places by the sub-pixel.
+        const box = content.getBoundingClientRect();
+        const laid = { x: box.width, y: box.height };
+        const shown = this.drawn ? drawnView(laid, this.drawn.offset, this.drawn.scale) : { scroll: { x: pane.scrollLeft, y: pane.scrollTop }, content: laid };
+        const view = viewRegion(shown, paneSize, viewBox);
+        // A change too small to see isn't one: the glide's first frame is where the pane was, to the rounding of its size. Held against what was last told, so a slow drift still adds up.
+        const last = this.last;
+        const pixel = view.width / paneSize.x;
+        if (last && [view.x - last.x, view.y - last.y, view.width - last.width, view.height - last.height].every(change => Math.abs(change) < pixel * UNSEEN_PX)) return;
+        this.last = view;
+        this.listeners.forEach(listener => listener(view));
+    }
+}
+
+const BoardViewContext = createContext<ViewFeed | null>(null);
+
+/**
+ * What a camera-mode board draws from: calls `listener` with the part of the
+ * board in the pane (`BoardView`, in viewBox units) as it is when this
+ * subscribes and every time it changes — the pane scrolled, the pill or a
+ * pinch zooming, a focus gliding, a follow keeping a point in the middle. It
+ * is the view the player's gestures and the board's own focus arrive as, each
+ * frame: nothing here renders, so `listener` draws from a ref and a canvas, as
+ * `usePlaybackFrame`'s does. Pass one that is stable; a new one is told the
+ * current view again, which is how a camera made after the pane learns where it
+ * is. Called in the child's layout effect, so it hears of a `pivot` that lands
+ * in the same commit. Nothing outside camera mode.
+ */
+export function useBoardView(listener: BoardViewListener): void {
+    const feed = useContext(BoardViewContext);
+    useLayoutEffect(() => feed?.subscribe(listener), [feed, listener]);
+}
+
 function spread(touches: TouchList): number {
     return Math.hypot(touches[0].clientX - touches[1].clientX, touches[0].clientY - touches[1].clientY);
 }
@@ -313,12 +449,7 @@ interface Pinch {
 
 /** Where a pinch's latest frame has drawn the board. */
 function pinchView(pinch: Pinch): ZoomView {
-    const grown = pinch.drawn / pinch.zoom;
-    return {
-        zoom: pinch.drawn,
-        scroll: { x: -pinch.offset.x, y: -pinch.offset.y },
-        content: { x: pinch.content.x * grown, y: pinch.content.y * grown },
-    };
+    return { zoom: pinch.drawn, ...drawnView(pinch.content, pinch.offset, pinch.drawn / pinch.zoom) };
 }
 
 /** Re-take a pinch's baseline from the fingers now down, keeping the board where it's drawn. */
@@ -363,8 +494,17 @@ function rebase(pinch: Pinch, touches: TouchList, pane: HTMLDivElement) {
  * it — Realm Arena's battlefield turned a quarter — which hands this a
  * `pivot`, so whatever was in the middle of the frame is still there after.
  * The fourth is the board's own, frame by frame: `useBoardCentre`.
+ *
+ * A board that is a camera rather than a layout — a WebGL canvas, too big to be
+ * made 600% of the column wide — wears all of this in `camera` mode. Nothing
+ * else changes: the same steps, the same pinch under the fingers, the same
+ * glide, pivot and follow, all in the viewBox's units. Only where the board
+ * goes differs. It is never laid out at the zoomed size or transformed: an
+ * empty spacer of that size is what scrolls, and the child is pinned to the
+ * pane, told what part of the board is in it (`useBoardView`) however that
+ * came about, and draws exactly that.
  */
-export default function BoardZoom({ zoomWidth, maxWidth, viewBox, focus, onFocused, pivot, children }: BoardZoomProps) {
+export default function BoardZoom({ zoomWidth, maxWidth, viewBox, focus, onFocused, pivot, camera = false, children }: BoardZoomProps) {
     const levels = useMemo(() => zoomLevels(zoomWidth, maxWidth), [zoomWidth, maxWidth]);
     const max = levels[levels.length - 1];
 
@@ -374,6 +514,8 @@ export default function BoardZoom({ zoomWidth, maxWidth, viewBox, focus, onFocus
     const [fitHeight, setFitHeight] = useState<number | null>(null);
     const paneRef = useRef<HTMLDivElement>(null);
     const contentRef = useRef<HTMLDivElement>(null);
+    // A camera is told where the view is (`useBoardView`) rather than the board being transformed.
+    const [feed] = useState(() => camera ? new ViewFeed() : null);
     const zoomRef = useRef(FIT_WIDTH);
     const anchorRef = useRef<ZoomAnchor | null>(null);
     const scrollToRef = useRef<{ x: number; y: number } | null>(null);
@@ -388,6 +530,11 @@ export default function BoardZoom({ zoomWidth, maxWidth, viewBox, focus, onFocus
     useEffect(() => {
         viewBoxRef.current = viewBox;
     });
+    // What the board is drawn on, once the pane has mounted.
+    const surfaceOf = useCallback((): Surface | null => {
+        const pane = paneRef.current, content = contentRef.current;
+        return pane && content ? { pane, content, feed } : null;
+    }, [feed]);
     // Read when a glide lands rather than when it starts: boards pass it inline.
     const onFocusedRef = useRef(onFocused);
     useEffect(() => {
@@ -410,28 +557,33 @@ export default function BoardZoom({ zoomWidth, maxWidth, viewBox, focus, onFocus
     useLayoutEffect(() => {
         zoomRef.current = zoom;
         pinchRef.current = null;
-        const pane = paneRef.current;
-        const content = contentRef.current;
-        if (!pane || !content) return;
+        const surface = surfaceOf();
+        if (!surface) return;
+        const { pane } = surface;
         const anchor = anchorRef.current;
         anchorRef.current = null;
         const scrollTo = scrollToRef.current;
         scrollToRef.current = null;
-        release(content);
+        release(surface);
         const focusTarget = focusTargetRef.current;
         if (focusTarget) {
             focusTargetRef.current = null;
-            glideRef.current = showFocus(pane, content, focusTarget, zoom);
+            glideRef.current = showFocus(surface, focusTarget, zoom);
             return;
         }
         if (scrollTo) {
-            landAt(pane, content, scrollTo);
+            landAt(surface, scrollTo);
             return;
         }
-        if (!anchor) return;
+        if (!anchor) {
+            // The board has the width the pane was given, wherever it's scrolled to.
+            feed?.sync();
+            return;
+        }
         pane.scrollLeft = anchor.cx * pane.scrollWidth - anchor.vx;
         pane.scrollTop = anchor.cy * pane.scrollHeight - anchor.vy;
-    }, [zoom]);
+        feed?.sync();
+    }, [zoom, surfaceOf, feed]);
 
     // The fitted height follows the column's width and the board's own shape,
     // so it's remeasured whenever either might have changed. The board's
@@ -441,6 +593,7 @@ export default function BoardZoom({ zoomWidth, maxWidth, viewBox, focus, onFocus
     // than the board itself, so a board that renders after BoardZoom mounts
     // (or is swapped for another) is still measured.
     useEffect(() => {
+        if (camera) return;
         const pane = paneRef.current;
         const content = contentRef.current;
         if (!pane || !content) return;
@@ -453,14 +606,48 @@ export default function BoardZoom({ zoomWidth, maxWidth, viewBox, focus, onFocus
         observer.observe(pane);
         observer.observe(content);
         return () => observer.disconnect();
-    }, []);
+    }, [camera]);
+
+    // A camera board has no `<svg>` to measure, so its fitted height is its
+    // viewBox's shape at the column's width, and the box it draws into is given
+    // the pane's size in pixels (ag-theme.css `.ag-board-zoom-slot`) — before
+    // paint, so it never shows unsized. Whatever the pane or the board's width
+    // changes, the camera is told the view again; so it is as it mounts, and as
+    // the pane scrolls.
+    const viewBoxWidth = viewBox?.width, viewBoxHeight = viewBox?.height;
+    useLayoutEffect(() => {
+        const pane = paneRef.current;
+        const content = contentRef.current;
+        if (!camera || !feed || !pane || !content) return;
+        const size = viewBoxWidth && viewBoxHeight ? { width: viewBoxWidth, height: viewBoxHeight } : undefined;
+        feed.bind(pane, content, size);
+        const measure = () => {
+            pane.style.setProperty('--ag-board-pane-w', `${pane.clientWidth}px`);
+            pane.style.setProperty('--ag-board-pane-h', `${pane.clientHeight}px`);
+            if (size) setFitHeight(pane.clientWidth * size.height / size.width);
+        };
+        measure();
+        feed.sync();
+        const observer = new ResizeObserver(() => {
+            measure();
+            feed.moved();
+        });
+        observer.observe(pane);
+        observer.observe(content);
+        const onScroll = () => feed.moved();
+        pane.addEventListener('scroll', onScroll, { passive: true });
+        return () => {
+            observer.disconnect();
+            pane.removeEventListener('scroll', onScroll);
+        };
+    }, [camera, feed, viewBoxWidth, viewBoxHeight]);
 
     // A follow lands where it got to, the pane scrolled there.
     const landTrack = useCallback(() => {
-        const pane = paneRef.current, content = contentRef.current, track = trackRef.current;
+        const surface = surfaceOf(), track = trackRef.current;
         trackRef.current = null;
-        if (pane && content && track) landAt(pane, content, track.scroll);
-    }, []);
+        if (surface && track) landAt(surface, track.scroll);
+    }, [surfaceOf]);
     // Whatever else moves the view first ends a glide where it was heading, and
     // a follow where it got to, so it starts from a board as it's laid out.
     const letGo = useCallback(() => {
@@ -472,20 +659,21 @@ export default function BoardZoom({ zoomWidth, maxWidth, viewBox, focus, onFocus
     // laying out), no pinch, and no player's hand on it. One function for the
     // component's life, so a board's clock holds it without resubscribing.
     const centre = useCallback<BoardCentre>(point => {
-        const pane = paneRef.current;
-        const content = contentRef.current;
+        const surface = surfaceOf();
         const size = viewBoxRef.current;
         if (!point) { landTrack(); return; }
-        if (!pane || !content || !size || takenRef.current || pinchRef.current || focusTargetRef.current) return;
+        if (!surface || !size || takenRef.current || pinchRef.current || focusTargetRef.current) return;
         if (glideRef.current && !glideRef.current.settled()) return;
+        const { pane } = surface;
         // Measured before it lifts off: a transform can count towards what the pane scrolls over.
         const lifted = trackRef.current?.content;
         const board = lifted ?? { x: pane.scrollWidth, y: pane.scrollHeight };
         const scroll = centredScroll(point, size, board, { x: pane.clientWidth, y: pane.clientHeight });
         trackRef.current = { content: board, scroll };
-        if (lifted) drawAt(content, { x: -scroll.x, y: -scroll.y }, 1);
-        else liftOff(pane, content, { x: -scroll.x, y: -scroll.y });
-    }, [landTrack]);
+        const offset = { x: -scroll.x, y: -scroll.y };
+        if (!lifted) liftOff(surface, offset);
+        drawAt(surface, offset, 1);
+    }, [landTrack, surfaceOf]);
 
     // A glide still in flight as the board goes away has nothing left to draw on.
     useEffect(() => () => letGo(), [letGo]);
@@ -501,6 +689,7 @@ export default function BoardZoom({ zoomWidth, maxWidth, viewBox, focus, onFocus
         const pane = paneRef.current;
         const content = contentRef.current;
         if (!pane || !content || !focus || !viewBox) return;
+        const surface: Surface = { pane, content, feed };
         letGo();
         takenRef.current = false;
         const inset = focus.inset ?? 0;
@@ -519,8 +708,8 @@ export default function BoardZoom({ zoomWidth, maxWidth, viewBox, focus, onFocus
             // Fingers still down would otherwise go on drawing over a pane
             // that has just scrolled out from under them.
             pinchRef.current = null;
-            release(content);
-            glideRef.current = showFocus(pane, content, target, zoom);
+            release(surface);
+            glideRef.current = showFocus(surface, target, zoom);
         } else {
             focusTargetRef.current = target;
             setZoom(level);
@@ -534,14 +723,14 @@ export default function BoardZoom({ zoomWidth, maxWidth, viewBox, focus, onFocus
     // A pivot lands at once, before paint, rather than gliding: the board has
     // already moved under the player, and this only puts their place back.
     useLayoutEffect(() => {
-        const pane = paneRef.current;
-        const content = contentRef.current;
-        if (!pane || !content || !pivot || !viewBox) return;
+        const surface = surfaceOf();
+        if (!surface || !pivot || !viewBox) return;
+        const { pane } = surface;
         letGo();
         // Read as it's drawn: mid-pinch, the pane sits unscrolled under the transform.
         const view = currentView(pane, zoomRef.current, pinchRef.current);
         pinchRef.current = null;
-        release(content);
+        release(surface);
         const middle = { x: pane.clientWidth / 2, y: pane.clientHeight / 2 };
         const to = pivot.at({
             x: (view.scroll.x + middle.x) / view.content.x * viewBox.width,
@@ -550,6 +739,7 @@ export default function BoardZoom({ zoomWidth, maxWidth, viewBox, focus, onFocus
         const scroll = centredScroll(to, viewBox, { x: pane.scrollWidth, y: pane.scrollHeight }, { x: pane.clientWidth, y: pane.clientHeight });
         pane.scrollLeft = scroll.x;
         pane.scrollTop = scroll.y;
+        feed?.sync();
         // Only `pivot.key` should retrigger this, as with `focus.key` above.
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [pivot?.key]);
@@ -573,9 +763,9 @@ export default function BoardZoom({ zoomWidth, maxWidth, viewBox, focus, onFocus
     };
 
     useEffect(() => {
-        const pane = paneRef.current;
-        const content = contentRef.current;
-        if (!pane || !content || levels.length === 1) return;
+        const surface = surfaceOf();
+        if (!surface || levels.length === 1) return;
+        const { pane } = surface;
         const clamp = (value: number) => Math.min(max, Math.max(FIT_WIDTH, value));
 
         const onTouchStart = (event: TouchEvent) => {
@@ -597,7 +787,7 @@ export default function BoardZoom({ zoomWidth, maxWidth, viewBox, focus, onFocus
                 drawn: zoomRef.current,
                 offset: { x: -scroll.x, y: -scroll.y },
             };
-            liftOff(pane, content, { x: -scroll.x, y: -scroll.y });
+            liftOff(surface, { x: -scroll.x, y: -scroll.y });
         };
 
         const onTouchMove = (event: TouchEvent) => {
@@ -618,7 +808,7 @@ export default function BoardZoom({ zoomWidth, maxWidth, viewBox, focus, onFocus
                 x: pinchOffset(pinch.scroll.x, pinch.start.x, finger.x, scale, pinch.content.x, pinch.pane.x),
                 y: pinchOffset(pinch.scroll.y, pinch.start.y, finger.y, scale, pinch.content.y, pinch.pane.y),
             };
-            drawAt(content, pinch.offset, pinch.drawn / pinch.laidOut);
+            drawAt(surface, pinch.offset, pinch.drawn / pinch.laidOut);
         };
 
         // The fingers lifting is when the zoom actually changes: the board is
@@ -637,7 +827,7 @@ export default function BoardZoom({ zoomWidth, maxWidth, viewBox, focus, onFocus
             const scrollTo = { x: -pinch.offset.x, y: -pinch.offset.y };
             const nextZoom = pinch.drawn;
             if (nextZoom === zoomRef.current) {
-                landAt(pane, content, scrollTo);
+                landAt(surface, scrollTo);
                 return;
             }
             scrollToRef.current = scrollTo;
@@ -670,7 +860,7 @@ export default function BoardZoom({ zoomWidth, maxWidth, viewBox, focus, onFocus
             pane.removeEventListener('touchcancel', endPinch);
             pane.removeEventListener('wheel', onWheel);
         };
-    }, [levels.length, max, letGo]);
+    }, [levels.length, max, letGo, surfaceOf]);
 
     return (
         <>
@@ -693,8 +883,18 @@ export default function BoardZoom({ zoomWidth, maxWidth, viewBox, focus, onFocus
                     height: zoom > FIT_WIDTH && fitHeight ? fitHeight : undefined,
                 } as React.CSSProperties}
             >
-                <div ref={contentRef} className="ag-board-zoom-content">
-                    <BoardCentreContext.Provider value={centre}>{children}</BoardCentreContext.Provider>
+                <div ref={contentRef} className={camera ? 'ag-board-zoom-content ag-board-zoom-content--camera' : 'ag-board-zoom-content'}>
+                    <BoardViewContext.Provider value={feed}>
+                        <BoardCentreContext.Provider value={centre}>
+                            {camera && viewBox ? (
+                                <>
+                                    {/* Scrolled over in the board's place, the shape of its viewBox at the zoom. */}
+                                    <div className="ag-board-zoom-spacer" style={{ aspectRatio: `${viewBox.width} / ${viewBox.height}` }} aria-hidden="true" />
+                                    <div className="ag-board-zoom-slot">{children}</div>
+                                </>
+                            ) : children}
+                        </BoardCentreContext.Provider>
+                    </BoardViewContext.Provider>
                 </div>
             </div>
         </>
