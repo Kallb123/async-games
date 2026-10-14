@@ -184,10 +184,15 @@ were played on both boards. The rest are in the lab's *Every run* list.
 - **The enemy turn finishes sooner on the 3D board.** Each of its 15 parts
   ends about 0.23s nearer to when it was meant to, so the whole turn is
   3.4–3.7s shorter (40.0s against 43.4s on today's map).
-- **One fault, not a cost:** on the 3D board's quarter turn, the camera swings
-  away to somewhere off the map. The isometric board keeps the middle of the
-  frame where it was (`BoardZoom`'s `pivot`). The one slow frame and long task
-  while turning the view most likely go with that fault.
+- **One fault, not a cost, since fixed:** on the 3D board's quarter turn, the
+  camera swung away to somewhere off the map. The isometric board keeps the
+  middle of the frame where it was (`BoardZoom`'s `pivot`), and now so does
+  this one: the view turns about the ground at the middle of the frame, and a
+  glide to a focus runs between ground points rather than looked-at points,
+  which only mean something at the turn they were made at (an instant turn,
+  or one begun while the view was gliding, left it looking at the wrong place).
+  The one slow frame and long task while turning the view most likely went
+  with that fault; the phone numbers above predate the fix.
 - **Not measured:** a cheaper phone, and an iPhone, where WebGL runs in
   Safari. One phone was enough to decide; they're worth a look before
   launch, not before building. The 3D board also still draws less than the
@@ -203,8 +208,6 @@ were played on both boards. The rest are in the lab's *Every run* list.
    comparison with the trace as well.
 2. **The remaining work before a player sees it:**
    - §3's missing pieces;
-   - the quarter turn keeping the middle of the frame, as the isometric
-     board's does, rather than swinging the camera off the map (§5.1);
    - `BoardZoom` as a camera (plan §7.2), in place of the 3D board's own
      gestures;
    - culling and a level of detail for maps of 8,000+ tiles. Today it draws

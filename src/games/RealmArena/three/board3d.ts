@@ -22,7 +22,7 @@ import { facingTowards, type Battlefield, type Facing, type Square } from "@/uti
 import { easeInOut, exactZoom, FIT_WIDTH, FOCUS_MARGIN_PX, focusZoom, GLIDE_LEAD, GLIDE_MS, wheelZoomFactor, zoomBetween, zoomLevels } from "@/utils/ui/boardZoom";
 import type { Rect } from "@/utils/ui/mapLabels";
 import { characterGeometry, type CharacterModels } from "./characterModels";
-import { azimuthOf, cameraBasis, figureMatrix, lightOf, lookAtFor, onScreen, QUARTER, regionOnScreen, squareCentre, type CameraBasis, type Vec3 } from "./iso3d";
+import { azimuthOf, cameraBasis, figureMatrix, groundAt, lightOf, lookAtFor, lookAtGround, onScreen, QUARTER, regionOnScreen, squareCentre, type CameraBasis, type Vec3 } from "./iso3d";
 import { lightSolids, solidMaterial } from "./solidMaterial";
 import { buildTerrain, type Sheets, type Terrain } from "./terrain3d";
 
@@ -128,7 +128,8 @@ export class Board3D {
     private shake: Vec3 = [0, 0, 0];
     private size = { width: 1, height: 1 };
     private fitted = false;
-    private glide: { from: { target: Vec3; zoom: number }; to: { target: Vec3; zoom: number }; start: number; key: string; told: boolean } | null = null;
+    /** A glide runs between points of the ground at the middle of the frame, not between looked-at points: those are only true of the turn they were made at. */
+    private glide: { from: { ground: Vec3; zoom: number }; to: { ground: Vec3; zoom: number }; start: number; key: string; told: boolean } | null = null;
     private turn: { from: number; to: number; start: number } | null = null;
     /** The focus last asked for, and the key of the one last glided to. */
     private wanted: { area: Rect; key: string; exact: boolean | undefined } | null = null;
@@ -275,8 +276,8 @@ export class Board3D {
     setRotation(rotation: number, glide: boolean): void {
         const to = azimuthOf(rotation);
         if (!glide) {
-            this.azimuth = to;
-            this.relight();
+            this.turn = null;
+            this.turnTo(to);
             this.invalidate();
             return;
         }
@@ -284,7 +285,6 @@ export class Board3D {
         let from = this.azimuth;
         while (to - from > Math.PI) from += 2 * Math.PI;
         while (from - to > Math.PI) from -= 2 * Math.PI;
-        // What was in the middle of the frame stays there as it turns.
         this.turn = { from, to, start: performance.now() };
         this.animate();
     }
@@ -315,7 +315,8 @@ export class Board3D {
             : focusZoom(LEVELS, region.width, board.width, this.size.width, FOCUS_MARGIN_PX);
         const zoom = fit * width / FIT_WIDTH;
         const centre = { x: region.x + region.width / 2, y: region.y + region.height / 2 };
-        this.glide = { from: { target: this.target, zoom: this.zoom }, to: { target: lookAtFor(basis, centre), zoom }, start: performance.now(), key, told: false };
+        const from = groundAt(this.basis, onScreen(this.basis, this.target));
+        this.glide = { from: { ground: from, zoom: this.zoom }, to: { ground: groundAt(basis, centre), zoom }, start: performance.now(), key, told: false };
         this.animate();
     }
 
@@ -586,28 +587,24 @@ export class Board3D {
             this.animating = 0;
             let more = false;
             let moved = false;
-            if (this.turn) {
-                const t = Math.min(1, (now - this.turn.start) / TURN_MS);
-                const centre = onScreen(this.basis, this.target);
-                const pivot = this.screenToGround(centre);
-                this.azimuth = this.turn.from + (this.turn.to - this.turn.from) * easeInOut(t);
-                this.relight();
-                if (pivot) this.target = lookAtFor(this.basis, onScreen(this.basis, pivot));
-                if (t >= 1) this.turn = null; else more = true;
-                this.layFigures(null);
-                moved = true;
-            }
+            // The glide first, so a turn begun in the same frame pivots on where it has got to.
             if (this.glide) {
                 const t = Math.min(1, (now - this.glide.start) / GLIDE_MS);
                 const k = easeInOut(t);
                 const { from, to } = this.glide;
-                this.target = from.target.map((n, i) => n + (to.target[i] - n) * k) as Vec3;
+                this.target = lookAtGround(this.basis, from.ground.map((n, i) => n + (to.ground[i] - n) * k) as Vec3);
                 this.zoom = zoomBetween(from.zoom, to.zoom, k);
                 if (!this.glide.told && t >= GLIDE_LEAD) {
                     this.glide.told = true;
                     this.handlers.onFocused(this.glide.key);
                 }
                 if (t >= 1) this.glide = null; else more = true;
+                moved = true;
+            }
+            if (this.turn) {
+                const t = Math.min(1, (now - this.turn.start) / TURN_MS);
+                this.turnTo(this.turn.from + (this.turn.to - this.turn.from) * easeInOut(t));
+                if (t >= 1) this.turn = null; else more = true;
                 moved = true;
             }
             if (this.waveDue && this.terrain) {
@@ -624,12 +621,13 @@ export class Board3D {
         this.animating = requestAnimationFrame(step);
     }
 
-    /** The ground under a point across the frame (y = 0), where the view through it meets it. */
-    private screenToGround(across: { x: number; y: number }): Vec3 | null {
-        const { origin, direction } = this.sightThrough(across);
-        if (Math.abs(direction[1]) < 1e-6) return null;
-        const t = -origin[1] / direction[1];
-        return [origin[0] + direction[0] * t, 0, origin[2] + direction[2] * t];
+    /** Turns the view to `azimuth` about the ground at the middle of the frame (`BoardZoom`'s `pivot`): what was there is still there, at the same zoom. */
+    private turnTo(azimuth: number): void {
+        const pivot = groundAt(this.basis, onScreen(this.basis, this.target));
+        this.azimuth = azimuth;
+        this.relight();
+        this.target = lookAtGround(this.basis, pivot);
+        this.layFigures(null);
     }
 
     /** Draws on the next frame, once, however often it's asked. */

@@ -76,6 +76,20 @@ export function lookAtFor(basis: CameraBasis, { x, y }: { x: number; y: number }
     return add(scale(basis.right, x), scale(basis.up, y));
 }
 
+/** The ground (y = 0) the view through a point of the frame, in `onScreen` units, meets: what is at that point of the frame. */
+export function groundAt(basis: CameraBasis, across: { x: number; y: number }): Vec3 {
+    const origin = lookAtFor(basis, across);
+    const along = origin[1] / basis.back[1];
+    return [origin[0] - basis.back[0] * along, 0, origin[2] - basis.back[2] * along];
+}
+
+/**
+ * The point the camera looks at for a frame centred on a point of the world:
+ * what to keep a point at the middle of the frame as `basis` turns, since the
+ * point it looks at belongs to the turn it was made at.
+ */
+export const lookAtGround = (basis: CameraBasis, point: Vec3): Vec3 => lookAtFor(basis, onScreen(basis, point));
+
 /**
  * The light, as the sprite renderer has it (scripts/lib/isoRender.mjs `LIGHT`):
  * from up, to the left and a little towards the viewer, fixed to the camera;

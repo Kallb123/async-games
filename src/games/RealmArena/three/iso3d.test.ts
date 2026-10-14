@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { FULL_HEIGHT, type Facing } from "@/utils/games/battlefield/terrain";
-import { azimuthOf, cameraBasis, figureMatrix, fitZoom, lightOf, lookAtFor, onScreen, QUARTER, regionOnScreen, type Vec3 } from "./iso3d";
+import { azimuthOf, cameraBasis, figureMatrix, fitZoom, groundAt, lightOf, lookAtFor, lookAtGround, onScreen, QUARTER, regionOnScreen, type Vec3 } from "./iso3d";
 
 const dot = (a: Vec3, b: Vec3) => a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
 /** Where a column-major matrix takes a point. */
@@ -31,6 +31,37 @@ describe("the 3D board's geometry", () => {
             expect(dot(right, up)).toBeCloseTo(0, 9);
             expect(up[1]).toBeGreaterThan(0);
         }
+    });
+
+    it("finds the ground a point of the frame shows, whichever way the camera looks", () => {
+        for (const rotation of [0, 1, 2, 3]) {
+            const basis = cameraBasis(azimuthOf(rotation));
+            const ground: Vec3 = [17.5, 0, 6.25];
+            const found = groundAt(basis, onScreen(basis, ground));
+            found.forEach((n, i) => expect(n).toBeCloseTo(ground[i], 9));
+        }
+    });
+
+    it("keeps the ground at the middle of the frame there through a turn, a frame at a time", () => {
+        const pivot: Vec3 = [23.9, 0, 16.3];
+        for (const [from, to] of [[0, 1], [1, 2], [3, 0], [0, 3]]) {
+            let basis = cameraBasis(azimuthOf(from));
+            let target = lookAtGround(basis, pivot);
+            for (let step = 1; step <= 12; step++) {
+                // As `Board3D` turns: about whatever is at the middle of the frame, at each angle on the way.
+                const kept = groundAt(basis, onScreen(basis, target));
+                basis = cameraBasis(azimuthOf(from) + (azimuthOf(to) - azimuthOf(from)) * step / 12);
+                target = lookAtGround(basis, kept);
+                groundAt(basis, onScreen(basis, target)).forEach((n, i) => expect(n).toBeCloseTo(pivot[i], 9));
+            }
+        }
+    });
+
+    it("loses the middle of the frame if the looked-at point is left as it was when the camera turns", () => {
+        const pivot: Vec3 = [23.9, 0, 16.3];
+        const target = lookAtGround(cameraBasis(azimuthOf(0)), pivot);
+        const turned = cameraBasis(azimuthOf(1));
+        expect(Math.hypot(...groundAt(turned, onScreen(turned, target)).map((n, i) => n - pivot[i]))).toBeGreaterThan(1);
     });
 
     it("draws a figure facing d on a board turned r quarters the way an unturned board draws one facing d + 2r, as the sprites' cells are picked", () => {
