@@ -1,0 +1,350 @@
+// The heart of the Realm Arena rendering bench: a battle from fixtures/ drawn by
+// whichever board it's handed — the isometric one or the 3D one, by the same
+// props — and the scripted scenarios played over it, each measured as the page
+// sees it (frames, long tasks, React commits, and for a WebGL board what it
+// handed the GPU). Two things drive it: the standalone bench page the runner
+// opens (BenchApp.tsx, run.ts) and the renderer lab in the app's admin tools
+// (`RealmArenaRendererLab`), which plays the same scenarios on a real phone.
+//
+// Wired as `src/app/games/realmarena/[gameid]/page.tsx` wires the board for a
+// co-op battle: the owners, the colours, the fog sweep, and the viewer's own
+// End turn played back one part per warband action (`play`), each part its own
+// playback and focus, resting `STEP_BEAT_MS` between. Keep it in step with the
+// page where the page changes what it hands the board — a harness that draws
+// less than the page measures less than the player gets.
+//
+// The runner builds it against other commits' src/ (`--against`), so it imports
+// nothing from src/ that main doesn't have. One board at a time: its handles
+// on the board it draws are this module's own.
+
+import React, { Profiler, useEffect, useMemo, useState } from "react";
+import type RealmArenaBoard from "@/games/RealmArena/components/RealmArenaBoard";
+import type { Playback } from "@/games/RealmArena/components/RealmArenaBoard";
+import { ART_SHEETS } from "@/games/RealmArena/art";
+import type { IRealmArenaSpecificGameStateResponse, IRealmArenaStepOutcome, RealmArenaPartState } from "@/games/RealmArena/apiModels";
+import { battlefieldOf } from "@/games/RealmArena/maps";
+import { battleFrom, isStanding, warbandsFor, type Fighter } from "@/games/RealmArena/rules";
+import { coopColourOf, endOf, friendlySquares, partFollow, reviewParts, STEP_BEAT_MS, unseenSquares } from "@/games/RealmArena/ui";
+import { registerScaledSackedFort } from "./scaledMap";
+
+/** What fixture.ts writes. */
+export interface Fixture {
+    name: string;
+    /** How it was made: `across` for one played on a scaled Sacked Fort (scaledMap.ts). */
+    recipe?: { across?: number };
+    viewer: string;
+    seats: string[];
+    before: IRealmArenaSpecificGameStateResponse;
+    after: IRealmArenaSpecificGameStateResponse;
+    step: IRealmArenaStepOutcome;
+}
+
+/** The part of a state the board draws, which each part of an End turn replaces (`withPartState` on the page). */
+type Shown = Pick<RealmArenaPartState, "fighters" | "ghosts" | "clouds" | "blasted">;
+
+/** What the scenarios set on the board. */
+interface View {
+    shown: Shown;
+    playback: Playback | null;
+    follow: React.ComponentProps<typeof RealmArenaBoard>["follow"];
+    selectedId: number | null;
+    /** Whose turn it is: their characters show their AP. */
+    acting: string | null;
+    waveDue: boolean;
+}
+
+/** One React commit of the board, as the profiling build reports it (none in a production build). */
+interface Commit { phase: string; actualMs: number; at: number }
+
+/** One part of the enemy turn: how long it was meant to play, and how long it took from being handed to the board to the board saying it had played. */
+interface PartTiming { part: number; cueMs: number; wallMs: number; timedOut: boolean }
+
+/** What `run` resolves with. */
+export interface ScenarioResult {
+    scenario: string;
+    wallMs: number;
+    /** The gaps between animation frames over the scenario, in ms: none for a scenario timed by the trace alone (`UNTIMED`). */
+    frameGaps: number[];
+    longTasks: { start: number; duration: number }[];
+    commits: Commit[];
+    parts: PartTiming[];
+    /** Elements under the board's frame at the end. */
+    domNodes: number;
+    /** For a board drawn with WebGL, what it handed the GPU over the scenario. */
+    gl?: { frames: number; calls: number; triangles: number };
+}
+
+/** How long the scenarios that step through something wait on each step. */
+const STEP_MS = 1500;
+/** How long the board is left alone in `idle`. */
+const IDLE_MS = 5000;
+/** Past a part's own length, how long it may take to say it has played before it's given up on: the page's `OWN_STUCK_MS`. */
+const STUCK_MS = 4000;
+
+const sleep = (ms: number) => new Promise<void>(resolve => setTimeout(resolve, ms));
+export const nextFrame = () => new Promise<number>(resolve => requestAnimationFrame(resolve));
+export const boardNodes = () => document.querySelector(".ag-realmarena-frame")?.getElementsByTagName("*").length ?? 0;
+
+/** The handles on the board drawn, set once it has mounted. */
+const control: {
+    set?: React.Dispatch<React.SetStateAction<View>>;
+    commits: Commit[];
+    played: Map<string, () => void>;
+    committed?: () => void;
+} = { commits: [], played: new Map() };
+
+/** A board the bench can draw: the isometric one, or anything that takes its props. */
+export type Board = typeof RealmArenaBoard;
+
+/**
+ * The battle drawn by `Board`, as the board screen draws it, ready for
+ * `runScenario` to play over: in its game's colours, inside whatever column
+ * the page puts it in.
+ */
+export function BenchBoard({ fixture, Board }: { fixture: Fixture; Board: Board }) {
+    const { viewer, seats } = fixture;
+    const [view, setView] = useState<View>(() => ({
+        shown: fixture.before, playback: null, follow: null, selectedId: null, acting: viewer, waveDue: false,
+    }));
+    useEffect(() => {
+        control.set = setView;
+        control.committed?.();
+    }, []);
+
+    // As the board screen derives them for a co-op battle.
+    const { fighters, ghosts, clouds, blasted } = view.shown;
+    const blastedKey = blasted.join(",");
+    const field = useMemo(() => battlefieldOf(fixture.after.map, blastedKey ? blastedKey.split(",").map(Number) : []), [fixture.after.map, blastedKey]);
+    const fog = fixture.after.fog;
+    const battle = battleFrom(field, { fighters, fog, clouds, seats, coop: true });
+    const unseen = useMemo(
+        () => fog ? unseenSquares(battleFrom(field, { fighters, fog: true, seats, coop: true }), viewer) : null,
+        [fog, field, fighters, seats, viewer],
+    );
+    const selected = fighters.find(fighter => fighter.id === view.selectedId);
+    const colourFor = (owner: string) => coopColourOf(viewer, owner);
+
+    return (
+        // The game's colours without its full-screen column (`.ag-game`), so it sits in whatever page holds it.
+        <div className="ag-game--realmarena">
+            <div className="ag-board-area">
+                <Profiler id="board" onRender={(_id, phase, actualMs) => control.commits.push({ phase, actualMs, at: performance.now() })}>
+                    <Board
+                        field={field}
+                        fighters={fighters}
+                        fogGhosts={ghosts}
+                        unseen={unseen}
+                        clouds={clouds}
+                        sides={battle.sides}
+                        owners={[...seats, ...warbandsFor(seats)]}
+                        waveDue={view.waveDue}
+                        showCentre={false}
+                        viewerId={viewer}
+                        colourFor={colourFor}
+                        nameFor={owner => owner}
+                        selected={selected}
+                        onSelect={id => setView(current => ({ ...current, selectedId: current.selectedId === id ? null : id }))}
+                        acting={view.acting}
+                        follow={view.follow}
+                        home={{ squares: friendlySquares(fighters, viewer, true), key: "home" }}
+                        playback={view.playback}
+                        onPlayed={key => control.played.get(key)?.()}
+                    />
+                </Profiler>
+            </div>
+        </div>
+    );
+}
+
+function setView(change: Partial<View>) {
+    control.set?.(current => ({ ...current, ...change }));
+}
+
+/** The viewer's own End turn coming back, played as the page plays it: a part at a time, each with its own focus, a beat between. */
+async function enemyTurn(fixture: Fixture, maxParts: number): Promise<PartTiming[]> {
+    const { viewer, before, after, step } = fixture;
+    const parts = reviewParts(after.map, step, { fighters: before.fighters, blasted: before.blasted }, after.fighters)
+        .filter(part => part.cues.length > 0)
+        .slice(0, maxParts);
+    const timings: PartTiming[] = [];
+    // The turn has passed on, as it has once the End turn comes back.
+    setView({ acting: fixture.seats[1] });
+    for (const [index, part] of parts.entries()) {
+        const key = `bench:${index}`;
+        const left = part.state?.fighters ?? after.fighters;
+        const cueMs = endOf(part.cues);
+        const played = new Promise<boolean>(resolve => {
+            control.played.set(key, () => resolve(false));
+            setTimeout(() => resolve(true), cueMs + STUCK_MS);
+        });
+        const start = performance.now();
+        setView({
+            shown: part.state ?? after,
+            playback: { key, cues: part.cues, events: part.events, field: part.field, before: part.before.fighters },
+            follow: partFollow(part, left, friendlySquares(left, viewer, true), false, key),
+        });
+        const timedOut = await played;
+        control.played.delete(key);
+        timings.push({ part: index, cueMs, wallMs: performance.now() - start, timedOut });
+        await sleep(STEP_BEAT_MS);
+    }
+    setView({ playback: null, follow: null });
+    return timings;
+}
+
+/** The view sent round the battlefield: each corner and the middle, alternately just fitted and at the deepest step, so every glide zooms. */
+async function pan(fixture: Fixture) {
+    const field = battlefieldOf(fixture.after.map, fixture.after.blasted);
+    const { width, height } = field;
+    const at = (col: number, row: number) => row * width + col;
+    const regions = [
+        [at(4, 4), at(10, 10)],
+        [at(width - 5, 4)],
+        [at(width - 12, height - 12), at(width - 5, height - 5)],
+        [at(4, height - 5)],
+        [at(Math.floor(width / 2) - 6, Math.floor(height / 2) - 6), at(Math.floor(width / 2) + 6, Math.floor(height / 2) + 6)],
+        [at(Math.floor(width / 2), Math.floor(height / 2))],
+    ];
+    for (const [index, squares] of regions.entries()) {
+        setView({ follow: { squares, key: `pan:${index}`, exact: index % 2 === 0 } });
+        await sleep(STEP_MS);
+    }
+    setView({ follow: null });
+}
+
+/** The view turned a quarter at a time, all the way round, by its own buttons. */
+async function turn() {
+    const button = document.querySelector<HTMLButtonElement>('button[aria-label="Turn the view clockwise"]');
+    if (!button) throw new Error("no button to turn the view by");
+    for (let quarter = 0; quarter < 4; quarter++) {
+        button.click();
+        await sleep(STEP_MS);
+    }
+}
+
+/** Each of the viewer's own characters selected in turn, as a tap selects it: its reach shaded and the view brought to it. */
+async function select(fixture: Fixture) {
+    const own = fixture.before.fighters.filter((fighter: Fighter) => fighter.owner === fixture.viewer && isStanding(fighter)).slice(0, 4);
+    for (const fighter of own) {
+        setView({ selectedId: fighter.id });
+        await sleep(STEP_MS);
+    }
+    setView({ selectedId: null });
+    await sleep(STEP_MS);
+}
+
+/** Nothing played and nothing due: whatever the board costs while nobody touches it. */
+async function idle() {
+    await sleep(IDLE_MS);
+}
+
+/** The same with the next wave due (§30.11), its warbands' zones lit and breathing. */
+async function wave() {
+    setView({ waveDue: true });
+    await sleep(IDLE_MS);
+    setView({ waveDue: false });
+}
+
+const SCENARIOS: Record<string, (fixture: Fixture, maxParts: number) => Promise<PartTiming[] | void>> = {
+    "enemy-turn": enemyTurn,
+    pan,
+    turn,
+    select,
+    idle,
+    wave,
+};
+
+/**
+ * The scenarios timed by the browser's trace alone: a frame counter of the
+ * page's own would ask for a frame every vsync, and so measure itself.
+ */
+const UNTIMED = new Set(["idle", "wave"]);
+
+/** What a WebGL board has drawn so far: frames, draw calls and triangles (`renderStats`). */
+export type GlStats = () => { frames: number; calls: number; triangles: number };
+
+/**
+ * Plays `scenario` over the battle drawn, measuring it as the page sees it:
+ * the enemy turn's first `maxParts` parts, and with `glStats`, what a WebGL
+ * board handed the GPU.
+ */
+export async function runScenario(fixture: Fixture, scenario: string, { maxParts = Infinity, glStats }: { maxParts?: number; glStats?: GlStats } = {}): Promise<ScenarioResult> {
+    const play = SCENARIOS[scenario];
+    if (!play) throw new Error(`no scenario "${scenario}": ${Object.keys(SCENARIOS).join(", ")}`);
+    const frameGaps: number[] = [];
+    const longTasks: ScenarioResult["longTasks"] = [];
+    const observer = new PerformanceObserver(list => {
+        for (const entry of list.getEntries()) longTasks.push({ start: entry.startTime, duration: entry.duration });
+    });
+    observer.observe({ type: "longtask" });
+    let recording = !UNTIMED.has(scenario);
+    let last = await nextFrame();
+    const frame = (time: number) => {
+        frameGaps.push(time - last);
+        last = time;
+        if (recording) requestAnimationFrame(frame);
+    };
+    if (recording) requestAnimationFrame(frame);
+    control.commits = [];
+    const glBefore = glStats?.();
+    const start = performance.now();
+    const parts = (await play(fixture, maxParts)) ?? [];
+    // Let the last of it land: a final glide, a commit after the last timer.
+    await sleep(500);
+    const wallMs = performance.now() - start;
+    recording = false;
+    observer.disconnect();
+    const glAfter = glStats?.();
+    const gl = glBefore && glAfter
+        ? { frames: glAfter.frames - glBefore.frames, calls: glAfter.calls - glBefore.calls, triangles: glAfter.triangles - glBefore.triangles }
+        : undefined;
+    return { scenario, wallMs, frameGaps, longTasks, commits: control.commits, parts, domNodes: boardNodes(), gl };
+}
+
+/** Once a board that draws its ground after it mounts — the 3D one marks its box ready — has drawn it. */
+export async function boardDrawn(): Promise<void> {
+    for (let box = document.querySelector<HTMLElement>(".ag-ra-3d"); box && !box.dataset.ready;) await nextFrame();
+}
+
+/** Resolves once the next board mounts. */
+export function boardMounted(): Promise<void> {
+    return new Promise(resolve => { control.committed = resolve; });
+}
+
+/** Every sheet the board draws from, fetched as it fetches them and decoded, so a scenario starts with the art in hand. */
+export const artDecoded = () => Promise.all(Object.values(ART_SHEETS).map(sheet => {
+    const image = new Image();
+    image.src = sheet.href;
+    return image.decode();
+}));
+
+/**
+ * Once a board just handed over is ready to measure, with when each step came:
+ * mounted (`mounted`, from `boardMounted` before it was rendered), its first
+ * frame, every art sheet decoded (`art`, from `artDecoded` as it was
+ * rendered), its ground drawn, and two frames more for whatever the art
+ * arriving drew.
+ */
+export async function boardSettled(mounted: Promise<void>, art: Promise<unknown>) {
+    await mounted;
+    const commitMs = performance.now();
+    const firstFrameMs = await nextFrame().then(() => performance.now());
+    await art;
+    const artMs = performance.now();
+    await boardDrawn();
+    const drawnMs = performance.now();
+    await nextFrame();
+    await nextFrame();
+    return { commitMs, firstFrameMs, artMs, drawnMs };
+}
+
+/** How long the board's mount took to render, as React's profiling build measured it. */
+export const mountRenderMs = () => control.commits.find(commit => commit.phase === "mount")?.actualMs ?? Number.NaN;
+
+/**
+ * Has the battle's map read as it was played: a scale fixture was played on a
+ * bigger Sacked Fort. The undo puts the real one back.
+ */
+export function applyFixtureMap(fixture: Fixture): () => void {
+    return fixture.recipe?.across ? registerScaledSackedFort(fixture.recipe.across) : () => {};
+}

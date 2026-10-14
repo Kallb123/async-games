@@ -116,14 +116,23 @@ plays scripted scenarios over it, and reports what each cost. It needs nothing
 but the checkout: no Next build, no Clerk, no database. An agent in a bare
 container can run it as it stands.
 
-- **`bench/realmarena/BenchApp.tsx`** is the page. It mounts the board on its
-  own, wired as `src/app/games/realmarena/[gameid]/page.tsx` wires it for a
-  co-op battle: the owners, the colours, the fog sweep, and the viewer's own
-  End turn coming back one part per warband action, each part with its own
-  playback and focus and a `STEP_BEAT_MS` rest between. It exposes
-  `window.bench.ready` and `window.bench.run(scenario)`. **Keep it in step
-  with the page**: if the page starts handing the board something new, the
-  bench should too, or it measures less than a player gets.
+- **`bench/realmarena/harness.tsx`** mounts the board on its own, wired as
+  `src/app/games/realmarena/[gameid]/page.tsx` wires it for a co-op battle:
+  the owners, the colours, the fog sweep, and the viewer's own End turn coming
+  back one part per warband action, each part with its own playback and focus
+  and a `STEP_BEAT_MS` rest between. It holds the scenarios too. **Keep it in
+  step with the page**: if the page starts handing the board something new,
+  the bench should too, or it measures less than a player gets.
+- **`bench/realmarena/summary.ts`** turns a scenario's raw measures into the
+  numbers reported (fps, frame gaps, long tasks), so the runner and the lab
+  below report the same thing.
+- **`bench/realmarena/BenchApp.tsx`**, with `entry-svg.tsx` and
+  `entry-three.tsx`, is the page the runner opens, one per renderer. It
+  exposes `window.bench.ready` and `window.bench.run(scenario)`.
+- The admin **renderer lab** (`/admin/realmarena-renderer`,
+  [`admin-tools.md`](./admin-tools.md)) imports `harness.tsx`, `summary.ts`,
+  `scaledMap.ts` and `fixtures/` to play the same scenarios on a real device,
+  so those files are app code as well and go through the app's gates.
 - **`bench/realmarena/fixtures/`** holds the battle it draws, frozen as JSON so
   every run plays exactly the same thing whatever the rules have done since.
   `bench/realmarena/fixture.ts` (`npm run ra-bench:fixture`) wrote it from
@@ -741,6 +750,14 @@ decision, best made before the renderer is built rather than after.
 5. **Today's players** get one short SVG PR (memoising, and the filters out)
    only if the migration is more than a few weeks away. Otherwise, nothing
    more is spent on the SVG.
+
+**Since then:** the camera was settled as the isometric angle turning a
+quarter at a time, drawn in three.js as real geometry, with the characters as
+their own 3D models. It's being tried in
+[`realm-arena-3d.md`](./realm-arena-3d.md). On the bench (`--renderers
+svg,three`), its own CPU cost through the enemy turn is about 2s at 2,916 tiles
+and at 16,384 alike, against 37–48s for the SVG. Its GPU side waits on a phone
+to measure.
 
 The order of work in §6.1 changes to match: steps 1 and 2 there (the SVG
 fixes) give way to the §7.2 groundwork, and step 5's painter is PixiJS (or

@@ -1,5 +1,7 @@
 'use client'
 import React, { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { TurnButtons, useBoardRotation } from '@/games/RealmArena/components/RealmArenaTurn';
+import { useBoardFocus } from '@/games/RealmArena/useBoardFocus';
 import BoardZoom, { useBoardCentre, type BoardZoomFocus, type BoardZoomPivot } from '@/components/ui/BoardZoom';
 import ClickableMapNode from '@/components/ui/ClickableMapNode';
 import MapLabelLayer from '@/components/ui/MapLabelLayer';
@@ -11,14 +13,13 @@ import { RealmArenaEffectMarks } from '@/games/RealmArena/components/RealmArenaE
 import RealmArenaFx from '@/games/RealmArena/components/RealmArenaFx';
 import type { Rect } from '@/utils/ui/mapLabels';
 import { useSvgId } from '@/utils/hooks/useSvgId';
-import { useStoredValue } from '@/utils/hooks/useStoredValue';
 import { usePrefersReducedMotion } from '@/utils/hooks/usePrefersReducedMotion';
 import { PlaybackProvider, setAttributes, translation, usePlaybackFrame, usePlaybackRef, usePlaybackValue } from '@/utils/hooks/usePlayback';
 import { CHARACTER_ART, facingCell, ITEM_ART, SMOKE_ART, spriteBox, TERRAIN_ART, type CharacterPose } from '@/games/RealmArena/art';
 import { CHARACTERS, ITEMS, type CharacterId, type ItemId } from '@/games/RealmArena/characters';
-import { ACTION_POINTS, CENTRE, isStanding, isWarband, maxHpOf, smokeSquares, type BattleState, type Fighter, type FogGhost, type MusterPick, type ToldEvent } from '@/games/RealmArena/rules';
+import { CENTRE, isStanding, isWarband, maxHpOf, smokeSquares, type BattleState, type Fighter, type FogGhost, type MusterPick, type ToldEvent } from '@/games/RealmArena/rules';
 import type { AttackOption } from '@/games/RealmArena/tactics';
-import { apPips, areaRect, captionAt, eventLines, type BattleCue, type CaptionCue, type FallCue, type FxPoints, type ScorchCue, type Shove, type Timed, type WalkCue, effectsOn, facingOf, fadeInAt, fadeOutAt, fighterStatus, aimFocus, endOf, focusOn, hpFraction, legLengthOn, progressOf, reachFocus, shakeAt, shakesOf, shovesOf, shoveAt, terrainLetter, toldAt, toldOf, walkerAt, walkCameraAt, legPoint, walkLift, walkSquares, type Told } from '@/games/RealmArena/ui';
+import { apPips, areaRect, BOARD_ZOOM, captionAt, eventLines, HP_BAR_HEIGHT, HP_BAR_RISE, HP_BAR_WIDTH, type BattleCue, type BoardFollow, type CaptionCue, type FallCue, type FxPoints, type ScorchCue, type Shove, type Timed, type WalkCue, effectsOn, facingOf, fadeInAt, fadeOutAt, fighterStatus, endOf, hpFraction, legLengthOn, progressOf, shakeAt, shakesOf, shovesOf, shoveAt, terrainLetter, toldAt, toldOf, walkerAt, walkCameraAt, legPoint, walkLift, walkSquares, type Told } from '@/games/RealmArena/ui';
 
 /** How deep the ground is drawn under the map's front edges, in quarters. */
 const SLAB_DEPTH = 3;
@@ -36,19 +37,12 @@ const MIN_ASPECT = 0.7;
  * facing the way it last stepped, over a shadow; fallen, it lies there. Its
  * body is taken as a disc `FIGURE_RADIUS` across, `FIGURE_RISE` above the
  * middle of the square's top — what a tap lands on, what its marks sit
- * beside and what a shot flies to — and the tallest of them (a mage's hat, a
- * staff's head) stands about `FIGURE_TOP` high, with its HP bar just over
- * that: a model drawn taller in art-masters/realmarena/characters wants this
- * raised with it. Everything here is in board units, against a square
- * `2 * ISO_HALF_WIDTH` across.
+ * beside and what a shot flies to — and it stands `FIGURE_TOP` high under its
+ * HP bar (`HP_BAR_*`, ui.ts, which every way of drawing the board shares).
+ * Everything here is in board units, against a square `2 * ISO_HALF_WIDTH` across.
  */
 const FIGURE_RADIUS = 4.5;
 const FIGURE_RISE = 7;
-const FIGURE_TOP = 12.5;
-const HP_BAR_WIDTH = 9;
-const HP_BAR_HEIGHT = 2;
-/** How high the HP bar's foot is over the middle of its square. */
-const HP_BAR_RISE = FIGURE_TOP + 0.5;
 /**
  * The rings on the ground round a figure's feet, as fractions of its square's
  * diamond: the one it's picked out by, wide enough to show round its feet,
@@ -92,8 +86,7 @@ const HEADROOM = ODDS_RISE + ODDS_HEIGHT / 2 + 1;
 /** How the battlefield is laid out on the board, at whichever turn it's viewed from. */
 const VIEW = { base: SLAB_DEPTH, headroom: HEADROOM, minAspect: MIN_ASPECT };
 
-/** A target picked to aim at, and who is aiming at it: what `follow` frames close (`aimFocus`). */
-export interface AimFollow { aim: { caster: Square; target: Square }; key: string }
+export type { AimFollow } from '@/games/RealmArena/ui';
 
 interface RealmArenaBoardProps {
     field: Battlefield;
@@ -145,7 +138,7 @@ interface RealmArenaBoardProps {
      * squares are only where it starts, and `WalkCamera` follows the walker
      * from there.
      */
-    follow?: { squares: readonly Square[]; key: string; exact?: boolean; close?: boolean; track?: boolean } | AimFollow | null;
+    follow?: BoardFollow | null;
     /**
      * Where the view rests when nothing else says where to look — the
      * viewer's own side, as the board opens and whenever a selection, a pick
@@ -962,15 +955,11 @@ function blasting(artId: string, view: IsoView, playback: Playback, cue: ScorchC
  * there after it (`BoardZoom`'s `pivot`).
  */
 export default function RealmArenaBoard({ field, fighters, fogGhosts = [], unseen, clouds, sides, sealed, owners, waveDue = false, showCentre = true, viewerId, colourFor, nameFor, selected, onSelect, placing, aiming, acting, refocus = 0, follow, home, odds, coverAt, overlay, playback, onPlayed, unplaced }: RealmArenaBoardProps) {
-    const [storedRotation, storeRotation] = useStoredValue(`realmarena-board-rotation-${viewerId}`);
-    const rotation = storedRotation === '1' || storedRotation === '2' || storedRotation === '3'
-        ? Number(storedRotation) as IsoRotation
-        : 0;
+    const [rotation, turnBy] = useBoardRotation(viewerId);
     const [turned, setTurned] = useState<Turned>({ from: rotation, turns: 0 });
     const turn = (by: 1 | 3) => {
-        const next = ((rotation + by) % 4) as IsoRotation;
         setTurned(({ turns }) => ({ from: rotation, turns: turns + 1 }));
-        storeRotation(String(next));
+        turnBy(by);
     };
 
     // The ground changes only when cover is blasted away, so it's laid out once a battlefield, and again each turn of the view.
@@ -1014,34 +1003,16 @@ export default function RealmArenaBoard({ field, fighters, fogGhosts = [], unsee
         return seat < 0 ? undefined : tintId(artId, seat);
     };
 
-    // A character selected in battle brings the near half of where it could move into
-    // view, rather than just the squares round it — zoomed exactly to that,
-    // since a full turn's reach is too wide for any step but the fit. A search
-    // over the whole map, so only redone when the selection or the board moves.
-    const reachRect = useMemo(
-        () => selected && isStanding(selected) ? reachFocus({ field, fighters, sides }, selected, acting === selected.owner ? selected.ap : ACTION_POINTS) : null,
-        [field, fighters, sides, selected, acting],
-    );
-
-    // A character picked up to place is brought close enough to tap a square beside it.
-    const pickedUp = placing?.selected != null ? sealed?.[placing.selected] : undefined;
-    // A review follows its steps, as Race Cars follows a roll, ahead of anything selected.
-    let focus: BoardZoomFocus | null = null;
-    if (follow && 'aim' in follow) focus = { rect: isoBounds(view, aimFocus(field, follow.aim.caster, follow.aim.target)), key: `follow:${follow.key}`, exact: true };
-    else if (follow && follow.squares.length > 0) focus = { rect: isoBounds(view, (follow.close ? aimFocus : focusOn)(field, ...follow.squares)), key: `follow:${follow.key}`, exact: follow.exact };
-    else if (pickedUp) focus = { rect: isoBounds(view, focusOn(field, pickedUp.square)), key: `pick:${pickedUp.square}:${refocus}` };
-    else if (selected) focus = { rect: isoBounds(view, reachRect ?? focusOn(field, selected.square)), key: `${selected.id}:${selected.square}:${refocus}`, exact: true };
-    else if (home && home.squares.length > 0) focus = { rect: isoBounds(view, focusOn(field, ...home.squares)), key: home.key, exact: true };
+    // A review follows its steps, as Race Cars follows a roll, ahead of anything
+    // selected; a character selected in battle brings the near half of where it
+    // could move into view, zoomed exactly to that, since a full turn's reach is
+    // too wide for any step but the fit. What plays waits for the glide there (`held`).
+    const { area, held, onFocused, tracks } = useBoardFocus({ field, fighters, sides, selected, acting, sealed, placing, follow, home, refocus, playing: !!playback });
+    let focus: BoardZoomFocus | null = area && { rect: isoBounds(view, area.area), key: area.key, exact: area.exact };
 
     // While an action plays, its caption floats over the foot of the frame
     // (`PlaybackCaption`), so the view frames it clear of that strip.
     if (focus && playback) focus = { ...focus, inset: CAPTION_INSET };
-
-    // What the board plays waits for the view to get there: an action plays
-    // only once the glide to it has landed, so nothing happens while the
-    // board is still moving (`held`, which stands the playback's clock still).
-    const [landed, setLanded] = useState<string | null>(null);
-    const held = !!playback && !!focus && landed !== focus.key;
 
     const centreSquares = showCentre ? field.objectives[CENTRE] ?? [] : [];
     const centre = centreSquares.length > 0 ? areaRect(field, centreSquares) : null;
@@ -1134,7 +1105,7 @@ export default function RealmArenaBoard({ field, fighters, fogGhosts = [], unsee
     }
     // A walk too long to frame is followed (`WalkCamera`): the first walker the
     // action walks, once the view has landed where it starts and the clock runs.
-    const tracked = follow && !('aim' in follow) && follow.track && playback && !held ? walking.values().next().value : undefined;
+    const tracked = tracks ? walking.values().next().value : undefined;
     const arrival = (fighterId: number): number | undefined => {
         const walks = walking.get(fighterId);
         return walks && endOf(walks);
@@ -1222,10 +1193,7 @@ export default function RealmArenaBoard({ field, fighters, fogGhosts = [], unsee
     return (
         <div className="ag-board-frame ag-realmarena-frame">
             <PlaybackProvider playKey={playback?.key ?? null} end={playback ? endOf(playback.cues) : 0} held={held} onEnd={onPlayed}>
-                {/* 84 squares corner to corner fitted to a phone is under ten
-                    pixels a square, so the deep step is what makes one
-                    tappable: about seven squares across (§13.1). */}
-                <BoardZoom zoomWidth={250} maxWidth={600} viewBox={view.size} focus={focus} onFocused={setLanded} pivot={pivot}>
+                <BoardZoom zoomWidth={BOARD_ZOOM.zoomWidth} maxWidth={BOARD_ZOOM.maxWidth} viewBox={view.size} focus={focus} onFocused={onFocused} pivot={pivot}>
                     <svg viewBox={`0 0 ${width} ${height}`} role="img" aria-label={`The ${field.name}`}>
                         <g ref={shakeBoard}>
                             <g className="ag-ra-ground--earth">
@@ -1337,10 +1305,7 @@ export default function RealmArenaBoard({ field, fighters, fogGhosts = [], unsee
                 {/* Turning the view: beside BoardZoom rather than in it, since
                     turning is this board's own, in the top corner opposite the
                     zoom pill. */}
-                <div className="ag-board-tag ag-ra-turn" role="group" aria-label="Turn the view">
-                    <button type="button" onClick={() => turn(3)} aria-label="Turn the view anticlockwise" title="Turn anticlockwise">↺</button>
-                    <button type="button" onClick={() => turn(1)} aria-label="Turn the view clockwise" title="Turn clockwise">↻</button>
-                </div>
+                <TurnButtons onTurn={turn} />
                 {/* Over the foot of the frame, out of the zoom: while an action plays,
                     what is happening in words; otherwise the targets, which want the
                     same spot while a character is selected. */}

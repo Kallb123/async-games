@@ -60,6 +60,9 @@ export const ART_SHEETS = {
 
 export type ArtSheet = keyof typeof ART_SHEETS;
 
+/** The characters' models as data, which the 3D board builds its figures from (three/characterModels.ts). Written by `npm run ra-characters`. */
+export const CHARACTER_MODELS_HREF = "/art/realmarena/characters.json";
+
 /** The width of a square's diamond on a sheet. */
 const TILE_PX = 64;
 /** Board units per pixel of a sheet. */

@@ -7,7 +7,7 @@ import { at, fieldOf, hillOf } from "@/utils/games/battlefield/testFixtures";
 import { ACTION_POINTS, isWarband, newFighter, reachOf, warbandOwner, type BattleEvent, type Fighter, type ToldEvent } from "./rules";
 import { ABILITIES, kitOf, type CharacterId } from "./characters";
 import { EFFECT_ART, ITEM_ART, type Missile } from "./art";
-import { abilityWait, actionFollow, oddsLines, aimFocus, coopColourOf, ALLY_COLOUR, ENEMY_COLOUR, TEAM_COLOUR, actionSquares, apPips, friendlySquares, spreadWide, areaRect, battleCues, canAct, effectsOn, eventLines, facingOf, fighterName, fighterStatus, focusOn, handItem, handOut, hpFraction, itemsOf, NO_ITEMS, numberedName, placeTap, reachFocus, reachShading, squadCounts, squadOf, whoseName, FLIGHT_PACE, CLIMB_LEG, DIAGONAL_LEG, flightMs, legWeight, HIT_TEXT_MS, PLAYBACK_MS, WALK_STEP_MS, moveFrame, isUnplaced, type BattleCue, type Placement, waveLineOf, reviewParts, withPartState, partLabel, HP_CHIP_MS, HP_TWEEN_MS, stepped, toldAt, toldOf, type TextCue, IMPACT_MS, KNOCK, LUNGE, SHAKE, SHAKE_MS, WALK_BOB, WALK_HOP, shakeAt, shakesOf, shoveAt, shovesOf, endOf, captionAt, legLengthOn, walkEase, walkerAt, walkerGroundAt, walkCameraAt, walkLift, walkSquares, flightAt, hitTextAt, POP_MS, burstAt, slashAt, progressOf, fadeOutAt, fadeInAt, FLIGHT_ARC, type FxPoints, type CaptionCue, type FallCue, type FlightCue, type SlashCue, type WalkCue } from "./ui";
+import { abilityWait, actionFollow, boardFocus, oddsLines, aimFocus, coopColourOf, ALLY_COLOUR, ENEMY_COLOUR, TEAM_COLOUR, actionSquares, apPips, friendlySquares, spreadWide, areaRect, battleCues, canAct, effectsOn, eventLines, facingOf, fighterName, fighterStatus, focusOn, handItem, handOut, hpFraction, itemsOf, NO_ITEMS, numberedName, placeTap, reachFocus, reachShading, squadCounts, squadOf, whoseName, FLIGHT_PACE, CLIMB_LEG, DIAGONAL_LEG, flightMs, legWeight, HIT_TEXT_MS, PLAYBACK_MS, WALK_STEP_MS, moveFrame, isUnplaced, type BattleCue, type Placement, waveLineOf, reviewParts, withPartState, partLabel, HP_CHIP_MS, HP_TWEEN_MS, stepped, toldAt, toldOf, type TextCue, IMPACT_MS, KNOCK, LUNGE, SHAKE, SHAKE_MS, WALK_BOB, WALK_HOP, shakeAt, shakesOf, shoveAt, shovesOf, endOf, captionAt, legLengthOn, walkEase, walkerAt, walkerGroundAt, walkCameraAt, walkLift, walkSquares, flightAt, hitTextAt, POP_MS, burstAt, slashAt, progressOf, fadeOutAt, fadeInAt, FLIGHT_ARC, type FxPoints, type CaptionCue, type FallCue, type FlightCue, type SlashCue, type WalkCue } from "./ui";
 import type { OddsBreakdown } from "./rules";
 import type { IRealmArenaStepOutcome, RealmArenaPartState } from "./apiModels";
 
@@ -301,6 +301,35 @@ describe("aimFocus", () => {
     it("frames closer than focusOn does", () => {
         const caster = squareAt(RUINED_FORT, 10, 20)!, target = squareAt(RUINED_FORT, 11, 20)!;
         expect(aimFocus(RUINED_FORT, caster, target).width).toBeLessThan(focusOn(RUINED_FORT, caster, target).width);
+    });
+});
+
+describe("boardFocus", () => {
+    const a = squareAt(RUINED_FORT, 10, 20)!, b = squareAt(RUINED_FORT, 14, 18)!;
+    const knight = { ...newFighter(0, "alice", "knight", a), ap: 3 };
+    const reach = { x: 1, y: 2, width: 3, height: 4 };
+    const home = { squares: [b], key: "home" };
+
+    it("follows an aim, then a step's squares, ahead of anything picked or selected", () => {
+        const all = { pickedUp: { square: b }, selected: knight, reach, home };
+        expect(boardFocus(RUINED_FORT, { ...all, follow: { aim: { caster: a, target: b }, key: "k" } }))
+            .toEqual({ area: aimFocus(RUINED_FORT, a, b), key: "follow:k", exact: true });
+        expect(boardFocus(RUINED_FORT, { ...all, follow: { squares: [a, b], key: "k", exact: true } }))
+            .toEqual({ area: focusOn(RUINED_FORT, a, b), key: "follow:k", exact: true });
+        expect(boardFocus(RUINED_FORT, { ...all, follow: { squares: [a, b], key: "k", close: true } })?.area).toEqual(aimFocus(RUINED_FORT, a, b));
+    });
+
+    it("frames a character picked up ahead of the selected one, and the selected one's reach ahead of its square", () => {
+        expect(boardFocus(RUINED_FORT, { follow: { squares: [], key: "none" }, pickedUp: { square: b }, selected: knight, reach, refocus: 2 }))
+            .toEqual({ area: focusOn(RUINED_FORT, b), key: `pick:${b}:2` });
+        expect(boardFocus(RUINED_FORT, { selected: knight, reach, home })).toEqual({ area: reach, key: `${knight.id}:${a}:0`, exact: true });
+        expect(boardFocus(RUINED_FORT, { selected: knight, home })?.area).toEqual(focusOn(RUINED_FORT, a));
+    });
+
+    it("falls back on the viewer's own side, then on nowhere", () => {
+        expect(boardFocus(RUINED_FORT, { home })).toEqual({ area: focusOn(RUINED_FORT, b), key: "home", exact: true });
+        expect(boardFocus(RUINED_FORT, { home: { squares: [], key: "home" } })).toBeNull();
+        expect(boardFocus(RUINED_FORT, {})).toBeNull();
     });
 });
 

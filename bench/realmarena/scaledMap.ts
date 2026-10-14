@@ -9,7 +9,9 @@
 // It's registered over the Sacked Fort's own id (`registerScaledSackedFort`) — by
 // fixture.ts while the battle is played, and by the bench page before it draws —
 // so the engine, `reviewParts` and the board all read the bigger map without a
-// line of the game knowing. Bench only: nothing under src/ imports this.
+// line of the game knowing — and handed back (the undo it returns) as soon as
+// it's done with, since in the app, where the admin renderer lab draws these
+// battles, every other Sacked Fort in the tab reads the same id.
 
 import { REALM_ARENA_MAPS } from "@/games/RealmArena/maps";
 import { SACKED_FORT_THREE_MAP } from "@/games/RealmArena/maps/sackedFort";
@@ -34,7 +36,10 @@ export function scaledSackedFort(size: number): Battlefield {
     });
 }
 
-/** Has every reader of the Sacked Fort's id read the scaled one instead, from here on in this process or page. */
-export function registerScaledSackedFort(size: number): void {
-    (REALM_ARENA_MAPS as Record<string, Battlefield>)[SCALED_MAP_ID] = scaledSackedFort(size);
+/** Has every reader of the Sacked Fort's id read the scaled one instead, until the undo it returns is called. */
+export function registerScaledSackedFort(size: number): () => void {
+    const maps = REALM_ARENA_MAPS as Record<string, Battlefield>;
+    const was = maps[SCALED_MAP_ID];
+    maps[SCALED_MAP_ID] = scaledSackedFort(size);
+    return () => { maps[SCALED_MAP_ID] = was; };
 }

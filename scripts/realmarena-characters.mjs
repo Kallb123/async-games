@@ -11,6 +11,10 @@
 //   characters-team.png  the same grid holding only the owner's colour, drawn
 //                        grey and shaded: what the board tints with each
 //                        seat's colour and lays over the figure
+//   characters.json      every master's parts and the kit's materials, as
+//                        data: what the 3D board builds its figures from
+//                        (src/games/RealmArena/three/characterModels.ts),
+//                        since art-masters is never deployed
 //
 // The layout is `CHARACTER_ART`'s, in src/games/RealmArena/art.ts, and read
 // from there: each cell keeps every Realm Arena sheet's convention — its width
@@ -27,16 +31,17 @@
 //   --preview <file.png>   also write the sheet tinted in the seat colours,
 //                          each figure on its square, to look at
 
-import { mkdir } from 'node:fs/promises';
+import { mkdir, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { parseArgs } from 'node:util';
 import sharp from 'sharp';
 
-import { ART_SHEETS, CHARACTER_ART, CHARACTER_CELL, CHARACTER_POSES } from '../src/games/RealmArena/art.ts';
+import { ART_SHEETS, CHARACTER_ART, CHARACTER_CELL, CHARACTER_MODELS_HREF, CHARACTER_POSES } from '../src/games/RealmArena/art.ts';
 import { CHARACTER_IDS } from '../src/games/RealmArena/roster.ts';
 import { FACING_COUNT } from '../src/utils/games/battlefield/terrain.ts';
 import { PLAYER_COLOURS } from '../src/utils/ui/playerColours.ts';
+import { modelsJson } from './lib/characterModels.mjs';
 import { FACINGS, hexToRgb, renderCell } from './lib/isoRender.mjs';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -66,8 +71,12 @@ function place(pixels, into, sprite) {
     }
 }
 
+/** Each character's parts, in `CHARACTER_IDS` order, for characters.json. */
+const models = {};
+
 for (const id of ids) {
     const { parts } = await import(pathToFileURL(path.join(MASTERS, `${id}.mjs`)).href);
+    models[id] = parts;
     for (const pose of CHARACTER_POSES) {
         if (!POSES[pose]) throw new Error(`kit.mjs doesn't say how to draw a character ${pose}`);
         const art = CHARACTER_ART[id][pose];
@@ -92,6 +101,10 @@ if (!options.only) {
         const { size } = await png(pixels).toFile(file);
         console.log(`${path.relative(ROOT, file)}: ${sheetWidth}x${sheetHeight}, ${Math.round(size / 1024)}KB`);
     }
+    const file = path.join(ROOT, 'public', CHARACTER_MODELS_HREF);
+    const json = modelsJson(MATERIALS, models);
+    await writeFile(file, json);
+    console.log(`${path.relative(ROOT, file)}: ${ids.length} characters, ${Math.round(json.length / 1024)}KB`);
 }
 
 if (options.preview) {

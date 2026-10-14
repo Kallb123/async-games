@@ -57,7 +57,12 @@ the battlefield's own isometric projection (`scripts/lib/isoRender.mjs`), into
 `public/art/realmarena/characters.png` (a row per character per pose, a column
 per facing — `CHARACTER_ART` in `src/games/RealmArena/art.ts` is the layout)
 and `characters-team.png` (just the owner's colour, grey and shaded, which the
-board tints per seat and lays over the figure). Commit both after changing a
-master. While working on one, `npm run ra-characters -- --only knight
+board tints per seat and lays over the figure). It also writes
+`characters.json`: every master's parts and `kit.mjs`'s materials as data,
+which the 3D board fetches and builds its figures from
+(`src/games/RealmArena/three/characterModels.ts`). This folder is never
+deployed (`.vercelignore`), so the app reads the masters only through that
+file, and a test fails if it falls behind them. Commit all three after
+changing a master. While working on one, `npm run ra-characters -- --only knight
 --preview /tmp/knight.png` draws just that character, tinted and standing on
 its square, without touching the sheets.

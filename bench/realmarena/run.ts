@@ -8,10 +8,13 @@
 //   npm run ra-bench                          every scenario, three runs, this checkout
 //   npm run ra-bench -- --against main        and the same against `main`, interleaved
 //   npm run ra-bench -- --scenarios enemy-turn,idle --runs 5 --label fewer-filters
+//   npm run ra-bench -- --renderers svg,three  the isometric board beside the 3D one (docs/realm-arena-3d.md)
 //
 // Options:
 //   --against <ref>    also measure <ref>'s src/ (a git worktree outside the repo),
 //                      interleaving the two so drift on the machine hits both alike
+//   --renderers <a,b>  which boards to draw this checkout with: svg (the isometric board, the
+//                      default) and three (the 3D experiment); --against draws its ref with the first
 //   --scenarios <a,b>  any of load, idle, wave, pan, turn, select, enemy-turn (default: all)
 //   --runs <n>         runs of each scenario per checkout (default 3); medians are reported
 //   --fixture <name>   holdout (default), holdout-fog, or holdout-8k / holdout-16k (the same
@@ -20,6 +23,9 @@
 //   --parts <n>        play only the enemy turn's first <n> parts
 //   --label <name>     names the report (default: the time)
 //   --trace            keep each scenario's first Chrome trace, for DevTools' Performance panel
+//   --screenshot       save a picture of each variant's board as it opens, to see what was measured
+//   --headed           a visible browser, which draws WebGL on the machine's GPU where it has one: the
+//                      3D board's GPU cost is only real this way (headless, without a GPU, it's software)
 //
 // What it measures is the bench page, BenchApp.tsx, bundled with esbuild against
 // each checkout's src/ — so the same harness measures the board before and
@@ -36,7 +42,8 @@ import { extname, join, normalize } from "node:path";
 import { fileURLToPath } from "node:url";
 import { parseArgs } from "node:util";
 import type { LoadResult, ScenarioResult } from "./BenchApp";
-import { percentile } from "../../scripts/lib/realmArenaBalance";
+import { percentile } from "@/utils/performance";
+import { formatMetric, scenarioSummary } from "./summary";
 
 const REPO = fileURLToPath(new URL("../..", import.meta.url));
 const BENCH = join(REPO, "bench/realmarena");
@@ -47,6 +54,7 @@ type Scenario = typeof SCENARIOS[number];
 const { values: options } = parseArgs({
     options: {
         against: { type: "string" },
+        renderers: { type: "string", default: "svg" },
         scenarios: { type: "string" },
         runs: { type: "string", default: "3" },
         fixture: { type: "string", default: "holdout" },
@@ -54,12 +62,18 @@ const { values: options } = parseArgs({
         parts: { type: "string" },
         label: { type: "string" },
         trace: { type: "boolean", default: false },
+        screenshot: { type: "boolean", default: false },
+        headed: { type: "boolean", default: false },
     },
 });
 const runs = Number(options.runs);
 const cpu = Number(options.cpu);
 const scenarios = (options.scenarios?.split(",") ?? [...SCENARIOS]) as Scenario[];
 for (const scenario of scenarios) if (!SCENARIOS.includes(scenario)) throw new Error(`no scenario "${scenario}": ${SCENARIOS.join(", ")}`);
+const RENDERERS = ["svg", "three"] as const;
+type Renderer = typeof RENDERERS[number];
+const renderers = options.renderers!.split(",") as Renderer[];
+for (const renderer of renderers) if (!RENDERERS.includes(renderer)) throw new Error(`no renderer "${renderer}": ${RENDERERS.join(", ")}`);
 if (!existsSync(join(BENCH, "fixtures", `${options.fixture}.json`))) throw new Error(`no fixture "${options.fixture}" in bench/realmarena/fixtures`);
 
 // The phone every run is on: the perf journeys' Pixel 7, with motion allowed, since the motion is what's measured.
@@ -71,6 +85,8 @@ const TRACE_CATEGORIES = ["toplevel", "devtools.timeline", "disabled-by-default-
 
 interface Variant {
     name: string;
+    /** Which board it draws: the bench's entry for it (entry-<renderer>.tsx). */
+    renderer: Renderer;
     /** The checkout whose src/ and public/ the page is built and served from. */
     root: string;
     /** The commit it's at, and whether this checkout had uncommitted changes. */
@@ -104,7 +120,7 @@ function resolving(root: string): Plugin {
 async function bundle(variant: Variant) {
     rmSync(variant.out, { recursive: true, force: true });
     await build({
-        entryPoints: { bench: join(BENCH, "BenchApp.tsx") },
+        entryPoints: { bench: join(BENCH, `entry-${variant.renderer}.tsx`) },
         outdir: variant.out,
         bundle: true,
         minify: true,
@@ -168,18 +184,22 @@ function serve(variant: Variant): Promise<void> {
 }
 
 function variants(): Variant[] {
-    const current: Variant = {
-        name: "current", root: REPO, commit: git(REPO, "rev-parse", "--short", "HEAD"),
-        dirty: git(REPO, "status", "--porcelain", "--", "src", "public").length > 0, out: join(OUT, ".build/current"),
-    };
-    if (!options.against) return [current];
-    const commit = git(REPO, "rev-parse", "--short", `${options.against}^{commit}`);
+    const commit = git(REPO, "rev-parse", "--short", "HEAD");
+    const dirty = git(REPO, "status", "--porcelain", "--", "src", "public").length > 0;
+    // Named by the renderer only where there's more than one to tell apart.
+    const named = (base: string, renderer: Renderer) => renderers.length > 1 || renderer !== "svg" ? `${base} ${renderer}` : base;
+    const current = renderers.map((renderer): Variant => ({
+        name: named("current", renderer), renderer, root: REPO, commit, dirty, out: join(OUT, `.build/current-${renderer}`),
+    }));
+    if (!options.against) return current;
+    const against = git(REPO, "rev-parse", "--short", `${options.against}^{commit}`);
     // Outside the repo, so nothing that sweeps it (tsc, eslint, vitest) finds a second copy of src/.
-    const root = join(tmpdir(), "ra-bench-worktrees", commit);
+    const root = join(tmpdir(), "ra-bench-worktrees", against);
     rmSync(root, { recursive: true, force: true });
     execFileSync("git", ["worktree", "prune"], { cwd: REPO });
-    execFileSync("git", ["worktree", "add", "--detach", root, commit], { cwd: REPO, stdio: "ignore" });
-    return [{ name: options.against, root, commit, dirty: false, temporary: true, out: join(OUT, `.build/${commit}`) }, current];
+    execFileSync("git", ["worktree", "add", "--detach", root, against], { cwd: REPO, stdio: "ignore" });
+    const renderer = renderers[0];
+    return [{ name: named(options.against, renderer), renderer, root, commit: against, dirty: false, temporary: true, out: join(OUT, `.build/${against}-${renderer}`) }, ...current];
 }
 
 function removeWorktrees(list: Variant[]) {
@@ -201,14 +221,21 @@ interface Run {
     errors: string[];
 }
 
+/**
+ * WebGL in software, where there's no GPU — as in a cloud container — so the 3D
+ * board can draw at all: Chromium otherwise refuses it the software renderer.
+ * It changes nothing for the isometric board, which uses no WebGL.
+ */
+const ARGS = ["--enable-unsafe-swiftshader"];
+
 async function launch(): Promise<Browser> {
     try {
-        return await chromium.launch();
+        return await chromium.launch({ args: ARGS, headless: !options.headed });
     } catch (error) {
         // This Playwright's own Chromium isn't installed: the container's (see the environment's notes) or one named.
         const executablePath = process.env.RA_BENCH_CHROMIUM ?? "/opt/pw-browsers/chromium";
         if (!existsSync(executablePath)) throw error;
-        return chromium.launch({ executablePath });
+        return chromium.launch({ executablePath, args: ARGS, headless: !options.headed });
     }
 }
 
@@ -225,6 +252,16 @@ async function measure(browser: Browser, variant: Variant, scenario: Scenario, r
         if (scenario === "load") await browser.startTracing(page, { categories: TRACE_CATEGORIES });
         await page.goto(`${variant.url}?${query}`);
         const load = await page.evaluate(() => window.bench!.ready);
+        if (options.screenshot && run === 0) {
+            // The warm-up load, settled into its opening view, and then close on the first character selected.
+            const shot = (what: string) => page.locator(".ag-realmarena-frame").screenshot({ path: join(OUT, `board-${options.fixture}-${variant.name.replace(/\W+/g, "-")}-${what}.png`) });
+            await page.waitForTimeout(1500);
+            await shot("open");
+            const selecting = page.evaluate(() => window.bench!.run("select"));
+            await page.waitForTimeout(1200);
+            await shot("selected");
+            await selecting;
+        }
         let result: ScenarioResult | undefined;
         if (scenario !== "load") {
             // Settled: the board's opening glide home, and anything the art arriving set off.
@@ -233,7 +270,7 @@ async function measure(browser: Browser, variant: Variant, scenario: Scenario, r
             result = await page.evaluate(name => window.bench!.run(name), scenario);
         }
         const raw = await browser.stopTracing();
-        if (options.trace && run === 1) writeFileSync(join(OUT, `trace-${options.fixture}-${scenario}-${variant.commit}.json`), raw);
+        if (options.trace && run === 1) writeFileSync(join(OUT, `trace-${options.fixture}-${scenario}-${variant.commit}-${variant.renderer}.json`), raw);
         const { usedSize } = await cdp.send("Runtime.getHeapUsage");
         return { variant: variant.name, scenario, run, load, result, trace: summariseTrace(raw), heapMb: usedSize / 2 ** 20, errors };
     } finally {
@@ -246,7 +283,7 @@ async function measure(browser: Browser, variant: Variant, scenario: Scenario, r
 interface TraceEvent { name: string; ph: string; ts: number; dur?: number; pid: number; tid: number; args?: { name?: string } }
 
 /** The main thread's busy time split by what it was doing (each event's self time, under the nearest kind it is or is inside), and the raster and image decoding off it. */
-interface TraceSummary { mainMs: number; scriptMs: number; gcMs: number; styleMs: number; layoutMs: number; paintMs: number; otherMs: number; rasterMs: number; decodeMs: number; frames: number; paints: number }
+interface TraceSummary { mainMs: number; scriptMs: number; gcMs: number; styleMs: number; layoutMs: number; paintMs: number; commitMs: number; otherMs: number; rasterMs: number; decodeMs: number; gpuMs: number; frames: number; paints: number }
 
 const KINDS: Record<string, keyof TraceSummary> = {
     FunctionCall: "scriptMs", EvaluateScript: "scriptMs", "v8.compile": "scriptMs", "v8.compileModule": "scriptMs", "v8.evaluateModule": "scriptMs",
@@ -254,20 +291,26 @@ const KINDS: Record<string, keyof TraceSummary> = {
     MajorGC: "gcMs", MinorGC: "gcMs", "V8.GCScavenger": "gcMs", "V8.GCCompactor": "gcMs", "V8.GCFinalizeMC": "gcMs", "V8.GCIncrementalMarking": "gcMs",
     UpdateLayoutTree: "styleMs", RecalculateStyles: "styleMs", ParseAuthorStyleSheet: "styleMs",
     Layout: "layoutMs",
-    PrePaint: "paintMs", Paint: "paintMs", Layerize: "paintMs", UpdateLayerTree: "paintMs", Commit: "paintMs", PaintImage: "paintMs",
+    PrePaint: "paintMs", Paint: "paintMs", Layerize: "paintMs", UpdateLayerTree: "paintMs", PaintImage: "paintMs",
+    // Handing the frame to the compositor — which, for a WebGL canvas, waits on the GPU drawing it.
+    Commit: "commitMs",
 };
 
 function summariseTrace(raw: Buffer): TraceSummary {
     const parsed = JSON.parse(raw.toString("utf8")) as { traceEvents?: TraceEvent[] } | TraceEvent[];
     const events = Array.isArray(parsed) ? parsed : parsed.traceEvents ?? [];
-    const summary: TraceSummary = { mainMs: 0, scriptMs: 0, gcMs: 0, styleMs: 0, layoutMs: 0, paintMs: 0, otherMs: 0, rasterMs: 0, decodeMs: 0, frames: 0, paints: 0 };
+    const summary: TraceSummary = { mainMs: 0, scriptMs: 0, gcMs: 0, styleMs: 0, layoutMs: 0, paintMs: 0, commitMs: 0, otherMs: 0, rasterMs: 0, decodeMs: 0, gpuMs: 0, frames: 0, paints: 0 };
     // The renderer's main thread that did the most: the page's, rather than a spare renderer's.
-    const mains = new Set(events.filter(event => event.ph === "M" && event.name === "thread_name" && event.args?.name === "CrRendererMain").map(event => `${event.pid}:${event.tid}`));
+    const threadsNamed = (name: string) => new Set(events.filter(event => event.ph === "M" && event.name === "thread_name" && event.args?.name === name).map(event => `${event.pid}:${event.tid}`));
+    const mains = threadsNamed("CrRendererMain");
+    // The GPU process's main thread: where WebGL is drawn — in software, where there's no GPU.
+    const gpus = threadsNamed("CrGpuMain");
     const byThread = new Map<string, TraceEvent[]>();
     for (const event of events) {
         if (event.ph !== "X" || event.dur === undefined) continue;
         if (event.name === "RasterTask") summary.rasterMs += event.dur / 1000;
         if (event.name === "ImageDecodeTask" || event.name === "Decode Image") summary.decodeMs += event.dur / 1000;
+        if (event.name === "GPUTask" && gpus.has(`${event.pid}:${event.tid}`)) summary.gpuMs += event.dur / 1000;
         const thread = `${event.pid}:${event.tid}`;
         if (!mains.has(thread)) continue;
         const list = byThread.get(thread) ?? [];
@@ -303,57 +346,27 @@ const total = (events: TraceEvent[]) => events.reduce((sum, event) => sum + (eve
 /** Nearest rank, as every other percentile in the repo is; NaN for nothing to rank. */
 const median = (values: number[]): number => {
     const ranked = values.filter(Number.isFinite);
-    return ranked.length === 0 ? Number.NaN : percentile(ranked, 0.5);
+    return ranked.length === 0 ? Number.NaN : percentile(ranked.sort((a, b) => a - b), 0.5);
 };
-const sum = (values: number[]) => values.reduce((a, b) => a + b, 0);
 
 /** One run's numbers, by metric. Lower is better for every one but fps. */
 function metrics({ load, result, trace, heapMb }: Run, scenario: Scenario): Record<string, number> {
     const row: Record<string, number> = {};
     if (scenario === "load") {
         Object.assign(row, {
-            "board committed (ms)": load.commitMs, "first frame (ms)": load.firstFrameMs, "art decoded (ms)": load.artMs,
+            "board committed (ms)": load.commitMs, "first frame (ms)": load.firstFrameMs, "art decoded (ms)": load.artMs, "board drawn (ms)": load.drawnMs,
             "mount render (ms)": load.mountActualMs, "board elements": load.domNodes, "tiles": load.tiles,
         });
     }
-    if (result) {
-        const gaps = result.frameGaps;
-        const tasks = result.longTasks.map(task => task.duration);
-        row["wall (ms)"] = result.wallMs;
-        if (gaps.length > 0) {
-            Object.assign(row, {
-                "fps": gaps.length / (sum(gaps) / 1000),
-                "frame gap p95 (ms)": percentile(gaps, 0.95),
-                "frame gap max (ms)": Math.max(...gaps),
-                "frames over 50ms": gaps.filter(gap => gap > 50).length,
-            });
-        }
-        Object.assign(row, {
-            "long tasks": tasks.length,
-            "blocking (ms)": sum(tasks.map(duration => Math.max(0, duration - 50))),
-            "longest task (ms)": tasks.length ? Math.max(...tasks) : 0,
-            "react commits": result.commits.length,
-            "react render (ms)": sum(result.commits.map(commit => commit.actualMs)),
-            "board elements": result.domNodes,
-        });
-        if (result.parts.length > 0) {
-            Object.assign(row, {
-                "parts played": result.parts.length,
-                "part overrun mean (ms)": sum(result.parts.map(part => part.wallMs - part.cueMs)) / result.parts.length,
-                "parts timed out": result.parts.filter(part => part.timedOut).length,
-            });
-        }
-    }
+    if (result) Object.assign(row, scenarioSummary(result));
     Object.assign(row, {
         "main thread busy (ms)": trace.mainMs, "· script": trace.scriptMs, "· gc": trace.gcMs, "· style": trace.styleMs,
-        "· layout": trace.layoutMs, "· paint": trace.paintMs, "· other": trace.otherMs,
+        "· layout": trace.layoutMs, "· paint": trace.paintMs, "· commit (waits on the GPU for WebGL)": trace.commitMs, "· other": trace.otherMs,
         "frames committed": trace.frames, "paints": trace.paints,
-        "raster, all threads (ms)": trace.rasterMs, "image decode (ms)": trace.decodeMs, "JS heap (MB)": heapMb,
+        "raster, all threads (ms)": trace.rasterMs, "image decode (ms)": trace.decodeMs, "GPU process (ms)": trace.gpuMs, "JS heap (MB)": heapMb,
     });
     return row;
 }
-
-const format = (value: number) => !Number.isFinite(value) ? "–" : Math.abs(value) >= 100 ? value.toFixed(0) : value.toFixed(1);
 
 function report(all: Run[], list: Variant[], environment: Record<string, string>): string {
     const lines = [`# Realm Arena rendering bench — ${options.label ?? environment.date}`, ""];
@@ -362,7 +375,8 @@ function report(all: Run[], list: Variant[], environment: Record<string, string>
     lines.push("", `Medians of ${runs} run${runs === 1 ? "" : "s"}, ± half the range the runs spanned. Lower is better, but for fps.`, "");
     for (const scenario of scenarios) {
         const rows = list.map(variant => all.filter(run => run.scenario === scenario && run.variant === variant.name).map(run => metrics(run, scenario)));
-        const names = Object.keys(rows[0]?.[0] ?? {});
+        // Every metric any variant reported, in the order they were first met: a WebGL board reports some an SVG one doesn't.
+        const names = [...new Set(rows.flat().flatMap(row => Object.keys(row)))];
         const medians = rows.map(byRun => Object.fromEntries(names.map(name => [name, median(byRun.map(row => row[name]))])));
         // How far the runs strayed either side of the median: a change smaller than this is noise.
         const spreads = rows.map(byRun => Object.fromEntries(names.map(name => {
@@ -371,15 +385,17 @@ function report(all: Run[], list: Variant[], environment: Record<string, string>
             return [name, values.length > 1 && middle ? (Math.max(...values) - Math.min(...values)) / 2 / Math.abs(middle) : Number.NaN];
         })));
         lines.push(`## ${scenario}`, "");
-        const head = ["", ...list.map(variant => variant.name), ...list.length === 2 ? ["change"] : []];
+        // Every variant after the first, against the first.
+        const others = list.slice(1);
+        const head = ["", ...list.map(variant => variant.name), ...others.map(variant => list.length === 2 ? "change" : `${variant.name} vs ${list[0].name}`)];
         lines.push(`| ${head.join(" | ")} |`, `|${head.map((_, index) => index === 0 ? "---" : "---:").join("|")}|`);
         for (const name of names) {
             const cells = medians.map((row, index) => {
                 const spread = spreads[index][name];
-                return Number.isFinite(spread) && spread >= 0.005 ? `${format(row[name])} ±${(spread * 100).toFixed(0)}%` : format(row[name]);
+                return Number.isFinite(spread) && spread >= 0.005 ? `${formatMetric(row[name])} ±${(spread * 100).toFixed(0)}%` : formatMetric(row[name]);
             });
-            if (list.length === 2) {
-                const [base, now] = [medians[0][name], medians[1][name]];
+            for (const index of others.keys()) {
+                const [base, now] = [medians[0][name], medians[index + 1][name]];
                 cells.push(base ? `${now >= base ? "+" : ""}${(((now - base) / base) * 100).toFixed(0)}%` : "–");
             }
             lines.push(`| ${name} | ${cells.join(" | ")} |`);
@@ -415,7 +431,7 @@ async function main() {
         environment = {
             date: new Date().toISOString(),
             fixture: options.fixture!,
-            browser: `Chromium ${browser.version()}, headless`,
+            browser: `Chromium ${browser.version()}, ${options.headed ? "headed" : "headless"}`,
             phone: `Pixel 7 (${PHONE.viewport.width}×${PHONE.viewport.height} at ${PHONE.deviceScaleFactor}×), CPU slowed ${cpu}×`,
             machine: `${cpus().length} × ${cpus()[0]?.model ?? "unknown CPU"}, Node ${process.version}`,
         };
