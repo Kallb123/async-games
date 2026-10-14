@@ -22,6 +22,8 @@
     "ra-marks": "node scripts/realmarena-marks.mjs",
     "ra-characters": "tsx scripts/realmarena-characters.mjs",
     "ra-balance": "tsx scripts/realmarena-balance.ts",
+    "ra-bench": "tsx bench/realmarena/run.ts",
+    "ra-bench:fixture": "tsx bench/realmarena/fixture.ts",
     "performance:budget": "node scripts/check-performance-budget.mjs"
   },
   "dependencies": {

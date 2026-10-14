@@ -6,7 +6,7 @@ full wave of around 30 warband enemies, even though only one of them moves at
 a time. This weighs five options, from making the SVG we have cheaper to
 handing the board to a game engine, and recommends a path.
 
-**Status: proposal.** Nothing here is built. The game design document
+**Status: proposal, with its bench built (§2).** Nothing else here is built. The game design document
 ([`games/realm-arena.md`](./games/realm-arena.md)) covers what the player sees.
 [`isometric-animations.md`](./isometric-animations.md) covers how an action
 plays over the board, and §4.7 there first raised canvas. This document covers
@@ -94,35 +94,192 @@ enemies, though only one moves".
    every square of a walker's path runs a `usePlaybackValue` each frame.
 
 Points 1 and 2 cost the same however few things move: they scale with the
-board and with how often the view changes. They're the first suspects.
+board and with how often the view changes. They were the first suspects. The
+bench has since measured them (§2.4), and the frames during a playback cost
+more than either.
 
 ---
 
 ## 2. Before choosing: measure
 
-No option should be picked on the hypotheses alone. Step 0 of any path:
+No option should be picked on the hypotheses alone, and none should be taken
+without the same measurement before and after it. That measurement is built:
+`npm run ra-bench`.
 
-- **A bench.** A development-only page that shows `RealmArenaBoard` with a
-  fixture: the Sacked Fort, fog on, a team of four against a 30-strong
-  warband wave, `waveDue` set, and a recorded warband End turn played part by
-  part. It should be built from `testFixtures.ts`, with no sign-in and no
-  database, and must return `notFound()` in production. A Playwright script
-  runs it in the pre-installed Chromium with 4× and 6× CPU throttling and
-  records a performance trace.
-- **What to record:** main-thread time per part (script, style and layout,
-  paint, raster), frame times during a walk, long tasks over 50 ms, frames
-  dropped during a glide and during idle with `waveDue`, and JS heap and image
-  memory.
-- **Targets to accept a change against** (a suggestion, to be agreed):
-  - a walk at 50 fps or better at 4× throttling;
-  - no long task over 100 ms between one part and the next;
-  - zero frames painted while idle;
-  - the same or less memory.
-- Keep the bench and the traces. Every option below is accepted or rejected
-  by the same run, and the results go into
+### 2.1 The bench
+
+It draws the real `RealmArenaBoard` on a throttled phone in headless Chromium,
+plays scripted scenarios over it, and reports what each cost. It needs nothing
+but the checkout: no Next build, no Clerk, no database. An agent in a bare
+container can run it as it stands.
+
+- **`bench/realmarena/BenchApp.tsx`** is the page. It mounts the board on its
+  own, wired as `src/app/games/realmarena/[gameid]/page.tsx` wires it for a
+  co-op battle: the owners, the colours, the fog sweep, and the viewer's own
+  End turn coming back one part per warband action, each part with its own
+  playback and focus and a `STEP_BEAT_MS` rest between. It exposes
+  `window.bench.ready` and `window.bench.run(scenario)`. **Keep it in step
+  with the page**: if the page starts handing the board something new, the
+  bench should too, or it measures less than a player gets.
+- **`bench/realmarena/fixtures/`** holds the battle it draws, frozen as JSON so
+  every run plays exactly the same thing whatever the rules have done since.
+  `bench/realmarena/fixture.ts` (`npm run ra-bench:fixture`) wrote it from
+  the engine's own command pipeline (`testFixtures.ts`) with seeded rolls. The
+  battle is three players in Hold Out on the Sacked Fort, large and hard,
+  moved on to the last wave, and the fixture is the End turn after it lands.
+  - `holdout` (the default) is played in the open: 42 figures, 27 of them
+    warband, and a 15-part enemy turn.
+  - `holdout-fog` is the same battle in fog of war: 31 figures in sight, 13
+    parts, the dimming and the page's sight-line sweep each part.
+
+  Generating them is reproducible: the rolls come from a seed, and the clock
+  stands still, so the warbands' two-second planning guard never cuts a turn
+  short on a busy machine. The same rules therefore write the same bytes.
+  Regenerate them only on purpose, since numbers taken against one fixture
+  don't compare with numbers taken against another.
+- **`bench/realmarena/run.ts`** is the runner. It bundles the page with
+  esbuild against a checkout's `src/` (React DOM's profiling build, so
+  `<Profiler>` reports commits) and serves it with that checkout's
+  `public/art`. It opens each scenario in a fresh Pixel 7 context with the CPU
+  slowed 4×, records a Chrome trace, and writes a Markdown summary (also
+  printed) and the JSON of every run to `bench-results/realmarena/`, which
+  git ignores.
+
+| Scenario | What it does | What it's for |
+|---|---|---|
+| `load` | Opens the page, until the board is drawn and every art sheet decoded. | First draw. |
+| `idle` | Leaves the board alone for 5s. | What the board costs doing nothing; should be next to zero. |
+| `wave` | The same with the next wave due, so the warbands' zones pulse. | Hypothesis 2. |
+| `pan` | Sends the view round the corners and the middle, alternately just fitted and at the deepest step, a glide every 1.5s. | Hypothesis 1: every glide zooms. |
+| `turn` | Turns the view a quarter four times with its own buttons. | The whole board laid out again. |
+| `select` | Selects four of the viewer's characters in turn, then none. | The reach search, its shading and the glide to it. |
+| `enemy-turn` | Plays the warbands' turn as the page does, part by part. | The complaint itself. |
+
+For each scenario it reports:
+
+- **Frames,** from the page's own animation frames: fps, the 95th-percentile
+  and longest gap, and frames over 50ms. `idle` and `wave` are timed by the
+  trace alone, because a frame counter would itself ask for a frame every
+  vsync.
+- **Long tasks** (and the blocking time over 50ms each), React commits and
+  their render time, and the elements under the board's frame.
+- **For `enemy-turn`,** how long past its own cues each part took to say it
+  had played (the glide to it, plus whatever held it up), and any part that
+  never did.
+- **From the trace:** the main thread's busy time, split by self time into
+  script, GC, style, layout, paint and other; frames committed and paints;
+  raster on every thread; image decoding; and the JS heap.
+
+### 2.2 Running it
+
+```sh
+npm run ra-bench                                    # every scenario, 3 runs (~7 min)
+npm run ra-bench -- --against main                  # and main's src/, interleaved (~14 min)
+npm run ra-bench -- --scenarios enemy-turn --runs 1 # one quick look (~1 min)
+npm run ra-bench -- --scenarios enemy-turn,pan --fixture holdout-fog --label fog
+```
+
+- **`--against <ref>`** builds the same page against another commit's `src/`
+  and `public/` (a temporary git worktree outside the repo, removed
+  afterwards) and runs the two interleaved, alternating which goes first. Any
+  slowdown on the machine during the run then hits both alike, and the
+  report adds a change column. **This is the way to judge a change**:
+  absolute numbers move from one container to the next, while a comparison
+  made in one run doesn't.
+- `--runs` sets how many medians are taken (default 3). Each cell shows ±
+  half the range the runs spanned. A change smaller than that is noise.
+- `--trace` keeps each scenario's first Chrome trace in `bench-results/`, for
+  DevTools' Performance panel. `--cpu` changes the slowdown, `--parts` plays
+  only the enemy turn's first few parts, and `--label` names the report.
+- It exits non-zero if the page threw, and lists the errors in the report.
+- **Measuring the rendering change of the moment:** commit (or leave
+  uncommitted, since the working tree is what "current" measures), then run
+  `--against main`. Paste the summary into the PR. A measured change worth
+  keeping goes into a checkpoint in
   [`performance-checkpoints/`](./performance-checkpoints/).
 
----
+### 2.3 What it can't tell you
+
+- **The container has no GPU.** Chromium rasters in software, on worker
+  threads the CPU slowdown doesn't touch. A phone rasters on its GPU. Raster
+  time is therefore a relative measure only. Main-thread style, layout and
+  paint are the numbers that carry over best.
+- **It's headless Chromium.** iOS Safari, where `<use>` and filters behave
+  differently, isn't measured, and a real phone's thermal throttling isn't
+  either. A change the bench calls a win still wants a look on a real phone.
+- **Text** is set in the bundled Bricolage Grotesque, as in the app. Nothing
+  else of the app's chrome is there: no top bar, dock or turn sheet.
+- **The bench measures itself a little:** the frame counter's callback is in
+  "script" for every scenario but `idle` and `wave`.
+
+### 2.4 First baseline
+
+Taken 2026-10-14 at `cad4bd1`: `npm run ra-bench`, the `holdout` fixture,
+three runs, in a 4-core cloud container. These are the medians. Main-thread
+time is self time at the 4× slowdown, and raster is off the main thread,
+in software.
+
+| Scenario | Wall | fps | Long tasks (blocking) | Main thread busy | · script | · style | · paint | Raster | React render |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|
+| `load` | 1.1s to first frame | – | – | 1.36s | 0.70s | 0.33s | 0.10s | 0.09s | 0.31s (mount) |
+| `idle` | 5.5s | – | 0 | 0.01s | – | – | – | – | – |
+| `wave` | 5.5s | – | 2 (19ms) | 0.32s | 0.15s | 0.02s | 0.05s | 0.14s | 0.07s |
+| `pan` | 9.5s | 46 | 17 (0.65s) | 4.4s | 0.99s | 0.74s | 1.63s | 3.0s | 0.42s |
+| `turn` | 6.5s | 46 | 5 (1.12s) | 2.0s | 0.79s | 0.64s | 0.25s | 0.36s | 0.32s |
+| `select` | 8.0s | 49 | 13 (0.45s) | 3.5s | 0.86s | 0.61s | 1.36s | 0.95s | 0.40s |
+| `enemy-turn` | 45.8s | **30** | **191 (10.1s)** | **39.1s** | 5.2s | **12.0s** | **14.1s** | 25.2s | 1.6s |
+
+The board is 2,865 elements. The enemy turn's 15 parts each took on average
+720ms more than their own cues, which is the glide to each one plus whatever
+held it up. No part ever failed to finish.
+
+**What it says about §1.2.**
+
+- **The complaint reproduces.** Playing the warbands' turn keeps the main
+  thread busy for 85% of the turn, at 30 fps, with 191 long tasks.
+- **The cost is per frame while something moves, not per zoom.** Over the
+  turn's 1,367 committed frames, each pays about 9ms of style recalc and 10ms
+  of paint on the main thread (at the 4× slowdown), across about two paints a
+  frame.
+  - **React is not it.** It renders for 1.6s of the 39s.
+  - **The zoom between parts (hypothesis 1) is real but smaller.** `pan`,
+    which zooms at every glide, costs about 1.6s of paint for six glides.
+  - **What's left points at the size of the SVG.** Every frame, a walker, a
+    flight or an HP bar sets an attribute somewhere in a 2,865-element SVG
+    full of `<use>`s and filters (hypotheses 3 and 4), and the browser
+    re-styles and re-paints far more of it than moved.
+- **The wave pulse (hypothesis 2) is cheap here.** With the wave due, Chromium
+  restyles and commits 22 frames in 5.5s and paints 4 times, about 0.3s of
+  main thread. Idle without it costs nothing. So Option 1b is worth little,
+  on Chromium at least.
+- **Turning the view** stalls once per quarter for the relayout: its longest
+  task is several hundred ms.
+
+So the order in §6 still holds, but Option 1's first item should be what cuts
+the per-frame style and paint cost, rather than 1a or 1b:
+
+- fewer elements re-styled per frame (1f, and the filters out, 1c and 1d);
+- or a renderer whose frames don't touch the DOM at all (Options 3 and 4).
+
+The bench will tell which.
+
+**How much to trust a difference.** An A/A run, `--against HEAD` on the same
+code, put the two checkouts within 5% of each other on every `enemy-turn`
+total: main-thread busy and its split, raster, fps, long tasks, blocking and
+part overrun. Each run strayed ±1–5% from the median. The figures that ride
+on one outlier are much looser and need more runs before reading anything
+into them: the longest task, the largest frame gap, the JS heap, and anything
+in the short `pan` and `select` scenarios (±10–80%).
+
+### 2.5 Targets
+
+These are a suggestion, to be agreed, and each is read off the bench.
+
+- `enemy-turn`: 50 fps or better, no long task over 100ms, and a part
+  overrun no more than the glide (about 300ms).
+- `idle` and `wave`: next to no main-thread time, and no paints in `idle`.
+- `pan`, `turn` and `select`: no long task over 100ms.
+- The JS heap no larger.
 
 ## 3. What any option must keep
 
@@ -353,10 +510,14 @@ as well as a new renderer. It isn't worth it for a quarter-turn board.
 
 ## 6. Recommendation
 
-1. **Measure first (§2).** Build the bench and take a baseline trace.
-2. **Do Option 1 regardless.** Ship 1a and 1b first, then 1c, 1d and 1f, and
-   measure after each. If hypotheses 1 and 2 are right, this may be enough for
-   Hold Out on its own, and all of it carries into any later step.
+1. **Measure first (§2).** The bench is built and the baseline is in §2.4.
+   Every step after this is judged by `npm run ra-bench -- --against main`.
+2. **Do Option 1 regardless,** led by what the baseline (§2.4) says costs
+   most. That's the per-frame style and paint during a playback, so start
+   with the filters out (1c, 1d) and fewer elements re-styled a frame (1f),
+   then 1a. 1b measured cheap on Chromium. Measure after each step. This may
+   be enough for Hold Out on its own, and all of it carries into any later
+   step.
 3. **If the bench still misses its targets, migrate to Option 3,** built so
    Option 4 stays a drop-in. A board of a few hundred sprites doesn't need
    WebGL. Canvas 2D costs no bundle and no dependency, and it keeps every
@@ -377,9 +538,9 @@ Each step is its own PR and is measured on the bench before the next.
 
 | # | PR | Notes |
 |---|---|---|
-| 0 | **Bench and baseline.** A dev-only bench page, a Playwright trace script and a checkpoint write-up. | `notFound()` in production. |
-| 1 | **Pan, don't re-zoom (1a), and the pulses out of the SVG (1b).** | Opt-in `BoardZoom` flag, so other boards are unchanged. |
-| 2 | **Filters out (1c, 1d), memoisation (1f).** | `npm run ra-marks` for the baked shadow. |
+| 0 | **Bench and baseline.** *Built (§2):* `npm run ra-bench`, the fixtures it plays and the first baseline (§2.4). | Standalone, outside Next, so it never ships. |
+| 1 | **Filters out (1c, 1d), memoisation (1f).** | The per-frame cost the baseline found (§2.4). `npm run ra-marks` for the baked shadow. |
+| 2 | **Pan, don't re-zoom (1a).** 1b only if a real phone (Safari) shows the pulse costing what Chromium doesn't. | Opt-in `BoardZoom` flag, so other boards are unchanged. |
 | 3 | **A scene list.** A pure `sceneOf`, with the SVG board rendering from it and nothing changing on screen. "At a moment" tests move onto the list. | Proves the abstraction while the SVG is still the reference. |
 | 4 | **`BoardZoom` camera mode.** A spacer, a pinned slot and `useBoardView()`. | Gesture, focus, pivot and `useBoardCentre` tests run in both modes. |
 | 5 | **The canvas painter behind a switch:** terrain, figures, walkers, shades, hit-testing and the DOM button layer. | The switch is a per-browser `useStoredValue`, so both renderers can be compared on one device. |
