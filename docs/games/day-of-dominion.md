@@ -1,6 +1,6 @@
 # Day of Dominion — Game Design Document
 
-**Status:** Concept, v0.8. Round 1 (§21.1) settled the name, eight players,
+**Status:** Concept, v0.9. Round 1 (§21.1) settled the name, eight players,
 turns taken one after another, long matches at a pace the host picks,
 several ways to win, five eras each player moves through at their own speed,
 units that upgrade through research, the yields with strategic resources,
@@ -14,9 +14,12 @@ remaining rules. Round 6 (§21.6) settled the victories, culture, religion,
 the eras (Classical to Modern), upgrades, strategic resources, the paces, the
 round limit, and a table with computer players and teams. Round 7 (§21.7) settled wonders, the air, gold, the rest of
 the eras and resources, and how computer players and teams work — computer
-players from the very first build. §20.3 lists every decision taken. Still
-open: the time model (D3), how long a match can run (D35), two small pieces
-of D50 and D51, and five for Milestone B and a prototype (D29–D34). The body is written as if each open recommendation were taken,
+players from the very first build. Round 8 (§21.8) settled diplomacy (war,
+peace, three agreements and teams of any shape), barbarians, fog of war, and
+what happens to a dropped seat (a computer player takes it). §20.3 lists every
+decision taken. Still open: the time model (D3), how long a match can run
+(D35), whether computer difficulty ever needs bonuses (the rest of D50), and
+the rendering prototype (D34). The body is written as if each open recommendation were taken,
 and marks the spot with the decision's number — except the time model, where
 it still assumes round 1's answer (§5.8 lists what would change).
 **Name:** Day of Dominion
@@ -1257,32 +1260,52 @@ hidden.
 
 ## 16. The other players, and everyone else
 
-### 16.1 War and peace
+### 16.1 War, peace and agreements
 
-A proposal (D29):
+**Decided in round 8 (D29):** war and peace, three agreements, and teams
+(§16.4).
+
+**War and peace.**
 
 - Every pair of players is **at peace** or **at war**. Everyone starts at peace.
 - **Closed borders at peace.** A unit can't enter another player's territory
-  unless the two are at war. A unit inside a border when it expands is moved
-  to the nearest tile it may stand on.
+  unless the two are at war or have agreed open borders. A unit inside a border
+  when it expands is moved to the nearest tile it may stand on.
 - **Declaring war** can be done on your turn against a player you've met. It
   takes effect **at the start of the next round**, and the other player is told
   at once by push notification. At eight players a round is most of a day, so
-  nobody wakes up to find a war started and lost.
+  nobody wakes up to find a war started and lost. **Any of your units inside
+  their borders are moved out** to the nearest tile outside as war is
+  declared, so open borders can't be used to walk an army to a capital and
+  then strike.
 - **Making peace** is a proposal the other player answers on their turn, and
   can carry gold either way: tribute from the losing side, or a price for
-  peace from the winning one (§12.8). Peace
-  lasts at least 15 rounds (scaled by pace) before either side may declare war
-  again.
+  peace from the winning one (§12.8). Peace lasts at least 15 rounds (scaled by
+  pace) before either side may declare war again.
 
-With eight players, alliances and agreements matter more than they would at
-two. Whether there are any beyond war and peace — open borders, shared
-research, defensive pacts, teams — is D29.
+**Agreements.** Proposed on your turn to a player you've met and are at peace
+with, answered on theirs, and any of them can carry gold either way. Each
+lasts 30 rounds (scaled by pace) and can be renewed; declaring war on the
+other side ends every agreement with them at once.
+
+| Agreement | What it does |
+|---|---|
+| **Open borders** | Each side's units may enter the other's territory. When it ends, units inside are moved out |
+| **Research agreement** | Both sides pay gold into it (a price set by the era of the more advanced one); when it ends, each gets a lump of science into their current research. Ended early by war, it pays nothing. From Philosophy |
+| **Defensive pact** | If anyone declares war on one side, they're at war with the other side too, from the same round |
+
+Who has a defensive pact with whom is **public** to everyone who has met both
+sides, because a pact that nobody knows about deters nobody. Open borders and
+research agreements are known only to the two sides and anyone who can see
+units crossing.
+
+Teammates (§16.4) have all of this from the start and for good, without
+signing anything.
 
 ### 16.2 Barbarians and tribal villages
 
 - **Barbarian camps** sit on the map from the start, and new ones appear over
-  time in land nobody can see (D30). Each has one defender from the era of
+  time in land nobody can see (decided in round 8, D30). Each has one defender from the era of
   the nearest player (§7.2). Every fifteen rounds a camp sends out a raider,
   which walks to the nearest city and attacks it. Taking a camp gives the
   nearest city of the player who took it some production.
@@ -1295,17 +1318,12 @@ research, defensive pacts, teams — is D29.
 
 ### 16.3 A player who leaves
 
-Over a match of months, this will happen in most eight-player games (§4.2), so
-it needs more than one answer (D32):
-
-1. **A new player can take the seat.** The seat is first offered by join
-   code, as an open seat is today (`/join`), so a friend can step in and play
-   on with the empire as it stands.
-2. **Otherwise a computer player takes it**, once computer players exist
-   (§16.5), unless the host has turned that off.
-3. **Otherwise its cities become free cities**: neutral, defending themselves
-   and their garrisons, never expanding or attacking, and capturable by
-   anyone. Its units are removed.
+Over a match of months, this will happen in most eight-player games (§4.2).
+**Decided in rounds 7 and 8 (D32, D50): a computer player takes the seat** and
+plays on with the empire as it stands, on the same team if it had one. The
+empire isn't offered to a new person. The player who left takes the loss the
+platform already records for a dropped seat; their empire can still win, but
+the win is the computer's (or the team's), not theirs.
 
 ### 16.4 Teams
 
@@ -1319,8 +1337,13 @@ how (D51). The host splits the table into teams at setup. Teammates:
 - **win together** (§18).
 
 They don't share research or treasuries. How teammates' turns fall — together,
-or one after another — is the time model's job (D3), not the team's. How many
-teams and how big is still to settle (§20.2).
+or one after another — is the time model's job (D3), not the team's.
+
+**A team is just a label** (decided in round 8). The host gives each seat one,
+and seats with the same label are a team, so a team can be any shape: four
+people against two computers, three against three, two against two against
+two, a pair of friends against four strangers. A table where every seat has a
+label of its own is a free-for-all.
 
 ### 16.5 Computer players
 
@@ -1363,7 +1386,7 @@ to test alone.
 computer-against-computer matches run headless in the test suite: whole
 matches, start to finish, on a seed. That's how the rules get tested end to
 end, how a change that breaks a late-game rule gets caught, and how the
-balance pass (§20.6) gets its numbers — hundreds of matches rather than a
+balance pass (§20.5) gets its numbers — hundreds of matches rather than a
 spreadsheet. Milestone A's first playable match is one person against the
 computer (§25).
 
@@ -1382,7 +1405,7 @@ can sign in as a computer seat, or send commands as one) and a `gremlin` pass
 
 ## 17. Fog of war and hidden information
 
-Always on (D31). Every tile, for each player, is one of:
+Always on (decided in round 8, D31). Every tile, for each player, is one of:
 
 - **Unexplored.** They've never seen it. The client is told nothing about it,
   not even its biome.
@@ -1501,8 +1524,8 @@ bottom.
 6. **Research, traditions and religion.** One sheet each, each a list of
    `BuildRow`s by era or branch.
 7. **The world.** Everyone you've met: era, score, city count, religion, war or
-   peace, and the buttons to declare war or propose peace (with gold, if you
-   like).
+   peace, the agreements you have with them, and the buttons to declare war,
+   propose peace or propose an agreement (each with gold, if you like).
 
 Anything with a name has an `InfoButton` opening an `InfoModal`. The game
 guide and the tutorial (§23.8) carry the rest. When it isn't the player's
@@ -1512,10 +1535,9 @@ turn, the sheets stay readable through `ReadOnlyPanel`.
 
 ## 20. Decisions to make
 
-Rounds 1, 2 and 4–7 have settled forty-two decisions (§20.3 lists them),
-and round 3 reopened the time model. What's left is below: the time model
-first, then the few still open, then the last of round 1's, which wait for
-Milestone B or a prototype. Each lists its options and a recommendation; the
+Rounds 1, 2 and 4–8 have settled forty-seven decisions (§20.3 lists them),
+and round 3 reopened the time model. What's left is below: the time model,
+two more, and the rendering prototype. Each lists its options and a recommendation; the
 recommendation is what the body assumes.
 
 ### 20.1 Reopened in round 3: the time model
@@ -1556,12 +1578,6 @@ handicap to the easiest) if the levels turn out too close together.
 *Recommendation:* (b), decided once a computer player is playable and
 computer-against-computer matches can measure how far apart the levels are.
 
-**D51, the rest: how many teams, and how big?** (§16.4)
-*Options:* (a) two to four teams of even size; (b) any split the host likes;
-(c) two teams only.
-*Recommendation:* (a), with computer players to even out a table that doesn't
-divide.
-
 ### 20.3 Decided so far
 
 | | Decision | Answer | Round | Where |
@@ -1592,6 +1608,11 @@ divide.
 | D26 | Unit upkeep | Two free units a city, 1 gold a round each beyond (2 from the Industrial era) | 4 | §10.6 |
 | D27 | Capturing cities | Capture only, losing 1 population and a level of walls | 4 | §11.4 |
 | D28 | Movement rules | Zones of control and closed borders at peace | 4 | §10.1, §16.1 |
+| D29 | Diplomacy | War and peace; open borders, research agreements and defensive pacts; teams | 8 | §16.1, §16.4 |
+| D30 | Barbarians | Camps that appear over time in land nobody can see, sending raiders; tribal villages | 8 | §16.2 |
+| D31 | Fog of war | Always on | 8 | §17 |
+| D32 | A player who leaves | A computer player takes the seat; the empire isn't offered to a new person | 7, 8 | §16.3 |
+| D33 | Standing orders | Move at the start of their owner's turn (if D3 brings shared rounds, at the start of the round) | 8 | §10.5 |
 | D36 | Domination | Hold every original capital | 6 | §18 |
 | D37 | Science victory | A Launch pad, three public parts, a ten-round voyage your capital must survive | 6 | §18 |
 | D38 | Culture | Borders and traditions | 6 | §14 |
@@ -1607,46 +1628,11 @@ divide.
 | D48 | What gold buys | The current item, tiles, upgrades, unit upkeep, peace | 7 | §12.8 |
 | D49 | What costs gold each round | Units beyond the free allowance only | 7 | §12.8 |
 | D50 | Computer players | From the first build, testable early; see only their seat; harder by smarter play; take over dropped seats (bonuses are open) | 7 | §16.5 |
-| D51 | Teams | Shared vision, open borders, war together; turns are D3's (sizes are open) | 7 | §16.4 |
+| D51 | Teams | A label on each seat, any shape; shared vision, open borders, war together; turns are D3's | 7, 8 | §16.4 |
 
 D21 (resources) became D42.
 
-### 20.4 Still open from round 1, before Milestone B
-
-**D29. Diplomacy** (§16.1).
-*Options:* (a) war and peace only; (b) + open borders, research agreements and
-defensive pacts; (c) + permanent teams set at setup.
-*Recommendation:* (a) first, then (b). *Changed by round 1:* at eight players,
-the case for (b) is much stronger than at four. *Changed by round 2:* gold can
-change hands in a peace proposal from the start (§16.1), and gives (b)'s deals
-a currency. *Changed by round 6:* (c) is decided — teams are in (D45) — and
-how they work is D51.
-
-**D30. Barbarians and villages** (§16.2).
-*Options:* (a) static camps that send raiders; (b) camps that appear over time
-in unseen land; (c) none.
-*Recommendation:* (b). *Changed by round 1:* over 300 rounds, a fixed set of
-camps is cleared by round 50 and never matters again.
-
-**D31. Fog of war** (§17).
-*Recommendation:* always on.
-
-**D32. A player who drops out** (§16.3).
-*Options:* (a) free cities; (b) the seat offered to a new player first, then
-free cities; (c) their empire vanishes.
-*Recommendation:* (b). *Changed by round 1:* in a match of months, someone leaves
-in most games. *Changed by round 6:* with computer players in (D45), a
-computer player takes the seat between a new person and free cities (§16.3).
-*Changed by round 7:* a computer player taking over is decided (D50); what's
-left is whether a new person is offered the seat first, and whether a host can
-turn the computer off and have free cities instead.
-
-**D33. When do standing orders move?**
-*Recommendation:* at the start of their owner's turn. *Changed by round 1:* with
-turns one at a time there's no shared start of round to move them at, and the
-start of the owner's turn is when they'd look.
-
-### 20.5 Can wait for a prototype
+### 20.4 Can wait for a prototype
 
 **D34. Rendering and art** (§22.2).
 *Recommendation:* prototype at the eight-player map size (2,760 hexes) on a
@@ -1654,7 +1640,7 @@ mid-range phone before anything else is drawn. *Changed by round 1:* the
 eight-player map is three and a half times the size round 1's was, which makes
 a canvas for the ground (§22.2) close to certain.
 
-### 20.6 Other numbers to confirm
+### 20.5 Other numbers to confirm
 
 Sight, movement, the advantages in §11.2, the growth formula, the population
 caps, every strength in §10.2, the pace multipliers, the score table, which
@@ -1784,6 +1770,23 @@ The time model (D3) is still undecided. The rest:
 
 ### 21.8 Round 8
 
+1. **Teams (D51):** teams should be able to be any shape, basically a label,
+   so it could be four humans against two computers. (§16.4.)
+2. **D29:** (a), (b) and (c): war and peace, agreements, and teams. (§16.1:
+   open borders, research agreements and defensive pacts, each for 30 rounds;
+   units inside a border are moved out when war is declared; pacts are
+   public.)
+3. **D30:** (b), camps that appear over time.
+4. **D31:** always on.
+5. **D32:** don't offer the empire out. (§16.3: a computer player takes the
+   seat, as round 7 said.)
+6. **D33:** agreed: the start of the owner's turn.
+
+The design work moved to a docs branch, `docs/day-of-dominion`, as AGENTS.md
+asks of a branch that only changes documents.
+
+### 21.9 Round 9
+
 To come.
 
 ---
@@ -1869,7 +1872,8 @@ The player's commands: `MoveUnit` (a path), `Attack`, `SetUnitOrder`,
 `PinCitizen`, `ClearForest`, `SetResearch`, `PickTradition`, `PickBelief`,
 `FoundReligion`, `SpreadReligion`, `BuyWithFaith`, `BuyWithGold`, `BuyTile`,
 `DeclareWar`,
-`ProposePeace`, `AnswerPeace` and `EndTurn`.
+`ProposePeace`, `AnswerPeace`, `ProposeAgreement`, `AnswerAgreement`,
+`EndAgreement` and `EndTurn`.
 
 Server-only commands, recorded on the history like `PlayerDropped` so a replay
 runs them at the same moment: **the empire moving on** at the start of each
@@ -1896,10 +1900,10 @@ recipient hasn't seen. The map seed never leaves the server.
   orders carry on, units without orders skip, an empty queue keeps making food,
   research and choices pick the first option.
 - **Dropping out** (§16.3). After the platform's run of missed turns (three
-  today), the dropout adapter (`IPlayerDropoutAdapter`) either opens the seat to
-  a new player or turns the player's cities free. Offering a seat that's already
-  in play is new to the platform: today a join code only fills a seat before a
-  game starts.
+  today), the dropout adapter (`IPlayerDropoutAdapter`) hands the seat to a
+  computer player. The seat keeps its place in the turn order and its empire;
+  what's new is a seat changing from a person to a computer in the middle of a
+  match, which the computer-seat note (§16.5) has to cover.
 
 ### 23.6 Undo and the recap
 
@@ -1954,7 +1958,8 @@ needs one more than any other here — three to six achievements, a share card
 - Workers and tile improvements (buildings do that job, §12.6).
 - Promotions and experience (D25).
 - Air units and nuclear weapons (D47).
-- Diplomacy beyond war and peace (D29).
+- Diplomacy beyond war, peace and §16.1's three agreements: trading cities,
+  resources or techs.
 - Culture and religious victories (§18), theological combat (§15).
 - City-states.
 - Map types beyond continents and islands; wrapping; rotating the view.
@@ -1989,17 +1994,17 @@ the tests from the first rule onwards.
 **Milestone B — the long match.**
 1. The command history out of the game document, and snapshots (§23.7): a
    platform piece with its own design document.
-2. Up to eight players, the paces, war and peace.
+2. Up to eight players, the paces, war, peace and agreements, teams.
 3. Traditions and religion.
 4. The Renaissance, Industrial and Modern eras, ocean, the later resources,
    wonders, the mission.
-5. Barbarians and tribal villages; a new person taking over a dropped seat.
+5. Barbarian camps that appear over time, and tribal villages.
 6. The computer player for the later eras, religion, culture and the mission;
    difficulty levels.
 
 **Milestone C — after that.** Culture and religious victories, promotions,
-diplomacy, air units (D47), the art pass. Teams (§16.4) fit in Milestone B,
-once there are more than two seats.
+air units (D47), the art pass. Teams (§16.4) and agreements (§16.1) fit in
+Milestone B, once there are more than two seats.
 
 **The riskiest parts**, worth a prototype before the rest is built on them:
 drawing a 2,760-hex map smoothly on a phone (§22.2), whether a late-game turn
