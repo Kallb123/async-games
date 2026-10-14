@@ -21,7 +21,7 @@ import { BOARD_ZOOM, CLIMB_LEG, endOf, HP_BAR_HEIGHT, HP_BAR_RISE, HP_BAR_WIDTH,
 import { facingTowards, type Battlefield, type Facing, type Square } from "@/utils/games/battlefield/terrain";
 import { easeInOut, exactZoom, FIT_WIDTH, FOCUS_MARGIN_PX, focusZoom, GLIDE_LEAD, GLIDE_MS, wheelZoomFactor, zoomBetween, zoomLevels } from "@/utils/ui/boardZoom";
 import type { Rect } from "@/utils/ui/mapLabels";
-import { characterGeometry } from "./characterModels";
+import { characterGeometry, type CharacterModels } from "./characterModels";
 import { azimuthOf, cameraBasis, figureMatrix, lightOf, lookAtFor, onScreen, QUARTER, regionOnScreen, squareCentre, type CameraBasis, type Vec3 } from "./iso3d";
 import { lightSolids, solidMaterial } from "./solidMaterial";
 import { buildTerrain, type Sheets, type Terrain } from "./terrain3d";
@@ -93,6 +93,9 @@ export interface Handlers {
 /** One pool of instanced figures: every figure of one character, drawn alike. */
 interface Pool { mesh: InstancedMesh; capacity: number; used: number }
 
+/** What the board draws from: the art sheets (the ground, the terrain's colours) and the characters' models. */
+export interface Art { sheets: Sheets; models: CharacterModels }
+
 export class Board3D {
     readonly canvas: HTMLCanvasElement;
     private readonly renderer: WebGLRenderer;
@@ -102,7 +105,7 @@ export class Board3D {
     private field: Battlefield | null = null;
     /** The battlefield's tallest top, in quarters. */
     private top = 0;
-    private sheets: Sheets | null = null;
+    private art: Art | null = null;
     private readonly solids: ShaderMaterial[] = [];
 
     private readonly pools = new Map<string, Pool>();
@@ -196,8 +199,9 @@ export class Board3D {
 
     // ---- What it draws ----
 
-    setSheets(sheets: Sheets): void {
-        this.sheets = sheets;
+    /** What it draws from, arrived: nothing is drawn before it, ground or figure. */
+    setArt(art: Art): void {
+        this.art = art;
         if (this.field) this.setField(this.field);
     }
 
@@ -205,13 +209,13 @@ export class Board3D {
     setField(field: Battlefield): void {
         const first = !this.field;
         this.field = field;
-        if (!this.sheets) return;
+        if (!this.art) return;
         if (this.terrain) {
             this.scene.remove(this.terrain.group);
             this.terrain.dispose();
         }
         this.top = Math.max(0, ...field.tiles.map(tile => tile.elevation));
-        this.terrain = buildTerrain(field, this.sheets);
+        this.terrain = buildTerrain(field, this.art.sheets);
         this.scene.add(this.terrain.group);
         if (first || !this.fitted) this.fit();
         this.relight();
@@ -377,7 +381,8 @@ export class Board3D {
     /** Every figure in its place — as it stands, or `ms` into what's playing — with its HP bar over it. */
     private layFigures(ms: number | null = null): void {
         const field = this.field;
-        if (!field) return;
+        if (!field || !this.art) return;
+        const { models } = this.art;
         for (const pool of this.pools.values()) pool.used = 0;
         this.placed = [];
         const matrix = new Matrix4();
@@ -414,13 +419,13 @@ export class Board3D {
             feet ??= squareCentre(field, square);
             const at: Vec3 = [feet[0], feet[1] + lift, feet[2]];
             matrix.fromArray(figureMatrix(at, facing, !standing));
-            this.place(fighter.character, false, matrix, spec.tint);
+            this.place(models, fighter.character, false, matrix, spec.tint);
             this.placed.push({ id: fighter.id, feet: at, standing });
             if (standing) bars.push({ feet: at, fraction, tint: spec.tint });
         }
         for (const { ghost, facing, tint } of this.ghosts) {
             matrix.fromArray(figureMatrix(squareCentre(field, ghost.square), facing, false));
-            this.place(ghost.character, true, matrix, tint);
+            this.place(models, ghost.character, true, matrix, tint);
         }
         for (const pool of this.pools.values()) {
             pool.mesh.count = pool.used;
@@ -432,14 +437,14 @@ export class Board3D {
     }
 
     /** One figure into its character's pool, growing the pool if it's full. */
-    private place(character: CharacterId, ghost: boolean, matrix: Matrix4, tint: Color | null): void {
+    private place(models: CharacterModels, character: CharacterId, ghost: boolean, matrix: Matrix4, tint: Color | null): void {
         const key = `${character}${ghost ? ":ghost" : ""}`;
         let pool = this.pools.get(key);
         if (!pool || pool.used >= pool.capacity) {
             const capacity = Math.max(8, (pool?.capacity ?? 0) * 2);
             const material = pool ? pool.mesh.material as ShaderMaterial : solidMaterial({ opacity: ghost ? 0.35 : 1 });
             if (!pool) this.solids.push(material);
-            const mesh = new InstancedMesh(characterGeometry(character), material, capacity);
+            const mesh = new InstancedMesh(characterGeometry(models, character), material, capacity);
             mesh.instanceMatrix.setUsage(DynamicDrawUsage);
             mesh.frustumCulled = false;
             mesh.setColorAt(0, new Color(1, 1, 1));

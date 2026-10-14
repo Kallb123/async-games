@@ -247,7 +247,10 @@ ground and its battle visuals — keeps the SVG as its master and renders the se
 `npm run ra-marks`. Realm Arena's characters are modelled in code too, in
 `art-masters/realmarena/characters`, and `npm run ra-characters` renders each
 one facing all eight isometric directions, standing and fallen, into the sprite
-sheet the board draws its figures from and a team-colour layer it tints per seat (see [`art-masters/README.md`](./art-masters/README.md)).
+sheet the board draws its figures from and a team-colour layer it tints per seat,
+plus the models as data for the 3D board (see
+[`art-masters/README.md`](./art-masters/README.md)). `art-masters` is never
+deployed, so nothing under `src/` may import from it.
 
 ## Design system conventions
 

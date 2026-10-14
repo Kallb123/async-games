@@ -6,6 +6,7 @@ import { TurnButtons, useBoardRotation } from '@/games/RealmArena/components/Rea
 import { Board3D, type FigureSpec, type Shading } from '@/games/RealmArena/three/board3d';
 import { cssColour } from '@/games/RealmArena/three/cssColour';
 import { loadSheets } from '@/games/RealmArena/three/terrain3d';
+import { loadCharacterModels } from '@/games/RealmArena/three/characterModels';
 import { isWarband } from '@/games/RealmArena/rules';
 import { endOf, facingOf } from '@/games/RealmArena/ui';
 import { useBoardFocus } from '@/games/RealmArena/useBoardFocus';
@@ -60,7 +61,7 @@ export default function RealmArenaBoard3D({ field, fighters, fogGhosts = [], uns
     useEffect(() => {
         if (!board) return;
         let live = true;
-        loadSheets().then(sheets => { if (live) board.setSheets(sheets); });
+        Promise.all([loadSheets(), loadCharacterModels()]).then(([sheets, models]) => { if (live) board.setArt({ sheets, models }); });
         return () => { live = false; };
     }, [board]);
 

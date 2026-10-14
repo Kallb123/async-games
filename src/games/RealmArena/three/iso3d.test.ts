@@ -1,7 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { CHARACTER_IDS } from "@/games/RealmArena/roster";
 import { FULL_HEIGHT, type Facing } from "@/utils/games/battlefield/terrain";
-import { characterGeometry } from "./characterModels";
 import { azimuthOf, cameraBasis, figureMatrix, fitZoom, lightOf, lookAtFor, onScreen, QUARTER, regionOnScreen, type Vec3 } from "./iso3d";
 
 const dot = (a: Vec3, b: Vec3) => a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
@@ -87,18 +85,5 @@ describe("the 3D board's geometry", () => {
         const look = onScreen(basis, lookAtFor(basis, centre));
         expect(look.x).toBeCloseTo(centre.x, 9);
         expect(look.y).toBeCloseTo(centre.y, 9);
-    });
-
-    it("builds every character's model from its master", () => {
-        for (const id of CHARACTER_IDS) {
-            const geometry = characterGeometry(id);
-            expect(geometry.getAttribute("position").count, id).toBeGreaterThan(100);
-            expect(geometry.getAttribute("color").count, id).toBe(geometry.getAttribute("position").count);
-            expect(geometry.getAttribute("flags").count, id).toBe(geometry.getAttribute("position").count);
-            // Standing on its square: nothing far below the ground, and about a figure's height.
-            const { center, radius } = geometry.boundingSphere!;
-            expect(center.z - radius, id).toBeGreaterThan(-0.5);
-            expect(center.z + radius, id).toBeLessThan(1.6);
-        }
     });
 });

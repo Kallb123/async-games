@@ -3,7 +3,9 @@
 // the same list of boxes, balls, capsules and tapered cylinders that
 // `npm run ra-characters` ray-casts into the sprite sheet, built as three.js
 // solids and merged into one geometry a character, so every figure of a kind is
-// one instanced draw.
+// one instanced draw. The masters aren't deployed: the same script writes their
+// parts and the kit's materials to `CHARACTER_MODELS_HREF` as data, and that's
+// what the board fetches (`loadCharacterModels`) and builds from.
 //
 // A model is written in its own frame — x forward, y to its left, z up, a
 // square's side to the unit, the origin the middle of its square on the ground
@@ -11,28 +13,12 @@
 // turns, poses and places each figure with its instance matrix (`figureMatrix`
 // in iso3d.ts). Each vertex carries its material's colour, as written, and its
 // flags: whether it is the owner's colour (tinted per figure), glows (unlit) or
-// shines (takes a highlight), which the figure shader (figureMaterial.ts) reads.
+// shines (takes a highlight), which the figure shader (solidMaterial.ts) reads.
 
 import { BoxGeometry, BufferGeometry, CapsuleGeometry, Color, CylinderGeometry, Euler, Float32BufferAttribute, Matrix4, SphereGeometry, Vector3 } from "three";
 import { mergeGeometries } from "three/addons/utils/BufferGeometryUtils.js";
+import { CHARACTER_MODELS_HREF } from "@/games/RealmArena/art";
 import type { CharacterId } from "@/games/RealmArena/characters";
-import { MATERIALS } from "../../../../art-masters/realmarena/characters/kit.mjs";
-import { parts as archer } from "../../../../art-masters/realmarena/characters/archer.mjs";
-import { parts as bloater } from "../../../../art-masters/realmarena/characters/bloater.mjs";
-import { parts as broodmother } from "../../../../art-masters/realmarena/characters/broodmother.mjs";
-import { parts as cleric } from "../../../../art-masters/realmarena/characters/cleric.mjs";
-import { parts as knight } from "../../../../art-masters/realmarena/characters/knight.mjs";
-import { parts as mage } from "../../../../art-masters/realmarena/characters/mage.mjs";
-import { parts as manAtArms } from "../../../../art-masters/realmarena/characters/manAtArms.mjs";
-import { parts as miner } from "../../../../art-masters/realmarena/characters/miner.mjs";
-import { parts as prospector } from "../../../../art-masters/realmarena/characters/prospector.mjs";
-import { parts as ravager } from "../../../../art-masters/realmarena/characters/ravager.mjs";
-import { parts as runepriest } from "../../../../art-masters/realmarena/characters/runepriest.mjs";
-import { parts as sapper } from "../../../../art-masters/realmarena/characters/sapper.mjs";
-import { parts as scout } from "../../../../art-masters/realmarena/characters/scout.mjs";
-import { parts as skitterling } from "../../../../art-masters/realmarena/characters/skitterling.mjs";
-import { parts as spitter } from "../../../../art-masters/realmarena/characters/spitter.mjs";
-import { parts as stonewarden } from "../../../../art-masters/realmarena/characters/stonewarden.mjs";
 
 type Vec3 = readonly [number, number, number];
 /** A part's turn, in degrees: rolled about x, then pitched about y, then yawed about z, as a master writes it. */
@@ -48,11 +34,25 @@ type Part = { mat: string } & (
 
 interface Material { colour: string; team?: boolean; glow?: boolean; shine?: number }
 
-/** Every character's master. A `Record` of every id, so a character added to the game without a model fails to compile. */
-const MASTERS: Record<CharacterId, readonly Part[]> = {
-    archer, bloater, broodmother, cleric, knight, mage, manAtArms, miner, prospector,
-    ravager, runepriest, sapper, scout, skitterling, spitter, stonewarden,
-} as unknown as Record<CharacterId, readonly Part[]>;
+/** The masters as `npm run ra-characters` serves them: the kit's materials, and every character's parts. */
+export interface CharacterModels {
+    materials: Readonly<Record<string, Material>>;
+    parts: Readonly<Record<CharacterId, readonly Part[]>>;
+}
+
+let loading: Promise<CharacterModels> | null = null;
+
+/** The served models, fetched once a page — and again after a failed fetch. */
+export function loadCharacterModels(): Promise<CharacterModels> {
+    loading ??= fetch(CHARACTER_MODELS_HREF).then(response => {
+        if (!response.ok) throw new Error(`couldn't load ${CHARACTER_MODELS_HREF}: ${response.status}`);
+        return response.json() as Promise<CharacterModels>;
+    }).catch(error => {
+        loading = null;
+        throw error;
+    });
+    return loading;
+}
 
 /**
  * How finely the round solids are cut. Low on purpose: a figure is a few
@@ -126,18 +126,21 @@ function dressed(part: Part, materials: Readonly<Record<string, Material>>): Buf
     return geometry;
 }
 
-const built = new Map<CharacterId, BufferGeometry>();
+const built = new WeakMap<CharacterModels, Map<CharacterId, BufferGeometry>>();
 
-/** A character's model, merged into one geometry in its own frame: built once, and shared by every board. */
-export function characterGeometry(character: CharacterId): BufferGeometry {
-    let geometry = built.get(character);
+/** A character's model, merged into one geometry in its own frame: built once from `models`, and shared by every board. */
+export function characterGeometry(models: CharacterModels, character: CharacterId): BufferGeometry {
+    let byCharacter = built.get(models);
+    if (!byCharacter) built.set(models, byCharacter = new Map());
+    let geometry = byCharacter.get(character);
     if (!geometry) {
-        const parts = MASTERS[character];
-        const merged = mergeGeometries(parts.map(part => dressed(part, MATERIALS as Record<string, Material>)));
+        const parts = models.parts[character];
+        if (!parts) throw new Error(`No model for ${character}: run npm run ra-characters`);
+        const merged = mergeGeometries(parts.map(part => dressed(part, models.materials)));
         if (!merged) throw new Error(`${character}'s parts couldn't be merged`);
         merged.computeBoundingSphere();
         geometry = merged;
-        built.set(character, geometry);
+        byCharacter.set(character, geometry);
     }
     return geometry;
 }
