@@ -419,7 +419,9 @@ accessibility.
   `pivot` and `useBoardCentre` already work in viewBox units, so their
   contract doesn't change. Other boards keep today's mode. This change is also
   what removes hypothesis 1: zooming becomes a scale in the draw call, with
-  nothing to re-lay-out and nothing to re-raster.
+  nothing to re-lay-out and nothing to re-raster. *Built* as `BoardZoom`'s
+  `camera` prop and `useBoardView`, for the 3D experiment
+  ([`realm-arena-3d.md`](./realm-arena-3d.md) §2.1).
 - **Input.** Ground taps go through `isoSquareAt`, which already exists. Taps
   on figures are a front-to-back disc test against the scene list, ghosts
   included.
@@ -562,7 +564,7 @@ Each step is its own PR and is measured on the bench before the next.
 | 1 | **Filters out (1c, 1d), memoisation (1f).** | The per-frame cost the baseline found (§2.4). `npm run ra-marks` for the baked shadow. |
 | 2 | **Pan, don't re-zoom (1a).** 1b only if a real phone (Safari) shows the pulse costing what Chromium doesn't. | Opt-in `BoardZoom` flag, so other boards are unchanged. |
 | 3 | **A scene list.** A pure `sceneOf`, with the SVG board rendering from it and nothing changing on screen. "At a moment" tests move onto the list. | Proves the abstraction while the SVG is still the reference. |
-| 4 | **`BoardZoom` camera mode.** A spacer, a pinned slot and `useBoardView()`. | Gesture, focus, pivot and `useBoardCentre` tests run in both modes. |
+| 4 | **`BoardZoom` camera mode.** A spacer, a pinned slot and `useBoardView()`. *Built, with the 3D board as its first client.* | Gesture, focus, pivot and `useBoardCentre` tests run in both modes. (Today the shared maths is unit-tested, `boardZoom.test.ts`, and both modes are driven through the bench's `pan`, `turn`, `select` and `enemy-turn` scenarios.) |
 | 5 | **The canvas painter behind a switch:** terrain, figures, walkers, shades, hit-testing and the DOM button layer. | The switch is a per-browser `useStoredValue`, so both renderers can be compared on one device. |
 | 6 | **Effects, shake and text on canvas,** or the fx SVG driven by the camera. | |
 | 7 | **Make canvas the default.** After a soak, delete the SVG path, `TintDefs`, `WalkerSlot` and friends. | Update AGENTS.md (the `isometric.ts` and `usePlayback` entries), `isometric-animations.md` §2 and §4, and add the one "What's new" line for the branch that a player would notice: the battlefield running smoothly. |
@@ -641,8 +643,8 @@ bigger game:
   where today's map gets 46px. That's too small to tap, so the board would
   want about 1,000%. A content layer 1,000% of the column wide is exactly the
   size the browser can't lay out and raster quickly. A bigger map needs
-  `BoardZoom` to be a camera (§4, Option 3), with a deeper zoom range set by
-  the map.
+  `BoardZoom` to be a camera (§4, Option 3: built since, as its `camera` mode),
+  with a deeper zoom range set by the map.
 - **Fitted to a phone, the whole map is an overview.** At 92 across, a square
   is under 5px wide. Drawing every sprite at that size is wasted work. At the
   fit, the board wants a level of detail: a pre-drawn overview of the ground,
@@ -735,8 +737,8 @@ decision, best made before the renderer is built rather than after.
      chunked layout;
    - the pure scene list, culled to the viewport, with a `sceneOf(view,
      state, playback, ms, viewport)` that returns only what's visible;
-   - `BoardZoom`'s camera mode, with a zoom range set by the map rather than
-     the column.
+   - `BoardZoom`'s camera mode (built since, for the 3D experiment), with a
+     zoom range set by the map rather than the column (not yet).
 
    The SVG board can render from the scene list in the meantime, which proves
    it before anything replaces the SVG, and the culling helps the SVG too.

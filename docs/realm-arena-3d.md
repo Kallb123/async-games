@@ -28,13 +28,68 @@ Everything lives in `src/games/RealmArena/three/` and
 
 | File | What it does |
 |---|---|
-| `iso3d.ts` | The pure geometry, with no three.js objects, so it's tested without a GPU (`iso3d.test.ts`). It covers: world units (a square's side; a quarter of height is `QUARTER` = √(2/3)/4, so a full height is half a square tall on screen, as in every sheet of the art); the camera's basis at each quarter turn; a figure's instance matrix (facing, fallen); and fitting a region into the frame. |
+| `iso3d.ts` | The pure geometry, with no three.js objects, so it's tested without a GPU (`iso3d.test.ts`). It covers: world units (a square's side; a quarter of height is `QUARTER` = √(2/3)/4, so a full height is half a square tall on screen, as in every sheet of the art); the camera's basis at each quarter turn; a figure's instance matrix (facing, fallen); and the frame the whole battlefield lies in as the camera sees it (`boardFrame`, §2.1), with the maths that moves a point of it across a quarter turn (`turnedPoint`) and sets the camera from a view of it (`cameraFor`). |
 | `characterModels.ts` | Builds each character's master into one merged geometry. The masters aren't deployed, so it fetches them as data from `public/art/realmarena/characters.json`, which `npm run ra-characters` writes beside the sprite sheets. A test fails if that file falls behind the masters or misses a character. Box, ball, capsule and taper become three.js solids, transformed as `scripts/lib/isoRender.mjs` places them. Each vertex carries its material's colour and flags: team, glow and shine. The served file holds the solids rather than triangles: the triangle count is set where they're built (`SEGMENTS`). |
 | `solidMaterial.ts` | One shader for every solid, reproducing the sprite renderer's `shade`: a sky ambient brighter on what faces up, a diffuse light from the upper left that turns with the camera, a highlight on what shines, and glow drawn unlit. It works in the colours as written (sRGB), as the sprites did, and tints the team-flagged parts with each instance's owner colour. |
 | `terrain3d.ts` | The ground texture: each square's grass, or scorched ground, unwarped from its diamond on the sheet, with the grid over it. Raised squares are instanced boxes, one draw per terrain. Trees are instanced. An overlay holds one texel per square for zones, fog, reach and range, with a second overlay for the wave. |
-| `board3d.ts` | `Board3D`, the imperative scene. It owns the renderer, the camera, figure pools (one instanced draw per character), HP bars, missiles, bursts, the glide to a focus, the quarter turn, panning and pinching, and picking. It draws only when something changes, or once a frame while something moves. |
+| `board3d.ts` | `Board3D`, the imperative scene. It owns the renderer, the camera, figure pools (one instanced draw per character), HP bars, missiles, bursts, the quarter turn and picking. It sets its camera from the view `BoardZoom` tells it (§2.1), and takes no gesture of its own but a tap. It draws only when something changes, or once a frame while something moves. |
 | `cssColour.ts` | Resolves a player's CSS colour (a token, `oklch()`) to the sRGB the isometric board shows. |
-| `RealmArenaBoard3D.tsx` | The React board. It takes exactly the isometric board's props and shares what decides what to show: where the view goes (`boardFocus`, now in `ui.ts`), the stored turn of the view (`useBoardRotation`), the turn buttons (`TurnButtons`), the playback clock (`PlaybackProvider`) and every timing an action plays by (`walkerAt`, `toldAt`, `shakeAt` and the cues). |
+| `RealmArenaBoard3D.tsx` | The React board. It takes exactly the isometric board's props and shares what decides what to show: where the view goes (`boardFocus`, now in `ui.ts`), the stored turn of the view and its pivot (`useBoardRotation`), the turn buttons (`TurnButtons`), the playback clock (`PlaybackProvider`) and every timing an action plays by (`walkerAt`, `toldAt`, `shakeAt` and the cues). It wraps the canvas in `BoardZoom`'s camera mode with the isometric board's own `BOARD_ZOOM`. |
+
+### 2.1 `BoardZoom` is the camera
+
+A WebGL canvas can't be laid out at 600% of the column, so `RealmArenaBoard3D`
+wears `<BoardZoom camera …>` (AGENTS.md; the design is the plan's §4 Option 3).
+The pill, the pinch and ctrl-wheel under the fingers, native scrolling and
+momentum, `focus` glides with `onFocused`, `pivot` and `useBoardCentre` are
+all `BoardZoom`'s, as on the isometric board, in `BOARD_ZOOM`'s steps. What
+differs is where the board goes. `BoardZoom` scrolls an empty spacer the shape
+of the viewBox at the zoom; the canvas's box is pinned over it (`sticky`),
+filling what the pane shows, and is never transformed or laid out bigger. It
+publishes the part of the viewBox in the pane (`useBoardView`) — from the
+scroll, or from the transient pinch, glide or follow, whichever is drawing —
+and `Board3D.setView` draws that, at once, in the frame it arrives in.
+
+- **The frame is the viewBox.** `boardFrame` lays the battlefield out in the
+  camera's own screen-plane units (a square's side to the unit at the fit):
+  the ground and its tallest tops, room over the back for a figure and its HP
+  bar, at least `MIN_ASPECT` as tall as wide (shared with the isometric board),
+  the ground in the middle across. It is **the same size at every quarter
+  turn** — a turn swaps a map's sides round, but the diamond they make is as
+  wide and as tall either way, as the isometric board's `view.size` is — so
+  `viewBox` never changes with the turn, which is what `pivot` needs ("a board
+  drawn the same size either way"). A turn only moves things about inside it.
+- **The camera from the view.** The view's middle, taken through the frame at
+  the turn it is laid out at, is a point across the camera's plane; the
+  ground that point shows is where the camera looks (`cameraFor`), and the
+  pixels a world unit takes up are the pane's width over the view's.
+- **The quarter turn.** `pivot` maps the point in the middle of the pane from
+  the old frame to the new one by way of the ground it shows (`turnedPoint`),
+  so the ground in the middle of the frame stays there at the same zoom.
+  `Board3D` still draws the turn itself, 320ms about that ground: the board
+  is told the new turn first (`BoardCamera` is a child of `BoardZoom`, so its
+  layout effect runs before `BoardZoom`'s pivot lands), notes the ground it
+  was showing, and then eases from that ground to the one the new view shows
+  while the azimuth turns. The two are the same ground, so it is a pure
+  rotation and ends with no jump, unless `BoardZoom` had to clamp the pivot at
+  the edge of the board (zoomed into a corner), when it glides to where the pane
+  could actually go.
+- **Taps.** The pane takes the drag and the pinch (`touch-action` is the
+  pane's, and the canvas sets none), so the canvas hears only a `click`. A tap
+  is a click that ended where it began, with one finger down: a drag ends in
+  `pointercancel`, a press that stopped a fling is the browser's, and a second
+  finger makes the press a pinch. Picking is as it was (the nearest figure
+  along the view through the tap, else the front-most square).
+- **Following a long walk.** `Board3D` finds the walker's place in the frame
+  each frame it is laid out and hands it to `useBoardCentre`, as
+  `WalkCamera` does on the isometric board: it gives way to a glide, a pinch
+  or the player, and lets go once the walk is over.
+- **A deeper range,** set by the map and not the column (the plan's §7.2), is
+  a bigger `maxWidth`: the spacer is empty, so nothing here lays out or
+  rasters the zoomed board. It isn't built.
+- **No drag with a mouse.** The isometric board doesn't pan on a mouse drag
+  either: a pane scrolls with a wheel, a trackpad, its scroll bars and a
+  finger. The old 3D board did, on its own.
 
 **Depth comes from the depth buffer.** A wall hides whoever is behind it by
 being in the way. None of the isometric board's machinery for this is needed:
@@ -54,11 +109,7 @@ These are things the isometric board shows that the 3D one doesn't yet:
 - smoke clouds, the centre's name, and fading on a fall;
 - the faint figure a wall hides: is it needed, now that a turn of the view
   shows round the wall?
-- outlines on the figures, which the sprites have;
-- `BoardZoom`'s pill. The 3D board pans, pinches and ctrl-wheels on its own,
-  which AGENTS.md reserves for `BoardZoom`. That's acceptable in an
-  experiment, but it would be the camera mode §7.2 of the plan asks for
-  before a player sees it.
+- outlines on the figures, which the sprites have.
 
 ## 4. Measuring it
 
@@ -187,12 +238,10 @@ were played on both boards. The rest are in the lab's *Every run* list.
 - **One fault, not a cost, since fixed:** on the 3D board's quarter turn, the
   camera swung away to somewhere off the map. The isometric board keeps the
   middle of the frame where it was (`BoardZoom`'s `pivot`), and now so does
-  this one: the view turns about the ground at the middle of the frame, and a
-  glide to a focus runs between ground points rather than looked-at points,
-  which only mean something at the turn they were made at (an instant turn,
-  or one begun while the view was gliding, left it looking at the wrong place).
-  The one slow frame and long task while turning the view most likely went
-  with that fault; the phone numbers above predate the fix.
+  this one, through the same `pivot` (§2.1): the view turns about the ground at
+  the middle of the frame. The one slow frame and long task while turning the
+  view most likely went with that fault; the phone numbers above predate the
+  fix, and the move to `BoardZoom`'s camera mode that followed it.
 - **Not measured:** a cheaper phone, and an iPhone, where WebGL runs in
   Safari. One phone was enough to decide; they're worth a look before
   launch, not before building. The 3D board also still draws less than the
@@ -208,8 +257,7 @@ were played on both boards. The rest are in the lab's *Every run* list.
    comparison with the trace as well.
 2. **The remaining work before a player sees it:**
    - §3's missing pieces;
-   - `BoardZoom` as a camera (plan §7.2), in place of the 3D board's own
-     gestures;
+   - a zoom range set by the map (§2.1);
    - culling and a level of detail for maps of 8,000+ tiles. Today it draws
      the whole map every frame, which costs little at 16k tiles and only grows
      with what stands on it.

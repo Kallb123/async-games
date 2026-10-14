@@ -1230,7 +1230,11 @@ description or theme colour is exactly what those two files exist to prevent.
     their landing options into view the instant a roll lands. A `pivot` — a key
     plus where the thing in the middle of the frame is now — puts the view back
     on it at once, without gliding, for a board redrawn under the player:
-    Realm Arena's battlefield turned a quarter.
+    Realm Arena's battlefield turned a quarter. A board drawn by a camera
+    rather than laid out — Realm Arena's three.js experiment — passes `camera`:
+    the pane then scrolls an empty spacer, the child is pinned to it, and
+    `useBoardView` tells it what part of the viewBox is in view, with all of the
+    above in the same units (`docs/realm-arena-3d.md` §2.1).
   - `src/utils/ui/` — pure helpers: `games.ts` (per-game metadata: name, art,
     accent, players), `avatar.ts`, `players.ts`, `mapEdges.ts` and
     `mapLabels.ts` (the two bits of board geometry the map kit above draws),

@@ -145,6 +145,15 @@ export type BoardFollow = AimFollow | { squares: readonly Square[]; key: string;
 export const BOARD_ZOOM = { zoomWidth: 250, maxWidth: 600 } as const;
 
 /**
+ * The least the board's height may be as a fraction of its width, however it is
+ * drawn: an isometric map is twice as wide as it's tall, which fitted to a
+ * phone would leave a strip of a frame to pan around in once zoomed. Raised
+ * from 0.62 for a little more battlefield on a phone; much more and the
+ * controls under it fall off the first screen.
+ */
+export const MIN_ASPECT = 0.7;
+
+/**
  * How tall a figure stands and the HP bar over it, in the isometric board's
  * units, against a square `2 * ISO_HALF_WIDTH` across: the tallest of them (a
  * mage's hat, a staff's head) stands about `FIGURE_TOP` high, with its HP bar

@@ -1,7 +1,9 @@
 // The geometry of the 3D board (docs/realm-arena-3d.md): where the battlefield's
 // squares, heights and figures are in the world, the orthographic camera that
-// looks at them as the isometric board does, and fitting a region of the map
-// into the frame. Pure: no three.js objects, so it's tested without a GPU.
+// looks at them as the isometric board does, and the frame the camera's view of
+// the whole battlefield is laid out in, which `BoardZoom` scrolls and zooms as
+// its viewBox (`BoardZoom`'s camera mode). Pure: no three.js objects, so it's
+// tested without a GPU.
 //
 // The world: x along the map's columns, z along its rows, y up, a square's side
 // to the unit — the units the character masters are written in — so square
@@ -18,6 +20,7 @@
 // map, the world staying put; the light turns with it, as the sprites' light
 // never moves from the upper left.
 
+import { MIN_ASPECT } from "@/games/RealmArena/ui";
 import { FULL_HEIGHT, type Battlefield, type Facing, type Square } from "@/utils/games/battlefield/terrain";
 import type { IsoRotation } from "@/utils/ui/isometric";
 import type { Rect } from "@/utils/ui/mapLabels";
@@ -153,7 +156,76 @@ export function figureMatrix(at: Vec3, facing: Facing | number, fallen: boolean)
     return matrix;
 }
 
-/** The zoom a region fits at: pixels per world unit to bring `region` (in `onScreen` units) into `frame` pixels with `margin` pixels round it. */
-export function fitZoom(region: { width: number; height: number }, frame: { width: number; height: number }, margin: number): number {
-    return Math.min((frame.width - 2 * margin) / Math.max(region.width, 1e-6), (frame.height - 2 * margin) / Math.max(region.height, 1e-6));
+/** The battlefield's tallest top, in quarters: what the frame leaves room for over the ground. */
+export const topOf = (field: Pick<Battlefield, "tiles">): number => Math.max(0, ...field.tiles.map(tile => tile.elevation));
+
+/** Room kept over the back of the map, in world units, for a figure standing there and the HP bar over it: about a square, as the isometric board's `HEADROOM` is. */
+const HEADROOM = 1.3;
+
+/**
+ * Where the whole battlefield lies in the camera's view, as a plane laid out
+ * like the isometric board's SVG: `size` is its viewBox, which `BoardZoom` fits to
+ * the column and scrolls and zooms about, and `origin` is where its top left is
+ * across the camera's frame (`onScreen`'s units, y up). A point of the frame is
+ * (`origin.x + x`, `origin.y - y`), in the same units: a unit of the frame is a
+ * square's side at the fit, whichever way the camera looks.
+ */
+export interface BoardFrame {
+    size: { width: number; height: number };
+    origin: { x: number; y: number };
+}
+
+/**
+ * The frame round a `grid`-sized battlefield standing `top` quarters high, at
+ * `basis`'s turn: the ground and its tallest tops, with `HEADROOM` over the back,
+ * at least `MIN_ASPECT` as tall as it is wide, with the ground in the middle of
+ * it. Its size is the same at every turn, as the isometric board's is — a turn
+ * swaps the map's sides round, but the diamond they make is as wide and as tall
+ * either way, and the ground's middle is where it is held — so the viewBox
+ * `BoardZoom` is given never changes with the turn, and a turn only moves things
+ * about inside it (`turnedPoint`).
+ */
+export function boardFrame(basis: CameraBasis, grid: { width: number; height: number }, top: number): BoardFrame {
+    const ground = regionOnScreen(basis, { x: 0, y: 0, width: grid.width, height: grid.height }, 0);
+    const raised = regionOnScreen(basis, { x: 0, y: 0, width: grid.width, height: grid.height }, top);
+    const drawn = raised.y + raised.height + HEADROOM - ground.y;
+    const height = Math.max(drawn, ground.width * MIN_ASPECT);
+    const pad = (height - drawn) / 2;
+    return { size: { width: ground.width, height }, origin: { x: ground.x, y: raised.y + raised.height + HEADROOM + pad } };
+}
+
+/** A point across the camera's frame (`onScreen`'s units) as a point of the frame. */
+export function toFrame(frame: BoardFrame, { x, y }: { x: number; y: number }): { x: number; y: number } {
+    return { x: x - frame.origin.x, y: frame.origin.y - y };
+}
+
+/** And a point of the frame, across the camera's frame. */
+export function fromFrame(frame: BoardFrame, { x, y }: { x: number; y: number }): { x: number; y: number } {
+    return { x: frame.origin.x + x, y: frame.origin.y - y };
+}
+
+/** A region across the camera's frame (`regionOnScreen`'s, y up from its bottom) as a rectangle of the frame (y down from its top). */
+export function frameRect(frame: BoardFrame, region: { x: number; y: number; width: number; height: number }): Rect {
+    return { x: region.x - frame.origin.x, y: frame.origin.y - (region.y + region.height), width: region.width, height: region.height };
+}
+
+/**
+ * Where a point of the frame, as it is drawn at one turn (`from`), is drawn at
+ * another (`to`), keeping the ground it shows: the ground the view through that
+ * point meets, found again at the new turn. What `BoardZoom`'s `pivot` asks for
+ * when the view is turned, with the middle of the pane as the point.
+ */
+export function turnedPoint(from: { basis: CameraBasis; frame: BoardFrame }, to: { basis: CameraBasis; frame: BoardFrame }, point: { x: number; y: number }): { x: number; y: number } {
+    return toFrame(to.frame, onScreen(to.basis, groundAt(from.basis, fromFrame(from.frame, point))));
+}
+
+/**
+ * The camera that shows `view` — the part of the frame `BoardZoom` says is in the
+ * pane — in a pane `width` pixels across: the ground at its middle, and the
+ * pixels a world unit takes up. The ground rather than the looked-at point, so
+ * the camera can turn about it (`lookAtGround`).
+ */
+export function cameraFor(basis: CameraBasis, frame: BoardFrame, view: Rect, width: number): { ground: Vec3; zoom: number } {
+    const middle = fromFrame(frame, { x: view.x + view.width / 2, y: view.y + view.height / 2 });
+    return { ground: groundAt(basis, middle), zoom: width / view.width };
 }

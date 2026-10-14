@@ -1,8 +1,14 @@
 // The 3D battlefield, imperatively (docs/realm-arena-3d.md): a three.js scene
 // the React board (`RealmArenaBoard3D`) owns one of and feeds — the battlefield,
-// the figures on it, what's shaded on the ground, where the view should go, and
-// what an action is playing — and that draws itself only when something has
-// changed, or a frame at a time while something moves.
+// the figures on it, what's shaded on the ground, the turn of the view, and what
+// an action is playing — and that draws itself only when something has changed,
+// or a frame at a time while something moves.
+//
+// It is a camera, and `BoardZoom` drives it (its camera mode): the pane's
+// scrolling, the zoom pill, a pinch, a focus glide and a follow all arrive as one
+// thing, the part of the board's frame (`iso3d`'s `BoardFrame`) in the pane
+// (`setView`), and this sets its orthographic camera to show exactly that. It
+// takes no gesture of its own but a tap.
 //
 // It keeps no clock of its own for what an action plays: the board's
 // `PlaybackProvider` hands it the playback's time (`frame`), and where
@@ -17,12 +23,12 @@ import {
 import type { BurstKind } from "@/games/RealmArena/art";
 import type { CharacterId } from "@/games/RealmArena/characters";
 import { isStanding, type Fighter, type FogGhost } from "@/games/RealmArena/rules";
-import { BOARD_ZOOM, CLIMB_LEG, endOf, HP_BAR_HEIGHT, HP_BAR_RISE, HP_BAR_WIDTH, hpFraction, shakeAt, toldAt, toldOf, walkerAt, walkLift, type BattleCue, type BurstCue, type FallCue, type FlightCue, type Told, type WalkCue } from "@/games/RealmArena/ui";
+import { CLIMB_LEG, endOf, HP_BAR_HEIGHT, HP_BAR_RISE, HP_BAR_WIDTH, hpFraction, shakeAt, toldAt, toldOf, walkerAt, walkLift, type BattleCue, type BurstCue, type FallCue, type FlightCue, type Told, type WalkCue } from "@/games/RealmArena/ui";
 import { facingTowards, type Battlefield, type Facing, type Square } from "@/utils/games/battlefield/terrain";
-import { easeInOut, exactZoom, FIT_WIDTH, FOCUS_MARGIN_PX, focusZoom, GLIDE_LEAD, GLIDE_MS, wheelZoomFactor, zoomBetween, zoomLevels } from "@/utils/ui/boardZoom";
+import { easeInOut } from "@/utils/ui/boardZoom";
 import type { Rect } from "@/utils/ui/mapLabels";
 import { characterGeometry, type CharacterModels } from "./characterModels";
-import { azimuthOf, cameraBasis, figureMatrix, groundAt, lightOf, lookAtFor, lookAtGround, onScreen, QUARTER, regionOnScreen, squareCentre, type CameraBasis, type Vec3 } from "./iso3d";
+import { azimuthOf, boardFrame, cameraBasis, cameraFor, figureMatrix, lightOf, lookAtFor, lookAtGround, onScreen, QUARTER, squareCentre, toFrame, topOf, type BoardFrame, type CameraBasis, type Vec3 } from "./iso3d";
 import { lightSolids, solidMaterial } from "./solidMaterial";
 import { buildTerrain, type Sheets, type Terrain } from "./terrain3d";
 
@@ -30,9 +36,6 @@ import { buildTerrain, type Sheets, type Terrain } from "./terrain3d";
 const WAVE_FRAME_MS = 66;
 /** How long a quarter turn of the view takes. */
 const TURN_MS = 320;
-/** The zoom steps, as widths of the fitted board (`FIT_WIDTH` is fitted): the isometric board's, `BoardZoom`'s for `BOARD_ZOOM`. */
-const LEVELS = zoomLevels(BOARD_ZOOM.zoomWidth, BOARD_ZOOM.maxWidth);
-const DEEPEST = Math.max(...LEVELS);
 /** How far a press may move and still be a tap, in pixels. */
 const TAP_SLOP = 8;
 
@@ -85,7 +88,6 @@ export function renderStats(): Readonly<typeof drawn> {
 
 /** What the board tells whoever holds it. */
 export interface Handlers {
-    onFocused: (key: string) => void;
     onFigure: (id: number) => void;
     onSquare: (square: Square) => void;
 }
@@ -100,7 +102,7 @@ export class Board3D {
     readonly canvas: HTMLCanvasElement;
     private readonly renderer: WebGLRenderer;
     private readonly scene = new Scene();
-    private readonly camera = new OrthographicCamera(-1, 1, 1, -1, 0.1, 400);
+    private readonly lens = new OrthographicCamera(-1, 1, 1, -1, 0.1, 400);
     private terrain: Terrain | null = null;
     private field: Battlefield | null = null;
     /** The battlefield's tallest top, in quarters. */
@@ -120,20 +122,25 @@ export class Board3D {
     private readonly missiles: InstancedMesh;
     private selectedId: number | null = null;
 
-    // The view: what it looks at, how close, and turned how far.
-    private target: Vec3 = [0, 0, 0];
-    private zoom = 1;
+    // The view: the part of the frame in the pane (`setView`, in the frame's own
+    // units), the frame it is measured in, and how far the camera has turned.
+    private view: Rect | null = null;
     private azimuth = azimuthOf(0);
+    /** The camera as it is now, turned to `azimuth`: what the scene is lit and its bars faced by. */
     private basis: CameraBasis = cameraBasis(azimuthOf(0));
+    /** The camera at the turn the view is going to: the turn the frame, and so the view, is laid out at. Differs from `basis` only while the view is turning. */
+    private frameBasis: CameraBasis = this.basis;
+    /** The whole battlefield's frame, at the turn `frameBasis` is at. */
+    private layout: BoardFrame | null = null;
     private shake: Vec3 = [0, 0, 0];
     private size = { width: 1, height: 1 };
-    private fitted = false;
-    /** A glide runs between points of the ground at the middle of the frame, not between looked-at points: those are only true of the turn they were made at. */
-    private glide: { from: { ground: Vec3; zoom: number }; to: { ground: Vec3; zoom: number }; start: number; key: string; told: boolean } | null = null;
-    private turn: { from: number; to: number; start: number } | null = null;
-    /** The focus last asked for, and the key of the one last glided to. */
-    private wanted: { area: Rect; key: string; exact: boolean | undefined } | null = null;
-    private applied: string | null = null;
+    /**
+     * The view turning about the ground at the middle of the frame: from the
+     * ground it was showing, to the ground the view now shows. The two are the
+     * same ground unless `BoardZoom` could not keep the middle where it was (the
+     * turn's pivot, clamped at the edge of the board), when it glides between.
+     */
+    private turn: { from: number; to: number; start: number; ground: Vec3; progress: number } | null = null;
     /** What's shaded on the ground, kept to lay again over ground built afresh. */
     private shading: { shade: (square: Square) => Shading | null; wave: ReadonlySet<Square> | null } | null = null;
     private animating = 0;
@@ -141,11 +148,18 @@ export class Board3D {
     private waveDrawn = 0;
 
     private playing: Playing | null = null;
+    /** How far into the playing action the figures were last laid, for a turn of the view to lay them there again. */
+    private playedMs = 0;
+    /** `frame` is working: a view arriving in it is drawn by it, not a second time. */
+    private framing = false;
+    /** `BoardZoom`'s `useBoardCentre`, while a camera follows a walker, and whether it has been told of one. */
+    private centre: ((point: { x: number; y: number } | null) => void) | null = null;
+    private following = false;
     private drawPending = 0;
     private readonly resize: ResizeObserver;
 
-    /** Who hears of a focus all but landed (as `BoardZoom`'s `onFocused`), and of a tap on a figure or on a square where none stands. */
-    private handlers: Handlers = { onFocused: () => {}, onFigure: () => {}, onSquare: () => {} };
+    /** Who hears of a tap on a figure, or on a square where none stands. */
+    private handlers: Handlers = { onFigure: () => {}, onSquare: () => {} };
 
     constructor(private readonly host: HTMLElement) {
         this.renderer = new WebGLRenderer({ antialias: true, alpha: true, powerPreference: "high-performance" });
@@ -179,10 +193,11 @@ export class Board3D {
         this.resize = new ResizeObserver(() => this.measure());
         this.resize.observe(host);
         this.measure();
-        this.handleGestures();
+        this.handleTaps();
     }
 
     dispose(): void {
+        this.stopFollowing();
         cancelAnimationFrame(this.drawPending);
         cancelAnimationFrame(this.animating);
         this.resize.disconnect();
@@ -198,6 +213,22 @@ export class Board3D {
         this.handlers = handlers;
     }
 
+    /**
+     * The way to keep a point of the frame in the middle of the pane
+     * (`BoardZoom`'s `useBoardCentre`), for a camera that follows a walker too
+     * far to frame; none when there is nothing to follow with.
+     */
+    follow(centre: ((point: { x: number; y: number } | null) => void) | null): void {
+        this.stopFollowing();
+        this.centre = centre;
+    }
+
+    private stopFollowing(): void {
+        if (!this.following) return;
+        this.following = false;
+        this.centre?.(null);
+    }
+
     // ---- What it draws ----
 
     /** What it draws from, arrived: nothing is drawn before it, ground or figure. */
@@ -208,21 +239,19 @@ export class Board3D {
 
     /** The battlefield: its ground and terrain built again, as they are only when cover is blasted. */
     setField(field: Battlefield): void {
-        const first = !this.field;
         this.field = field;
+        this.top = topOf(field);
+        this.layout = boardFrame(this.frameBasis, field, this.top);
         if (!this.art) return;
         if (this.terrain) {
             this.scene.remove(this.terrain.group);
             this.terrain.dispose();
         }
-        this.top = Math.max(0, ...field.tiles.map(tile => tile.elevation));
         this.terrain = buildTerrain(field, this.art.sheets);
         this.scene.add(this.terrain.group);
-        if (first || !this.fitted) this.fit();
         this.relight();
         this.layFigures();
         this.applyShading();
-        this.applyFocus();
         this.invalidate();
     }
 
@@ -272,10 +301,19 @@ export class Board3D {
         this.invalidate();
     }
 
-    /** Turns the view a quarter at a time (`IsoRotation`), gliding round unless told to jump. */
+    /**
+     * Turns the view a quarter at a time (`IsoRotation`), gliding round unless
+     * told to jump. The frame the view is measured in is laid out at the turn it
+     * is going to, so called before `BoardZoom`'s `pivot` puts the view where
+     * that turn leaves the middle of the pane: until it does, the view is the
+     * turn's before, and the camera is kept on the ground it showed.
+     */
     setRotation(rotation: number, glide: boolean): void {
         const to = azimuthOf(rotation);
-        if (!glide) {
+        const before = glide ? this.camera() : null;
+        this.frameBasis = cameraBasis(to);
+        if (this.field) this.layout = boardFrame(this.frameBasis, this.field, this.top);
+        if (!before) {
             this.turn = null;
             this.turnTo(to);
             this.invalidate();
@@ -285,43 +323,24 @@ export class Board3D {
         let from = this.azimuth;
         while (to - from > Math.PI) from += 2 * Math.PI;
         while (from - to > Math.PI) from -= 2 * Math.PI;
-        this.turn = { from, to, start: performance.now() };
+        this.turn = { from, to, start: performance.now(), ground: before.ground, progress: 0 };
         this.animate();
     }
 
     /**
-     * Brings a region of squares into view, as `BoardZoom` brings a focus: the
-     * deepest step it fits at, or with `exact` just fitting it — once a key, so
-     * the same focus asked for again leaves the view where the player has since
-     * put it; and held until there is a battlefield and a frame to fit it to.
+     * Tells the camera what part of the frame is in the pane (`BoardZoom`'s
+     * `useBoardView`), in the frame's own units (`boardFrame`): drawn at once,
+     * since it arrives a frame at a time from a scroll, a pinch or a glide
+     * and is meant to be seen in that frame.
      */
-    focus(area: Rect, key: string, exact: boolean | undefined): void {
-        this.wanted = { area, key, exact };
-        this.applyFocus();
-    }
-
-    private applyFocus(): void {
-        const field = this.field, wanted = this.wanted;
-        if (!field || !this.terrain || !wanted || wanted.key === this.applied || this.size.width <= 1) return;
-        this.applied = wanted.key;
-        const { area, key, exact } = wanted;
-        const basis = this.turn ? cameraBasis(this.turn.to) : this.basis;
-        const region = regionOnScreen(basis, area, this.top);
-        // As `BoardZoom` picks its zoom, the board's width fitted to the frame and its height the frame's.
-        const fit = this.fitZoom(basis);
-        const board = { width: this.size.width / fit, height: this.size.height / fit };
-        const width = exact
-            ? exactZoom(region, board, this.size, FOCUS_MARGIN_PX, DEEPEST)
-            : focusZoom(LEVELS, region.width, board.width, this.size.width, FOCUS_MARGIN_PX);
-        const zoom = fit * width / FIT_WIDTH;
-        const centre = { x: region.x + region.width / 2, y: region.y + region.height / 2 };
-        const from = groundAt(this.basis, onScreen(this.basis, this.target));
-        this.glide = { from: { ground: from, zoom: this.zoom }, to: { ground: groundAt(basis, centre), zoom }, start: performance.now(), key, told: false };
-        this.animate();
+    setView(view: Rect): void {
+        this.view = view;
+        if (!this.framing) this.draw();
     }
 
     /** What an action plays, or none. Ready to draw at a time with `frame`. */
     play(playback: { cues: readonly BattleCue[]; before: readonly Fighter[] } | null, tracked: boolean): void {
+        this.stopFollowing();
         for (const burst of this.playing?.bursts ?? []) {
             this.scene.remove(burst.mesh);
             burst.mesh.geometry.dispose();
@@ -359,20 +378,32 @@ export class Board3D {
     frame(ms: number): void {
         const playing = this.playing, field = this.field;
         if (!field) return;
-        this.layFigures(playing ? ms : null);
-        if (playing) {
-            this.layFlights(playing, ms);
-            this.layBursts(playing, ms);
-            // The shake is across the frame in board units, down positive.
-            const { x, y } = shakeAt(playing.cues, ms);
-            this.shake = this.basis.right.map((n, i) => (n * x - this.basis.up[i] * y) * BOARD_UNIT) as Vec3;
-            if (playing.tracked !== null && ms < playing.end) {
-                const walker = this.placed.find(one => one.id === playing.tracked);
-                if (walker && !this.glide) this.target = lookAtFor(this.basis, onScreen(this.basis, walker.feet));
+        this.playedMs = ms;
+        // A follow moves the view as this lays the frame out, and it is drawn once, at the end.
+        this.framing = true;
+        try {
+            this.layFigures(playing ? ms : null);
+            if (playing) {
+                this.layFlights(playing, ms);
+                this.layBursts(playing, ms);
+                // The shake is across the frame in board units, down positive.
+                const { x, y } = shakeAt(playing.cues, ms);
+                this.shake = this.basis.right.map((n, i) => (n * x - this.basis.up[i] * y) * BOARD_UNIT) as Vec3;
+                if (playing.tracked !== null && ms < playing.end) {
+                    const walker = this.placed.find(one => one.id === playing.tracked);
+                    if (walker && this.layout && this.centre) {
+                        this.following = true;
+                        this.centre(toFrame(this.layout, onScreen(this.frameBasis, walker.feet)));
+                    }
+                } else {
+                    this.stopFollowing();
+                }
+            } else {
+                this.missiles.count = 0;
+                this.shake = [0, 0, 0];
             }
-        } else {
-            this.missiles.count = 0;
-            this.shake = [0, 0, 0];
+        } finally {
+            this.framing = false;
         }
         this.draw();
     }
@@ -533,29 +564,30 @@ export class Board3D {
 
     // ---- The view ----
 
-    /** The whole battlefield's ground, as it lands across the frame. */
-    private boardRegion(basis = this.basis) {
-        const field = this.field!;
-        return regionOnScreen(basis, { x: 0, y: 0, width: field.width, height: field.height }, 0);
+    /**
+     * What the camera shows: the ground at the middle of the frame and the
+     * pixels a world unit takes up, from the part of the frame `BoardZoom` says
+     * is in the pane (the whole frame until it says), and the point it looks at
+     * at the camera's turn now. Mid-turn the ground eases from the one the turn
+     * began on to the one the view shows, so the turn is about it. Null until
+     * there is a battlefield and a frame to fit it to.
+     */
+    private camera(): { ground: Vec3; zoom: number; target: Vec3 } | null {
+        const frame = this.layout;
+        if (!frame || this.size.width <= 1) return null;
+        const shown = cameraFor(this.frameBasis, frame, this.view ?? { x: 0, y: 0, ...frame.size }, this.size.width);
+        const from = this.turn?.ground;
+        const k = this.turn?.progress ?? 1;
+        const ground = from ? from.map((n, i) => n + (shown.ground[i] - n) * k) as Vec3 : shown.ground;
+        return { ground, zoom: shown.zoom, target: lookAtGround(this.basis, ground) };
     }
 
-    /** The zoom the whole battlefield fits the frame's width at: the fitted board. */
-    private fitZoom(basis = this.basis): number {
-        return this.field ? this.size.width / this.boardRegion(basis).width : 1;
-    }
-
-    private fit(): void {
-        if (!this.field || this.size.width <= 1) return;
-        const region = this.boardRegion();
-        this.zoom = this.size.width / region.width;
-        this.target = lookAtFor(this.basis, { x: region.x + region.width / 2, y: region.y + region.height / 2 });
-        this.fitted = true;
-    }
-
-    /** A point of the frame, in pixels from its top left, across the frame in world units (`onScreen`). */
-    private across({ x, y }: { x: number; y: number }): { x: number; y: number } {
-        const at = onScreen(this.basis, this.target);
-        return { x: at.x + (x - this.size.width / 2) / this.zoom, y: at.y + (this.size.height / 2 - y) / this.zoom };
+    /** A point of the canvas, in pixels from its top left, across the frame in world units (`onScreen`). */
+    private across({ x, y }: { x: number; y: number }): { x: number; y: number } | null {
+        const camera = this.camera();
+        if (!camera) return null;
+        const at = onScreen(this.basis, camera.target);
+        return { x: at.x + (x - this.size.width / 2) / camera.zoom, y: at.y + (this.size.height / 2 - y) / camera.zoom };
     }
 
     /** The line of sight through a point across the frame: where it passes the camera's plane, and which way it looks. */
@@ -568,8 +600,6 @@ export class Board3D {
         if (width === 0 || height === 0) return;
         this.size = { width, height };
         this.renderer.setSize(width, height, false);
-        if (!this.fitted) this.fit();
-        this.applyFocus();
         this.invalidate();
     }
 
@@ -580,30 +610,18 @@ export class Board3D {
         if (this.terrain) lightSolids(this.terrain.solids, light);
     }
 
-    /** Runs the frames a glide, a turn or the wave's breathing needs, until there are none. */
+    /** Runs the frames a turn or the wave's breathing needs, until there are none. */
     private animate(): void {
         if (this.animating) return;
         const step = (now: number) => {
             this.animating = 0;
             let more = false;
             let moved = false;
-            // The glide first, so a turn begun in the same frame pivots on where it has got to.
-            if (this.glide) {
-                const t = Math.min(1, (now - this.glide.start) / GLIDE_MS);
-                const k = easeInOut(t);
-                const { from, to } = this.glide;
-                this.target = lookAtGround(this.basis, from.ground.map((n, i) => n + (to.ground[i] - n) * k) as Vec3);
-                this.zoom = zoomBetween(from.zoom, to.zoom, k);
-                if (!this.glide.told && t >= GLIDE_LEAD) {
-                    this.glide.told = true;
-                    this.handlers.onFocused(this.glide.key);
-                }
-                if (t >= 1) this.glide = null; else more = true;
-                moved = true;
-            }
             if (this.turn) {
                 const t = Math.min(1, (now - this.turn.start) / TURN_MS);
-                this.turnTo(this.turn.from + (this.turn.to - this.turn.from) * easeInOut(t));
+                const k = easeInOut(t);
+                this.turn.progress = k;
+                this.turnTo(this.turn.from + (this.turn.to - this.turn.from) * k);
                 if (t >= 1) this.turn = null; else more = true;
                 moved = true;
             }
@@ -621,13 +639,15 @@ export class Board3D {
         this.animating = requestAnimationFrame(step);
     }
 
-    /** Turns the view to `azimuth` about the ground at the middle of the frame (`BoardZoom`'s `pivot`): what was there is still there, at the same zoom. */
+    /**
+     * Turns the camera to `azimuth`, the scene lit and its figures laid again as
+     * it now faces. What the camera looks at is the ground at the middle of the
+     * frame (`camera`), so it turns about that rather than swinging off.
+     */
     private turnTo(azimuth: number): void {
-        const pivot = groundAt(this.basis, onScreen(this.basis, this.target));
         this.azimuth = azimuth;
         this.relight();
-        this.target = lookAtGround(this.basis, pivot);
-        this.layFigures(null);
+        this.layFigures(this.playing ? this.playedMs : null);
     }
 
     /** Draws on the next frame, once, however often it's asked. */
@@ -640,15 +660,17 @@ export class Board3D {
     }
 
     private draw(): void {
+        const view = this.camera();
+        if (!view) return;
         const { width, height } = this.size;
-        const halfW = width / 2 / this.zoom, halfH = height / 2 / this.zoom;
-        Object.assign(this.camera, { left: -halfW, right: halfW, top: halfH, bottom: -halfH });
-        this.camera.updateProjectionMatrix();
-        const look = this.target.map((n, i) => n + this.shake[i]) as Vec3;
-        this.camera.position.set(...look.map((n, i) => n + this.basis.back[i] * 150) as Vec3);
-        this.camera.up.set(0, 1, 0);
-        this.camera.lookAt(...look);
-        this.renderer.render(this.scene, this.camera);
+        const halfW = width / 2 / view.zoom, halfH = height / 2 / view.zoom;
+        Object.assign(this.lens, { left: -halfW, right: halfW, top: halfH, bottom: -halfH });
+        this.lens.updateProjectionMatrix();
+        const look = view.target.map((n, i) => n + this.shake[i]) as Vec3;
+        this.lens.position.set(...look.map((n, i) => n + this.basis.back[i] * 150) as Vec3);
+        this.lens.up.set(0, 1, 0);
+        this.lens.lookAt(...look);
+        this.renderer.render(this.scene, this.lens);
         drawn.frames++;
         drawn.calls += this.renderer.info.render.calls;
         drawn.triangles += this.renderer.info.render.triangles;
@@ -656,81 +678,44 @@ export class Board3D {
         if (this.terrain && !this.host.dataset.ready) this.host.dataset.ready = "true";
     }
 
-    // ---- Taps and gestures ----
-    // The board's own, not BoardZoom's: BoardZoom scrolls and scales DOM
-    // content, and what moves here is a WebGL camera. Until BoardZoom can drive
-    // a camera (docs/realm-arena-3d.md §6), these mirror its gestures — drag to
-    // pan, pinch and ctrl-wheel anchored under the fingers — on the shared maths
-    // in src/utils/ui/boardZoom.ts.
+    // ---- Taps ----
+    // The only press the canvas takes for itself. Dragging and pinching are
+    // `BoardZoom`'s: the canvas sits in its pane, which the browser scrolls and
+    // `BoardZoom` zooms, and `touch-action` hands a drag and a pinch there. A
+    // press that becomes either never ends in a `click` — a drag takes the touch
+    // (`pointercancel`), and a press that stopped a fling is the browser's — so
+    // a tap is a `click` that stayed where it began, with one finger down.
 
-    private handleGestures(): void {
-        const pointers = new Map<number, { x: number; y: number }>();
-        let start: { x: number; y: number } | null = null;
-        let moved = false;
-        let pinch: number | null = null;
-        const local = (event: PointerEvent | WheelEvent) => {
+    private handleTaps(): void {
+        let down: { x: number; y: number } | null = null;
+        const fingers = new Set<number>();
+        let spoilt = false;
+        const local = (event: PointerEvent | MouseEvent) => {
             const rect = this.canvas.getBoundingClientRect();
             return { x: event.clientX - rect.left, y: event.clientY - rect.top };
         };
         this.canvas.addEventListener("pointerdown", event => {
-            this.canvas.setPointerCapture(event.pointerId);
-            pointers.set(event.pointerId, local(event));
-            start = local(event);
-            moved = false;
-            this.glide = null;
+            // A mouse is one press at a time, however the last one was let go of out of reach.
+            if (event.pointerType !== "touch") fingers.clear();
+            fingers.add(event.pointerId);
+            // A second finger makes the press a pinch, however it ends.
+            spoilt = fingers.size > 1;
+            if (!spoilt) down = local(event);
         });
-        this.canvas.addEventListener("pointermove", event => {
-            const last = pointers.get(event.pointerId);
-            if (!last) return;
-            const now = local(event);
-            pointers.set(event.pointerId, now);
-            if (start && Math.hypot(now.x - start.x, now.y - start.y) > TAP_SLOP) moved = true;
-            if (pointers.size === 2) {
-                const [a, b] = [...pointers.values()];
-                const spread = Math.hypot(a.x - b.x, a.y - b.y);
-                if (pinch) this.zoomAbout({ x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 }, spread / pinch);
-                pinch = spread;
-                return;
-            }
-            this.pan(now.x - last.x, now.y - last.y);
+        const lift = (event: PointerEvent) => { fingers.delete(event.pointerId); };
+        this.canvas.addEventListener("pointerup", lift);
+        this.canvas.addEventListener("pointercancel", lift);
+        this.canvas.addEventListener("click", event => {
+            const at = local(event);
+            if (!spoilt && down && Math.hypot(at.x - down.x, at.y - down.y) <= TAP_SLOP) this.tap(at);
         });
-        const up = (event: PointerEvent) => {
-            pointers.delete(event.pointerId);
-            if (pointers.size < 2) pinch = null;
-            if (!moved && start && pointers.size === 0) this.tap(local(event));
-            if (pointers.size === 0) start = null;
-        };
-        this.canvas.addEventListener("pointerup", up);
-        this.canvas.addEventListener("pointercancel", event => { pointers.delete(event.pointerId); start = null; });
-        this.canvas.addEventListener("wheel", event => {
-            if (!event.ctrlKey && !event.metaKey) return;
-            event.preventDefault();
-            this.zoomAbout(local(event), wheelZoomFactor(event.deltaY, event.deltaMode));
-        }, { passive: false });
-    }
-
-    private pan(dx: number, dy: number): void {
-        const at = onScreen(this.basis, this.target);
-        this.target = lookAtFor(this.basis, { x: at.x - dx / this.zoom, y: at.y + dy / this.zoom });
-        this.invalidate();
-    }
-
-    /** Zooms by `factor` between the fit and the deepest step, keeping what's under `point` there. */
-    private zoomAbout(point: { x: number; y: number }, factor: number): void {
-        const fit = this.fitZoom();
-        const under = this.across(point);
-        this.zoom = Math.min(Math.max(this.zoom * factor, fit), fit * DEEPEST / FIT_WIDTH);
-        const moved = this.across(point);
-        const at = onScreen(this.basis, this.target);
-        this.target = lookAtFor(this.basis, { x: at.x + under.x - moved.x, y: at.y + under.y - moved.y });
-        this.invalidate();
     }
 
     /** A tap: the nearest figure along the view through it, or else the square under it. */
     private tap(point: { x: number; y: number }): void {
         const field = this.field;
-        if (!field) return;
-        const across = this.across(point);
+        const across = field && this.across(point);
+        if (!across) return;
         // A figure is taken as a disc round the middle of its body, across the frame.
         let best: { id: number; depth: number } | null = null;
         for (const one of this.placed) {

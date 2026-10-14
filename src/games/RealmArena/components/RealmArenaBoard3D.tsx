@@ -1,14 +1,16 @@
 'use client'
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import type { Color } from 'three';
+import BoardZoom, { useBoardCentre, useBoardView, type BoardView, type BoardZoomFocus, type BoardZoomPivot } from '@/components/ui/BoardZoom';
 import type RealmArenaBoard from '@/games/RealmArena/components/RealmArenaBoard';
 import { TurnButtons, useBoardRotation } from '@/games/RealmArena/components/RealmArenaTurn';
 import { Board3D, type FigureSpec, type Shading } from '@/games/RealmArena/three/board3d';
 import { cssColour } from '@/games/RealmArena/three/cssColour';
+import { azimuthOf, boardFrame, cameraBasis, frameRect, regionOnScreen, topOf, turnedPoint } from '@/games/RealmArena/three/iso3d';
 import { loadSheets } from '@/games/RealmArena/three/terrain3d';
 import { loadCharacterModels } from '@/games/RealmArena/three/characterModels';
 import { isWarband } from '@/games/RealmArena/rules';
-import { endOf, facingOf } from '@/games/RealmArena/ui';
+import { BOARD_ZOOM, endOf, facingOf } from '@/games/RealmArena/ui';
 import { useBoardFocus } from '@/games/RealmArena/useBoardFocus';
 import { PlaybackProvider, usePlaybackFrame } from '@/utils/hooks/usePlayback';
 
@@ -18,6 +20,23 @@ type RealmArenaBoard3DProps = React.ComponentProps<typeof RealmArenaBoard>;
 /** Hands the board the playback's time, a frame at a time, inside the `PlaybackProvider` it reads. */
 function PlaybackFrames({ board }: { board: Board3D | null }) {
     usePlaybackFrame(ms => board?.frame(ms));
+    return null;
+}
+
+/**
+ * The camera's hold on the board, from inside `BoardZoom`: it turns the camera
+ * with the view, tells it where `BoardZoom` has put the view (`useBoardView`)
+ * and gives it the way to follow a walker (`useBoardCentre`). It draws nothing.
+ * A child of `BoardZoom`, so that its layout effects run before `BoardZoom`'s
+ * own: the camera is turned before the `pivot` that lands with the turn tells
+ * it where the view is after.
+ */
+function BoardCamera({ board, rotation, glide }: { board: Board3D | null; rotation: number; glide: boolean }) {
+    const centre = useBoardCentre();
+    const onView = useCallback((view: BoardView) => board?.setView(view), [board]);
+    useLayoutEffect(() => board?.setRotation(rotation, glide), [board, rotation, glide]);
+    useLayoutEffect(() => board?.follow(centre), [board, centre]);
+    useBoardView(onView);
     return null;
 }
 
@@ -34,10 +53,17 @@ function PlaybackFrames({ board }: { board: Board3D | null }) {
  * way, with no depth order to keep.
  *
  * What it shares with the isometric board is everything that decides what to
- * show: the props, where the view goes (`boardFocus`), the stored turn of the
- * view, the playback clock (`PlaybackProvider`) and the timings an action plays
- * by (ui.ts). What it draws is `Board3D`'s, imperatively, outside React's
- * renders.
+ * show and how it moves: the props, where the view goes (`boardFocus`), the
+ * stored turn of the view, the playback clock (`PlaybackProvider`), the timings
+ * an action plays by (ui.ts) — and `BoardZoom`, in its camera mode, which is
+ * the camera. Its zoom steps and pill, its pinch and ctrl-wheel under the
+ * fingers, its native scrolling and momentum, its focus glides and holds
+ * (`onFocused`), its pivot on a quarter turn and its follow of a long walk are
+ * the isometric board's, in the units of the board's frame (`boardFrame`: the
+ * battlefield as the camera sees it, the same size at every turn). `Board3D`
+ * hears only what part of that frame is in the pane (`useBoardView`) and sets
+ * its camera to show it; the one press it takes for itself is a tap. What it
+ * draws is `Board3D`'s, imperatively, outside React's renders.
  *
  * Not yet drawn: the muster's sealed squad and placing it, a lined-up action's
  * path, odds, cover and HP preview, the effect marks, AP pips and items, the
@@ -106,28 +132,39 @@ export default function RealmArenaBoard3D({ field, fighters, fogGhosts = [], uns
         }, wave.size > 0 ? wave : null);
     }, [board, field, owners, colourFor, waveDue, showCentre, aiming, unseen]);
 
-    const [rotation, turnBy] = useBoardRotation(viewerId);
     // The view glides round when the player turns it, and opens already turned.
-    const turnedHere = useRef(false);
-    const turn = (by: 1 | 3) => {
-        turnedHere.current = true;
-        turnBy(by);
+    const [rotation, turn, turned] = useBoardRotation(viewerId);
+
+    // The battlefield as the camera sees it, laid out as the isometric board's SVG is
+    // (`boardFrame`): `BoardZoom`'s viewBox, the same size at every turn.
+    const top = useMemo(() => topOf(field), [field]);
+    const here = useMemo(() => {
+        const basis = cameraBasis(azimuthOf(rotation));
+        return { basis, frame: boardFrame(basis, field, top) };
+    }, [field, top, rotation]);
+    // Only the turn's own pivot needs the view it turned from, and only once.
+    const pivot: BoardZoomPivot | null = turned.turns === 0 ? null : {
+        key: String(turned.turns),
+        at: point => {
+            const basis = cameraBasis(azimuthOf(turned.from));
+            return turnedPoint({ basis, frame: boardFrame(basis, field, top) }, here, point);
+        },
     };
-    useEffect(() => board?.setRotation(rotation, turnedHere.current), [board, rotation]);
 
     // Where the view goes, and what plays waiting for it to get there, as the isometric board decides them.
     const { area, held, onFocused, tracks } = useBoardFocus({ field, fighters, sides, selected, acting, sealed, placing, follow, home, refocus, playing: !!playback });
-    useEffect(() => {
-        if (area) board?.focus(area.area, area.key, area.exact);
-    });
+    const focus: BoardZoomFocus | null = area && { rect: frameRect(here.frame, regionOnScreen(here.basis, area.area, top)), key: area.key, exact: area.exact };
     const onTapSquare = placing?.onTap ?? aiming?.onSquare;
-    useEffect(() => board?.listen({ onFocused, onFigure: onSelect, onSquare: square => onTapSquare?.(square) }), [board, onFocused, onSelect, onTapSquare]);
+    useEffect(() => board?.listen({ onFigure: onSelect, onSquare: square => onTapSquare?.(square) }), [board, onSelect, onTapSquare]);
     useEffect(() => board?.play(playback ? { cues: playback.cues, before: playback.before } : null, tracks), [board, playback, tracks]);
 
     return (
         <div ref={frame} className="ag-board-frame ag-realmarena-frame">
             <PlaybackProvider playKey={playback?.key ?? null} end={playback ? endOf(playback.cues) : 0} held={held} onEnd={onPlayed}>
-                <div ref={host} className="ag-ra-3d" role="img" aria-label={`The ${field.name}`} />
+                <BoardZoom camera zoomWidth={BOARD_ZOOM.zoomWidth} maxWidth={BOARD_ZOOM.maxWidth} viewBox={here.frame.size} focus={focus} onFocused={onFocused} pivot={pivot}>
+                    <div ref={host} className="ag-ra-3d" role="img" aria-label={`The ${field.name}`} />
+                    <BoardCamera board={board} rotation={rotation} glide={turned.turns > 0} />
+                </BoardZoom>
                 <PlaybackFrames board={board} />
             </PlaybackProvider>
             <TurnButtons onTurn={turn} />
