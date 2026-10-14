@@ -12,6 +12,10 @@
 // page where the page changes what it hands the board — a harness that draws
 // less than the page measures less than the player gets.
 //
+// It draws whichever board its entry hands `startBench` — the isometric one
+// (entry-svg.tsx) or the 3D one (entry-three.tsx) — with the same props, so the
+// runner can measure one beside the other (`--renderers`).
+//
 // It exposes `window.bench`: `ready` once the board is drawn and its art is
 // decoded, and `run(scenario)`, which plays one scenario and resolves with what
 // the page itself saw of it (frames, long tasks, React commits); the runner adds
@@ -22,7 +26,8 @@ import { createRoot } from "react-dom/client";
 import "bootstrap/dist/css/bootstrap.css";
 import "@/app/globals.css";
 import "@/app/ag-theme.css";
-import RealmArenaBoard, { type Playback } from "@/games/RealmArena/components/RealmArenaBoard";
+import type RealmArenaBoard from "@/games/RealmArena/components/RealmArenaBoard";
+import type { Playback } from "@/games/RealmArena/components/RealmArenaBoard";
 import type { IRealmArenaSpecificGameStateResponse, IRealmArenaStepOutcome, RealmArenaPartState } from "@/games/RealmArena/apiModels";
 import { ART_SHEETS } from "@/games/RealmArena/art";
 import { battlefieldOf } from "@/games/RealmArena/maps";
@@ -73,6 +78,8 @@ export interface ScenarioResult {
     parts: PartTiming[];
     /** Elements under the board's frame at the end. */
     domNodes: number;
+    /** For a board drawn with WebGL, what it handed the GPU over the scenario. */
+    gl?: { frames: number; calls: number; triangles: number };
 }
 
 declare global {
@@ -88,6 +95,8 @@ export interface LoadResult {
     commitMs: number;
     firstFrameMs: number;
     artMs: number;
+    /** And the board drawn with its ground: no later than the art for one that draws as it mounts. */
+    drawnMs: number;
     /** The mount's commit, as React measured it. */
     mountActualMs: number;
     domNodes: number;
@@ -118,7 +127,10 @@ const control: {
     committed?: () => void;
 } = { commits: [], played: new Map() };
 
-function App({ fixture }: { fixture: Fixture }) {
+/** A board the bench can draw: the isometric one, or anything that takes its props. */
+export type Board = typeof RealmArenaBoard;
+
+function App({ fixture, Board }: { fixture: Fixture; Board: Board }) {
     const { viewer, seats } = fixture;
     const [view, setView] = useState<View>(() => ({
         shown: fixture.before, playback: null, follow: null, selectedId: null, acting: viewer, waveDue: false,
@@ -146,7 +158,7 @@ function App({ fixture }: { fixture: Fixture }) {
             <div className="ag-game ag-game--realmarena">
                 <div className="ag-board-area">
                     <Profiler id="board" onRender={(_id, phase, actualMs) => control.commits.push({ phase, actualMs, at: performance.now() })}>
-                        <RealmArenaBoard
+                        <Board
                             field={field}
                             fighters={fighters}
                             fogGhosts={ghosts}
@@ -296,6 +308,7 @@ async function run(fixture: Fixture, scenario: string): Promise<ScenarioResult> 
     };
     if (recording) requestAnimationFrame(frame);
     control.commits = [];
+    const glBefore = stats?.();
     const start = performance.now();
     const parts = (await play(fixture)) ?? [];
     // Let the last of it land: a final glide, a commit after the last timer.
@@ -303,10 +316,19 @@ async function run(fixture: Fixture, scenario: string): Promise<ScenarioResult> 
     const wallMs = performance.now() - start;
     recording = false;
     observer.disconnect();
-    return { scenario, wallMs, frameGaps, longTasks, commits: control.commits, parts, domNodes: boardNodes() };
+    const glAfter = stats?.();
+    const gl = glBefore && glAfter
+        ? { frames: glAfter.frames - glBefore.frames, calls: glAfter.calls - glBefore.calls, triangles: glAfter.triangles - glBefore.triangles }
+        : undefined;
+    return { scenario, wallMs, frameGaps, longTasks, commits: control.commits, parts, domNodes: boardNodes(), gl };
 }
 
-async function load(): Promise<LoadResult> {
+/** Once a board that draws its ground after it mounts — the 3D one marks its box ready — has drawn it. */
+async function boardDrawn(): Promise<void> {
+    for (let box = document.querySelector<HTMLElement>(".ag-ra-3d"); box && !box.dataset.ready;) await nextFrame();
+}
+
+async function load(Board: Board): Promise<LoadResult> {
     const response = await fetch(`fixtures/${FIXTURE}.json`);
     if (!response.ok) throw new Error(`no fixture "${FIXTURE}"`);
     const fixture = await response.json() as Fixture;
@@ -319,12 +341,14 @@ async function load(): Promise<LoadResult> {
         image.src = sheet.href;
         return image.decode();
     }));
-    createRoot(document.getElementById("root")!).render(<App fixture={fixture} />);
+    createRoot(document.getElementById("root")!).render(<App fixture={fixture} Board={Board} />);
     await committed;
     const commitMs = performance.now();
     const firstFrameMs = await nextFrame().then(() => performance.now());
     await art;
     const artMs = performance.now();
+    await boardDrawn();
+    const drawnMs = performance.now();
     // Two frames more, for whatever the art arriving drew.
     await nextFrame();
     await nextFrame();
@@ -334,6 +358,7 @@ async function load(): Promise<LoadResult> {
         commitMs,
         firstFrameMs,
         artMs,
+        drawnMs,
         mountActualMs: control.commits.find(commit => commit.phase === "mount")?.actualMs ?? Number.NaN,
         domNodes: boardNodes(),
         figures: fixture.before.fighters.length,
@@ -341,4 +366,12 @@ async function load(): Promise<LoadResult> {
     };
 }
 
-window.bench = { ready: load(), run: () => Promise.reject(new Error("not ready")) };
+/** Draws `Board` over the fixture the page was asked for, and hands the runner `window.bench`. */
+export function startBench(Board: Board, glStats?: GlStats): void {
+    stats = glStats;
+    window.bench = { ready: load(Board), run: () => Promise.reject(new Error("not ready")) };
+}
+
+/** What a WebGL board has drawn so far: frames, draw calls and triangles (`renderStats`). */
+export type GlStats = () => { frames: number; calls: number; triangles: number };
+let stats: GlStats | undefined;

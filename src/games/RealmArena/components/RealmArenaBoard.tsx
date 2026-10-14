@@ -18,7 +18,7 @@ import { CHARACTER_ART, facingCell, ITEM_ART, SMOKE_ART, spriteBox, TERRAIN_ART,
 import { CHARACTERS, ITEMS, type CharacterId, type ItemId } from '@/games/RealmArena/characters';
 import { ACTION_POINTS, CENTRE, isStanding, isWarband, maxHpOf, smokeSquares, type BattleState, type Fighter, type FogGhost, type MusterPick, type ToldEvent } from '@/games/RealmArena/rules';
 import type { AttackOption } from '@/games/RealmArena/tactics';
-import { apPips, areaRect, captionAt, eventLines, type BattleCue, type CaptionCue, type FallCue, type FxPoints, type ScorchCue, type Shove, type Timed, type WalkCue, effectsOn, facingOf, fadeInAt, fadeOutAt, fighterStatus, aimFocus, endOf, focusOn, hpFraction, legLengthOn, progressOf, reachFocus, shakeAt, shakesOf, shovesOf, shoveAt, terrainLetter, toldAt, toldOf, walkerAt, walkCameraAt, legPoint, walkLift, walkSquares, type Told } from '@/games/RealmArena/ui';
+import { apPips, areaRect, captionAt, eventLines, type BattleCue, type CaptionCue, type FallCue, type FxPoints, type ScorchCue, type Shove, type Timed, type WalkCue, effectsOn, facingOf, fadeInAt, fadeOutAt, fighterStatus, boardFocus, endOf, hpFraction, legLengthOn, progressOf, reachFocus, shakeAt, shakesOf, shovesOf, shoveAt, terrainLetter, toldAt, toldOf, walkerAt, walkCameraAt, legPoint, walkLift, walkSquares, type Told } from '@/games/RealmArena/ui';
 
 /** How deep the ground is drawn under the map's front edges, in quarters. */
 const SLAB_DEPTH = 3;
@@ -783,6 +783,23 @@ function WalkCamera({ view, walks }: { view: IsoView; walks: readonly WalkCue[] 
     return null;
 }
 
+/** The viewer's own turn of the battlefield (`IsoRotation`), as this browser remembers it, and the way to turn it: every way of drawing the board shares it. */
+export function useBoardRotation(viewerId: string): [IsoRotation, (rotation: IsoRotation) => void] {
+    const [stored, store] = useStoredValue(`realmarena-board-rotation-${viewerId}`);
+    const rotation = stored === '1' || stored === '2' || stored === '3' ? Number(stored) as IsoRotation : 0;
+    return [rotation, next => store(String(next))];
+}
+
+/** The buttons that turn the battlefield's view a quarter either way, in the frame's top corner: every way of drawing the board wears them. */
+export function TurnButtons({ onTurn }: { onTurn: (by: 1 | 3) => void }) {
+    return (
+        <div className="ag-board-tag ag-ra-turn" role="group" aria-label="Turn the view">
+            <button type="button" onClick={() => onTurn(3)} aria-label="Turn the view anticlockwise" title="Turn anticlockwise">↺</button>
+            <button type="button" onClick={() => onTurn(1)} aria-label="Turn the view clockwise" title="Turn clockwise">↻</button>
+        </div>
+    );
+}
+
 /** The view turned a quarter at a time, and how it got there: what the board keeps its place across. */
 interface Turned {
     from: IsoRotation;
@@ -962,15 +979,11 @@ function blasting(artId: string, view: IsoView, playback: Playback, cue: ScorchC
  * there after it (`BoardZoom`'s `pivot`).
  */
 export default function RealmArenaBoard({ field, fighters, fogGhosts = [], unseen, clouds, sides, sealed, owners, waveDue = false, showCentre = true, viewerId, colourFor, nameFor, selected, onSelect, placing, aiming, acting, refocus = 0, follow, home, odds, coverAt, overlay, playback, onPlayed, unplaced }: RealmArenaBoardProps) {
-    const [storedRotation, storeRotation] = useStoredValue(`realmarena-board-rotation-${viewerId}`);
-    const rotation = storedRotation === '1' || storedRotation === '2' || storedRotation === '3'
-        ? Number(storedRotation) as IsoRotation
-        : 0;
+    const [rotation, storeRotation] = useBoardRotation(viewerId);
     const [turned, setTurned] = useState<Turned>({ from: rotation, turns: 0 });
     const turn = (by: 1 | 3) => {
-        const next = ((rotation + by) % 4) as IsoRotation;
         setTurned(({ turns }) => ({ from: rotation, turns: turns + 1 }));
-        storeRotation(String(next));
+        storeRotation(((rotation + by) % 4) as IsoRotation);
     };
 
     // The ground changes only when cover is blasted away, so it's laid out once a battlefield, and again each turn of the view.
@@ -1026,12 +1039,8 @@ export default function RealmArenaBoard({ field, fighters, fogGhosts = [], unsee
     // A character picked up to place is brought close enough to tap a square beside it.
     const pickedUp = placing?.selected != null ? sealed?.[placing.selected] : undefined;
     // A review follows its steps, as Race Cars follows a roll, ahead of anything selected.
-    let focus: BoardZoomFocus | null = null;
-    if (follow && 'aim' in follow) focus = { rect: isoBounds(view, aimFocus(field, follow.aim.caster, follow.aim.target)), key: `follow:${follow.key}`, exact: true };
-    else if (follow && follow.squares.length > 0) focus = { rect: isoBounds(view, (follow.close ? aimFocus : focusOn)(field, ...follow.squares)), key: `follow:${follow.key}`, exact: follow.exact };
-    else if (pickedUp) focus = { rect: isoBounds(view, focusOn(field, pickedUp.square)), key: `pick:${pickedUp.square}:${refocus}` };
-    else if (selected) focus = { rect: isoBounds(view, reachRect ?? focusOn(field, selected.square)), key: `${selected.id}:${selected.square}:${refocus}`, exact: true };
-    else if (home && home.squares.length > 0) focus = { rect: isoBounds(view, focusOn(field, ...home.squares)), key: home.key, exact: true };
+    const area = boardFocus(field, { follow, pickedUp, selected, reach: reachRect, home, refocus });
+    let focus: BoardZoomFocus | null = area && { rect: isoBounds(view, area.area), key: area.key, exact: area.exact };
 
     // While an action plays, its caption floats over the foot of the frame
     // (`PlaybackCaption`), so the view frames it clear of that strip.
@@ -1337,10 +1346,7 @@ export default function RealmArenaBoard({ field, fighters, fogGhosts = [], unsee
                 {/* Turning the view: beside BoardZoom rather than in it, since
                     turning is this board's own, in the top corner opposite the
                     zoom pill. */}
-                <div className="ag-board-tag ag-ra-turn" role="group" aria-label="Turn the view">
-                    <button type="button" onClick={() => turn(3)} aria-label="Turn the view anticlockwise" title="Turn anticlockwise">↺</button>
-                    <button type="button" onClick={() => turn(1)} aria-label="Turn the view clockwise" title="Turn clockwise">↻</button>
-                </div>
+                <TurnButtons onTurn={turn} />
                 {/* Over the foot of the frame, out of the zoom: while an action plays,
                     what is happening in words; otherwise the targets, which want the
                     same spot while a character is selected. */}

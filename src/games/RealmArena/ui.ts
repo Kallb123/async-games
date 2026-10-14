@@ -130,6 +130,44 @@ export function reachFocus(state: BattleState, fighter: Fighter, ap: number): Re
     return { x: left, y: top, width: right - left, height: bottom - top };
 }
 
+/** What the board follows: a target picked to aim at and who aims at it, or squares — a review's step, an action played — with how to frame them. */
+export type BoardFollow =
+    | { aim: { caster: Square; target: Square }; key: string }
+    | { squares: readonly Square[]; key: string; exact?: boolean; close?: boolean; track?: boolean };
+
+/** Where the board's view goes, in squares, the key that reapplies it, and whether it's zoomed to just fit (`BoardZoomFocus.exact`). */
+export interface BoardFocusArea {
+    area: Rect;
+    key: string;
+    exact?: boolean;
+}
+
+/**
+ * Where the board's view goes, whichever way the board is drawn: a review's
+ * step or a target picked from the list (`follow`) ahead of anything else, then
+ * a character picked up to place, close enough to tap a square beside it, then
+ * the selected one — the near half of its reach (`reach`, `reachFocus`), or
+ * the squares round it — and with nothing else, the viewer's own side
+ * (`home`). A step is framed just fit round its squares (`exact`) or, for an
+ * action, close round whoever acted and whoever it reached (`close`,
+ * `aimFocus`). Null for nowhere: the view stays where it is.
+ */
+export function boardFocus(field: Pick<Battlefield, "width">, { follow, pickedUp, selected, reach, home, refocus = 0 }: {
+    follow?: BoardFollow | null;
+    pickedUp?: { square: Square } | null;
+    selected?: Fighter | null;
+    reach?: Rect | null;
+    home?: { squares: readonly Square[]; key: string } | null;
+    refocus?: number;
+}): BoardFocusArea | null {
+    if (follow && "aim" in follow) return { area: aimFocus(field, follow.aim.caster, follow.aim.target), key: `follow:${follow.key}`, exact: true };
+    if (follow && follow.squares.length > 0) return { area: (follow.close ? aimFocus : focusOn)(field, ...follow.squares), key: `follow:${follow.key}`, exact: follow.exact };
+    if (pickedUp) return { area: focusOn(field, pickedUp.square), key: `pick:${pickedUp.square}:${refocus}` };
+    if (selected) return { area: reach ?? focusOn(field, selected.square), key: `${selected.id}:${selected.square}:${refocus}`, exact: true };
+    if (home && home.squares.length > 0) return { area: focusOn(field, ...home.squares), key: home.key, exact: true };
+    return null;
+}
+
 /**
  * Where a step of the battle happened, for a review to follow (§17.3 PR 8):
  * every character it changed — moved, hurt, spent AP, took a stance — where

@@ -305,6 +305,9 @@ sheet the board draws its figures from and a team-colour layer it tints per seat
   frozen Hold Out battle on a throttled phone in headless Chromium and needs
   no build, sign-in or database
   ([`docs/realm-arena-rendering.md`](./docs/realm-arena-rendering.md) §2).
+  `--renderers svg,three` measures the 3D experiment beside the isometric
+  board ([`docs/realm-arena-3d.md`](./docs/realm-arena-3d.md)); in a
+  container without a GPU, read its CPU numbers, not its GPU ones.
 - **Review with the crew before committing** (see below). At minimum, run
   `caveman` over any UI, component, hook or game change.
 

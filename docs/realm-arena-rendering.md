@@ -742,6 +742,14 @@ decision, best made before the renderer is built rather than after.
    only if the migration is more than a few weeks away. Otherwise, nothing
    more is spent on the SVG.
 
+**Since then:** the camera was settled as the isometric angle turning a
+quarter at a time, drawn in three.js as real geometry, with the characters as
+their own 3D models. It's being tried in
+[`realm-arena-3d.md`](./realm-arena-3d.md). On the bench (`--renderers
+svg,three`), its own CPU cost through the enemy turn is about 2s at 2,916 tiles
+and at 16,384 alike, against 37–48s for the SVG. Its GPU side waits on a phone
+to measure.
+
 The order of work in §6.1 changes to match: steps 1 and 2 there (the SVG
 fixes) give way to the §7.2 groundwork, and step 5's painter is PixiJS (or
 three.js) rather than Canvas 2D.
