@@ -18,9 +18,8 @@ import { createRoot } from "react-dom/client";
 import "bootstrap/dist/css/bootstrap.css";
 import "@/app/globals.css";
 import "@/app/ag-theme.css";
-import { ART_SHEETS } from "@/games/RealmArena/art";
 import { battlefieldOf } from "@/games/RealmArena/maps";
-import { BenchBoard, boardDrawn, boardMounted, boardNodes, mountRenderMs, nextFrame, runScenario, applyFixtureMap, type Board, type Fixture, type GlStats, type ScenarioResult } from "./harness";
+import { artDecoded, BenchBoard, boardMounted, boardNodes, boardSettled, mountRenderMs, runScenario, applyFixtureMap, type Board, type Fixture, type GlStats, type ScenarioResult } from "./harness";
 
 export type { ScenarioResult } from "./harness";
 
@@ -58,30 +57,13 @@ async function load(Board: Board, glStats: GlStats | undefined): Promise<LoadRes
     // A scale fixture's battle was played on a bigger Sacked Fort, which everything here must read too — for as long as the page lasts.
     applyFixtureMap(fixture);
     const mounted = boardMounted();
-    // The sheets the board draws from, fetched as it fetches them, and decoded, so every scenario starts with the art in hand.
-    const art = Promise.all(Object.values(ART_SHEETS).map(sheet => {
-        const image = new Image();
-        image.src = sheet.href;
-        return image.decode();
-    }));
+    const art = artDecoded();
     createRoot(document.getElementById("root")!).render(<main className="ag-app"><BenchBoard fixture={fixture} Board={Board} /></main>);
-    await mounted;
-    const commitMs = performance.now();
-    const firstFrameMs = await nextFrame().then(() => performance.now());
-    await art;
-    const artMs = performance.now();
-    await boardDrawn();
-    const drawnMs = performance.now();
-    // Two frames more, for whatever the art arriving drew.
-    await nextFrame();
-    await nextFrame();
+    const times = await boardSettled(mounted, art);
     window.bench!.run = scenario => runScenario(fixture, scenario, { maxParts: MAX_PARTS, glStats });
     return {
         fixture: fixture.name,
-        commitMs,
-        firstFrameMs,
-        artMs,
-        drawnMs,
+        ...times,
         mountActualMs: mountRenderMs(),
         domNodes: boardNodes(),
         figures: fixture.before.fighters.length,

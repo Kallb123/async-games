@@ -43,7 +43,7 @@ import { fileURLToPath } from "node:url";
 import { parseArgs } from "node:util";
 import type { LoadResult, ScenarioResult } from "./BenchApp";
 import { percentile } from "@/utils/performance";
-import { scenarioSummary } from "./summary";
+import { formatMetric, scenarioSummary } from "./summary";
 
 const REPO = fileURLToPath(new URL("../..", import.meta.url));
 const BENCH = join(REPO, "bench/realmarena");
@@ -368,8 +368,6 @@ function metrics({ load, result, trace, heapMb }: Run, scenario: Scenario): Reco
     return row;
 }
 
-const format = (value: number) => !Number.isFinite(value) ? "–" : Math.abs(value) >= 100 ? value.toFixed(0) : value.toFixed(1);
-
 function report(all: Run[], list: Variant[], environment: Record<string, string>): string {
     const lines = [`# Realm Arena rendering bench — ${options.label ?? environment.date}`, ""];
     for (const [key, value] of Object.entries(environment)) lines.push(`- **${key}:** ${value}`);
@@ -394,7 +392,7 @@ function report(all: Run[], list: Variant[], environment: Record<string, string>
         for (const name of names) {
             const cells = medians.map((row, index) => {
                 const spread = spreads[index][name];
-                return Number.isFinite(spread) && spread >= 0.005 ? `${format(row[name])} ±${(spread * 100).toFixed(0)}%` : format(row[name]);
+                return Number.isFinite(spread) && spread >= 0.005 ? `${formatMetric(row[name])} ±${(spread * 100).toFixed(0)}%` : formatMetric(row[name]);
             });
             for (const index of others.keys()) {
                 const [base, now] = [medians[0][name], medians[index + 1][name]];

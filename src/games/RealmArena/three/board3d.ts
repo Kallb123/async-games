@@ -185,6 +185,8 @@ export class Board3D {
         this.terrain?.dispose();
         for (const pool of this.pools.values()) (pool.mesh.material as ShaderMaterial).dispose();
         this.renderer.dispose();
+        // Hand the context back now, not whenever it's collected: a page allows only so many at once, and drops the oldest past that.
+        this.renderer.forceContextLoss();
         this.canvas.remove();
     }
 

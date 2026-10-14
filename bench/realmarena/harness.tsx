@@ -20,6 +20,7 @@
 import React, { Profiler, useEffect, useMemo, useState } from "react";
 import type RealmArenaBoard from "@/games/RealmArena/components/RealmArenaBoard";
 import type { Playback } from "@/games/RealmArena/components/RealmArenaBoard";
+import { ART_SHEETS } from "@/games/RealmArena/art";
 import type { IRealmArenaSpecificGameStateResponse, IRealmArenaStepOutcome, RealmArenaPartState } from "@/games/RealmArena/apiModels";
 import { battlefieldOf } from "@/games/RealmArena/maps";
 import { battleFrom, isStanding, warbandsFor, type Fighter } from "@/games/RealmArena/rules";
@@ -308,6 +309,33 @@ export async function boardDrawn(): Promise<void> {
 /** Resolves once the next board mounts. */
 export function boardMounted(): Promise<void> {
     return new Promise(resolve => { control.committed = resolve; });
+}
+
+/** Every sheet the board draws from, fetched as it fetches them and decoded, so a scenario starts with the art in hand. */
+export const artDecoded = () => Promise.all(Object.values(ART_SHEETS).map(sheet => {
+    const image = new Image();
+    image.src = sheet.href;
+    return image.decode();
+}));
+
+/**
+ * Once a board just handed over is ready to measure, with when each step came:
+ * mounted (`mounted`, from `boardMounted` before it was rendered), its first
+ * frame, every art sheet decoded (`art`, from `artDecoded` as it was
+ * rendered), its ground drawn, and two frames more for whatever the art
+ * arriving drew.
+ */
+export async function boardSettled(mounted: Promise<void>, art: Promise<unknown>) {
+    await mounted;
+    const commitMs = performance.now();
+    const firstFrameMs = await nextFrame().then(() => performance.now());
+    await art;
+    const artMs = performance.now();
+    await boardDrawn();
+    const drawnMs = performance.now();
+    await nextFrame();
+    await nextFrame();
+    return { commitMs, firstFrameMs, artMs, drawnMs };
 }
 
 /** How long the board's mount took to render, as React's profiling build measured it. */

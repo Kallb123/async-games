@@ -2803,7 +2803,7 @@ button.ag-chat-gif { cursor: pointer; }
     font-weight: 800;
     color: var(--ag-ink-softer);
 }
-/* The row's highest count on a ResultTable. */
+/* The row's best value: the highest count on a ResultTable, the better board in the renderer lab. */
 .ag-chart-table td.ag-chart-table-best {
     font-weight: 800;
     color: var(--ag-ink);

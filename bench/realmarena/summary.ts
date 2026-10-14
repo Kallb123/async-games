@@ -8,6 +8,10 @@
 import { percentile } from "@/utils/performance";
 import type { ScenarioResult } from "./harness";
 
+/** A metric as the reports print it: whole where it's whole or large, to one place otherwise, and a dash for none. */
+export const formatMetric = (value: number | undefined) => value === undefined || !Number.isFinite(value) ? "–"
+    : Number.isInteger(value) || Math.abs(value) >= 100 ? value.toFixed(0) : value.toFixed(1);
+
 const sum = (values: readonly number[]) => values.reduce((a, b) => a + b, 0);
 
 export function scenarioSummary(result: ScenarioResult): Record<string, number> {

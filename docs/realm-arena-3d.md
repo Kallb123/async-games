@@ -89,8 +89,9 @@ container:
 A real verdict on the GPU side needs a phone. The admin tools' **Realm
 Arena renderer lab** (`/admin/realmarena-renderer`,
 [`admin-tools.md`](./admin-tools.md)) runs these same scenarios on whatever
-device opens it, either board, any battle, and copies its results as
-Markdown with the device's GPU named.
+device opens it. By default it plays each scenario on both boards, one after
+the other, and sets their numbers side by side. It copies its results as
+Markdown, with the device's GPU named.
 
 ## 5. Results
 
@@ -146,9 +147,9 @@ Hold Out battle (`holdout`, 2,916 tiles) and the bigger game's scale
 ## 6. Next
 
 1. **Measure on a phone.** This decides it. Open the renderer lab
-   (`/admin/realmarena-renderer`) on the phones people play on, play each
-   scenario on both boards, and paste the copied results into this
-   document. On a desktop with a GPU,
+   (`/admin/realmarena-renderer`) on the phones people play on. With **Both,
+   to compare** chosen, play each scenario, and paste the copied results into
+   this document. On a desktop with a GPU,
    `npm run ra-bench -- --renderers svg,three --headed` gives the same
    comparison with the trace as well.
 2. **If the phone agrees,** the remaining work before a player sees it:
