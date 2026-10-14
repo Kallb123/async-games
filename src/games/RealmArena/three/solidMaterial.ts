@@ -8,8 +8,7 @@
 //
 // Each vertex brings its colour and its flags (team, glow, shine:
 // characterModels.ts). An instance's colour (`InstancedMesh.setColorAt`) is
-// its owner's: it tints the vertices flagged team — or, with `tintAll`, every
-// vertex, which is how a raised square takes its terrain's colour.
+// its owner's: it tints the vertices flagged team.
 
 import { ShaderMaterial, Vector3 } from "three";
 import type { Vec3 } from "./iso3d";
@@ -50,11 +49,7 @@ varying vec3 vTint;
 void main() {
     vec3 n = normalize(vNormal);
     vec3 base = vColour;
-#ifdef TINT_ALL
-    base *= vTint;
-#else
     if (vFlags.x > 0.5) base *= vTint;
-#endif
     vec3 shaded = base;
     if (vFlags.y < 0.5) {
         float ambient = 0.42 + 0.16 * n.y;
@@ -67,16 +62,15 @@ void main() {
 
 /**
  * A material for solids drawn this way. Its light follows the camera
- * (`lightSolids`). Geometry without a `flags` attribute — a plain box — needs
- * one of zeros (`plainFlags` in board3d.ts).
+ * (`lightSolids`). Geometry needs a `color` and a `flags` attribute: a plain
+ * solid gets one colour and zero flags (`coloured`, terrain3d.ts).
  */
-export function solidMaterial({ tintAll = false, opacity = 1 }: { tintAll?: boolean; opacity?: number } = {}): ShaderMaterial {
+export function solidMaterial({ opacity = 1 }: { opacity?: number } = {}): ShaderMaterial {
     return new ShaderMaterial({
         vertexShader,
         fragmentShader,
         vertexColors: true,
         transparent: opacity < 1,
-        defines: tintAll ? { TINT_ALL: "" } : {},
         uniforms: {
             light: { value: new Vector3(0, 1, 0) },
             halfway: { value: new Vector3(0, 1, 0) },

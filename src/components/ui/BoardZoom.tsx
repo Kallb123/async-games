@@ -1,6 +1,6 @@
 'use client'
 import React, { createContext, useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import { centredScroll, easeInOut, exactZoom, FIT_WIDTH, focusZoom, glideFrame, pinchOffset, wheelZoomFactor, zoomLevels, type ZoomView } from '@/utils/ui/boardZoom';
+import { centredScroll, easeInOut, exactZoom, FIT_WIDTH, FOCUS_MARGIN_PX, focusZoom, GLIDE_LEAD, GLIDE_MS, glideFrame, pinchOffset, wheelZoomFactor, zoomLevels, type ZoomView } from '@/utils/ui/boardZoom';
 import { prefersReducedMotion } from '@/utils/hooks/usePrefersReducedMotion';
 import type { Rect } from '@/utils/ui/mapLabels';
 
@@ -70,9 +70,6 @@ interface BoardZoomProps {
     children: React.ReactNode;
 }
 
-/** How much breathing room a focused region keeps from the edge of the pane. */
-const FOCUS_MARGIN_PX = 28;
-
 /**
  * The content point a focus should centre, as a fraction of the whole board,
  * and — for a smooth one — the view it glides from, recorded before its zoom
@@ -82,17 +79,6 @@ interface FocusTarget { cx: number; cy: number; inset: number; smooth: boolean; 
 
 /** The class on the board while a pinch or a glide is drawing it (`drawAt`). */
 const MOVING = 'ag-board-zoom-content--moving';
-
-/** How long an unprompted focus takes to glide the board over to what it's showing. */
-const GLIDE_MS = 380;
-
-/**
- * How far through a glide, of the time it takes, a focus is told it has landed.
- * A board holding what it plays until the view gets there starts it as the
- * glide eases in to land, so the action doesn't wait out the slowest quarter of
- * a glide that has all but arrived.
- */
-const GLIDE_LEAD = 0.75;
 
 /**
  * A focus glide in flight. Like a pinch, it is drawn as a CSS transform over a

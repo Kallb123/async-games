@@ -39,7 +39,7 @@ type Vec3 = readonly [number, number, number];
 type Rotation = { x?: number; y?: number; z?: number };
 
 /** One part of a master, as `solidOf` in scripts/lib/isoRender.mjs reads it. */
-export type Part = { mat: string } & (
+type Part = { mat: string } & (
     | { box: { at: Vec3; size: Vec3; rot?: Rotation } | { from: Vec3; to: Vec3; size: readonly [number, number]; roll?: number } }
     | { ball: { at: Vec3; r: number | Vec3; rot?: Rotation } }
     | { taper: { from: Vec3; to: Vec3; r: number; r2?: number; roll?: number } }

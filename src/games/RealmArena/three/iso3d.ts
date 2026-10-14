@@ -27,7 +27,7 @@ export type Vec3 = [number, number, number];
 /** A quarter of height, in a square's sides. */
 export const QUARTER = Math.sqrt(2 / 3) / FULL_HEIGHT;
 /** The camera's angle above the ground. */
-export const ELEVATION = Math.PI / 6;
+const ELEVATION = Math.PI / 6;
 
 const dot = (a: Vec3, b: Vec3) => a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
 const scale = (a: Vec3, s: number): Vec3 => [a[0] * s, a[1] * s, a[2] * s];

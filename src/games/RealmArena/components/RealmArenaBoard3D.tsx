@@ -1,15 +1,15 @@
 'use client'
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import type { Color } from 'three';
 import type RealmArenaBoard from '@/games/RealmArena/components/RealmArenaBoard';
-import { TurnButtons, useBoardRotation } from '@/games/RealmArena/components/RealmArenaBoard';
+import { TurnButtons, useBoardRotation } from '@/games/RealmArena/components/RealmArenaTurn';
 import { Board3D, type FigureSpec, type Shading } from '@/games/RealmArena/three/board3d';
 import { cssColour } from '@/games/RealmArena/three/cssColour';
 import { loadSheets } from '@/games/RealmArena/three/terrain3d';
-import { ACTION_POINTS, isStanding, isWarband } from '@/games/RealmArena/rules';
-import { boardFocus, endOf, facingOf, reachFocus } from '@/games/RealmArena/ui';
+import { isWarband } from '@/games/RealmArena/rules';
+import { endOf, facingOf } from '@/games/RealmArena/ui';
+import { useBoardFocus } from '@/games/RealmArena/useBoardFocus';
 import { PlaybackProvider, usePlaybackFrame } from '@/utils/hooks/usePlayback';
-import type { IsoRotation } from '@/utils/ui/isometric';
 
 /** The same props as the isometric board: either draws the same battle, and a screen picks one. */
 type RealmArenaBoard3DProps = React.ComponentProps<typeof RealmArenaBoard>;
@@ -76,7 +76,9 @@ export default function RealmArenaBoard3D({ field, fighters, fogGhosts = [], uns
         const figures: FigureSpec[] = fighters.map(fighter => ({ fighter, facing: facingOf(field, fighter), tint: tintOf(fighter.owner) }));
         board.setFigures(figures, fogGhosts.map(ghost => ({ ghost, facing: facingOf(field, ghost), tint: tintOf(ghost.owner) })));
     }, [board, field, fighters, fogGhosts, tintOf]);
-    useEffect(() => board?.setSelected(selected?.id ?? null), [board, selected]);
+    useEffect(() => {
+        if (frame.current) board?.setSelected(selected?.id ?? null, cssColour(frame.current, 'var(--ag-on-dark)'));
+    }, [board, selected]);
 
     // What's shaded on the ground, strongest first: a reach, a range, the fog, the zones, the centre.
     useEffect(() => {
@@ -103,33 +105,23 @@ export default function RealmArenaBoard3D({ field, fighters, fogGhosts = [], uns
         }, wave.size > 0 ? wave : null);
     }, [board, field, owners, colourFor, waveDue, showCentre, aiming, unseen]);
 
-    const [rotation, storeRotation] = useBoardRotation(viewerId);
+    const [rotation, turnBy] = useBoardRotation(viewerId);
     // The view glides round when the player turns it, and opens already turned.
     const turnedHere = useRef(false);
     const turn = (by: 1 | 3) => {
         turnedHere.current = true;
-        storeRotation(((rotation + by) % 4) as IsoRotation);
+        turnBy(by);
     };
     useEffect(() => board?.setRotation(rotation, turnedHere.current), [board, rotation]);
 
-    // Where the view goes, as the isometric board decides it.
-    const reachRect = useMemo(
-        () => selected && isStanding(selected) ? reachFocus({ field, fighters, sides }, selected, acting === selected.owner ? selected.ap : ACTION_POINTS) : null,
-        [field, fighters, sides, selected, acting],
-    );
-    const pickedUp = placing?.selected != null ? sealed?.[placing.selected] : undefined;
-    const focus = boardFocus(field, { follow, pickedUp, selected, reach: reachRect, home, refocus });
+    // Where the view goes, and what plays waiting for it to get there, as the isometric board decides them.
+    const { area, held, onFocused, tracks } = useBoardFocus({ field, fighters, sides, selected, acting, sealed, placing, follow, home, refocus, playing: !!playback });
     useEffect(() => {
-        if (focus) board?.focus(focus.area, focus.key, focus.exact);
+        if (area) board?.focus(area.area, area.key, area.exact);
     });
-
-    // What plays waits for the view to get there, as on the isometric board.
-    const [landed, setLanded] = useState<string | null>(null);
-    const held = !!playback && !!focus && landed !== focus.key;
-    const tracked = !!follow && !('aim' in follow) && !!follow.track && !!playback && !held;
     const onTapSquare = placing?.onTap ?? aiming?.onSquare;
-    useEffect(() => board?.listen({ onFocused: setLanded, onFigure: onSelect, onSquare: square => onTapSquare?.(square) }), [board, onSelect, onTapSquare]);
-    useEffect(() => board?.play(playback ? { cues: playback.cues, before: playback.before } : null, tracked), [board, playback, tracked]);
+    useEffect(() => board?.listen({ onFocused, onFigure: onSelect, onSquare: square => onTapSquare?.(square) }), [board, onFocused, onSelect, onTapSquare]);
+    useEffect(() => board?.play(playback ? { cues: playback.cues, before: playback.before } : null, tracks), [board, playback, tracks]);
 
     return (
         <div ref={frame} className="ag-board-frame ag-realmarena-frame">

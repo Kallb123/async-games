@@ -17,25 +17,22 @@ import {
 import type { BurstKind } from "@/games/RealmArena/art";
 import type { CharacterId } from "@/games/RealmArena/characters";
 import { isStanding, type Fighter, type FogGhost } from "@/games/RealmArena/rules";
-import { endOf, hpFraction, shakeAt, toldAt, toldOf, walkerAt, walkLift, type BattleCue, type BurstCue, type FallCue, type FlightCue, type Told, type WalkCue } from "@/games/RealmArena/ui";
+import { BOARD_ZOOM, CLIMB_LEG, endOf, HP_BAR_HEIGHT, HP_BAR_RISE, HP_BAR_WIDTH, hpFraction, shakeAt, toldAt, toldOf, walkerAt, walkLift, type BattleCue, type BurstCue, type FallCue, type FlightCue, type Told, type WalkCue } from "@/games/RealmArena/ui";
 import { facingTowards, type Battlefield, type Facing, type Square } from "@/utils/games/battlefield/terrain";
+import { easeInOut, exactZoom, FIT_WIDTH, FOCUS_MARGIN_PX, focusZoom, GLIDE_LEAD, GLIDE_MS, wheelZoomFactor, zoomBetween, zoomLevels } from "@/utils/ui/boardZoom";
 import type { Rect } from "@/utils/ui/mapLabels";
 import { characterGeometry } from "./characterModels";
-import { azimuthOf, cameraBasis, fitZoom, figureMatrix, lightOf, lookAtFor, onScreen, QUARTER, regionOnScreen, squareCentre, type CameraBasis, type Vec3 } from "./iso3d";
+import { azimuthOf, cameraBasis, figureMatrix, lightOf, lookAtFor, onScreen, QUARTER, regionOnScreen, squareCentre, type CameraBasis, type Vec3 } from "./iso3d";
 import { lightSolids, solidMaterial } from "./solidMaterial";
 import { buildTerrain, type Sheets, type Terrain } from "./terrain3d";
 
-/** How long a glide to a focus takes, and how far through it the focus is told it has landed: `BoardZoom`'s own. */
-const GLIDE_MS = 380;
-const GLIDE_LEAD = 0.75;
 /** How often the wave's breathing is drawn (§30.11): a slow glow needs no more, and every frame of it draws the whole board. */
 const WAVE_FRAME_MS = 66;
 /** How long a quarter turn of the view takes. */
 const TURN_MS = 320;
-/** The room a focused region keeps from the edge of the frame, in pixels: `BoardZoom`'s. */
-const FOCUS_MARGIN_PX = 28;
-/** The zoom steps, as multiples of the fitted board: `BoardZoom`'s for this board (`zoomWidth` 250, `maxWidth` 600). */
-const STEPS = [1, 2.5, 6];
+/** The zoom steps, as widths of the fitted board (`FIT_WIDTH` is fitted): the isometric board's, `BoardZoom`'s for `BOARD_ZOOM`. */
+const LEVELS = zoomLevels(BOARD_ZOOM.zoomWidth, BOARD_ZOOM.maxWidth);
+const DEEPEST = Math.max(...LEVELS);
 /** How far a press may move and still be a tap, in pixels. */
 const TAP_SLOP = 8;
 
@@ -45,7 +42,7 @@ const BOARD_UNIT = Math.SQRT2 / 20;
 /** A board unit up the frame, in the world's height: a full height is 10 of them. */
 const BOARD_RISE = QUARTER * 4 / 10;
 /** The HP bar: its size and how high its middle is over its figure's feet, in world units, as the isometric board's (`HP_BAR_*`). */
-const HP_BAR = { width: 9 * BOARD_UNIT, height: 2 * BOARD_RISE, rise: 13 * BOARD_RISE };
+const HP_BAR = { width: HP_BAR_WIDTH * BOARD_UNIT, height: HP_BAR_HEIGHT * BOARD_RISE, rise: (HP_BAR_RISE + HP_BAR_HEIGHT / 2) * BOARD_RISE };
 /** How many HP bars the board has room for before it grows. */
 const BAR_ROOM = 256;
 
@@ -103,6 +100,8 @@ export class Board3D {
     private readonly camera = new OrthographicCamera(-1, 1, 1, -1, 0.1, 400);
     private terrain: Terrain | null = null;
     private field: Battlefield | null = null;
+    /** The battlefield's tallest top, in quarters. */
+    private top = 0;
     private sheets: Sheets | null = null;
     private readonly solids: ShaderMaterial[] = [];
 
@@ -164,7 +163,7 @@ export class Board3D {
             mesh.instanceMatrix.setUsage(DynamicDrawUsage);
             this.scene.add(mesh);
         }
-        this.ring = new Mesh(new RingGeometry(0.34, 0.42, 32).rotateX(-Math.PI / 2), new MeshBasicMaterial({ color: 0xf6efe2, transparent: true, opacity: 0.9, depthWrite: false }));
+        this.ring = new Mesh(new RingGeometry(0.34, 0.42, 32).rotateX(-Math.PI / 2), new MeshBasicMaterial({ transparent: true, opacity: 0.9, depthWrite: false }));
         this.ring.visible = false;
         this.ring.renderOrder = 1;
         this.scene.add(this.ring);
@@ -209,6 +208,7 @@ export class Board3D {
             this.scene.remove(this.terrain.group);
             this.terrain.dispose();
         }
+        this.top = Math.max(0, ...field.tiles.map(tile => tile.elevation));
         this.terrain = buildTerrain(field, this.sheets);
         this.scene.add(this.terrain.group);
         if (first || !this.fitted) this.fit();
@@ -227,8 +227,10 @@ export class Board3D {
         this.invalidate();
     }
 
-    setSelected(id: number | null): void {
+    /** Who is selected, ringed in `colour` — the isometric board's ring's (`--ag-on-dark`). */
+    setSelected(id: number | null, colour: Color): void {
         this.selectedId = id;
+        (this.ring.material as MeshBasicMaterial).color.copy(colour).convertSRGBToLinear();
         this.layRing();
         this.invalidate();
     }
@@ -298,13 +300,14 @@ export class Board3D {
         this.applied = wanted.key;
         const { area, key, exact } = wanted;
         const basis = this.turn ? cameraBasis(this.turn.to) : this.basis;
-        const top = Math.max(0, ...field.tiles.map(tile => tile.elevation));
-        const region = regionOnScreen(basis, area, top);
-        const fits = fitZoom(region, this.size, FOCUS_MARGIN_PX);
-        const fit = this.fitZoom();
-        const zoom = exact
-            ? Math.min(Math.max(fits, fit), fit * STEPS[STEPS.length - 1])
-            : fit * ([...STEPS].reverse().find(step => fit * step <= fits) ?? 1);
+        const region = regionOnScreen(basis, area, this.top);
+        // As `BoardZoom` picks its zoom, the board's width fitted to the frame and its height the frame's.
+        const fit = this.fitZoom(basis);
+        const board = { width: this.size.width / fit, height: this.size.height / fit };
+        const width = exact
+            ? exactZoom(region, board, this.size, FOCUS_MARGIN_PX, DEEPEST)
+            : focusZoom(LEVELS, region.width, board.width, this.size.width, FOCUS_MARGIN_PX);
+        const zoom = fit * width / FIT_WIDTH;
         const centre = { x: region.x + region.width / 2, y: region.y + region.height / 2 };
         this.glide = { from: { target: this.target, zoom: this.zoom }, to: { target: lookAtFor(basis, centre), zoom }, start: performance.now(), key, told: false };
         this.animate();
@@ -522,21 +525,34 @@ export class Board3D {
 
     // ---- The view ----
 
+    /** The whole battlefield's ground, as it lands across the frame. */
+    private boardRegion(basis = this.basis) {
+        const field = this.field!;
+        return regionOnScreen(basis, { x: 0, y: 0, width: field.width, height: field.height }, 0);
+    }
+
     /** The zoom the whole battlefield fits the frame's width at: the fitted board. */
-    private fitZoom(): number {
-        const field = this.field;
-        if (!field) return 1;
-        const region = regionOnScreen(this.basis, { x: 0, y: 0, width: field.width, height: field.height }, 0);
-        return this.size.width / region.width;
+    private fitZoom(basis = this.basis): number {
+        return this.field ? this.size.width / this.boardRegion(basis).width : 1;
     }
 
     private fit(): void {
-        const field = this.field;
-        if (!field || this.size.width <= 1) return;
-        this.zoom = this.fitZoom();
-        const region = regionOnScreen(this.basis, { x: 0, y: 0, width: field.width, height: field.height }, 0);
+        if (!this.field || this.size.width <= 1) return;
+        const region = this.boardRegion();
+        this.zoom = this.size.width / region.width;
         this.target = lookAtFor(this.basis, { x: region.x + region.width / 2, y: region.y + region.height / 2 });
         this.fitted = true;
+    }
+
+    /** A point of the frame, in pixels from its top left, across the frame in world units (`onScreen`). */
+    private across({ x, y }: { x: number; y: number }): { x: number; y: number } {
+        const at = onScreen(this.basis, this.target);
+        return { x: at.x + (x - this.size.width / 2) / this.zoom, y: at.y + (this.size.height / 2 - y) / this.zoom };
+    }
+
+    /** The line of sight through a point across the frame: where it passes the camera's plane, and which way it looks. */
+    private sightThrough(across: { x: number; y: number }): { origin: Vec3; direction: Vec3 } {
+        return { origin: lookAtFor(this.basis, across), direction: this.basis.back.map(n => -n) as Vec3 };
     }
 
     private measure(): void {
@@ -567,7 +583,7 @@ export class Board3D {
                 const t = Math.min(1, (now - this.turn.start) / TURN_MS);
                 const centre = onScreen(this.basis, this.target);
                 const pivot = this.screenToGround(centre);
-                this.azimuth = this.turn.from + (this.turn.to - this.turn.from) * ease(t);
+                this.azimuth = this.turn.from + (this.turn.to - this.turn.from) * easeInOut(t);
                 this.relight();
                 if (pivot) this.target = lookAtFor(this.basis, onScreen(this.basis, pivot));
                 if (t >= 1) this.turn = null; else more = true;
@@ -576,10 +592,10 @@ export class Board3D {
             }
             if (this.glide) {
                 const t = Math.min(1, (now - this.glide.start) / GLIDE_MS);
-                const k = ease(t);
+                const k = easeInOut(t);
                 const { from, to } = this.glide;
                 this.target = from.target.map((n, i) => n + (to.target[i] - n) * k) as Vec3;
-                this.zoom = Math.exp(Math.log(from.zoom) + (Math.log(to.zoom) - Math.log(from.zoom)) * k);
+                this.zoom = zoomBetween(from.zoom, to.zoom, k);
                 if (!this.glide.told && t >= GLIDE_LEAD) {
                     this.glide.told = true;
                     this.handlers.onFocused(this.glide.key);
@@ -602,9 +618,8 @@ export class Board3D {
     }
 
     /** The ground under a point across the frame (y = 0), where the view through it meets it. */
-    private screenToGround({ x, y }: { x: number; y: number }): Vec3 | null {
-        const origin = lookAtFor(this.basis, { x, y });
-        const direction = this.basis.back.map(n => -n) as Vec3;
+    private screenToGround(across: { x: number; y: number }): Vec3 | null {
+        const { origin, direction } = this.sightThrough(across);
         if (Math.abs(direction[1]) < 1e-6) return null;
         const t = -origin[1] / direction[1];
         return [origin[0] + direction[0] * t, 0, origin[2] + direction[2] * t];
@@ -680,7 +695,7 @@ export class Board3D {
         this.canvas.addEventListener("wheel", event => {
             if (!event.ctrlKey && !event.metaKey) return;
             event.preventDefault();
-            this.zoomAbout(local(event), Math.exp(-event.deltaY / 300));
+            this.zoomAbout(local(event), wheelZoomFactor(event.deltaY, event.deltaMode));
         }, { passive: false });
     }
 
@@ -690,14 +705,14 @@ export class Board3D {
         this.invalidate();
     }
 
+    /** Zooms by `factor` between the fit and the deepest step, keeping what's under `point` there. */
     private zoomAbout(point: { x: number; y: number }, factor: number): void {
         const fit = this.fitZoom();
-        const zoom = Math.min(Math.max(this.zoom * factor, fit), fit * STEPS[STEPS.length - 1]);
+        const under = this.across(point);
+        this.zoom = Math.min(Math.max(this.zoom * factor, fit), fit * DEEPEST / FIT_WIDTH);
+        const moved = this.across(point);
         const at = onScreen(this.basis, this.target);
-        const offset = { x: point.x - this.size.width / 2, y: this.size.height / 2 - point.y };
-        const under = { x: at.x + offset.x / this.zoom, y: at.y + offset.y / this.zoom };
-        this.zoom = zoom;
-        this.target = lookAtFor(this.basis, { x: under.x - offset.x / zoom, y: under.y - offset.y / zoom });
+        this.target = lookAtFor(this.basis, { x: at.x + under.x - moved.x, y: at.y + under.y - moved.y });
         this.invalidate();
     }
 
@@ -705,8 +720,7 @@ export class Board3D {
     private tap(point: { x: number; y: number }): void {
         const field = this.field;
         if (!field) return;
-        const at = onScreen(this.basis, this.target);
-        const across = { x: at.x + (point.x - this.size.width / 2) / this.zoom, y: at.y + (this.size.height / 2 - point.y) / this.zoom };
+        const across = this.across(point);
         // A figure is taken as a disc round the middle of its body, across the frame.
         let best: { id: number; depth: number } | null = null;
         for (const one of this.placed) {
@@ -723,11 +737,9 @@ export class Board3D {
     /** The front-most square drawn under a point across the frame: its top, at whatever height it stands. */
     private squareAt(across: { x: number; y: number }): Square | undefined {
         const field = this.field!;
-        const origin = lookAtFor(this.basis, across);
-        const direction = this.basis.back.map(n => -n) as Vec3;
-        const top = Math.max(0, ...field.tiles.map(tile => tile.elevation));
+        const { origin, direction } = this.sightThrough(across);
         // Walk down the view from the tallest top to the ground, a quarter at a time.
-        for (let quarter = top; quarter >= 0; quarter--) {
+        for (let quarter = this.top; quarter >= 0; quarter--) {
             const y = quarter * QUARTER;
             const t = (y - origin[1]) / direction[1];
             const col = Math.floor(origin[0] + direction[0] * t), row = Math.floor(origin[2] + direction[2] * t);
@@ -739,10 +751,8 @@ export class Board3D {
     }
 }
 
-/** A leg of a walk's length in the world: a square straight, √2 across a diagonal, and a little more for a change of height. */
+/** A leg of a walk's length in the world: a square straight, √2 across a diagonal, and `CLIMB_LEG` of a square more for each quarter climbed, as `legWeight` prices it. */
 function worldLeg(field: Battlefield, from: Square, to: Square): number {
     const a = squareCentre(field, from), b = squareCentre(field, to);
-    return Math.hypot(b[0] - a[0], b[2] - a[2]) + Math.abs(b[1] - a[1]) * 0.25;
+    return Math.hypot(b[0] - a[0], b[2] - a[2]) + CLIMB_LEG * Math.abs(field.tiles[to].elevation - field.tiles[from].elevation);
 }
-
-const ease = (t: number) => t < 0.5 ? 2 * t * t : 1 - (-2 * t + 2) ** 2 / 2;

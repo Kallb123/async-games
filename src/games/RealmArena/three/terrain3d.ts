@@ -166,7 +166,7 @@ export interface Terrain {
     group: Group;
     /** Every material drawn with the solid shader, for the light to turn with the camera. */
     solids: ShaderMaterial[];
-    /** The overlay's texels, a square each (row-flipped, as a texture's rows run), and the texture to tell when they change. */
+    /** The overlay's texels, four bytes a square in the map's order, and the texture to tell when they change. */
     overlay: { data: Uint8Array; texture: DataTexture };
     /** The wave's overlay (§30.11), drawn separately so it can breathe. */
     wave: { data: Uint8Array; texture: DataTexture; material: MeshBasicMaterial };

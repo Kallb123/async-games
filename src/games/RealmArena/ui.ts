@@ -130,10 +130,32 @@ export function reachFocus(state: BattleState, fighter: Fighter, ap: number): Re
     return { x: left, y: top, width: right - left, height: bottom - top };
 }
 
-/** What the board follows: a target picked to aim at and who aims at it, or squares — a review's step, an action played — with how to frame them. */
-export type BoardFollow =
-    | { aim: { caster: Square; target: Square }; key: string }
-    | { squares: readonly Square[]; key: string; exact?: boolean; close?: boolean; track?: boolean };
+/** A target picked to aim at, and who is aiming at it: what the board frames close (`aimFocus`). */
+export interface AimFollow { aim: { caster: Square; target: Square }; key: string }
+
+/**
+ * What the board follows: a target picked to aim at, or squares — a review's
+ * step, an action played — just fitted round (`exact`), framed close round
+ * whoever acted and whoever it reached (`close`), or, for a walk too long to
+ * frame, where it starts, the camera following the walker from there (`track`).
+ */
+export type BoardFollow = AimFollow | { squares: readonly Square[]; key: string; exact?: boolean; close?: boolean; track?: boolean };
+
+/** How far the battlefield zooms (`BoardZoom`'s `zoomWidth` and `maxWidth`): 84 squares corner to corner fitted to a phone is under ten pixels a square, so the deep step is what makes one tappable — about seven squares across (§13.1). */
+export const BOARD_ZOOM = { zoomWidth: 250, maxWidth: 600 } as const;
+
+/**
+ * How tall a figure stands and the HP bar over it, in the isometric board's
+ * units, against a square `2 * ISO_HALF_WIDTH` across: the tallest of them (a
+ * mage's hat, a staff's head) stands about `FIGURE_TOP` high, with its HP bar
+ * just over that — a model drawn taller in art-masters/realmarena/characters
+ * wants this raised with it.
+ */
+export const FIGURE_TOP = 12.5;
+export const HP_BAR_WIDTH = 9;
+export const HP_BAR_HEIGHT = 2;
+/** How high the HP bar's foot is over the middle of its square. */
+export const HP_BAR_RISE = FIGURE_TOP + 0.5;
 
 /** Where the board's view goes, in squares, the key that reapplies it, and whether it's zoomed to just fit (`BoardZoomFocus.exact`). */
 export interface BoardFocusArea {
