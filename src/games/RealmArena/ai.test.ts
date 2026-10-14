@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { at } from "@/utils/games/battlefield/testFixtures";
 import { coverAgainst } from "@/utils/games/battlefield/cover";
 import { reachFrom } from "@/utils/games/battlefield/pathfinding";
-import { battlefieldWith, buildBattlefield, type Battlefield, type Square } from "@/utils/games/battlefield/terrain";
+import { battlefieldWith, buildBattlefield, distance, type Battlefield, type Square } from "@/utils/games/battlefield/terrain";
 import { FACTIONS, type CharacterId } from "./characters";
 import { FOUR_GATE_FORT } from "./maps/fourGateFort";
 import {
@@ -23,8 +23,10 @@ function ready(id: number, owner: string, character: CharacterId, square: Square
     return { ...newFighter(id, owner, character, square), ap: ACTION_POINTS, ...extra };
 }
 
-function fieldOf(rows: string[], centre?: { col: number; row: number; width: number; height: number }): Battlefield {
-    return buildBattlefield({ name: "Puzzle", rows, deployments: [], objectives: centre ? { centre } : {} });
+type Area = { col: number; row: number; width: number; height: number };
+
+function fieldOf(rows: string[], centre?: Area, deployments: Area[] = []): Battlefield {
+    return buildBattlefield({ name: "Puzzle", rows, deployments, objectives: centre ? { centre } : {} });
 }
 
 const battle = (field: Battlefield, fighters: Fighter[], fog = false): BattleState => ({ field, fighters, sides: SIDES, ...(fog ? { fog: true } : {}) });
@@ -35,6 +37,9 @@ function planned(state: BattleState, round = 1): Action | undefined {
     if (action) expect(check(state, AI, action)).not.toHaveProperty("refused");
     return action;
 }
+
+/** Where an action leaves a character standing on `from`: the end of its path, if it moves. */
+const endOf = (action: Action | undefined, from: Square): Square => action && "path" in action ? action.path.at(-1)! : from;
 
 const OPEN = fieldOf(Array(9).fill(".".repeat(16)));
 
@@ -99,7 +104,7 @@ describe("nextAction's puzzles (§29.11)", () => {
         const enemy = ready(1, "a", "archer", at(field, 3, 5));
         const action = planned(battle(field, [archer, enemy]));
         expect(action).toMatchObject({ kind: "move", fighter: 0 });
-        const end = action && "path" in action ? action.path.at(-1)! : archer.square;
+        const end = endOf(action, archer.square);
         expect(coverAgainst(field, end, enemy.square)).not.toBe("none");
     });
 
@@ -146,7 +151,7 @@ describe("nextAction's puzzles (§29.11)", () => {
         const action = planned(battle(field, [knight]), 1);
         expect(action).toMatchObject({ kind: "move", fighter: 0 });
         const walk = reachFrom(field, at(field, 9, 9)).costs;
-        expect(walk[action && "path" in action ? action.path.at(-1)! : knight.square]).toBeLessThan(walk[knight.square]);
+        expect(walk[endOf(action, knight.square)]).toBeLessThan(walk[knight.square]);
     });
 
     it("stops when it has nothing to do it with: no AP left, or nobody standing", () => {
@@ -154,6 +159,33 @@ describe("nextAction's puzzles (§29.11)", () => {
         const enemy = ready(1, "a", "knight", at(OPEN, 15, 8));
         expect(planned(battle(OPEN, [archer, enemy]))).toBeUndefined();
         expect(planned(battle(OPEN, [{ ...archer, hp: 0, ap: ACTION_POINTS }, enemy]))).toBeUndefined();
+    });
+});
+
+describe("nextAction in Hold Out (§30.3)", () => {
+    it("closes in on a Knight it outnumbers rather than ringing it just out of reach", () => {
+        // Each Skitterling alone would lose the trade with the Knight, but its
+        // losses come back with the next wave and the Knight's never do.
+        const knight = ready(0, "a", "knight", at(OPEN, 8, 4));
+        const pack = [at(OPEN, 6, 4), at(OPEN, 10, 4), at(OPEN, 8, 2), at(OPEN, 8, 6)].map((square, i) => ready(i + 1, AI, "skitterling", square));
+        const state = battle(OPEN, [knight, ...pack]);
+        const action = nextAction(viewOf(state, AI), AI, 4, []);
+        expect(action).toMatchObject({ kind: "move" });
+        expect(distance(OPEN, endOf(action, knight.square), knight.square)).toBeLessThan(2);
+    });
+
+    it("goes looking where the team deployed when it neither sees nor remembers anyone, rather than waiting in the keep", () => {
+        // The team's zones (seats a and b) far to the east, out of sight; the warband's in the west.
+        const teamZone = { col: 29, row: 0, width: 3, height: 5 };
+        const field = fieldOf(Array(5).fill(".".repeat(32)), { col: 1, row: 1, width: 2, height: 2 }, [teamZone, teamZone, { col: 0, row: 0, width: 1, height: 5 }]);
+        const knight = ready(0, AI, "knight", at(field, 1, 2));
+        const hidden = ready(1, "a", "archer", at(field, 30, 2));
+        const state = battle(field, [knight, hidden], true);
+        expect(viewOf(state, AI).fighters).toHaveLength(1);
+        const action = nextAction(viewOf(state, AI), AI, 4, []);
+        expect(action).toMatchObject({ kind: "move", fighter: knight.id });
+        const walk = reachFrom(field, at(field, 30, 2)).costs;
+        expect(walk[endOf(action, knight.square)]).toBeLessThan(walk[knight.square]);
     });
 });
 
