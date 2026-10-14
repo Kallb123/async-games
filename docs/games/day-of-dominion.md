@@ -1,6 +1,6 @@
 # Day of Dominion — Game Design Document
 
-**Status:** Concept, v0.5. Round 1 (§21.1) settled the name, eight players,
+**Status:** Concept, v0.6. Round 1 (§21.1) settled the name, eight players,
 turns taken one after another, long matches at a pace the host picks,
 several ways to win, five eras each player moves through at their own speed,
 units that upgrade through research, the yields with strategic resources,
@@ -8,8 +8,8 @@ and one military unit a tile. Round 2 (§21.2) added gold as a sixth yield,
 chose city buildings over workers, and made combat strength and advantages
 with no roll. Round 3 (§21.3) reopened the time model: §5 lays out eight
 ways to run a round and what each would need here. Round 4 (§21.4) settled the
-map, the biomes (plains and desert added), cities (three apart, two rings,
-borders by culture) and most of the remaining rules; §20.4 lists every
+map, the biomes (plains and desert added), cities (four apart, working three
+rings, borders by culture to four, as corrected in round 5) and most of the remaining rules; §20.4 lists every
 decision taken. Still open: the time model, round 2's questions (D35–D47), the
 two gold raised (D48–D49), and five for Milestone B and a prototype
 (D29–D34). The body is written as if each open recommendation were taken,
@@ -705,11 +705,9 @@ don't wrap.
 | 6 | 40 × 52 | 2,080 | ~1,080 |
 | 8 | 46 × 60 | 2,760 | ~1,440 |
 
-Cities three hexes apart with two rings each (D20) could pack fifteen or more
-into that, so it's the brakes on sprawl (§12.4), not the map, that decide how
-many are worth having; ten or so is the aim, with contested ground between
-neighbours and islands across the water. A table that wants closer neighbours
-picks small. It's also large: §22.2 is about drawing
+That's room for about ten cities each, four hexes apart with three rings of
+land (D20), with contested ground between neighbours and islands across the
+water. A table that wants closer neighbours picks small. It's also large: §22.2 is about drawing
 it, and BoardZoom's "fit" step stops being useful past four players (§22.3).
 
 ### 9.7 Generating the map
@@ -908,8 +906,8 @@ None in the first version (D25).
 ### 12.1 Founding
 
 A settler founds a city on the tile it stands on, if the tile is land (not
-mountains), and at least three hexes from any other city: two clear tiles
-between (decided in round 4, D20). The city takes the settler's place, with population 1, and
+mountains), and at least four hexes from any other city: three clear tiles
+between (decided in round 5, D20). The city takes the settler's place, with population 1, and
 claims the six tiles around it.
 
 The capital is the first city, and gets +2 science, +2 production, +2
@@ -922,19 +920,21 @@ the rest of the match, whoever holds it (§18).
   **with its culture**: each time the city's culture reaches a threshold, it
   claims the best tile next to its border, by its focus, unless the player has
   pinned one (D18). The threshold rises with each tile.
-- A city reaches **two rings out** (18 tiles and its centre), for working and
-  for its border alike (D20). Cities three apart overlap in their second
-  rings, so neighbouring cities — yours or a rival's — compete for the tiles
-  between them, and culture (or gold, below) decides who gets them.
+- A city works tiles up to **three rings out** (36 tiles and its centre),
+  and its border can reach **four rings** (D20), so a city with a lot of
+  culture holds land it can't work, which keeps rivals off it. Cities four
+  apart overlap in their third and fourth rings, so neighbours — yours or a
+  rival's — compete for the tiles between them, and culture (or gold, below)
+  decides who gets them.
 - A tile belongs to one city. A tile already held by someone else is skipped
   (taking tiles from a rival with culture is a candidate for a culture
   victory, later).
 - **Each citizen works one tile.** The city centre is worked for free.
-- **Specialists.** A citizen with no tile left to work — the city has worked
-  out its land, or its neighbours hold the rest — works in the city instead,
+- **Specialists.** A citizen with no tile left to work — usually because its
+  neighbours hold the land it would have worked — works in the city instead,
   for +2 of the city's focus yield (production, science, culture, faith or
-  gold; science on *Balanced* or *Food*). A big city on a small patch of land
-  is a city of specialists.
+  gold; science on *Balanced* or *Food*). A big city squeezed between rivals
+  becomes a city of specialists.
 - **Citizens are placed automatically** by the city's focus — *Balanced*,
   *Food*, *Production*, *Science*, *Culture*, *Faith* or *Gold* — and the
   player can pin a citizen to a tile (D17).
@@ -995,8 +995,7 @@ food (2, +1 river). Its citizen works the river grassland next door for 3
 more: 6 food against 2 eaten, +4 a round, so population 2 at about round 7
 (it needs 23). At population 2 it works a forest too (+3 a round), so
 population 3 comes at about round 17. By round 100 a well-placed capital is
-around population 8; by round 300, 15–20, working every tile it holds and
-the rest as specialists.
+around population 8; by round 300, 20 or more.
 
 **Sprawl is braked three ways** (D19), without a happiness number:
 
@@ -1567,7 +1566,7 @@ disbands a unit, with a round's warning.
 | D17 | Citizens | Placed automatically by the city's focus, with pinning | 4 | §12.2 |
 | D18 | Territory | Grows by the city's culture | 4 | §12.2 |
 | D19 | Brakes on size | Fresh-water population caps, rising settler costs, techs and traditions costing more per city past the fourth | 4 | §12.4 |
-| D20 | City spacing | Three hexes apart, two rings | 4 | §12.1–§12.2 |
+| D20 | City spacing | Four hexes apart, working three rings, borders to four | 5 (correcting 4) | §12.1–§12.2 |
 | D22 | Production | A queue of five, repeat, progress kept on a switch, an empty queue makes food, automation (buying is D48) | 4 | §12.5 |
 | D23 | Stacking | One military unit a tile, plus one civilian | 1 | §10.1 |
 | D24 | Combat | Strength plus advantages, no roll | 2 | §11.2 |
@@ -1691,12 +1690,16 @@ The time model (D3) is still undecided. The rest:
 9. **D17:** agreed.
 10. **D18:** (c), culture gains tiles.
 11. **D19:** (a).
-12. **D20:** (a), three apart, two rings. (§12.1–§12.2: borders stop at two
-    rings too, neighbours overlap and compete for the tiles between them, and
-    specialists are added for citizens with no tile left to work.)
+12. **D20:** (a), three apart, two rings. *Corrected in round 5 to (b).*
 13. **D22, D25, D26, D27, D28:** agreed.
 
 ### 21.5 Round 5
+
+1. **D20, corrected:** should have been (b): four apart, working three rings,
+   borders to four. (§9.6, §12.1–§12.2. Specialists, added for round 4's
+   smaller cities, stay, for a city squeezed by its neighbours.)
+
+### 21.6 Round 6
 
 To come.
 
