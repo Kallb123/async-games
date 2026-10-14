@@ -311,6 +311,10 @@ most of the smoothness for a fraction of that. If particles are wanted later —
 embers, sparks, smoke — a `<canvas>` over the board for those alone fits the
 same timeline without touching the board.
 
+The question is taken further — where the board's time likely goes, five options from a cheaper
+SVG to a game engine, and a recommended order — in
+[`realm-arena-rendering.md`](./realm-arena-rendering.md).
+
 ---
 
 ## 5. Feel and timings
