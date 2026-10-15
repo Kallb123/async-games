@@ -152,10 +152,86 @@ export const BOARD_ZOOM = { zoomWidth: 250, maxWidth: 600 } as const;
  * wants this raised with it.
  */
 export const FIGURE_TOP = 12.5;
+/**
+ * A figure's body taken as a disc `FIGURE_RADIUS` across, centred `FIGURE_RISE`
+ * over the middle of its square's top: what a tap lands on, what its marks sit
+ * beside, and what a shot flies to and a blow's text hangs from.
+ */
+export const FIGURE_RADIUS = 4.5;
+export const FIGURE_RISE = 7;
 export const HP_BAR_WIDTH = 9;
 export const HP_BAR_HEIGHT = 2;
 /** How high the HP bar's foot is over the middle of its square. */
 export const HP_BAR_RISE = FIGURE_TOP + 0.5;
+
+/**
+ * What hangs round a figure, in the same units, shared by every way of drawing
+ * the board. The rings on the ground round its feet, as fractions of its square's
+ * diamond: the one it's picked out by, wide enough to show round its feet,
+ * and outside that, still inside the square, the dashed one round one on
+ * watch or still sealed.
+ */
+export const RING_RADIUS = 0.62;
+export const MARKER_RADIUS = 0.8;
+/** The AP pips: a column of dots down the figure's right, clear of the disc and inside its square's width. */
+export const AP_PIP_RADIUS = 0.75;
+export const AP_PIP_STEP = 1.9;
+export const AP_PIP_OFFSET = 5.6;
+/**
+ * The effect marks (§20.2): a column of badges down the figure's left, where
+ * the AP pips never are, clear of the disc and inside its square's width.
+ * Three stand within the disc's height.
+ */
+export const EFFECT_MARK_SIZE = 3;
+export const EFFECT_MARK_STEP = 3.1;
+export const EFFECT_MARK_OFFSET = 6.2;
+/**
+ * The item a character carries (§21.1): by its right shoulder, in the AP
+ * pips' column above them, so it never covers them, the effect marks or the
+ * HP bar over the figure's head.
+ */
+export const ITEM_MARK_SIZE = 3;
+export const ITEM_MARK_OFFSET = { x: AP_PIP_OFFSET, y: -5 };
+
+/** The ring drawn round a figure's feet: chosen, a candidate for a tap, aimed at, or a watcher a move would set off. */
+export type Ring = "selected" | "candidate" | "aimed" | "flagged";
+
+/** The dashed ring round a figure's feet, outside its `Ring`: on watch, or a squad still sealed. */
+export type Marker = "watch" | "sealed";
+
+/**
+ * The ring round a figure's feet, if any, in the order they win: chosen, then
+ * aimed at, then a watcher a move would set off, then a candidate for a tap.
+ * `aiming` is the lined-up action's, if there is one.
+ */
+export function ringOf(id: number, selected: number | undefined, aiming: { aimed: readonly number[]; flagged: readonly number[]; candidates: readonly number[] } | null | undefined): Ring | undefined {
+    if (id === selected) return "selected";
+    if (aiming?.aimed.includes(id)) return "aimed";
+    if (aiming?.flagged.includes(id)) return "flagged";
+    if (aiming?.candidates.includes(id)) return "candidate";
+    return undefined;
+}
+
+/** A target's chance to hit: a pill wide enough for "100%", worn above its figure's HP bar. */
+export const ODDS_WIDTH = 10.5;
+export const ODDS_HEIGHT = 4;
+export const ODDS_RISE = HP_BAR_RISE + HP_BAR_HEIGHT + ODDS_HEIGHT / 2 + 0.6;
+/** A cover shield standing on a square's edge: narrow enough to stay clear of the figure's disc and the HP bar. */
+export const SHIELD_WIDTH = 3.6;
+export const SHIELD_HEIGHT = 4.6;
+/** The path a lined-up move takes: how wide the line is, and the radius of the dot where it ends. */
+export const PATH_WIDTH = 1.2;
+export const PATH_END_RADIUS = 2;
+/** The centre's name: its size and weight, and how far clear of the area's edge its baseline stands. */
+export const CENTRE_LABEL = { fontSize: 10, fontWeight: 800, gap: 4 } as const;
+
+/** The outline of a cover shield, standing on its point at the origin. `left` is just its left half. */
+export function shieldPath(left = false): string {
+    const half = SHIELD_WIDTH / 2, shoulder = -SHIELD_HEIGHT * 0.45, belly = -SHIELD_HEIGHT * 0.12;
+    return left
+        ? `M0 ${-SHIELD_HEIGHT}H${-half}V${shoulder}Q${-half} ${belly} 0 0Z`
+        : `M${-half} ${-SHIELD_HEIGHT}H${half}V${shoulder}Q${half} ${belly} 0 0Q${-half} ${belly} ${-half} ${shoulder}Z`;
+}
 
 /** Where the board's view goes, in squares, the key that reapplies it, and whether it's zoomed to just fit (`BoardZoomFocus.exact`). */
 export interface BoardFocusArea {
@@ -1855,6 +1931,12 @@ export interface FxPoints {
     head: Point;
 }
 
+/** Where the visuals go on a square whose ground is at `ground`: a figure's disc (`FIGURE_RISE` over it), and the top of that disc. */
+export function fxPointsAt(ground: Point): FxPoints {
+    const body = { x: ground.x, y: ground.y - FIGURE_RISE };
+    return { ground, body, head: { x: body.x, y: body.y - FIGURE_RADIUS } };
+}
+
 /**
  * How high each missile's arc rises (§26.1), as a share of how far it goes (up
  * to `MAX_ARC`): an arrow on a shallow arc, a bolt in a straight line, a gobbet
@@ -1870,6 +1952,23 @@ export const FLIGHT_ARC: Readonly<Record<Missile, number>> = {
     acid: 0.2,
     dynamite: 0.3,
 };
+/**
+ * How each missile is drawn (§26.1), in board units: how big it is. A flask, a
+ * pot or a stick of dynamite tumbles end over end; anything else points the way
+ * it goes. (How high its arc rises is `FLIGHT_ARC`, with the rest of where it is.)
+ */
+export const FLIGHT: Readonly<Record<Missile, { size: number; tumbles?: true }>> = {
+    arrow: { size: 12 },
+    bolt: { size: 10 },
+    fireball: { size: 14 },
+    fireFlask: { size: 7, tumbles: true },
+    thunderFlask: { size: 7, tumbles: true },
+    smokePot: { size: 7, tumbles: true },
+    acid: { size: 10 },
+    dynamite: { size: 9, tumbles: true },
+};
+/** How fast a flask or a pot turns over, in degrees a millisecond. */
+export const TUMBLE = 0.9;
 /**
  * The highest any arc peaks above the straight line, in board units: three
  * squares' depth on screen. Without it a lob across the map would rise by a
@@ -2002,6 +2101,28 @@ export function fadeInAt(cue: Timed, ms: number): number | null {
     const left = 1 - progressOf(cue, ms);
     return 1 - left * left;
 }
+
+/** The hit text, in board units: the number's middle above the point it's hung from, the label under it, and a mark beside the number. */
+export const HIT_VALUE_RISE = 4;
+export const HIT_LABEL_DROP = 3.6;
+export const HIT_MARK_SIZE = 3.4;
+/**
+ * The room between the end of the big text and the mark beside it, in board
+ * units: clear of the text's outline (half its 1.3 stroke) with a little air.
+ * The mark goes after the text as it is drawn, so a word — "Hunker down" — is
+ * cleared as surely as a number.
+ */
+export const HIT_MARK_GAP = 1.2;
+/**
+ * How much higher each lane of hit text stands (`TextCue.lane`): clear of the
+ * number and the label under it on the lane below, with room for that one to
+ * rise as it fades.
+ */
+export const HIT_LANE_RISE = 9;
+/** A strike's slash, across the figure it lands on, in board units. */
+export const SLASH_SIZE = 14;
+/** A puff of a smoke pot's cloud: a square across, in board units, its foot just in front of the square's middle. */
+export const SMOKE_SIZE = 2 * ISO_HALF_WIDTH;
 
 /** How hit text rises, in board units (down positive): settling in from just below, then floating away. */
 const HIT_SETTLE = 1.5;
