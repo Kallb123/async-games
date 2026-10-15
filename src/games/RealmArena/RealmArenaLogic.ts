@@ -176,7 +176,6 @@ const TALLIED: Readonly<Partial<Record<Action["kind"], keyof Tally>>> = {
     attack: "attacks",
     aimedShot: "attacks",
     cleave: "abilities",
-    shieldWall: "abilities",
     fireball: "abilities",
     dynamite: "abilities",
     heal: "abilities",
@@ -218,7 +217,7 @@ export function tallied(fighters: readonly Fighter[], action: Action, events: re
 // sends it. So there is no ten-second hold (§5) — Undo is simply there until
 // the player does something that isn't undoable.
 //
-// Undoable: a move, a sneak, hunkering down, going on watch, a shield wall, a
+// Undoable: a move, a sneak, hunkering down, going on watch, a
 // heal or a Regrowth, a raise, a Purify, a Hunter's mark, a healing draught,
 // and a throw or a Demolish that lands on nobody — a smoke pot always does
 // (§21.2) — the actions that roll nothing and hurt nobody. A fire flask or a Demolish that
@@ -245,7 +244,7 @@ export function tallied(fighters: readonly Fighter[], action: Action, events: re
 // snapshot outlives its turn.
 
 /** The kinds that can ever be taken back: no attack is among them. */
-const UNDOABLE_KINDS: ReadonlySet<Action["kind"]> = new Set(["move", "sneak", "hunker", "watch", "shieldWall", "heal", "regrowth", "raise", "purify", "huntersMark", "draught", "throw", "demolish"]);
+const UNDOABLE_KINDS: ReadonlySet<Action["kind"]> = new Set(["move", "sneak", "hunker", "watch", "heal", "regrowth", "raise", "purify", "huntersMark", "draught", "throw", "demolish"]);
 
 /**
  * What an undoable action may have done: everything but an attack landing, a
@@ -254,7 +253,7 @@ const UNDOABLE_KINDS: ReadonlySet<Action["kind"]> = new Set(["move", "sneak", "h
  * hurts nobody (§22). A `thrown` or a `demolished` event is peaceful only when
  * it hit nobody, which `peaceful` checks itself.
  */
-const PEACEFUL_EVENTS: ReadonlySet<BattleEvent["kind"]> = new Set(["moved", "healed", "raised", "hunkered", "shieldWall", "watching", "effect", "marked", "blasted"]);
+const PEACEFUL_EVENTS: ReadonlySet<BattleEvent["kind"]> = new Set(["moved", "healed", "raised", "hunkered", "watching", "effect", "marked", "blasted"]);
 
 /**
  * How many snapshots the stack keeps: a character's whole turn of one-AP
@@ -392,7 +391,6 @@ export function unnamed(events: readonly BattleEvent[], hidden: (fighter: number
         if (!("fighter" in event) || !hidden(event.fighter)) return [event];
         switch (event.kind) {
             case "moved": return [{ ...event, sneaking: false }];
-            case "shieldWall":
             case "marked":
             case "raised": return [];
             case "healed": return event.via === "draught" ? [event] : [];
@@ -487,7 +485,6 @@ function clause(event: BattleEvent, fighters: readonly Fighter[], actor: string,
         }
         case "raised": return `raised ${name(event.target)} with ${name(event.fighter)}`;
         case "hunkered": return `hunkered ${name(event.fighter)} down`;
-        case "shieldWall": return `raised a shield wall with ${name(event.fighter)}`;
         case "watching": return `put ${name(event.fighter)} on watch`;
         case "spotted": return `${name(event.fighter)} found ${name(event.by)} in its way, and went round`;
         case "effect": return `${name(event.fighter)} is ${event.change === "cleared" ? "no longer " : ""}${EFFECTS[event.effect].state}`;
@@ -515,8 +512,7 @@ function veiledClause(event: BattleEvent, name: (id: number) => string, hitIn: (
         case "burst": return `used an ability with ${name(event.fighter)}${hit(event.targets, event.damage)}`;
         case "healed": return event.via === "draught" ? undefined : `used an ability on ${name(event.target)} with ${name(event.fighter)}`;
         case "raised": return `used an ability on ${name(event.target)} with ${name(event.fighter)}`;
-        case "marked":
-        case "shieldWall": return `used an ability with ${name(event.fighter)}`;
+        case "marked": return `used an ability with ${name(event.fighter)}`;
         default: return undefined;
     }
 }
@@ -741,7 +737,6 @@ export function toldTo(events: readonly BattleEvent[], battle: BattleState, view
                 return keep(saw(event.fighter) || saw(event.by));
             case "downed":
             case "hunkered":
-            case "shieldWall":
             case "watching":
             case "effect":
             case "burned":
@@ -1160,7 +1155,6 @@ const ACTION_PHRASES: Readonly<Record<Action["kind"], string>> = {
     aimedShot: "took an aimed shot",
     hunker: "hunkered down",
     watch: "went on watch",
-    shieldWall: "raised a shield wall",
     cleave: "cleaved",
     fireball: "threw a fireball",
     dynamite: "threw dynamite",
@@ -1198,7 +1192,6 @@ function cleanAction(action: Action): Action {
         case "regrowth": return { kind: action.kind, fighter: action.fighter, target: action.target };
         case "hunker":
         case "watch":
-        case "shieldWall":
         case "purify":
         case "burst": return { kind: action.kind, fighter: action.fighter };
         case "cleave": return { kind: action.kind, fighter: action.fighter, targets: [...action.targets] };

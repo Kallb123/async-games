@@ -96,13 +96,14 @@ describe("the tally (§23.3)", () => {
     it("is kept by the command that acts, and undo takes it back with the action", async () => {
         const game = makeGame();
         await musterAll(game);
-        const knight = game.specificGameState.fighters.find(one => one.owner === "a" && one.character === "knight")!;
+        const cleric = game.specificGameState.fighters.find(one => one.owner === "a" && one.character === "cleric")!;
+        cleric.hp = 1;
 
-        expect((await play(game, actBy("a", { kind: "shieldWall", fighter: knight.id }))).outcome.validMove).toBe(true);
-        expect(game.specificGameState.fighters.find(one => one.id === knight.id)!.tally).toEqual({ attacks: 0, abilities: 1, items: 0 });
+        expect((await play(game, actBy("a", { kind: "heal", fighter: cleric.id, target: cleric.id }))).outcome.validMove).toBe(true);
+        expect(game.specificGameState.fighters.find(one => one.id === cleric.id)!.tally).toEqual({ attacks: 0, abilities: 1, items: 0 });
 
         expect((await play(game, cmd(RealmArenaUndo, "a"))).outcome.validMove).toBe(true);
-        expect(game.specificGameState.fighters.find(one => one.id === knight.id)!.tally).toBeUndefined();
+        expect(game.specificGameState.fighters.find(one => one.id === cleric.id)!.tally).toBeUndefined();
     });
 });
 

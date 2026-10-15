@@ -42,6 +42,9 @@ import { addTally, NO_TALLY, type Ranks, type Tally } from "./mastery";
 
 /** Every character starts each of its owner's turns with this many AP (§13.2). */
 export const ACTION_POINTS = 4;
+
+/** The AP a raised character has to spend when it is raised on its owner's own turn. */
+export const RAISED_AP = 2;
 export const ATTACK_AP = 2;
 export const HUNKER_AP = 1;
 /** AP a reaction takes from the bank, so 4 banked buy two and 2 or 3 buy one (§13.4). */
@@ -168,7 +171,7 @@ export interface Fighter {
     option?: OptionId;
     /**
      * Where the smoke pot it threw landed, while the cloud lasts: until the
-     * start of its owner's next turn, as a shield wall does, and gone with it
+     * start of its owner's next turn, as a hunker does, and gone with it
      * if it's downed first (§21.2). The cloud is the 3×3 around that square.
      */
     smoke?: Square;
@@ -297,7 +300,7 @@ export function allied(state: Pick<BattleState, "sides">, a: string | null | und
 export type Action =
     | { kind: "move" | "sneak"; fighter: number; path: Square[] }
     | { kind: "attack" | "aimedShot" | "heal" | "raise" | "draught" | "shieldBash" | "cripplingShot" | "huntersMark" | "rend" | "regrowth"; fighter: number; target: number }
-    | { kind: "hunker" | "watch" | "shieldWall" | "purify" | "burst"; fighter: number }
+    | { kind: "hunker" | "watch" | "purify" | "burst"; fighter: number }
     | { kind: "cleave"; fighter: number; targets: number[] }
     /** A demolish is aimed at the square of low cover it blasts. */
     | { kind: "fireball" | "dynamite" | "throw" | "demolish"; fighter: number; at: Square };
@@ -336,7 +339,7 @@ export type BattleEvent =
     /** A Scout's Hunter's mark on `target`, whose `effect` follows (§23.2). */
     | { kind: "marked"; fighter: number; target: number }
     | { kind: "raised"; fighter: number; target: number; hp: number }
-    | { kind: "hunkered" | "shieldWall"; fighter: number }
+    | { kind: "hunkered"; fighter: number }
     | { kind: "watching"; fighter: number; banked: number }
     /**
      * An enemy out of sight standing in a move's path, found by the mover, which
@@ -563,10 +566,12 @@ export interface ShotOdds {
     flanked: boolean;
 }
 
-/** Whether a standing ally holds a shield wall next to this character (§13.6). */
+/** Whether a character stands with the passive Shield wall, which covers whoever is next to it (§13.6). */
+export const holdsShieldWall = (fighter: Fighter): boolean => isStanding(fighter) && abilitiesOf(fighter).includes("shieldWall");
+
+/** Whether a standing character with the passive Shield wall, friend or foe, is next to this one (§13.6). */
 function shielded(state: BattleState, target: Fighter): boolean {
-    return state.fighters.some(knight => hasEffect(knight, "shieldWall") && isStanding(knight) && knight.id !== target.id
-        && allied(state, knight.owner, target.owner) && nextTo(state.field, knight.square, target.square));
+    return state.fighters.some(knight => knight.id !== target.id && holdsShieldWall(knight) && nextTo(state.field, knight.square, target.square));
 }
 
 /**
@@ -1040,8 +1045,6 @@ export function check(battle: BattleState, player: string, action: unknown): Che
                 if (!enemies.every((one): one is Fighter => isEnemy(state, actor, one))) return "Pick two enemies";
                 return enemies.every(one => inMeleeReach(state.field, actor.square, one.square)) ? undefined : "Both enemies must be next to them, within a quarter of their height";
             });
-        case "shieldWall":
-            return ability("shieldWall", () => undefined);
         case "demolish":
             return ability("demolish", () => isSquare(state.field, at) && coverNextTo(state.field, actor.square, at) ? undefined : "Pick low cover next to them");
         case "purify":
@@ -1417,10 +1420,6 @@ export function act(state: BattleState, player: string, action: Action, roll: Ro
         case "cleave":
             for (const id of action.targets) run.strike(actor, get(id));
             break;
-        case "shieldWall":
-            actor.effects.shieldWall = EFFECTS.shieldWall.count;
-            events.push({ kind: "shieldWall", fighter: actor.id });
-            break;
         case "fireball":
         case "dynamite": {
             // Every character in the area, friend or foe — the thrower too, if
@@ -1468,10 +1467,12 @@ export function act(state: BattleState, player: string, action: Action, roll: Ro
             break;
         }
         case "raise": {
-            // Back on its feet at half HP, with nothing to spend until its
-            // owner's next turn; the points for downing it stay scored (§13.5).
+            // Back on its feet at half HP, with 2 AP to spend if it's its
+            // owner's turn and nothing until their next turn if not; the
+            // points for downing it stay scored (§13.5).
             const target = get(action.target);
             target.hp = Math.ceil(maxHpOf(target) / 2);
+            if (target.owner === player) target.ap = RAISED_AP;
             events.push({ kind: "raised", fighter: actor.id, target: target.id, hp: target.hp });
             break;
         }

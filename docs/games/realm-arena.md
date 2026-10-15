@@ -703,11 +703,11 @@ games are named for. It would also be Defender of the Realm's first faction.
 | Character | Role | Movement per AP | HP | Attack | Ability (AP, cooldown) | Points |
 |---|---|---:|---:|---|---|---:|
 | **Man-at-arms** | Cheap front line | 6 | 8 | Sword, melee, 4 | **Cleave:** strike two enemies next to them (2 AP, 3 turns) | 15 |
-| **Knight** | Slow and very tough | 4 | 12 | Mace, melee, 4 | **Shield wall:** allies next to the Knight count as in half cover until its next turn (2 AP, 3 turns) | 25 |
+| **Knight** | Slow and very tough | 4 | 12 | Mace, melee, 4 | **Shield wall (passive):** anyone next to the Knight, friend or foe, counts as in half cover | 25 |
 | **Archer** | Long range; the overwatch specialist | 6 | 6 | Bow, 80%, range 20, 3 | **Aimed shot:** +20% to hit (3 AP, 2 turns) | 20 |
 | **Scout** | Fastest and fragile; the flanker | 8 | 6 | Knives, melee, 3 | **Sneak:** move without setting off reactions (2 AP a move, no cooldown) | 20 |
 | **Mage** | Fragile; hits an area | 6 | 5 | Mage Bolt, 80%, range 12, 3 | **Fireball:** 3 damage to every character in a 3×3 area, friend or foe, up to 12 squares away, with no roll (3 AP, 3 turns) | 30 |
-| **Cleric** | Support | 6 | 7 | Staff, melee, 2 | **Heal:** restore 4 HP to themselves or an ally they can see within 12 squares (2 AP, once a turn, no cooldown). **Raise:** bring a downed ally back at half HP (3 AP, 4 turns) | 25 |
+| **Cleric** | Support | 6 | 7 | Staff, melee, 2 | **Heal:** restore 4 HP to themselves or an ally they can see within 12 squares (2 AP, once a turn, no cooldown). **Raise:** bring a downed ally back at half HP (3 AP, 4 turns); on its owner's turn it has 2 AP to spend | 25 |
 
 **The budget:** 100 points each for two players, 80 for three, and 70 each for
 four (free-for-all or teams). That's 4–6 characters at two players and 3–4 at
@@ -737,12 +737,13 @@ open. All are first guesses for playtesting, kept in `characters.ts` and
   they could stand, and a Cleric can raise them.
 - **A fireball hits the whole 3×3**, walls or not, once its centre is in range
   and in sight.
-- **A shield wall moves with the Knight.** Whoever is next to it when a shot
-  comes in has at least half cover. It doesn't cover the Knight itself.
+- **A shield wall is the Knight's passive, always on, and moves with it.**
+  Whoever is next to it when a shot comes in — friend or foe — has at least
+  half cover. It doesn't cover the Knight itself.
 - **Healing is for an ally that is hurt**, and never takes it past full HP.
 - **Raising** needs the fallen ally's square to be one a character can stand
-  on, with nobody standing there. The raised character acts from its owner's
-  next turn. A Cleric's Raise has a cooldown of four turns (§30.13).
+  on, with nobody standing there. The raised character has 2 AP to spend if
+  it is its owner's turn, and otherwise acts from its owner's next turn. A Cleric's Raise has a cooldown of four turns (§30.13).
 - **Downing your own character** (a fireball's friendly fire) scores nobody
   anything.
 - **A cooldown of *n* turns** counts down at the start of each of its owner's
