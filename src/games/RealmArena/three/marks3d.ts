@@ -21,6 +21,7 @@ import {
 import { Billboards, CanvasAtlas, sheetTexture, spriteRect, type BillboardAxes } from "./billboards";
 import { cssColour } from "./cssColour";
 import type { Vec3 } from "./iso3d";
+import { rgba } from "./canvasShapes";
 import { GroundRings, type RingColours, type RingKind } from "./rings3d";
 import type { Sheets } from "./terrain3d";
 
@@ -91,7 +92,6 @@ export function markColours(scope: Element): RingColours {
 }
 
 /** A colour as a canvas writes it, as written (`cssColour` keeps sRGB). */
-const canvasColour = ({ r, g, b }: Color, alpha = 1) => `rgba(${Math.round(r * 255)}, ${Math.round(g * 255)}, ${Math.round(b * 255)}, ${alpha})`;
 
 /** Drawn after the HP bars (2 and 3, board3d.ts) and over the figures. */
 const MARKS_ORDER = 4;
@@ -143,13 +143,13 @@ export class MarkLayer {
         if (item) this.items.add({ at: feet, x: item.x, y: item.y, width: ITEM_MARK_SIZE, height: ITEM_MARK_SIZE, rect: spriteRect(item.sprite) });
         for (const { on, x, y } of pips) {
             const box = 2 * AP_PIP_RADIUS + PIP_EDGE;
-            const rect = this.pipAtlas.rect(`pip:${on}:${canvasColour(colours.gold)}:${canvasColour(colours.onDark)}`, box, box, context => {
+            const rect = this.pipAtlas.rect(`pip:${on}:${rgba(colours.gold)}:${rgba(colours.onDark)}`, box, box, context => {
                 context.beginPath();
                 context.arc(box / 2, box / 2, AP_PIP_RADIUS, 0, 2 * Math.PI);
-                context.fillStyle = on ? canvasColour(colours.gold) : "rgba(0, 0, 0, 0.35)";
+                context.fillStyle = on ? rgba(colours.gold) : "rgba(0, 0, 0, 0.35)"; // `.ag-ra-ap`, which has no token
                 context.fill();
                 context.lineWidth = PIP_EDGE;
-                context.strokeStyle = canvasColour(colours.onDark);
+                context.strokeStyle = rgba(colours.onDark);
                 context.stroke();
             });
             this.pips.add({ at: feet, x, y, width: box, height: box, rect });

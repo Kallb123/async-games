@@ -22,7 +22,7 @@ const BACK_OPACITY = 0.7;
 /** How faint the lined-up HP change flashes, and how long a flash takes (`.ag-ra-pulse--hp`). */
 const PULSE_MIN = 0.15;
 const PULSE_MS = 800;
-/** The fill of a bar whose figure has no owner's colour. */
+/** The fill of a bar whose figure has no owner's colour; the back is `.ag-ra-hp`'s black. */
 const UNOWNED = new Color(0.85, 0.85, 0.85);
 const BLACK = new Color(0, 0, 0);
 

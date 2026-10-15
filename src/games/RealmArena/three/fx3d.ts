@@ -12,7 +12,7 @@
 // Few draws, however many effects: one for the sprites of the fx sheet (every
 // burst but the smoke pot's, every slash and every missile), one for the smoke
 // pot's burst, one for the effect marks beside the text, one for the text itself
-// (drawn once each into a canvas, §`CanvasAtlas`), all over everything the way
+// (drawn once each into a canvas, see `CanvasAtlas`), all over everything the way
 // the isometric board's effects layer is; and one for the standing smoke, which
 // a wall in front of hides.
 

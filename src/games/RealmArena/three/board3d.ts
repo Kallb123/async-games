@@ -176,7 +176,7 @@ export class Board3D {
      */
     private turn: { from: number; to: number; start: number; ground: Vec3; progress: number } | null = null;
     /** What's shaded on the ground, kept to lay again over ground built afresh. */
-    private shading: { shade: (square: Square) => Shading | null; wave: ReadonlySet<Square> | null } | null = null;
+    private shading: { shade: (square: Square) => Shading | null; wave: ReadonlyMap<Square, Color> | null } | null = null;
     private animating = 0;
     private waveDue = false;
     private waveDrawn = 0;
@@ -317,8 +317,8 @@ export class Board3D {
         this.invalidate();
     }
 
-    /** What's shaded on each square of the ground, and the zones the wave will land in (§30.11), if it's due. */
-    setShading(shade: (square: Square) => Shading | null, wave: ReadonlySet<Square> | null): void {
+    /** What's shaded on each square of the ground, and the zones the wave will land in (§30.11) in each one's colour, if it's due. */
+    setShading(shade: (square: Square) => Shading | null, wave: ReadonlyMap<Square, Color> | null): void {
         this.shading = { shade, wave };
         this.applyShading();
     }
@@ -369,8 +369,10 @@ export class Board3D {
         };
         paint(terrain.overlay.data, shade);
         terrain.overlay.texture.needsUpdate = true;
-        const warm = new Color(0.86, 0.36, 0.3);
-        paint(terrain.wave.data, square => wave?.has(square) ? { colour: warm, alpha: 0.55 } : null);
+        paint(terrain.wave.data, square => {
+            const colour = wave?.get(square);
+            return colour ? { colour, alpha: 0.55 } : null;
+        });
         terrain.wave.texture.needsUpdate = true;
         this.waveDue = !!wave && wave.size > 0;
         terrain.wave.material.opacity = this.waveDue ? 0.5 : 0;

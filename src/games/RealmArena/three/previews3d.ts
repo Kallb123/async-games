@@ -39,7 +39,7 @@ const SHIELD_STROKE = 0.4;
 /** The dark ground of an odds pill (`--ra-night` at 88%), and of a shield (80%). */
 const ODDS_GROUND = 0.88;
 const SHIELD_GROUND = 0.8;
-/** The centre's name, as `MapLabel` draws a name on the map: white, outlined dark. */
+/** The centre's name, as `MapLabel` draws a name on the map by default (its `fill`, `stroke` and `strokeWidth`): white, outlined dark. */
 const LABEL_FILL = "#fff";
 const LABEL_OUTLINE = { colour: "rgba(0, 0, 0, 0.6)", width: 3 };
 

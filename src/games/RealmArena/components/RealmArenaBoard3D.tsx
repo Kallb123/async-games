@@ -158,12 +158,12 @@ export default function RealmArenaBoard3D({ field, fighters, fogGhosts = [], uns
         if (!board || !scope) return;
         const token = (name: string) => cssColour(scope, `var(${name})`);
         const zone = new Map<number, Shading>();
-        const wave = new Set<number>();
+        const wave = new Map<number, Color>();
         field.deployments.forEach((squares, seat) => {
             const owner = owners[seat];
             const colour = owner ? cssColour(scope, colourFor(owner)) : token('--ag-ink-softer');
             for (const square of squares) zone.set(square, { colour, alpha: 0.16 });
-            if (waveDue && owner !== undefined && isWarband(owner)) squares.forEach(square => wave.add(square));
+            if (waveDue && owner !== undefined && isWarband(owner)) squares.forEach(square => wave.set(square, colour));
         });
         const layers: ShadingLayer[] = [square => zone.get(square) ?? null];
         const centre = new Set(showCentre ? field.objectives[CENTRE] ?? [] : []);
