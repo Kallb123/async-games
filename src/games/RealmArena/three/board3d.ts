@@ -17,19 +17,21 @@
 // placed in the world rather than on the isometric board.
 
 import {
-    Color, DynamicDrawUsage, InstancedMesh, Matrix4, Mesh, MeshBasicMaterial, OrthographicCamera, PlaneGeometry, Quaternion, RingGeometry, Scene,
+    Color, DynamicDrawUsage, InstancedMesh, Matrix4, Mesh, MeshBasicMaterial, OrthographicCamera, PlaneGeometry, Quaternion, Scene,
     SphereGeometry, Vector3, WebGLRenderer, type ShaderMaterial,
 } from "three";
 import type { BurstKind } from "@/games/RealmArena/art";
 import type { CharacterId } from "@/games/RealmArena/characters";
-import { isStanding, type Fighter, type FogGhost } from "@/games/RealmArena/rules";
-import { CLIMB_LEG, endOf, HP_BAR_HEIGHT, HP_BAR_RISE, HP_BAR_WIDTH, hpFraction, shakeAt, toldAt, toldOf, walkerAt, walkLift, type BattleCue, type BurstCue, type FallCue, type FlightCue, type Told, type WalkCue } from "@/games/RealmArena/ui";
+import { isStanding, type Fighter, type FogGhost, type MusterPick } from "@/games/RealmArena/rules";
+import { CLIMB_LEG, endOf, HP_BAR_HEIGHT, HP_BAR_RISE, HP_BAR_WIDTH, hpFraction, shakeAt, toldAt, toldOf, walkerAt, walkLift, type BattleCue, type BurstCue, type FallCue, type FlightCue, type Ring, type Told, type WalkCue } from "@/games/RealmArena/ui";
 import { facingTowards, type Battlefield, type Facing, type Square } from "@/utils/games/battlefield/terrain";
 import { easeInOut } from "@/utils/ui/boardZoom";
 import type { Rect } from "@/utils/ui/mapLabels";
 import { billboardAxes, setAxes } from "./billboards";
 import { characterGeometry, type CharacterModels } from "./characterModels";
 import { azimuthOf, cameraBasis, cameraFor, figureMatrix, lightOf, lookAtFor, lookAtGround, onScreen, QUARTER, squareCentre, toFrame, type BoardFrame, type BoardLayout, type CameraBasis, type Vec3 } from "./iso3d";
+import { MarkLayer, marksOf, type MarkLevel } from "./marks3d";
+import type { RingColours } from "./rings3d";
 import { lightSolids, solidMaterial } from "./solidMaterial";
 import { buildTerrain, type Sheets, type Terrain } from "./terrain3d";
 
@@ -65,6 +67,22 @@ export interface FigureSpec {
     facing: Facing;
     /** Its owner's colour, its team parts tinted with; none for one nobody owns. */
     tint: Color | null;
+}
+
+/** A pick of the viewer's sealed squad (the muster), and which way it's drawn facing. */
+export interface SealedSpec {
+    pick: MusterPick;
+    facing: Facing;
+}
+
+/** How faint the sealed squad is drawn, as the isometric board has it (`.ag-ra-sealed`). */
+const SEALED_OPACITY = 0.7;
+
+/** What the figures are marked with: whose turn it is in battle (their AP shows), the ring round each figure's feet, and the colours the marks are drawn in. */
+export interface Marking {
+    acting: string | null;
+    rings: ReadonlyMap<number, Ring>;
+    colours: RingColours;
 }
 
 /** What an action plays, ready to place a frame at a time. */
@@ -121,9 +139,13 @@ export class Board3D {
     private placed: Placed[] = [];
 
     private readonly bars: { back: InstancedMesh; fill: InstancedMesh };
-    private readonly ring: Mesh;
     private readonly missiles: InstancedMesh;
-    private selectedId: number | null = null;
+    /** What hangs round the figures: marks, pips, items and rings. Made with the art it draws from. */
+    private marks: MarkLayer | null = null;
+    private marking: Marking | null = null;
+    /** The viewer's sealed squad while the muster lasts, and which of them is picked up. Their ids in `placed` are `-(index + 1)`. */
+    private sealed: SealedSpec[] = [];
+    private pickedUp: number | null = null;
 
     // The view: the part of the frame in the pane (`setView`, in the frame's own
     // units), the frame it is measured in, and how far the camera has turned.
@@ -184,10 +206,6 @@ export class Board3D {
             mesh.instanceMatrix.setUsage(DynamicDrawUsage);
             this.scene.add(mesh);
         }
-        this.ring = new Mesh(new RingGeometry(0.34, 0.42, 32).rotateX(-Math.PI / 2), new MeshBasicMaterial({ transparent: true, opacity: 0.9, depthWrite: false }));
-        this.ring.visible = false;
-        this.ring.renderOrder = 1;
-        this.scene.add(this.ring);
         this.missiles = new InstancedMesh(new SphereGeometry(0.06, 8, 6).scale(2.2, 0.7, 0.7), new MeshBasicMaterial({ color: 0xffe3a3 }), 16);
         this.missiles.count = 0;
         this.missiles.instanceMatrix.setUsage(DynamicDrawUsage);
@@ -205,6 +223,7 @@ export class Board3D {
         cancelAnimationFrame(this.animating);
         this.resize.disconnect();
         this.terrain?.dispose();
+        this.marks?.dispose();
         for (const pool of this.pools.values()) (pool.mesh.material as ShaderMaterial).dispose();
         this.renderer.dispose();
         // Hand the context back now, not whenever it's collected: a page allows only so many at once, and drops the oldest past that.
@@ -237,6 +256,12 @@ export class Board3D {
     /** What it draws from, arrived: nothing is drawn before it, ground or figure. */
     setArt(art: Art): void {
         this.art = art;
+        if (this.marks) {
+            this.scene.remove(this.marks.group);
+            this.marks.dispose();
+        }
+        this.marks = new MarkLayer(art.sheets, this.axes);
+        this.scene.add(this.marks.group);
         if (this.field) this.setField(this.field, this.top);
     }
 
@@ -265,11 +290,18 @@ export class Board3D {
         this.invalidate();
     }
 
-    /** Who is selected, ringed in `colour` — the isometric board's ring's (`--ag-on-dark`). */
-    setSelected(id: number | null, colour: Color): void {
-        this.selectedId = id;
-        (this.ring.material as MeshBasicMaterial).color.copy(colour).convertSRGBToLinear();
-        this.layRing();
+    /** What the figures are marked with: the ring round each one's feet (chosen, a candidate, aimed at, a watcher), the AP pips on its owner's turn, and the colours. */
+    setMarking(marking: Marking): void {
+        this.marking = marking;
+        this.layFigures(this.playing ? this.playedMs : null);
+        this.invalidate();
+    }
+
+    /** The viewer's sealed squad, drawn where each pick stands while the muster lasts, and the index of the one picked up to move, if any. */
+    setSealed(sealed: SealedSpec[], pickedUp: number | null): void {
+        this.sealed = sealed;
+        this.pickedUp = pickedUp;
+        this.layFigures(this.playing ? this.playedMs : null);
         this.invalidate();
     }
 
@@ -434,6 +466,7 @@ export class Board3D {
         const matrix = new Matrix4();
         const bars: { feet: Vec3; fraction: number; tint: Color | null }[] = [];
         const playing = ms === null ? null : this.playing;
+        this.marks?.begin(this.marking?.colours ?? null);
 
         for (const spec of this.figures) {
             const { fighter } = spec;
@@ -441,6 +474,9 @@ export class Board3D {
             let feet: Vec3 | null = null;
             let standing = isStanding(fighter);
             let fraction = hpFraction(fighter);
+            // What it wears: all its marks at rest, its item alone while it walks, and none once down. Shown as the action found it until the cue that changed them lands.
+            let level: MarkLevel = standing ? "all" : "none";
+            let drawn = fighter;
             if (playing) {
                 const walks = playing.walks.get(fighter.id);
                 const fall = playing.falls.get(fighter.id);
@@ -451,16 +487,21 @@ export class Board3D {
                     lift = -walkLift(leg, one => field.tiles[one].elevation) * BOARD_RISE;
                     if (leg.from !== leg.to) facing = facingTowards(field, leg.from, leg.to);
                     standing = true;
+                    level = "item";
                 } else if (walks && ms! < walks[0].start) {
                     square = walks[0].path[0];
                     standing = true;
                 }
                 if (fall && ms! < fall.start) {
                     standing = true;
+                    level = "none";
                     if (!leg) square = fall.fighter.square;
                 }
                 const told = playing.told.get(fighter.id);
-                if (told) fraction = hpFraction(toldAt(told, fighter, ms!).drawn);
+                if (told) {
+                    drawn = toldAt(told, fighter, ms!).drawn;
+                    fraction = hpFraction(drawn);
+                }
             }
             feet ??= squareCentre(field, square);
             const at: Vec3 = [feet[0], feet[1] + lift, feet[2]];
@@ -468,7 +509,9 @@ export class Board3D {
             this.place(models, fighter.character, false, matrix, spec.tint);
             this.placed.push({ id: fighter.id, feet: at, standing });
             if (standing) bars.push({ feet: at, fraction, tint: spec.tint });
+            this.layMarks(at, fighter, drawn, level);
         }
+        this.layMuster(models, matrix);
         for (const { ghost, facing, tint } of this.ghosts) {
             matrix.fromArray(figureMatrix(squareCentre(field, ghost.square), facing, false));
             this.place(models, ghost.character, true, matrix, tint);
@@ -479,16 +522,41 @@ export class Board3D {
             if (pool.mesh.instanceColor) pool.mesh.instanceColor.needsUpdate = true;
         }
         this.layBars(bars);
-        this.layRing();
+        this.marks?.end();
     }
 
-    /** One figure into its character's pool, growing the pool if it's full. */
-    private place(models: CharacterModels, character: CharacterId, ghost: boolean, matrix: Matrix4, tint: Color | null): void {
-        const key = `${character}${ghost ? ":ghost" : ""}`;
+    /** What hangs round a figure whose feet are at `feet`: its ring, and its marks, pips and item as far as `level` allows. */
+    private layMarks(feet: Vec3, fighter: Fighter, drawn: Fighter, level: MarkLevel): void {
+        const { marks, marking } = this;
+        if (!marks || !marking) return;
+        const worn = marksOf(level, drawn, fighter.owner === marking.acting);
+        marks.figure(feet, worn);
+        const ring = marking.rings.get(fighter.id);
+        if (ring) marks.ring(feet, ring);
+        if (worn.watching) marks.ring(feet, "watch");
+    }
+
+    /** The viewer's sealed squad, standing faintly where each pick is to be: with its item, the dashed ring of a squad still sealed, and a ring on the one picked up. */
+    private layMuster(models: CharacterModels, matrix: Matrix4): void {
+        const field = this.field!;
+        this.sealed.forEach(({ pick, facing }, index) => {
+            const feet = squareCentre(field, pick.square);
+            matrix.fromArray(figureMatrix(feet, facing, false));
+            this.place(models, pick.character, false, matrix, null, SEALED_OPACITY);
+            this.placed.push({ id: -(index + 1), feet, standing: true });
+            this.marks?.figure(feet, { effects: [], watching: false, item: pick.item });
+            this.marks?.ring(feet, "sealed");
+            if (index === this.pickedUp) this.marks?.ring(feet, "selected");
+        });
+    }
+
+    /** One figure into its character's pool, growing the pool if it's full. A figure drawn faint at an `opacity` of its own has a pool for that. */
+    private place(models: CharacterModels, character: CharacterId, ghost: boolean, matrix: Matrix4, tint: Color | null, opacity?: number): void {
+        const key = `${character}${ghost ? ":ghost" : ""}${opacity === undefined ? "" : `:${opacity}`}`;
         let pool = this.pools.get(key);
         if (!pool || pool.used >= pool.capacity) {
             const capacity = Math.max(8, (pool?.capacity ?? 0) * 2);
-            const material = pool ? pool.mesh.material as ShaderMaterial : solidMaterial({ opacity: ghost ? 0.35 : 1 });
+            const material = pool ? pool.mesh.material as ShaderMaterial : solidMaterial({ opacity: opacity ?? (ghost ? 0.35 : 1) });
             if (!pool) this.solids.push(material);
             const mesh = new InstancedMesh(characterGeometry(models, character), material, capacity);
             mesh.instanceMatrix.setUsage(DynamicDrawUsage);
@@ -530,12 +598,6 @@ export class Board3D {
         back.count = fill.count = bars.length;
         back.instanceMatrix.needsUpdate = fill.instanceMatrix.needsUpdate = true;
         if (fill.instanceColor) fill.instanceColor.needsUpdate = true;
-    }
-
-    private layRing(): void {
-        const at = this.placed.find(one => one.id === this.selectedId);
-        this.ring.visible = !!at;
-        if (at) this.ring.position.set(at.feet[0], at.feet[1] + 0.01, at.feet[2]);
     }
 
     /** The shots and throws in flight: an arc from the shooter's body to the target's, or its ground for a throw. */

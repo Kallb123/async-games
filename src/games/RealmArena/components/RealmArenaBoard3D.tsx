@@ -7,11 +7,12 @@ import type RealmArenaBoard from '@/games/RealmArena/components/RealmArenaBoard'
 import { TurnButtons, useBoardRotation } from '@/games/RealmArena/components/RealmArenaTurn';
 import { Board3D, type FigureSpec, type Shading } from '@/games/RealmArena/three/board3d';
 import { cssColour } from '@/games/RealmArena/three/cssColour';
+import { markColours } from '@/games/RealmArena/three/marks3d';
 import { azimuthOf, boardFrame, cameraBasis, frameRect, regionOnScreen, topOf, turnedPoint, type BoardLayout } from '@/games/RealmArena/three/iso3d';
 import { loadSheets } from '@/games/RealmArena/three/terrain3d';
 import { loadCharacterModels } from '@/games/RealmArena/three/characterModels';
 import { isWarband } from '@/games/RealmArena/rules';
-import { BOARD_ZOOM, endOf, facingOf } from '@/games/RealmArena/ui';
+import { BOARD_ZOOM, endOf, facingOf, ringOf, type Ring } from '@/games/RealmArena/ui';
 import { useBoardFocus } from '@/games/RealmArena/useBoardFocus';
 import { PlaybackProvider, usePlaybackFrame } from '@/utils/hooks/usePlayback';
 
@@ -109,9 +110,20 @@ export default function RealmArenaBoard3D({ field, fighters, fogGhosts = [], uns
         const figures: FigureSpec[] = fighters.map(fighter => ({ fighter, facing: facingOf(field, fighter), tint: tintOf(fighter.owner) }));
         board.setFigures(figures, fogGhosts.map(ghost => ({ ghost, facing: facingOf(field, ghost), tint: tintOf(ghost.owner) })));
     }, [board, field, fighters, fogGhosts, tintOf]);
+    // What hangs round them: a ring each for who is chosen, a candidate, aimed at or a watcher a move would set off; and the AP of whoever's turn it is.
     useEffect(() => {
-        if (frame.current) board?.setSelected(selected?.id ?? null, cssColour(frame.current, 'var(--ag-on-dark)'));
-    }, [board, selected]);
+        if (!board || !frame.current) return;
+        const rings = new Map<number, Ring>();
+        for (const { id } of fighters) {
+            const ring = ringOf(id, selected?.id, aiming);
+            if (ring) rings.set(id, ring);
+        }
+        board.setMarking({ acting: acting ?? null, rings, colours: markColours(frame.current) });
+    }, [board, fighters, selected, aiming, acting]);
+    // The viewer's sealed squad, drawn where each pick stands, with the one picked up ringed.
+    useEffect(() => {
+        board?.setSealed(sealed?.map(pick => ({ pick, facing: facingOf(field, pick) })) ?? [], placing?.selected ?? null);
+    }, [board, field, sealed, placing?.selected]);
 
     // What's shaded on the ground, strongest first: a reach, a range, the fog, the zones, the centre.
     useEffect(() => {
@@ -161,7 +173,15 @@ export default function RealmArenaBoard3D({ field, fighters, fogGhosts = [], uns
     const { area, held, onFocused, tracks } = useBoardFocus({ field, fighters, sides, selected, acting, sealed, placing, follow, home, refocus, playing: !!playback });
     const focus: BoardZoomFocus | null = area && { rect: frameRect(here.frame, regionOnScreen(here.basis, area.area, top)), key: area.key, exact: area.exact };
     const onTapSquare = placing?.onTap ?? aiming?.onSquare;
-    useEffect(() => board?.listen({ onFigure: onSelect, onSquare: square => onTapSquare?.(square) }), [board, onSelect, onTapSquare]);
+    // While placing, a tap on a character of the squad — sealed, or a fighter — goes where a tap on its square does.
+    useEffect(() => board?.listen({
+        onFigure: id => {
+            if (!placing) return id >= 0 ? onSelect(id) : undefined;
+            const square = id < 0 ? sealed?.[-id - 1]?.square : fighters.find(fighter => fighter.id === id)?.square;
+            if (square !== undefined) placing.onTap(square);
+        },
+        onSquare: square => onTapSquare?.(square),
+    }), [board, onSelect, onTapSquare, placing, sealed, fighters]);
     useEffect(() => board?.play(playback ? { cues: playback.cues, before: playback.before } : null, tracks), [board, playback, tracks]);
 
     return (
