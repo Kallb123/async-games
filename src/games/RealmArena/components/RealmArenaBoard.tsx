@@ -21,7 +21,7 @@ import { CHARACTER_ART, facingCell, ITEM_ART, SMOKE_ART, spriteBox, TERRAIN_ART,
 import { CHARACTERS, ITEMS, type CharacterId, type ItemId } from '@/games/RealmArena/characters';
 import { CENTRE, isStanding, isWarband, maxHpOf, smokeSquares, type BattleState, type Fighter, type FogGhost, type MusterPick, type ToldEvent } from '@/games/RealmArena/rules';
 import type { AttackOption } from '@/games/RealmArena/tactics';
-import { AP_PIP_OFFSET, AP_PIP_RADIUS, AP_PIP_STEP, apPips, areaRect, BOARD_ZOOM, CENTRE_LABEL, EFFECT_MARK_OFFSET, EFFECT_MARK_SIZE, EFFECT_MARK_STEP, FIGURE_RADIUS, FIGURE_RISE, fxPointsAt, HP_BAR_HEIGHT, HP_BAR_RISE, HP_BAR_WIDTH, ITEM_MARK_OFFSET, ITEM_MARK_SIZE, MARKER_RADIUS, ODDS_HEIGHT, ODDS_RISE, ODDS_WIDTH, PATH_END_RADIUS, RING_RADIUS, ringOf, shadedSquares, shieldPath, SMOKE_SIZE, type GroundShade, type Marker, type ShadeKind, type Ring, type BattleCue, type BoardFollow, type FallCue, type FxPoints, type ScorchCue, type Shove, type Timed, type WalkCue, effectsOn, facingOf, fadeInAt, fadeOutAt, fighterStatus, endOf, hpFraction, legLengthOn, progressOf, shakeAt, shakesOf, shovesOf, shoveAt, terrainLetter, toldAt, toldOf, walkerAt, walkCameraAt, legPoint, walkLift, walkSquares, type Told } from '@/games/RealmArena/ui';
+import { AP_PIP_OFFSET, AP_PIP_RADIUS, AP_PIP_STEP, apPips, areaRect, BOARD_ZOOM, CENTRE_LABEL, EFFECT_MARK_OFFSET, EFFECT_MARK_SIZE, EFFECT_MARK_STEP, FIGURE_RADIUS, FIGURE_RISE, figureRectAt, fxPointsAt, HP_BAR_HEIGHT, HP_BAR_RISE, HP_BAR_WIDTH, ITEM_MARK_OFFSET, ITEM_MARK_SIZE, MARKER_RADIUS, ODDS_HEIGHT, ODDS_RISE, ODDS_WIDTH, PATH_END_RADIUS, RING_RADIUS, ringOf, shadedSquares, shieldPath, SMOKE_SIZE, type GroundShade, type Marker, type ShadeKind, type Ring, type BattleCue, type BoardFollow, type FallCue, type FxPoints, type ScorchCue, type Shove, type Timed, type WalkCue, effectsOn, facingOf, fadeInAt, fadeOutAt, fighterStatus, endOf, hpFraction, legLengthOn, progressOf, shakeAt, shakesOf, shovesOf, shoveAt, terrainLetter, toldAt, toldOf, walkerAt, walkCameraAt, legPoint, walkLift, walkSquares, type Told } from '@/games/RealmArena/ui';
 
 /** How deep the ground is drawn under the map's front edges, in quarters. */
 const SLAB_DEPTH = 3;
@@ -217,9 +217,7 @@ function hidden(view: IsoView, square: Square): boolean {
 
 /** What a figure covers, from the top of its HP bar to its feet: what the centre's name keeps off. */
 function figureRect(view: IsoView, square: Square): Rect {
-    const { x, y } = isoCentre(view, square);
-    const top = HP_BAR_RISE + HP_BAR_HEIGHT;
-    return { x: x - FIGURE_RADIUS, y: y - top, width: FIGURE_RADIUS * 2, height: top };
+    return figureRectAt(isoCentre(view, square));
 }
 
 /**

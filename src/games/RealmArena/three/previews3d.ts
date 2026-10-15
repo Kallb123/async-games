@@ -7,16 +7,17 @@
 // one atlas of shapes and text drawn as they're needed — so one draw, and the
 // numbers the isometric board's CSS gives each carry over.
 //
-// It is laid out afresh when what it shows changes and as the view turns (a
-// path's runs lie along the frame the camera sees), and not otherwise.
+// It is laid out afresh when what it shows changes, when the figures move (the
+// centre's name keeps off them) and as the view turns (a path's runs lie along
+// the frame the camera sees), and not otherwise.
 
 import { CENTRE_LABEL, ODDS_HEIGHT, ODDS_RISE, ODDS_WIDTH, PATH_END_RADIUS, PATH_WIDTH, SHIELD_HEIGHT, SHIELD_WIDTH, shieldPath } from "@/games/RealmArena/ui";
 import type { Battlefield, Square } from "@/utils/games/battlefield/terrain";
 import type { Rect } from "@/utils/ui/mapLabels";
 import { Billboards, CanvasAtlas, type BillboardAxes } from "./billboards";
 import { DISC_BOX, discRect, drawText, layStable, rgba, solidRect, textWidth, whenFontReady, type BoardLook, type TextStyle } from "./canvasShapes";
-import { squareCentre, type CameraBasis } from "./iso3d";
-import { areaMiddle, areaRise, pathPieces, pathPoints, shieldsAt } from "./previewGeometry";
+import { boardFrame, squareCentre, topOf, type CameraBasis } from "./iso3d";
+import { areaMiddle, centreLabel, pathPieces, pathPoints, shieldsAt } from "./previewGeometry";
 
 /** What's previewed: all of it comes from the board's props, and none of it is the board's to decide. */
 export interface PreviewSpec {
@@ -47,6 +48,8 @@ export class Previews3D {
     private readonly atlas = new CanvasAtlas(16);
     readonly billboards: Billboards;
     private spec: PreviewSpec = NO_PREVIEWS;
+    /** The squares figures stand on, which the centre's name keeps clear of (`setFigures`). */
+    private figures: readonly Square[] = [];
     private look: BoardLook | null = null;
     /** Which look the atlas was drawn in: keys carry it, so a new look draws afresh. */
     private looks = 0;
@@ -76,6 +79,16 @@ export class Previews3D {
         this.spec = spec;
     }
 
+    /**
+     * Where figures stand, standing or fallen, and the sealed squad: told when they move, not a frame at a time while one walks.
+     * Says whether that changes what's laid out, which is only the centre's name, and only if they stand on other squares than they did.
+     */
+    setFigures(squares: readonly Square[]): boolean {
+        const before = this.figures;
+        this.figures = squares;
+        return !!this.spec.centre && (before.length !== squares.length || before.some((square, i) => square !== squares[i]));
+    }
+
     /** Lays everything out for a battlefield and the camera it is seen by. */
     lay(field: Battlefield | null, basis: CameraBasis): void {
         const { billboards, look } = this;
@@ -83,7 +96,7 @@ export class Previews3D {
         if (field && look) {
             layStable(this.atlas, () => {
                 billboards.begin();
-                this.layCentre(basis, look);
+                this.layCentre(field, basis, look);
                 this.layPath(field, basis, look);
                 this.layCover(field, look);
                 this.layOdds(field, look);
@@ -92,19 +105,22 @@ export class Previews3D {
         billboards.end();
     }
 
-    /** The centre's name, just clear of the top of its area as the camera sees it. */
-    private layCentre(basis: CameraBasis, look: BoardLook): void {
+    /** The centre's name, clear of the top of its area as the camera sees it, and of the figures standing there if it can be (`centreLabel`). */
+    private layCentre(field: Battlefield, basis: CameraBasis, look: BoardLook): void {
         const { centre } = this.spec;
         if (!centre || !this.typeset) return;
         const style: TextStyle = { family: look.font, weight: CENTRE_LABEL.fontWeight, size: CENTRE_LABEL.fontSize };
         const text = "Centre";
         const { width: stroke } = LABEL_OUTLINE;
-        const width = textWidth(this.atlas, text, style) + stroke + 1;
+        const textWide = textWidth(this.atlas, text, style);
+        const width = textWide + stroke + 1;
         // A box with the baseline in it: the caps' height over it, the stroke's half-width under.
         const baseline = stroke / 2 + style.size * 0.8;
         const height = baseline + style.size * 0.2 + stroke / 2;
         const rect = this.atlas.rect(`${this.looks}:centre`, width, height, context => drawText(context, text, width / 2, baseline, style, LABEL_FILL, { outline: LABEL_OUTLINE }));
-        this.billboards.add({ at: areaMiddle(centre), y: -(areaRise(basis, centre) + CENTRE_LABEL.gap) - (baseline - height / 2), width, height, rect });
+        // The name is drawn from the middle of its box, and `placed` says where the middle of its text is.
+        const placed = centreLabel(field, basis, centre, this.figures, boardFrame(basis, field, topOf(field)), text, textWide);
+        this.billboards.add({ at: areaMiddle(centre), x: placed.x, y: placed.y - (baseline - height / 2), width, height, rect });
     }
 
     /** The line a move takes, over the squares' tops, round-jointed, with the dot where it ends. */

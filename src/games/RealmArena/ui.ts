@@ -145,6 +145,32 @@ export type BoardFollow = AimFollow | { squares: readonly Square[]; key: string;
 export const BOARD_ZOOM = { zoomWidth: 250, maxWidth: 600 } as const;
 
 /**
+ * How wide the widest of today's maps lies in the 3D board's frame (`boardFrame`'s
+ * `size.width`, a square's side to the unit): the Three Gate Fort, 64 squares by
+ * 48, is 64 + 48 corner to corner across a diamond a camera turned 45 degrees
+ * sees, a frame 79.2 units wide. The squares `BOARD_ZOOM` leaves at its deepest
+ * step on that map are the size a tap needs, so a bigger map is zoomed to match.
+ */
+const REFERENCE_FRAME_WIDTH = (64 + 48) / Math.SQRT2;
+
+/**
+ * `BoardZoom`'s steps for the 3D board, set by the map and not the column: a frame
+ * `frameWidth` units across (`boardFrame`'s `size.width`) gets the steps that leave
+ * a square the size `BOARD_ZOOM` leaves one on today's widest map, at the middle
+ * step and the deepest. Zoom is a width in percent of the column, so the squares
+ * stay the same size when both steps grow with the frame. Never less than
+ * `BOARD_ZOOM`, so every map today is unchanged, and the two grow together, so the
+ * middle step stays below the deepest (`zoomLevels`). The isometric board keeps
+ * `BOARD_ZOOM`: its zoomed board is laid out at this width, and a camera's is only
+ * an empty spacer to scroll over.
+ */
+export function boardZoomFor(frameWidth: number): { zoomWidth: number; maxWidth: number } {
+    const grown = frameWidth / REFERENCE_FRAME_WIDTH;
+    if (!(grown > 1) || !Number.isFinite(grown)) return BOARD_ZOOM;
+    return { zoomWidth: Math.round(BOARD_ZOOM.zoomWidth * grown), maxWidth: Math.round(BOARD_ZOOM.maxWidth * grown) };
+}
+
+/**
  * How tall a figure stands and the HP bar over it, in the isometric board's
  * units, against a square `2 * ISO_HALF_WIDTH` across: the tallest of them (a
  * mage's hat, a staff's head) stands about `FIGURE_TOP` high, with its HP bar
@@ -163,6 +189,12 @@ export const HP_BAR_WIDTH = 9;
 export const HP_BAR_HEIGHT = 2;
 /** How high the HP bar's foot is over the middle of its square. */
 export const HP_BAR_RISE = FIGURE_TOP + 0.5;
+
+/** What a figure standing on `ground` (the middle of its square's top) covers, from the top of its HP bar to its feet: what the centre's name keeps off. */
+export function figureRectAt(ground: Point): Rect {
+    const top = HP_BAR_RISE + HP_BAR_HEIGHT;
+    return { x: ground.x - FIGURE_RADIUS, y: ground.y - top, width: FIGURE_RADIUS * 2, height: top };
+}
 
 /**
  * What hangs round a figure, in the same units, shared by every way of drawing
@@ -192,6 +224,14 @@ export const EFFECT_MARK_OFFSET = 6.2;
  */
 export const ITEM_MARK_SIZE = 3;
 export const ITEM_MARK_OFFSET = { x: AP_PIP_OFFSET, y: -5 };
+/**
+ * The soft shadow under every mark a figure wears and the one beside a hit's
+ * text: how far it falls right (`dx`) and down (`dy`), how far its blur spreads
+ * (`blur`, a standard deviation) and how dark it is, in board units. It is
+ * `.ag-ra-figure-mark`'s `drop-shadow(0 0.3px 0.4px rgba(0, 0, 0, 0.5))`, which
+ * the isometric board draws by — change both.
+ */
+export const MARK_SHADOW = { dx: 0, dy: 0.3, blur: 0.4, alpha: 0.5 } as const;
 
 /** The ring drawn round a figure's feet: chosen, a candidate for a tap, aimed at, or a watcher a move would set off. */
 export type Ring = "selected" | "candidate" | "aimed" | "flagged";

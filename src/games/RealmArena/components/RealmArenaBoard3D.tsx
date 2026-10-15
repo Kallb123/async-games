@@ -6,7 +6,7 @@ import { useBoardView, type BoardView } from '@/components/ui/boardView';
 import type RealmArenaBoard from '@/games/RealmArena/components/RealmArenaBoard';
 import { CAPTION_INSET, PlaybackCaption, UnplacedMark } from '@/games/RealmArena/components/RealmArenaCaption';
 import { TurnButtons, useBoardRotation } from '@/games/RealmArena/components/RealmArenaTurn';
-import { Board3D, type FigureSpec } from '@/games/RealmArena/three/board3d';
+import { Board3D, type FigureSpec, type Outline } from '@/games/RealmArena/three/board3d';
 import { boardLook } from '@/games/RealmArena/three/canvasShapes';
 import { cssColour } from '@/games/RealmArena/three/cssColour';
 import { azimuthOf, boardFrame, cameraBasis, frameRect, regionOnScreen, topOf, turnedPoint, type BoardLayout } from '@/games/RealmArena/three/iso3d';
@@ -14,8 +14,9 @@ import { overlaid, type Shading, type ShadingLayer } from '@/games/RealmArena/th
 import { loadSheets } from '@/games/RealmArena/three/terrain3d';
 import { loadCharacterModels } from '@/games/RealmArena/three/characterModels';
 import { CENTRE, isWarband, smokeSquares } from '@/games/RealmArena/rules';
-import { areaRect, BOARD_ZOOM, endOf, facingOf, ringOf, shadedSquares, type Ring, type ShadeKind } from '@/games/RealmArena/ui';
+import { areaRect, boardZoomFor, endOf, facingOf, ringOf, shadedSquares, type Ring, type ShadeKind } from '@/games/RealmArena/ui';
 import { useBoardFocus } from '@/games/RealmArena/useBoardFocus';
+import { squaresOfArea } from '@/utils/games/battlefield/terrain';
 import { PlaybackProvider, usePlaybackFrame } from '@/utils/hooks/usePlayback';
 import { usePrefersReducedMotion } from '@/utils/hooks/usePrefersReducedMotion';
 
@@ -25,16 +26,24 @@ type RealmArenaBoard3DProps = React.ComponentProps<typeof RealmArenaBoard>;
 /** A layer that paints `shading` on each of `squares`. */
 const inSet = (squares: ReadonlySet<number>, shading: Shading): ShadingLayer => square => squares.has(square) ? shading : null;
 
-/** The token and strength each kind of ground shading is painted in, as the isometric board's CSS has it (`.ag-ra-fog` and the rest). A reach deepens by `REACH_STEP` for each AP it costs beyond the first. */
-const SHADES: Readonly<Record<ShadeKind, { token: string; alpha: number }>> = {
+/** The token and strength each kind of ground shading is painted in, as the isometric board's CSS has it (`.ag-ra-fog` and the rest), and for one it outlines, the width of that stroke in the token's colour. A reach deepens by `REACH_STEP` for each AP it costs beyond the first. */
+const SHADES: Readonly<Record<ShadeKind, { token: string; alpha: number; stroke?: number }>> = {
     fog: { token: '--ag-ink', alpha: 0.4 },
     smoke: { token: '--ag-ink-softer', alpha: 0.35 },
     reach: { token: '--ra-reach', alpha: 0.18 },
     range: { token: '--ra-range', alpha: 0.3 },
-    blast: { token: '--ag-danger', alpha: 0.3 },
-    place: { token: '--ra-centre', alpha: 0.28 },
+    blast: { token: '--ag-danger', alpha: 0.3, stroke: 0.5 },
+    place: { token: '--ra-centre', alpha: 0.28, stroke: 0.4 },
 };
 const REACH_STEP = 0.12;
+
+/** The stroke round each kind of area the board outlines, as the isometric board's CSS has it: `.ag-ra-deployment` (a zone), `.ag-ra-deployment--wave` (a zone the wave is due in), `.ag-ra-wave` (the breathing stroke over it) and `.ag-ra-centre`. Each is the stroke's strength, its width and its dash, none for a solid line. */
+const STROKES = {
+    zone: { alpha: 0.7, width: 0.6, dash: [2, 1.5] },
+    waveDue: { alpha: 0.75, width: 1, dash: [2, 1.5] },
+    wave: { alpha: 1, width: 1 },
+    centre: { alpha: 1, width: 0.9, dash: [3, 1.5] },
+} as const satisfies Record<string, Pick<Outline, 'alpha' | 'width' | 'dash'>>;
 
 /** Hands the board the playback's time, a frame at a time, inside the `PlaybackProvider` it reads. */
 function PlaybackFrames({ board }: { board: Board3D | null }) {
@@ -162,28 +171,43 @@ export default function RealmArenaBoard3D({ field, fighters, fogGhosts = [], uns
 
     // What's shaded on the ground, laid over one another in the order the isometric
     // board paints them: the zones and the centre (which it draws as polygons), then
-    // what both boards shade a square at a time (`shadedSquares`).
+    // what both boards shade a square at a time (`shadedSquares`). The edge of each
+    // area it strokes is laid in the same order (`setOutlines`).
     useEffect(() => {
         const scope = frame.current;
         if (!board || !scope) return;
         const token = (name: string) => cssColour(scope, `var(${name})`);
         const zone = new Map<number, Shading>();
         const wave = new Map<number, Color>();
+        const outlines: Outline[] = [], waveOutlines: Outline[] = [];
         field.deployments.forEach((squares, seat) => {
             const owner = owners[seat];
             const colour = owner ? cssColour(scope, colourFor(owner)) : token('--ag-ink-softer');
             for (const square of squares) zone.set(square, { colour, alpha: 0.16 });
-            if (waveDue && owner !== undefined && isWarband(owner)) squares.forEach(square => wave.set(square, colour));
+            const due = waveDue && owner !== undefined && isWarband(owner);
+            if (due) squares.forEach(square => wave.set(square, colour));
+            // A zone drawn in parts is outlined part by part. One the wave is due in is stroked the heavier (`.ag-ra-deployment--wave`), and breathes over it (`.ag-ra-wave`).
+            for (const area of field.deploymentAreas[seat]) {
+                const part = new Set(squaresOfArea(field.width, area));
+                outlines.push({ squares: part, colour, ...due ? STROKES.waveDue : STROKES.zone });
+                if (due) waveOutlines.push({ squares: part, colour, ...STROKES.wave });
+            }
         });
         const layers: ShadingLayer[] = [square => zone.get(square) ?? null];
         const centre = new Set(showCentre ? field.objectives[CENTRE] ?? [] : []);
-        if (centre.size > 0) layers.push(inSet(centre, { colour: token('--ra-centre'), alpha: 0.18 }));
+        if (centre.size > 0) {
+            const colour = token('--ra-centre');
+            layers.push(inSet(centre, { colour, alpha: 0.18 }));
+            outlines.push({ squares: centre, colour, ...STROKES.centre });
+        }
         for (const shade of shadedSquares({ unseen, smoke, aiming, placing, sealed })) {
-            const { token: name, alpha } = SHADES[shade.kind];
+            const { token: name, alpha, stroke } = SHADES[shade.kind];
             const colour = token(name);
             layers.push(square => shade.has(square) ? { colour, alpha: shade.ap ? alpha + REACH_STEP * (shade.ap(square) - 1) : alpha } : null);
+            if (stroke) outlines.push({ squares: new Set(Array.from(field.tiles.keys()).filter(shade.has)), colour, alpha: 1, width: stroke });
         }
         board.setShading(square => overlaid(layers, square), wave.size > 0 ? wave : null);
+        board.setOutlines(outlines, waveOutlines);
     }, [board, field, smoke, owners, colourFor, waveDue, showCentre, aiming, unseen, placing, sealed]);
 
     // What an action lined up and the map show over the figures: the path, the
@@ -241,7 +265,7 @@ export default function RealmArenaBoard3D({ field, fighters, fogGhosts = [], uns
     return (
         <div ref={frame} className="ag-board-frame ag-realmarena-frame">
             <PlaybackProvider playKey={playback?.key ?? null} end={playback ? endOf(playback.cues) : 0} held={held} onEnd={onPlayed}>
-                <BoardZoom camera zoomWidth={BOARD_ZOOM.zoomWidth} maxWidth={BOARD_ZOOM.maxWidth} viewBox={here.frame.size} focus={focus} onFocused={onFocused} pivot={pivot}>
+                <BoardZoom camera {...boardZoomFor(here.frame.size.width)} viewBox={here.frame.size} focus={focus} onFocused={onFocused} pivot={pivot}>
                     <div ref={host} className="ag-ra-3d" role="img" aria-label={`The ${field.name}`} />
                     <BoardCamera board={board} rotation={rotation} glide={turned.turns > 0} layout={here} />
                 </BoardZoom>

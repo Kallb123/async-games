@@ -20,7 +20,7 @@
 
 import {
     CanvasTexture, Color, DoubleSide, DynamicDrawUsage, InstancedBufferAttribute, InstancedBufferGeometry, LinearFilter, LinearMipmapLinearFilter, Mesh, PlaneGeometry,
-    ShaderMaterial, Texture, Vector3,
+    ShaderMaterial, Texture, Vector3, Vector4,
 } from "three";
 import type { Sprite } from "@/games/RealmArena/art";
 import type { Sheets } from "./terrain3d";
@@ -85,12 +85,40 @@ export function setAxes(axes: BillboardAxes, { right, up, back }: CameraBasis): 
     axes.back.value.set(...back);
 }
 
+/**
+ * A soft dark shadow under a quad's sprite, as the isometric board's CSS
+ * `drop-shadow` draws one, in board units: how far it falls right (`dx`) and
+ * down (`dy`), how far its blur spreads (`blur`, a standard deviation) and how
+ * dark it is at its heart. It is the sprite's own shape, so it follows the art.
+ */
+export interface BillboardShadow { dx: number; dy: number; blur: number; alpha: number }
+
+/**
+ * A blur is taken in a few taps: the one on the sprite's shadow itself and a
+ * ring of eight round it, the middle's share of the whole being this. With it
+ * the ring stands at `blur * sqrt(2 / (1 - SHADOW_CENTRE))` — the radius at
+ * which the nine taps spread as widely as a Gaussian of that deviation does.
+ */
+const SHADOW_CENTRE = 0.2;
+
+/** A `BillboardShadow` as the shader takes it, in the world's units: how far it falls right and down, the radius of its ring of taps, and its alpha. */
+export function shadowUniform({ dx, dy, blur, alpha }: BillboardShadow): [number, number, number, number] {
+    return [dx * BOARD_UNIT, dy * BOARD_UNIT, blur * Math.sqrt(2 / (1 - SHADOW_CENTRE)) * BOARD_UNIT, alpha];
+}
+
 // A quad lying flat (`FLAT`, no camera axes) is across the world's x and z and lifted in y.
+// With a `SHADOW` it is grown by all the shadow can reach, so the shadow isn't cut off at the sprite's edge, and
+// the sprite's own rectangle of the texture is kept to, so the growth shows none of the sprite beside it on the sheet.
 const vertexShader = /* glsl */ `
 #ifndef FLAT
 uniform vec3 right;
 uniform vec3 up;
 uniform vec3 back;
+#endif
+#ifdef SHADOW
+uniform vec4 shadow;
+varying vec2 vStep;
+varying vec4 vRect;
 #endif
 uniform float lift;
 attribute vec3 at;
@@ -101,8 +129,17 @@ attribute vec4 tint;
 varying vec2 vUv;
 varying vec4 vTint;
 void main() {
+    vec2 size = place.zw;
+    vec2 q = uv;
+    #ifdef SHADOW
+    size += 2.0 * (max(abs(shadow.x), abs(shadow.y)) + shadow.z);
+    q = (uv - 0.5) * size / place.zw + 0.5;
+    // How far the texture moves a world unit right and down the sprite, for the shadow's taps.
+    vStep = vec2(rect.z - rect.x, rect.w - rect.y) / place.zw;
+    vRect = rect;
+    #endif
     // Sized first and turned after, so a quad that isn't square turns as a rectangle and isn't sheared.
-    vec2 corner = position.xy * place.zw;
+    vec2 corner = position.xy * size;
     float s = sin(spin), c = cos(spin);
     corner = vec2(c * corner.x + s * corner.y, -s * corner.x + c * corner.y);
     vec2 across = place.xy + corner;
@@ -111,19 +148,48 @@ void main() {
     #else
     vec3 world = at + right * across.x + up * across.y + back * lift;
     #endif
-    vUv = vec2(mix(rect.x, rect.z, uv.x), mix(rect.w, rect.y, uv.y));
+    vUv = vec2(mix(rect.x, rect.z, q.x), mix(rect.w, rect.y, q.y));
     vTint = tint;
     gl_Position = projectionMatrix * viewMatrix * vec4(world, 1.0);
 }`;
 
+// A shadow is the sprite's alpha, taken a little way back along the way it falls and blurred, laid dark under the sprite.
 const fragmentShader = /* glsl */ `
 uniform sampler2D map;
 varying vec2 vUv;
 varying vec4 vTint;
+#ifdef SHADOW
+uniform vec4 shadow;
+varying vec2 vStep;
+varying vec4 vRect;
+const float CENTRE = ${SHADOW_CENTRE.toFixed(2)};
+float inRect(vec2 at) {
+    vec2 within = step(vRect.xy, at) * step(at, vRect.zw);
+    return within.x * within.y;
+}
+float alphaAt(vec2 at) {
+    return texture2D(map, at).a * inRect(at);
+}
+#endif
 void main() {
     vec4 texel = texture2D(map, vUv) * vTint;
+    #ifdef SHADOW
+    texel.a *= inRect(vUv);
+    vec2 from = vUv - vStep * shadow.xy;
+    float cover = CENTRE * alphaAt(from);
+    for (int i = 0; i < 8; i++) {
+        float angle = float(i) * 0.78539816;
+        cover += (1.0 - CENTRE) / 8.0 * alphaAt(from + vStep * shadow.z * vec2(cos(angle), sin(angle)));
+    }
+    // The sprite over the shadow, which is black: its colour is the sprite's share of what shows.
+    float behind = cover * shadow.w * vTint.a;
+    float a = texel.a + behind * (1.0 - texel.a);
+    if (a < 0.004) discard;
+    gl_FragColor = vec4(texel.rgb * texel.a / a, a);
+    #else
     if (texel.a < 0.004) discard;
     gl_FragColor = texel;
+    #endif
 }`;
 
 /** How a `Billboards` is drawn among the rest. */
@@ -138,6 +204,8 @@ export interface BillboardOptions {
     order?: number;
     /** How far towards the camera it's drawn from what it hangs from, in the world's units, so the figure it hangs from never cuts into it; for a quad lying flat, how far over the ground. */
     lift?: number;
+    /** A soft dark shadow under every sprite, as the marks have on the isometric board; none by default. For a quad that isn't turned: the shadow falls the same way whichever way it spins. */
+    shadow?: BillboardShadow;
 }
 
 const WHITE = new Color(1, 1, 1);
@@ -153,7 +221,7 @@ export class Billboards {
     private count = 0;
     private attributes!: { at: InstancedBufferAttribute; place: InstancedBufferAttribute; rect: InstancedBufferAttribute; spin: InstancedBufferAttribute; tint: InstancedBufferAttribute };
 
-    constructor(private readonly texture: Texture, axes: BillboardAxes | null, { depthTest = false, order = 10, lift = 0.5 }: BillboardOptions = {}) {
+    constructor(private readonly texture: Texture, axes: BillboardAxes | null, { depthTest = false, order = 10, lift = 0.5, shadow }: BillboardOptions = {}) {
         const geometry = new InstancedBufferGeometry();
         const plane = new PlaneGeometry(1, 1);
         geometry.index = plane.index;
@@ -165,8 +233,9 @@ export class Billboards {
             transparent: true,
             depthTest,
             depthWrite: false,
-            ...!axes && { side: DoubleSide, defines: { FLAT: "" } },
-            uniforms: { map: { value: texture }, lift: { value: lift }, ...axes },
+            defines: { ...!axes && { FLAT: "" }, ...shadow && { SHADOW: "" } },
+            ...!axes && { side: DoubleSide },
+            uniforms: { map: { value: texture }, lift: { value: lift }, ...axes, ...shadow && { shadow: { value: new Vector4(...shadowUniform(shadow)) } } },
         });
         this.mesh = new Mesh(geometry, material);
         this.mesh.frustumCulled = false;
