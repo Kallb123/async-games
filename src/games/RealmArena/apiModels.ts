@@ -54,6 +54,8 @@ export interface IRealmArenaSpecificGameStateResponse {
     nextWave?: { round: number; arriving?: number; upTo?: true };
     /** How strong the co-op warbands are (§30.5); absent is Normal. */
     difficulty?: StoredDifficulty;
+    /** The warbands take their turns in a block after all the players', not one after each; absent is the alternating order. */
+    teamBlocks?: true;
     /**
      * Whom the team fights, in co-op (§29.3), once the team knows: a faction
      * the host picked from the start, one drawn at random once one of its

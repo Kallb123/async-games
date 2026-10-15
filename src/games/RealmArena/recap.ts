@@ -40,7 +40,7 @@ import type { IGameCommand, ICommandOutcome } from "@/utils/apiModels/GameLogic"
 import type { IHistoryEntry } from "@/utils/games/history";
 import { andList, capitalise, numberWord, pluralize } from "@/utils/ui/text";
 import type { IRealmArenaSpecificGameStateResponse } from "./apiModels";
-import { unnamed, type EnemyTurn, type IRealmArenaOutcome, type RealmArenaAct, type Told } from "./RealmArenaLogic";
+import { enemyTurnsOf, unnamed, type EnemyTurn, type IRealmArenaOutcome, type RealmArenaAct, type Told } from "./RealmArenaLogic";
 import { battlefieldOf } from "./maps";
 import { CHARACTERS, enemyNameOf, UNKNOWN_ENEMY, type CharacterId, type ItemId } from "./characters";
 import { battleFrom, centreHolders, ENEMY_SIDE, isStanding, isWarband, sideOf, sideScore, TEAM_SIDE, type BattleEvent, type Fighter } from "./rules";
@@ -297,7 +297,7 @@ function enemyLineCount(turn: EnemyTurn, said: (told: Told | undefined, events: 
  * centre. Each is the warband's own row, keyed by the End turn's command, so
  * the board's dot and the feed's folding read it as the enemy's.
  */
-function enemyRows(base: RowBase, command: IGameCommand, turn: EnemyTurn, lines: readonly IHistoryEntry[], next: RAState, said: (told: Told | undefined, events: readonly BattleEvent[]) => readonly BattleEvent[]): IGameEvent[] {
+function enemyRows(base: RowBase, command: IGameCommand, turn: EnemyTurn, lines: readonly IHistoryEntry[], next: RAState, said: (told: Told | undefined, events: readonly BattleEvent[]) => readonly BattleEvent[], key = `${command.id}:enemy`): IGameEvent[] {
     // The enemy's name as its lines begin with it: "The enemy" while a random
     // enemy is hidden (§29.3), its faction's once it's known — and a turn can
     // see the one give way to the other.
@@ -317,17 +317,17 @@ function enemyRows(base: RowBase, command: IGameCommand, turn: EnemyTurn, lines:
     // In fog, only the parts the viewer was told of wrote them a line (§27.2).
     let at = 0;
     const started = said(turn.startedTold, turn.started);
-    const rows: IGameEvent[] = burningRow(own, `${command.id}:enemy:burning`, started.length > 0 ? lines.slice(at, ++at) : [], started, next.fighters);
+    const rows: IGameEvent[] = burningRow(own, `${key}:burning`, started.length > 0 ? lines.slice(at, ++at) : [], started, next.fighters);
     for (const [index, step] of turn.steps.entries()) {
         const events = said(step.told, step.events);
         if (events.length === 0) continue;
         const line = lines[at++];
         if (!line) break;
-        rows.push(actionRow({ ...own, id: `${command.id}:enemy:${index}` }, nameOf(line.text), line.text, told(events), step.action.fighter, next.fighters));
+        rows.push(actionRow({ ...own, id: `${key}:${index}` }, nameOf(line.text), line.text, told(events), step.action.fighter, next.fighters));
     }
     const points = turn.ended ? centrePointsOf(turn.ended, turn.owner) : 0;
     if (points > 0) {
-        rows.push({ ...own, id: `${command.id}:enemy:centre`, type: RA_CENTRE, glyph: "★", title: `${nameOf(lines[at]?.text ?? "")} ended their turn holding the centre, for ${pluralize(points, "point")}` });
+        rows.push({ ...own, id: `${key}:centre`, type: RA_CENTRE, glyph: "★", title: `${nameOf(lines[at]?.text ?? "")} ended their turn holding the centre, for ${pluralize(points, "point")}` });
     }
     return rows;
 }
@@ -377,7 +377,7 @@ function toEvents(
             // scoring makes it news, so a bare one is `quiet` — and only the
             // sender's own, not a warband's in the enemy's turn after it (§29.4).
             const { events = [], recap } = outcome as Partial<IRealmArenaOutcome>;
-            const enemy = recap?.enemy;
+            const turns = enemyTurnsOf(recap);
             const points = centrePointsOf(events, command.senderId);
             if (points > 0) {
                 // Counted off the squad as the feed's viewer sees it, so not
@@ -403,8 +403,13 @@ function toEvents(
             // own window after the enemy's turn, and they'd never see it.
             const ended = next.complete && !prev.complete;
             const rest = lines.slice(ended ? BATTLE_END_LINES : 0).filter(entry => entry.actorId === undefined).reverse();
-            const enemyLines = enemy ? enemyLineCount(enemy, said) : 0;
-            if (enemy) rows.push(...enemyRows(base, command, enemy, rest.slice(0, enemyLines), state(next), said));
+            // Each warband turn of a block (§29.4) wrote its lines in turn, and its rows are keyed apart.
+            let enemyLines = 0;
+            for (const [index, turn] of turns.entries()) {
+                const count = enemyLineCount(turn, said);
+                rows.push(...enemyRows(base, command, turn, rest.slice(enemyLines, enemyLines + count), state(next), said, index === 0 ? undefined : `${command.id}:enemy${index}`));
+                enemyLines += count;
+            }
             rows.push(...burningRow({ ...base, actorId: "", actorUsername: "" }, `${command.id}:burning`, rest.slice(enemyLines), said(recap?.startedTold, recap?.started ?? events), state(next).fighters));
             break;
         }

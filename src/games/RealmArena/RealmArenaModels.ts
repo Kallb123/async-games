@@ -7,7 +7,7 @@ import { mongoMap } from "@/utils/games/mongoMaps";
 import { capitalise, pluralize } from "@/utils/ui/text";
 import { userIdListToNamesAndMap } from "@/utils/users/clerk";
 import { RealmArenaGameType, type IGameCommand } from "@/utils/apiModels/GameLogic";
-import { battleOf, battleRoundsOf, budgetOf, enemyEvents, enemyHidden, nextWaveOf, toldTo, unnamed, warbandBudgetOf, type IRealmArenaOutcome, type RealmArenaBoard, type Told } from "./RealmArenaLogic";
+import { battleOf, battleRoundsOf, budgetOf, enemyEvents, enemyHidden, enemyTurnsOf, nextWaveOf, toldTo, unnamed, warbandBudgetOf, type IRealmArenaOutcome, type RealmArenaBoard, type Told } from "./RealmArenaLogic";
 import { rollOffTurnOrder } from "@/utils/games/rollOff";
 import { gameCommandVersion } from "@/utils/ui/games";
 import { meta } from "./meta";
@@ -49,6 +49,15 @@ export interface IRealmArenaCoop {
     difficulty?: StoredDifficulty;
     /** The battlefield the host picked for Hold Out (§30.9). Absent means the line battle for the team's size (§29.2). */
     map?: CoopMap;
+    /**
+     * The warbands take their turns in a block (§29.4): every player goes in
+     * seat order, then every warband still standing, then the players again —
+     * rather than a warband after each player. Absent is the alternating
+     * rotation every battle before it had, so a battle without it plays and
+     * replays as it always did. Only for a team of two or more
+     * (`buildInitialRealmArenaState`): with one player the two orders are the same.
+     */
+    teamBlocks?: true;
     /**
      * The host chose Random (§29.3): the team musters not knowing whom it
      * will face, and the faction stays hidden — off the wire and unnamed in
@@ -207,23 +216,27 @@ export interface RealmArenaCoopInvite {
     difficulty?: StoredDifficulty;
     /** Hold Out only; absent is the line battle (§30.9). */
     map?: CoopMap;
+    /** Warbands take their turns in a block after the players' (§29.4); absent is a warband after each player. */
+    teamBlocks?: true;
 }
 
 /**
  * A co-op setting as the host chose it, or undefined for anything else a
  * request could send: only an enemy that is a faction, or Random, a mission
  * that is Hold Out, a difficulty that is Easy or Hard, and in Hold Out a
- * battlefield that is one of `COOP_MAPS`, each when sent.
+ * battlefield that is one of `COOP_MAPS`, and team blocks that are true or false
+ * (false is the default and isn't kept), each when sent.
  * What the setup route checks and the invitation stores, so a lobby
  * invitation, whose settings reach the model unread, is held to it as well.
  */
 export function coopInviteOf(value: unknown): RealmArenaCoopInvite | undefined {
-    const { enemy, mission, difficulty, map } = (value ?? {}) as { enemy?: unknown, mission?: unknown, difficulty?: unknown, map?: unknown };
+    const { enemy, mission, difficulty, map, teamBlocks } = (value ?? {}) as { enemy?: unknown, mission?: unknown, difficulty?: unknown, map?: unknown, teamBlocks?: unknown };
+    if (teamBlocks !== undefined && typeof teamBlocks !== "boolean") return undefined;
     if (mission !== undefined && mission !== "holdOut") return undefined;
     if (difficulty !== undefined && difficulty !== "easy" && difficulty !== "hard") return undefined;
     if (map !== undefined && (mission !== "holdOut" || !COOP_MAPS.includes(map as CoopMap))) return undefined;
     if (enemy !== RANDOM_ENEMY && !isFactionId(enemy)) return undefined;
-    return { enemy, ...(mission ? { mission } : {}), ...(difficulty ? { difficulty } : {}), ...(map ? { map: map as CoopMap } : {}) };
+    return { enemy, ...(mission ? { mission } : {}), ...(difficulty ? { difficulty } : {}), ...(map ? { map: map as CoopMap } : {}), ...(teamBlocks ? { teamBlocks: true as const } : {}) };
 }
 
 export interface IRealmArenaInvitationData extends IInvitationData {
@@ -300,6 +313,9 @@ RealmArenaInvitationSchema.methods.CreateGame = async function(invite: IRealmAre
     const factions = specificGameState.factions ?? REALM_ONLY;
     const from = factions.length > 1 ? `, from ${factions.map(id => FACTIONS[id].name.replace(/^The /, "the ")).join(" or ")}` : "";
     history.push({ text: `Setup: ${sized}each player musters ${budgetOf(specificGameState)} points' worth of characters${from}, sealed until every player has` });
+    if (specificGameState.coop?.teamBlocks) {
+        history.push({ text: "Setup: the players take their turns one after another, then the warbands take theirs in a block" });
+    }
     if (specificGameState.coop) {
         history.push({ text: `Setup: on ${DIFFICULTY_NAMES[specificGameState.coop.difficulty ?? "normal"]}, each warband musters ${warbandBudgetOf(specificGameState)} points' worth` });
     }
@@ -381,7 +397,8 @@ export function buildInitialRealmArenaState(turnOrder: string[], mastery: Master
         ...(size ? { size } : {}),
         ...(factions ? { factions } : {}),
         ...(settings.rulesVersion !== undefined ? { rulesVersion: settings.rulesVersion } : {}),
-        ...(settings.coop ? { coop: coopState(settings.coop) } : {}),
+        // Blocks are for a team of two or more: for one player they're the alternating order.
+        ...(settings.coop ? { coop: coopState({ ...settings.coop, teamBlocks: settings.coop.teamBlocks && turnOrder.length >= 2 ? true : undefined }) } : {}),
         phase: "muster",
         roundsPlayed: 0,
         fighters: [],
@@ -395,8 +412,8 @@ export function buildInitialRealmArenaState(turnOrder: string[], mastery: Master
 }
 
 /** A co-op battle's state as it starts: only the settings that were chosen, so one without them looks as every battle before it did. */
-function coopState({ enemy, random, mission, difficulty, map }: CoopSettings): IRealmArenaCoop {
-    return { enemy, nextWarband: 0, ...(random ? { random } : {}), ...(mission ? { mission } : {}), ...(difficulty ? { difficulty } : {}), ...(map ? { map } : {}) };
+function coopState({ enemy, random, mission, difficulty, map, teamBlocks }: CoopSettings): IRealmArenaCoop {
+    return { enemy, nextWarband: 0, ...(random ? { random } : {}), ...(mission ? { mission } : {}), ...(difficulty ? { difficulty } : {}), ...(map ? { map } : {}), ...(teamBlocks ? { teamBlocks } : {}) };
 }
 
 /** What a battle's settings are, read back off its state: what a replay rebuilds it from. */
@@ -529,6 +546,7 @@ export function gameStateToModel(
         ...(gs.coop?.mission ? { mission: gs.coop.mission } : {}),
         ...(nextWave ? { nextWave } : {}),
         ...(gs.coop?.difficulty ? { difficulty: gs.coop.difficulty } : {}),
+        ...(gs.coop?.teamBlocks ? { teamBlocks: true as const } : {}),
         // A random enemy stays off the wire until it's seen (§29.3), and the
         // fog lifts as the battle ends, the faction with it. Never a view with
         // one of its characters in it and not the faction: that's a sighting.
@@ -647,8 +665,8 @@ const withoutRolls = (events: readonly BattleEvent[]): ToldEvent[] => events.map
  */
 function partsOf(outcome: IRealmArenaOutcome, viewerId: string | null, gs: IRealmArenaSpecificGameState, complete: boolean): IRealmArenaStepPart[] | undefined {
     const { events = [], recap } = outcome;
-    const enemy = recap?.enemy;
-    if (!enemy) return undefined;
+    const turns = enemyTurnsOf(recap);
+    if (!recap || turns.length === 0) return undefined;
     const battle = battleOf(gs, complete);
     const hidden = battle.fog && enemyHidden(gs.coop);
     // What the viewer was told of some events: the record of it where there is
@@ -664,17 +682,26 @@ function partsOf(outcome: IRealmArenaOutcome, viewerId: string | null, gs: IReal
     const started = recap.started ?? [];
     // The command's own events are the player's End turn, then the warband's
     // turn, then what happened as the next turn began (`RealmArenaEndTurn`).
-    const own = events.slice(0, events.length - enemyEvents(enemy).length - started.length);
+    const own = events.slice(0, events.length - turns.reduce((sum, turn) => sum + enemyEvents(turn).length, 0) - started.length);
 
     const board = (after: RealmArenaBoard | undefined): RealmArenaPartState | undefined => {
         if (!after) return undefined;
         const { fighters, ghosts, clouds, blasted, scores, enemy: whom } = gameStateToModel({ ...gs, ...after, sightings: after.sightings, coop: after.coop }, viewerId, null, complete);
         return { fighters, ghosts, clouds, blasted, scores, ...whom ? { enemy: whom } : {} };
     };
+    // Warbands taking turns in a block (§29.4) hand over to one another in a
+    // part of their own, as the first is handed the player's End turn.
+    const last = turns[turns.length - 1];
     const planned = [
-        { kind: "ended" as const, events: said(both(recap.told, enemy.startedTold), [...own, ...enemy.started]), after: enemy.startedAfter },
-        ...enemy.steps.map(step => ({ kind: "enemy" as const, events: said(step.told, step.events), after: step.after })),
-        { kind: "handOff" as const, events: said(both(enemy.endedTold, recap.startedTold), [...enemy.ended ?? [], ...started]), after: undefined },
+        { kind: "ended" as const, events: said(both(recap.told, turns[0].startedTold), [...own, ...turns[0].started]), after: turns[0].startedAfter },
+        ...turns.flatMap((turn, index) => {
+            const following = turns[index + 1];
+            return [
+                ...turn.steps.map(step => ({ kind: "enemy" as const, events: said(step.told, step.events), after: step.after })),
+                ...following ? [{ kind: "enemy" as const, events: said(both(turn.endedTold, following.startedTold), [...turn.ended ?? [], ...following.started]), after: following.startedAfter }] : [],
+            ];
+        }),
+        { kind: "handOff" as const, events: said(both(last.endedTold, recap.startedTold), [...last.ended ?? [], ...started]), after: undefined },
     ].filter(part => part.events.length > 0);
     if (planned.length < 2) return undefined;
     return planned.map(({ kind, events: told, after }, index): IRealmArenaStepPart => {

@@ -1094,6 +1094,12 @@ export interface IRealmArenaOutcome extends ICommandOutcome {
      */
     recap?: {
         enemy?: EnemyTurn;
+        /**
+         * The warbands' turns after `enemy`'s, when they take their turns in a
+         * block (`IRealmArenaCoop.teamBlocks`, §29.4): one End turn plays them
+         * all. Absent when there is only the one.
+         */
+        thenEnemy?: EnemyTurn[];
         started?: BattleEvent[];
         /** In fog, what each player was told of what happened as the next turn began (§27.2). */
         startedTold?: Told;
@@ -1142,6 +1148,10 @@ export interface EnemyTurn {
 
 /** Everything that happened in a warband's turn, in order. */
 export const enemyEvents = (turn: EnemyTurn): BattleEvent[] => [...turn.started, ...turn.steps.flatMap(step => step.events), ...turn.ended ?? []];
+
+/** Every warband turn an End turn played, in order: one, or in a block (§29.4) as many as were standing. */
+export const enemyTurnsOf = (recap: Pick<NonNullable<IRealmArenaOutcome["recap"]>, "enemy" | "thenEnemy"> | undefined): EnemyTurn[] =>
+    recap?.enemy ? [recap.enemy, ...recap.thenEnemy ?? []] : [];
 
 const ACTION_PHRASES: Readonly<Record<Action["kind"], string>> = {
     move: "moved",
@@ -1383,6 +1393,12 @@ export class RealmArenaEndTurn implements IGameCommand {
      * request: no client chooses the enemy's moves.
      */
     recordedEnemyActions?: Action[];
+    /**
+     * The actions of the warbands' turns after the first, when they take their
+     * turns in a block (`IRealmArenaCoop.teamBlocks`, §29.4), one list a turn.
+     * Absent when one warband took a turn or none did.
+     */
+    recordedMoreEnemyActions?: Action[][];
     /** Every 1–100 roll the warband's turn used, in order, as `RealmArenaAct`'s are recorded. Absent when it rolled nothing. */
     recordedRolls?: number[];
     readonly className = "RealmArenaEndTurn";
@@ -1406,10 +1422,14 @@ export class RealmArenaEndTurn implements IGameCommand {
         // before the warband's turn that follows changes it (§29.9).
         const told = gs.coop ? toldByViewer(data, events) : undefined;
         const { roll, used } = recordedRolls(this.recordedRolls, () => randomInt(ROLL_SIDES) + 1);
-        const { enemy, started, startedTold } = handOff(data, this.senderId, { recorded: this.recordedEnemyActions, roll }, commandVersion(this));
+        const recorded = this.recordedEnemyActions ? [this.recordedEnemyActions, ...Array.isArray(this.recordedMoreEnemyActions) ? this.recordedMoreEnemyActions : []] : undefined;
+        const { enemy: turns, started, startedTold } = handOff(data, this.senderId, { recorded, roll }, commandVersion(this));
+        const [enemy, ...thenEnemy] = turns;
         // Always a list in co-op, an empty one when no warband took a turn,
         // so a replay that comes to one never asks the planner.
         if (gs.coop) this.recordedEnemyActions = enemy?.steps.map(step => step.action) ?? [];
+        if (thenEnemy.length > 0) this.recordedMoreEnemyActions = thenEnemy.map(turn => turn.steps.map(step => step.action));
+        else delete this.recordedMoreEnemyActions;
         if (used.length > 0) this.recordedRolls = used;
         else delete this.recordedRolls;
         // Here as well as in CheckEndTurn, which a solo battle never reaches
@@ -1418,15 +1438,16 @@ export class RealmArenaEndTurn implements IGameCommand {
         markDirty(gameData);
         return {
             ...turnEnded(gs),
-            events: [...events, ...enemy ? enemyEvents(enemy) : [], ...started],
-            recap: { enemy, started, startedTold, told },
+            events: [...events, ...turns.flatMap(enemyEvents), ...started],
+            recap: { enemy, ...thenEnemy.length > 0 ? { thenEnemy } : {}, started, startedTold, told },
         } as IRealmArenaOutcome;
     }
 }
 
 /** Where a warband's actions come from (§29.8): the ones an End turn recorded, on a replay, or the planner's, live. */
 interface WarbandMoves {
-    recorded: readonly unknown[] | undefined;
+    /** The actions each warband turn of this End turn took, in order, on a replay; undefined live. */
+    recorded: readonly (readonly unknown[])[] | undefined;
     roll: Roll;
 }
 
@@ -1448,16 +1469,19 @@ const WARBAND_DEADLINE_MS = 2_000;
  * Live, a turn is capped at four actions a character and at a deadline, and
  * an action `check` refuses or a planner that throws ends it there, logged
  * (§29.7): what it did before is kept and recorded, so a replay matches.
- * Undefined in a free-for-all, and when there's no warband left to play.
+ * Undefined in a free-for-all, and when there's no warband left to play. A
+ * block of turns (`IRealmArenaCoop.teamBlocks`) names the warband (`only`),
+ * and gets nothing if that one has been wiped out.
  */
-function warbandTurn(data: IRealmArenaGameData, moves: WarbandMoves): EnemyTurn | undefined {
+function warbandTurn(data: IRealmArenaGameData, moves: { recorded: readonly unknown[] | undefined; roll: Roll }, only?: number): EnemyTurn | undefined {
     const gs = data.specificGameState;
     const coop = gs.coop;
     if (!coop) return undefined;
-    const order = data.gameState.turnOrder;
     const count = gs.seats.length;
     const standing = squadsStanding(battleOf(gs), Array.from({ length: count }, (_, k) => warbandOwner(k)));
-    const k = Array.from({ length: count }, (_, step) => (coop.nextWarband + step) % count).find(one => standing.includes(warbandOwner(one)));
+    const k = only !== undefined
+        ? (standing.includes(warbandOwner(only)) ? only : undefined)
+        : Array.from({ length: count }, (_, step) => (coop.nextWarband + step) % count).find(one => standing.includes(warbandOwner(one)));
     if (k === undefined) return undefined;
     const owner = warbandOwner(k);
     gs.coop = { ...coop, nextWarband: (k + 1) % count };
@@ -1502,8 +1526,24 @@ function warbandTurn(data: IRealmArenaGameData, moves: WarbandMoves): EnemyTurn 
 }
 
 /**
+ * Every warband still standing, one turn each in order, as a block (§29.4,
+ * `IRealmArenaCoop.teamBlocks`): it stops where a turn leaves the battle over.
+ * A replay's turns come from `moves.recorded`, in the order they were played.
+ */
+function warbandBlock(data: IRealmArenaGameData, moves: WarbandMoves): EnemyTurn[] {
+    const gs = data.specificGameState;
+    const turns: EnemyTurn[] = [];
+    for (let k = 0; k < gs.seats.length && !battleIsOver(gs); k++) {
+        const turn = warbandTurn(data, { recorded: moves.recorded && (moves.recorded[turns.length] ?? []), roll: moves.roll }, k);
+        if (turn) turns.push(turn);
+    }
+    return turns;
+}
+
+/**
  * The hand-off after `from` ends their turn: in co-op, the next warband takes
- * its turn (§29.4); then the turn passes to the next seat still playing, which
+ * its turn (§29.4) — or, when they take their turns in a block, every warband
+ * does once the last player has gone, before the round turns over — then the turn passes to the next seat still playing, which
  * ends the round if it passes back round the table (§13.8), and that seat's
  * turn begins (`startTurn`) — unless the battle is over by then. What burning
  * does as a turn begins is written to the log in a line of its own (§20.3).
@@ -1516,16 +1556,29 @@ function warbandTurn(data: IRealmArenaGameData, moves: WarbandMoves): EnemyTurn 
  * Returns the warband's turn, and everything that happened as the next
  * player's turn began.
  */
-function handOff(data: IRealmArenaGameData, from: string, moves: WarbandMoves, version: number): { enemy?: EnemyTurn; started: BattleEvent[]; startedTold?: Told } {
+function handOff(data: IRealmArenaGameData, from: string, moves: WarbandMoves, version: number): { enemy: EnemyTurn[]; started: BattleEvent[]; startedTold?: Told } {
     const gs = data.specificGameState;
     const order = data.gameState.turnOrder;
-    const enemy = battleIsOver(gs) ? undefined : warbandTurn(data, moves);
+    const blocks = gs.coop?.teamBlocks === true;
+    const enemy: EnemyTurn[] = [];
+    if (!blocks && !battleIsOver(gs)) {
+        const turn = warbandTurn(data, { recorded: moves.recorded?.[0], roll: moves.roll });
+        if (turn) enemy.push(turn);
+    }
     const started: BattleEvent[] = [];
     // In fog, what each player was told of it all, line by line (§27.2).
     const startedTold: Told | undefined = gs.fog ? Object.fromEntries(order.map(viewer => [viewer, []])) : undefined;
     for (let seat = from; ;) {
-        const next = nextSeat(data, seat);
-        if (order.indexOf(next) <= order.indexOf(seat)) {
+        let next = nextSeat(data, seat);
+        const wraps = () => order.indexOf(next) <= order.indexOf(seat);
+        // The block follows the last player to go, whether that player ended
+        // their turn or was burned out at the start of it, and the next seat
+        // is then worked out again: a warband may have wiped a squad out.
+        if (blocks && wraps() && !battleIsOver(gs)) {
+            enemy.push(...warbandBlock(data, moves));
+            next = nextSeat(data, seat);
+        }
+        if (wraps()) {
             gs.roundsPlayed += 1;
             landWave(data, version);
         }
