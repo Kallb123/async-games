@@ -86,6 +86,8 @@ export interface Marking {
 
 /** What an action plays, ready to place a frame at a time. */
 interface Playing {
+    /** Which playback it is (`PlaybackProvider`'s `playKey`). */
+    key: string;
     cues: readonly BattleCue[];
     walks: Map<number, WalkCue[]>;
     falls: Map<number, FallCue>;
@@ -311,7 +313,7 @@ export class Board3D {
     /** What the figures are marked with: the ring round each one's feet (chosen, a candidate, aimed at, a watcher) and the AP pips on its owner's turn. */
     setMarking(marking: Marking): void {
         this.marking = marking;
-        this.layFigures(this.playing ? this.playedMs : null);
+        this.layFigures();
         this.invalidate();
     }
 
@@ -319,7 +321,7 @@ export class Board3D {
     setSealed(sealed: SealedSpec[], pickedUp: number | null): void {
         this.sealed = sealed;
         this.pickedUp = pickedUp;
-        this.layFigures(this.playing ? this.playedMs : null);
+        this.layFigures();
         this.layStanding();
         this.invalidate();
     }
@@ -363,7 +365,7 @@ export class Board3D {
     setLook(look: BoardLook): void {
         this.look = look;
         this.previews.setLook(look, () => this.layPreviews());
-        this.layFigures(this.playing ? this.playedMs : null);
+        this.layFigures();
         this.layPreviews();
     }
 
@@ -376,7 +378,7 @@ export class Board3D {
     /** What an action lined up would do to the HP of each figure it touches, flashing at the end of its bar. */
     setHpChange(change: ReadonlyMap<number, number> | null): void {
         this.hpChange = change;
-        this.layFigures(this.playing ? this.playedMs : null);
+        this.layFigures();
         this.animate();
         this.invalidate();
     }
@@ -470,8 +472,19 @@ export class Board3D {
      * What an action plays, or none. Ready to draw at a time with `frame`. With
      * `still` (reduced motion) nobody walks, nothing flies, bursts, slashes or
      * shakes the board, and hit text only appears and fades.
+     *
+     * The playback it is already playing — handed over again as a new object
+     * on a render, or now with a walker to follow — carries on where it is:
+     * started again, everything it moves would be laid at its start, and a
+     * walker drawn back on the square it set off from until the next frame.
      */
-    play(playback: { cues: readonly BattleCue[]; before: readonly Fighter[]; field: Battlefield } | null, tracked: boolean, still = false): void {
+    play(playback: { key: string; cues: readonly BattleCue[]; before: readonly Fighter[]; field: Battlefield } | null, tracked: boolean, still = false): void {
+        const playing = this.playing;
+        if (playback && playing?.key === playback.key && playing.still === still) {
+            playing.tracked = followed(playing.walks, tracked);
+            if (playing.tracked === null) this.stopFollowing();
+            return;
+        }
         this.stopFollowing();
         this.clearCovers();
         this.playing = null;
@@ -494,8 +507,8 @@ export class Board3D {
             }
             const arrivals = new Map([...walks].map(([id, one]) => [id, endOf(one)]));
             this.playing = {
-                cues: playback.cues, walks, falls, told, covers, field: playback.field, shoves: new Map(), arrivals, still,
-                tracked: tracked ? walks.keys().next().value ?? null : null, end: endOf(playback.cues),
+                key: playback.key, cues: playback.cues, walks, falls, told, covers, field: playback.field, shoves: new Map(), arrivals, still,
+                tracked: followed(walks, tracked), end: endOf(playback.cues),
             };
         }
         this.frame(0);
@@ -503,10 +516,16 @@ export class Board3D {
         this.animate();
     }
 
-    /** Draws what's playing as it is `ms` in. */
-    frame(ms: number): void {
+    /**
+     * Draws what's playing as it is `ms` in — if it is the playback with `key`,
+     * when one is given. The frame loop of the next playback runs its first
+     * frame before the board is told of it (`play`), and that frame laid over
+     * the playback before, at its start, would draw its walker back where it
+     * set off from.
+     */
+    frame(ms: number, key?: string): void {
         const playing = this.playing, field = this.field;
-        if (!field) return;
+        if (!field || (key !== undefined && playing?.key !== key)) return;
         this.playedMs = ms;
         // A follow moves the view as this lays the frame out, and it is drawn once, at the end.
         this.framing = true;
@@ -541,7 +560,9 @@ export class Board3D {
     // ---- Laying things out ----
 
     /**
-     * Every figure in its place — as it stands, or `ms` into what's playing —
+     * Every figure in its place — as it stands, or `ms` into what's playing
+     * (where it last got to, unless told: mid-action, at rest, a walker would
+     * be drawn at the end of its walk) —
      * with its HP bar and marks over it. A character the action downs stands as
      * it was until the blow lands, then fades out as its fallen figure fades in
      * (`fallingAt`), its bar fading with it and no marks on it. A figure knocked
@@ -553,7 +574,7 @@ export class Board3D {
      * walker along the ground; a stale sighting in the fog and the faint figure
      * drawn through a wall have none, as on the isometric board.
      */
-    private layFigures(ms: number | null = null): void {
+    private layFigures(ms: number | null = this.playing ? this.playedMs : null): void {
         const field = this.field;
         if (!field || !this.art) return;
         const { models } = this.art;
@@ -800,7 +821,7 @@ export class Board3D {
     private turnTo(azimuth: number): void {
         this.azimuth = azimuth;
         this.relight();
-        this.layFigures(this.playing ? this.playedMs : null);
+        this.layFigures();
         // A missile's arc is drawn across the frame, as the camera now faces.
         if (this.playing) this.fx.lay(this.playedMs, this.basis);
         // A path's runs and the centre's name lie along the frame the camera now sees.
@@ -901,6 +922,11 @@ export class Board3D {
         }
         return undefined;
     }
+}
+
+/** The walker whose walk the camera follows, if it follows one: the first to walk. */
+function followed(walks: ReadonlyMap<number, WalkCue[]>, tracked: boolean): number | null {
+    return tracked ? walks.keys().next().value ?? null : null;
 }
 
 /** A leg of a walk's length in the world: a square straight, √2 across a diagonal, and `CLIMB_LEG` of a square more for each quarter climbed, as `legWeight` prices it. */

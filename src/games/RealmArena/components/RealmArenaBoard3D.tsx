@@ -45,9 +45,9 @@ const STROKES = {
     centre: { alpha: 1, width: 0.9, dash: [3, 1.5] },
 } as const satisfies Record<string, Pick<Outline, 'alpha' | 'width' | 'dash'>>;
 
-/** Hands the board the playback's time, a frame at a time, inside the `PlaybackProvider` it reads. */
-function PlaybackFrames({ board }: { board: Board3D | null }) {
-    usePlaybackFrame(ms => board?.frame(ms));
+/** Hands the board the time of the playback with `playKey`, a frame at a time, inside the `PlaybackProvider` it reads. */
+function PlaybackFrames({ board, playKey }: { board: Board3D | null; playKey: string | undefined }) {
+    usePlaybackFrame(ms => board?.frame(ms, playKey));
     return null;
 }
 
@@ -260,7 +260,7 @@ export default function RealmArenaBoard3D({ field, fighters, fogGhosts = [], uns
         },
         onSquare: square => onTapSquare?.(square),
     }), [board, onSelect, onTapSquare, placing, sealed, fighters]);
-    useEffect(() => board?.play(playback ? { cues: playback.cues, before: playback.before, field: playback.field } : null, tracks, still), [board, playback, tracks, still]);
+    useEffect(() => board?.play(playback ? { key: playback.key, cues: playback.cues, before: playback.before, field: playback.field } : null, tracks, still), [board, playback, tracks, still]);
 
     return (
         <div ref={frame} className="ag-board-frame ag-realmarena-frame">
@@ -269,7 +269,7 @@ export default function RealmArenaBoard3D({ field, fighters, fogGhosts = [], uns
                     <div ref={host} className="ag-ra-3d" role="img" aria-label={`The ${field.name}`} />
                     <BoardCamera board={board} rotation={rotation} glide={turned.turns > 0} layout={here} />
                 </BoardZoom>
-                <PlaybackFrames board={board} />
+                <PlaybackFrames board={board} playKey={playback?.key} />
                 <TurnButtons onTurn={turn} />
                 {/* Over the foot of the frame, out of the zoom: while an action plays, what is happening in words; otherwise the targets, which want the same spot. */}
                 {playback ? <PlaybackCaption key={playback.key} playback={playback} fighters={fighters} viewerId={viewerId} nameFor={nameFor} /> : overlay}
