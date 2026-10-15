@@ -21,7 +21,7 @@ import { CHARACTER_ART, facingCell, ITEM_ART, SMOKE_ART, spriteBox, TERRAIN_ART,
 import { CHARACTERS, ITEMS, type CharacterId, type ItemId } from '@/games/RealmArena/characters';
 import { CENTRE, isStanding, isWarband, maxHpOf, smokeSquares, type BattleState, type Fighter, type FogGhost, type MusterPick, type ToldEvent } from '@/games/RealmArena/rules';
 import type { AttackOption } from '@/games/RealmArena/tactics';
-import { AP_PIP_OFFSET, AP_PIP_RADIUS, AP_PIP_STEP, apPips, areaRect, BOARD_ZOOM, EFFECT_MARK_OFFSET, EFFECT_MARK_SIZE, EFFECT_MARK_STEP, FIGURE_RADIUS, FIGURE_RISE, fxPointsAt, HP_BAR_HEIGHT, HP_BAR_RISE, HP_BAR_WIDTH, ITEM_MARK_OFFSET, ITEM_MARK_SIZE, MARKER_RADIUS, RING_RADIUS, ringOf, SMOKE_SIZE, type Marker, type Ring, type BattleCue, type BoardFollow, type FallCue, type FxPoints, type ScorchCue, type Shove, type Timed, type WalkCue, effectsOn, facingOf, fadeInAt, fadeOutAt, fighterStatus, endOf, hpFraction, legLengthOn, progressOf, shakeAt, shakesOf, shovesOf, shoveAt, terrainLetter, toldAt, toldOf, walkerAt, walkCameraAt, legPoint, walkLift, walkSquares, type Told } from '@/games/RealmArena/ui';
+import { AP_PIP_OFFSET, AP_PIP_RADIUS, AP_PIP_STEP, apPips, areaRect, BOARD_ZOOM, CENTRE_LABEL, EFFECT_MARK_OFFSET, EFFECT_MARK_SIZE, EFFECT_MARK_STEP, FIGURE_RADIUS, FIGURE_RISE, fxPointsAt, HP_BAR_HEIGHT, HP_BAR_RISE, HP_BAR_WIDTH, ITEM_MARK_OFFSET, ITEM_MARK_SIZE, MARKER_RADIUS, ODDS_HEIGHT, ODDS_RISE, ODDS_WIDTH, PATH_END_RADIUS, RING_RADIUS, ringOf, shieldPath, SMOKE_SIZE, type Marker, type Ring, type BattleCue, type BoardFollow, type FallCue, type FxPoints, type ScorchCue, type Shove, type Timed, type WalkCue, effectsOn, facingOf, fadeInAt, fadeOutAt, fighterStatus, endOf, hpFraction, legLengthOn, progressOf, shakeAt, shakesOf, shovesOf, shoveAt, terrainLetter, toldAt, toldOf, walkerAt, walkCameraAt, legPoint, walkLift, walkSquares, type Told } from '@/games/RealmArena/ui';
 
 /** How deep the ground is drawn under the map's front edges, in quarters. */
 const SLAB_DEPTH = 3;
@@ -32,13 +32,6 @@ const SLAB_DEPTH = 3;
 // square's top, and it stands `FIGURE_TOP` high under its HP bar (`HP_BAR_*`):
 // all in ui.ts, which every way of drawing the board shares. Everything here is
 // in board units, against a square `2 * ISO_HALF_WIDTH` across.
-/** A target's chance to hit: a pill wide enough for "100%", worn above its figure's HP bar. */
-const ODDS_WIDTH = 10.5;
-const ODDS_HEIGHT = 4;
-const ODDS_RISE = HP_BAR_RISE + HP_BAR_HEIGHT + ODDS_HEIGHT / 2 + 0.6;
-/** A cover shield standing on a square's edge: narrow enough to stay clear of the figure's disc and the HP bar. */
-const SHIELD_WIDTH = 3.6;
-const SHIELD_HEIGHT = 4.6;
 /** How far below its disc's middle a figure is looked for, to tell whether something in front hides it: most of the way to the disc's foot. */
 const FOOT_PROBE = FIGURE_RADIUS * 0.6;
 /** Room over the back of the map for a figure standing there, and the odds above it. */
@@ -512,14 +505,6 @@ function Odds({ view, square, chance }: { view: IsoView; square: Square; chance:
             <text x={x} y={y - ODDS_RISE}>{chance}%</text>
         </g>
     );
-}
-
-/** The outline of a shield, standing on its point at the origin. `left` is just its left half. */
-function shieldPath(left = false): string {
-    const half = SHIELD_WIDTH / 2, shoulder = -SHIELD_HEIGHT * 0.45, belly = -SHIELD_HEIGHT * 0.12;
-    return left
-        ? `M0 ${-SHIELD_HEIGHT}H${-half}V${shoulder}Q${-half} ${belly} 0 0Z`
-        : `M${-half} ${-SHIELD_HEIGHT}H${half}V${shoulder}Q${half} ${belly} 0 0Q${-half} ${belly} ${-half} ${shoulder}Z`;
 }
 
 /**
@@ -1131,7 +1116,7 @@ export default function RealmArenaBoard({ field, fighters, fogGhosts = [], unsee
                             {path && pathEnd && (
                                 <>
                                     <polyline className="ag-ra-path" points={isoPoints(path)} />
-                                    <circle className="ag-ra-path-end" cx={pathEnd.x} cy={pathEnd.y} r={2} />
+                                    <circle className="ag-ra-path-end" cx={pathEnd.x} cy={pathEnd.y} r={PATH_END_RADIUS} />
                                 </>
                             )}
 
@@ -1172,9 +1157,9 @@ export default function RealmArenaBoard({ field, fighters, fogGhosts = [], unsee
                                     }]}
                                     obstacles={figureRects}
                                     width={width} height={height}
-                                    offset={(centre.width + centre.height) * ISO_HALF_HEIGHT / 2 + 4}
-                                    fontSize={10}
-                                    fontWeight={800}
+                                    offset={(centre.width + centre.height) * ISO_HALF_HEIGHT / 2 + CENTRE_LABEL.gap}
+                                    fontSize={CENTRE_LABEL.fontSize}
+                                    fontWeight={CENTRE_LABEL.fontWeight}
                                 />
                             )}
 

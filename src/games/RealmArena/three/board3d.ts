@@ -17,21 +17,25 @@
 // placed in the world rather than on the isometric board.
 
 import {
-    Color, DynamicDrawUsage, InstancedMesh, Matrix4, Mesh, MeshBasicMaterial, OrthographicCamera, PlaneGeometry, Quaternion, Scene,
+    Color, DynamicDrawUsage, InstancedMesh, Matrix4, Mesh, MeshBasicMaterial, OrthographicCamera, Scene,
     Vector3, WebGLRenderer, type ShaderMaterial,
 } from "three";
 import type { CharacterId } from "@/games/RealmArena/characters";
 import { isStanding, type Fighter, type FogGhost, type MusterPick } from "@/games/RealmArena/rules";
-import { CLIMB_LEG, endOf, HP_BAR_HEIGHT, HP_BAR_RISE, HP_BAR_WIDTH, hpFraction, shakeAt, toldAt, toldOf, walkerAt, walkLift, type BattleCue, type FallCue, type Ring, type Told, type WalkCue } from "@/games/RealmArena/ui";
+import { CLIMB_LEG, endOf, shakeAt, toldAt, toldOf, walkerAt, walkLift, type BattleCue, type FallCue, type Ring, type Told, type WalkCue } from "@/games/RealmArena/ui";
 import { facingTowards, type Battlefield, type Facing, type Square } from "@/utils/games/battlefield/terrain";
 import { easeInOut } from "@/utils/ui/boardZoom";
 import type { Rect } from "@/utils/ui/mapLabels";
 import { billboardAxes, setAxes } from "./billboards";
+import { barLevels, HpBars, type BarSpec } from "./bars3d";
+import type { PreviewLook } from "./canvasShapes";
 import { characterGeometry, type CharacterModels } from "./characterModels";
 import { BattleFx } from "./fx3d";
 import { azimuthOf, cameraBasis, cameraFor, figureMatrix, lightOf, lookAtFor, lookAtGround, onScreen, QUARTER, squareCentre, toFrame, type BoardFrame, type BoardLayout, type CameraBasis, type Vec3 } from "./iso3d";
 import { MarkLayer, marksOf, type MarkLevel } from "./marks3d";
 import type { RingColours } from "./rings3d";
+import { NO_PREVIEWS, Previews3D, type PreviewSpec } from "./previews3d";
+import type { Shading } from "./shading3d";
 import { lightSolids, solidMaterial } from "./solidMaterial";
 import { buildTerrain, type Sheets, type Terrain } from "./terrain3d";
 
@@ -47,16 +51,13 @@ const BOARD_UNIT = Math.SQRT2 / 20;
 
 /** A board unit up the frame, in the world's height: a full height is 10 of them. */
 const BOARD_RISE = QUARTER * 4 / 10;
-/** The HP bar: its size and how high its middle is over its figure's feet, in world units, as the isometric board's (`HP_BAR_*`). */
-const HP_BAR = { width: HP_BAR_WIDTH * BOARD_UNIT, height: HP_BAR_HEIGHT * BOARD_RISE, rise: (HP_BAR_RISE + HP_BAR_HEIGHT / 2) * BOARD_RISE };
-/** How many HP bars the board has room for before it grows. */
-const BAR_ROOM = 256;
+/** How often a lined-up HP change's flash is drawn: smooth enough for a flash of 0.8s, and every frame of it draws the whole board. */
+const PULSE_FRAME_MS = 33;
 
 /** A figure the board can pick: where it stands, roughly, for a tap to find. */
 interface Placed { id: number; feet: Vec3; standing: boolean }
 
-/** What's shaded on the ground, a texel a square: the colour, and how strongly (0–1). */
-export interface Shading { colour: Color; alpha: number }
+export type { Shading };
 
 /** What the board is told about a figure, as the React board works it out. */
 export interface FigureSpec {
@@ -135,7 +136,12 @@ export class Board3D {
     private ghosts: { ghost: FogGhost; facing: Facing; tint: Color | null }[] = [];
     private placed: Placed[] = [];
 
-    private readonly bars: { back: InstancedMesh; fill: InstancedMesh };
+    /** The HP bars, and the lined-up action's previews and the centre's name: flat to the camera, one draw each. */
+    private readonly bars: HpBars;
+    private readonly previews: Previews3D;
+    /** What the previews are drawn in, and the HP an action lined up would change, for the bars (`setLook`, `setHpChange`). */
+    private look: PreviewLook | null = null;
+    private hpChange: ReadonlyMap<number, number> | null = null;
     /** The effects an action plays over the battlefield, and the smoke that stands on it. */
     private readonly fx: BattleFx;
     /** What hangs round the figures: marks, pips, items and rings. Made with the art it draws from. */
@@ -169,6 +175,7 @@ export class Board3D {
     private animating = 0;
     private waveDue = false;
     private waveDrawn = 0;
+    private pulseDrawn = 0;
 
     private playing: Playing | null = null;
     /** How far into the playing action the figures were last laid, for a turn of the view to lay them there again. */
@@ -191,19 +198,9 @@ export class Board3D {
         this.canvas = this.renderer.domElement;
         host.appendChild(this.canvas);
 
-        // Both drawn after everything solid, the fill over the back.
-        const plane = new PlaneGeometry(1, 1);
-        this.bars = {
-            back: new InstancedMesh(plane, new MeshBasicMaterial({ color: 0x000000, transparent: true, opacity: 0.7, depthWrite: false }), BAR_ROOM),
-            fill: new InstancedMesh(plane, new MeshBasicMaterial({ transparent: true, depthWrite: false }), BAR_ROOM),
-        };
-        this.bars.back.renderOrder = 2;
-        this.bars.fill.renderOrder = 3;
-        for (const mesh of [this.bars.back, this.bars.fill]) {
-            mesh.count = 0;
-            mesh.instanceMatrix.setUsage(DynamicDrawUsage);
-            this.scene.add(mesh);
-        }
+        this.bars = new HpBars(this.axes);
+        this.previews = new Previews3D(this.axes);
+        this.scene.add(this.bars.billboards.mesh, this.previews.billboards.mesh);
         this.fx = new BattleFx(this.scene, host, this.axes, () => this.playing && this.frame(this.playedMs));
 
         this.resize = new ResizeObserver(() => this.measure());
@@ -220,6 +217,8 @@ export class Board3D {
         this.terrain?.dispose();
         this.fx.dispose();
         this.marks?.dispose();
+        this.bars.dispose();
+        this.previews.dispose();
         for (const pool of this.pools.values()) (pool.mesh.material as ShaderMaterial).dispose();
         this.renderer.dispose();
         // Hand the context back now, not whenever it's collected: a page allows only so many at once, and drops the oldest past that.
@@ -267,6 +266,7 @@ export class Board3D {
         this.field = field;
         this.top = top;
         this.fx.setField(field);
+        this.previews.lay(field, this.basis);
         if (!this.art) return;
         if (this.terrain) {
             this.scene.remove(this.terrain.group);
@@ -285,6 +285,8 @@ export class Board3D {
         this.figures = figures;
         this.ghosts = ghosts;
         this.layFigures();
+        // A figure arriving with a change to flash on its bar starts the flashing.
+        this.animate();
         this.invalidate();
     }
 
@@ -313,6 +315,37 @@ export class Board3D {
     setShading(shade: (square: Square) => Shading | null, wave: ReadonlySet<Square> | null): void {
         this.shading = { shade, wave };
         this.applyShading();
+    }
+
+    /**
+     * What the previews are drawn in: the colours and typeface the isometric
+     * board's CSS gives them. The text in them waits for the typeface to load,
+     * and is laid out when it has.
+     */
+    setLook(look: PreviewLook): void {
+        this.look = look;
+        this.previews.setLook(look, () => this.layPreviews());
+        this.layFigures(this.playing ? this.playedMs : null);
+        this.layPreviews();
+    }
+
+    /** What's drawn over the board of a lined-up action and of the map: the path, the odds, the cover and the centre's name. */
+    setPreviews(spec: PreviewSpec = NO_PREVIEWS): void {
+        this.previews.set(spec);
+        this.layPreviews();
+    }
+
+    /** What an action lined up would do to the HP of each figure it touches, flashing at the end of its bar. */
+    setHpChange(change: ReadonlyMap<number, number> | null): void {
+        this.hpChange = change;
+        this.layFigures(this.playing ? this.playedMs : null);
+        this.animate();
+        this.invalidate();
+    }
+
+    private layPreviews(): void {
+        this.previews.lay(this.field, this.basis);
+        this.invalidate();
     }
 
     private applyShading(): void {
@@ -458,7 +491,7 @@ export class Board3D {
         for (const pool of this.pools.values()) pool.used = 0;
         this.placed = [];
         const matrix = new Matrix4();
-        const bars: { feet: Vec3; fraction: number; tint: Color | null }[] = [];
+        const bars: BarSpec[] = [];
         const playing = ms === null ? null : this.playing;
         this.marks?.begin(this.marking?.colours ?? null);
 
@@ -467,10 +500,10 @@ export class Board3D {
             let square = fighter.square, facing = spec.facing, lift = 0;
             let feet: Vec3 | null = null;
             let standing = isStanding(fighter);
-            let fraction = hpFraction(fighter);
             // What it wears: all its marks at rest, its item alone while it walks, and none once down. Shown as the action found it until the cue that changed them lands.
             let level: MarkLevel = standing ? "all" : "none";
-            let drawn = fighter;
+            // The figure as its bar and marks show it, and the level its chip drains down to.
+            let drawn = fighter, chip: number | undefined;
             if (playing) {
                 const walks = playing.walks.get(fighter.id);
                 const fall = playing.falls.get(fighter.id);
@@ -492,17 +525,14 @@ export class Board3D {
                     if (!leg) square = fall.fighter.square;
                 }
                 const told = playing.told.get(fighter.id);
-                if (told) {
-                    drawn = toldAt(told, fighter, ms!).drawn;
-                    fraction = hpFraction(drawn);
-                }
+                if (told) ({ drawn, chip } = toldAt(told, fighter, ms!));
             }
             feet ??= squareCentre(field, square);
             const at: Vec3 = [feet[0], feet[1] + lift, feet[2]];
             matrix.fromArray(figureMatrix(at, facing, !standing));
             this.place(models, fighter.character, false, matrix, spec.tint);
             this.placed.push({ id: fighter.id, feet: at, standing });
-            if (standing) bars.push({ feet: at, fraction, tint: spec.tint });
+            if (standing) bars.push({ feet: at, ...barLevels(drawn, fighter, chip, this.hpChange?.get(fighter.id)), tint: spec.tint });
             this.layMarks(at, fighter, drawn, level);
         }
         this.layMuster(models, matrix);
@@ -515,7 +545,7 @@ export class Board3D {
             pool.mesh.instanceMatrix.needsUpdate = true;
             if (pool.mesh.instanceColor) pool.mesh.instanceColor.needsUpdate = true;
         }
-        this.layBars(bars);
+        this.bars.lay(bars, this.look);
         this.marks?.end();
     }
 
@@ -573,27 +603,6 @@ export class Board3D {
         pool.used++;
     }
 
-    /** The HP bars, over each standing figure, turned to face the camera. */
-    private layBars(bars: { feet: Vec3; fraction: number; tint: Color | null }[]): void {
-        const { back, fill } = this.bars;
-        bars = bars.slice(0, BAR_ROOM);
-        const facing = new Quaternion().setFromRotationMatrix(new Matrix4().lookAt(new Vector3(...this.basis.back), new Vector3(), new Vector3(0, 1, 0)));
-        const right = new Vector3(...this.basis.right), toward = new Vector3(...this.basis.back).multiplyScalar(0.01);
-        const m = new Matrix4();
-        bars.forEach(({ feet, fraction, tint }, index) => {
-            const middle = new Vector3(feet[0], feet[1] + HP_BAR.rise, feet[2]);
-            back.setMatrixAt(index, m.compose(middle, facing, new Vector3(HP_BAR.width, HP_BAR.height, 1)));
-            const width = Math.max(0.0001, HP_BAR.width * fraction);
-            const shifted = middle.clone().addScaledVector(right, (width - HP_BAR.width) / 2).add(toward);
-            fill.setMatrixAt(index, m.compose(shifted, facing, new Vector3(width, HP_BAR.height, 1)));
-            // A plain material takes its colour as linear, and the tint is as written.
-            fill.setColorAt(index, (tint ?? new Color(0.85, 0.85, 0.85)).clone().convertSRGBToLinear());
-        });
-        back.count = fill.count = bars.length;
-        back.instanceMatrix.needsUpdate = fill.instanceMatrix.needsUpdate = true;
-        if (fill.instanceColor) fill.instanceColor.needsUpdate = true;
-    }
-
     // ---- The view ----
 
     /**
@@ -643,7 +652,7 @@ export class Board3D {
         if (this.terrain) lightSolids(this.terrain.solids, light);
     }
 
-    /** Runs the frames a turn or the wave's breathing needs, until there are none. */
+    /** Runs the frames a turn, the wave's breathing or an HP change's flashing needs, until there are none. */
     private animate(): void {
         if (this.animating) return;
         const step = (now: number) => {
@@ -666,6 +675,14 @@ export class Board3D {
                     moved = true;
                 }
             }
+            if (this.bars.pulsing) {
+                more = true;
+                if (moved || now - this.pulseDrawn >= PULSE_FRAME_MS) {
+                    this.bars.pulse(now);
+                    this.pulseDrawn = now;
+                    moved = true;
+                }
+            }
             if (moved) this.draw();
             if (more) this.animating = requestAnimationFrame(step);
         };
@@ -683,6 +700,8 @@ export class Board3D {
         this.layFigures(this.playing ? this.playedMs : null);
         // A missile's arc is drawn across the frame, as the camera now faces.
         if (this.playing) this.fx.lay(this.playedMs, this.basis);
+        // A path's runs and the centre's name lie along the frame the camera now sees.
+        this.previews.lay(this.field, this.basis);
     }
 
     /** Draws on the next frame, once, however often it's asked. */

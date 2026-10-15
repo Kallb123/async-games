@@ -92,9 +92,10 @@ attribute vec4 tint;
 varying vec2 vUv;
 varying vec4 vTint;
 void main() {
-    vec2 corner = position.xy;
+    // Sized first and turned after, so a quad that isn't square turns as a rectangle and isn't sheared.
+    vec2 corner = position.xy * place.zw;
     float s = sin(spin), c = cos(spin);
-    corner = vec2(c * corner.x + s * corner.y, -s * corner.x + c * corner.y) * place.zw;
+    corner = vec2(c * corner.x + s * corner.y, -s * corner.x + c * corner.y);
     vec2 across = place.xy + corner;
     vec3 world = at + right * across.x + up * across.y + back * lift;
     vUv = vec2(mix(rect.x, rect.z, uv.x), mix(rect.w, rect.y, uv.y));
@@ -169,6 +170,8 @@ export class Billboards {
             at: make(3, old?.at), place: make(4, old?.place), rect: make(4, old?.rect), spin: make(1, old?.spin), tint: make(4, old?.tint),
         };
         for (const [name, attribute] of Object.entries(this.attributes)) geometry.setAttribute(name, attribute);
+        // three.js caps an instanced geometry at what its attributes held when it was first drawn, and keeps that cap through new attributes: let it find the new one.
+        (geometry as unknown as { _maxInstanceCount?: number })._maxInstanceCount = undefined;
         this.capacity = capacity;
     }
 
