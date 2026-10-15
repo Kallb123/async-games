@@ -154,7 +154,7 @@ export const BOARD_ZOOM = { zoomWidth: 250, maxWidth: 600 } as const;
 const REFERENCE_FRAME_WIDTH = (64 + 48) / Math.SQRT2;
 
 /** How much deeper than `BOARD_ZOOM` the 3D board's deepest step goes: a camera can draw close in without the isometric board's layout cost, and a player wanted a closer look — a third more. */
-const DEEP_3D = 4 / 3;
+const DEEP_3D = 5 / 3;
 
 /**
  * `BoardZoom`'s steps for the 3D board, set by the map and not the column: a frame
