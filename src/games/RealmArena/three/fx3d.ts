@@ -19,11 +19,11 @@
 import type { Scene, Texture } from "three";
 import { BURST_ART, EFFECT_ART, MISSILE_ART, SLASH_ART, SMOKE_ART } from "@/games/RealmArena/art";
 import {
-    burstAt, flightAt, fxPointsAt, HIT_MARK_SIZE, hitTextAt, SLASH_SIZE, slashAt,
+    burstAt, flightAt, fxPointsAt, HIT_MARK_SIZE, hitTextAt, MARK_SHADOW, SLASH_SIZE, slashAt,
     type BattleCue, type BurstCue, type FlightCue, type HitTone, type SlashCue, type TextCue,
 } from "@/games/RealmArena/ui";
 import { squareCentre, onScreen, type CameraBasis, type Vec3 } from "./iso3d";
-import { Billboards, CanvasAtlas, sheetTexture, spriteRect, toBoardUnits, type BillboardAxes } from "./billboards";
+import { Billboards, CanvasAtlas, sheetTexture, spriteRect, toBoardUnits, type BillboardAxes, type BillboardShadow } from "./billboards";
 import { drawText, textWidth, whenFontReady, type TextStyle } from "./canvasShapes";
 import { BODY, burstBox, flightPlace, hitTextLayout, SMOKE_PUFF } from "./fxLayout";
 import type { Sheets } from "./terrain3d";
@@ -134,11 +134,12 @@ export class BattleFx {
     setArt(sheets: Sheets): void {
         this.disposeLayers();
         const atlas = new CanvasAtlas();
-        const over = (texture: Texture, order: number) => new Billboards(texture, this.axes, { order });
+        const over = (texture: Texture, order: number, shadow?: BillboardShadow) => new Billboards(texture, this.axes, { order, shadow });
         this.layers = {
             effects: over(sheetTexture(sheets, SLASH_ART.sheet), 10),
             smokeBursts: over(sheetTexture(sheets, SMOKE_ART.sheet), 10),
-            marks: over(sheetTexture(sheets, "effects"), 11),
+            // The mark beside a hit's text wears the soft shadow every mark does (`.ag-ra-figure-mark`).
+            marks: over(sheetTexture(sheets, "effects"), 11, MARK_SHADOW),
             words: over(atlas.texture, 12),
             // Standing on the ground a little in front of its square's middle, so the ground in front of it doesn't cut into it; it's drawn after the figures and bars, under the effects.
             clouds: new Billboards(sheetTexture(sheets, SMOKE_ART.sheet), this.axes, { depthTest: true, order: 4, lift: 0.25 }),

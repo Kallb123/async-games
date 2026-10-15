@@ -7,8 +7,11 @@ import { at, fieldOf, hillOf } from "@/utils/games/battlefield/testFixtures";
 import { ACTION_POINTS, isWarband, newFighter, reachOf, warbandOwner, type BattleEvent, type Fighter, type ToldEvent } from "./rules";
 import { ABILITIES, kitOf, type CharacterId } from "./characters";
 import { EFFECT_ART, ITEM_ART, type Missile } from "./art";
-import { abilityWait, ringOf, shieldPath, shadedSquares, SHIELD_WIDTH, actionFollow, boardFocus, oddsLines, aimFocus, coopColourOf, ALLY_COLOUR, ENEMY_COLOUR, TEAM_COLOUR, actionSquares, apPips, friendlySquares, spreadWide, areaRect, battleCues, canAct, effectsOn, eventLines, facingOf, fighterName, fighterStatus, focusOn, handItem, handOut, hpFraction, itemsOf, NO_ITEMS, numberedName, placeTap, reachFocus, reachShading, squadCounts, squadOf, whoseName, FLIGHT_PACE, CLIMB_LEG, DIAGONAL_LEG, flightMs, legWeight, HIT_TEXT_MS, PLAYBACK_MS, WALK_STEP_MS, moveFrame, isUnplaced, type BattleCue, type Placement, waveLineOf, reviewParts, withPartState, partLabel, HP_CHIP_MS, HP_TWEEN_MS, stepped, toldAt, toldOf, type TextCue, IMPACT_MS, KNOCK, LUNGE, SHAKE, SHAKE_MS, WALK_BOB, WALK_HOP, shakeAt, shakesOf, shoveAt, shovesOf, endOf, captionAt, legLengthOn, walkEase, walkerAt, walkerGroundAt, walkCameraAt, walkLift, walkSquares, flightAt, hitTextAt, POP_MS, burstAt, slashAt, progressOf, fadeOutAt, fadeInAt, FLIGHT_ARC, type FxPoints, type CaptionCue, type FallCue, type FlightCue, type SlashCue, type WalkCue } from "./ui";
+import { abilityWait, ringOf, shieldPath, shadedSquares, SHIELD_WIDTH, actionFollow, boardFocus, oddsLines, aimFocus, coopColourOf, ALLY_COLOUR, ENEMY_COLOUR, TEAM_COLOUR, actionSquares, apPips, friendlySquares, spreadWide, areaRect, battleCues, canAct, effectsOn, eventLines, facingOf, fighterName, fighterStatus, focusOn, handItem, handOut, hpFraction, itemsOf, NO_ITEMS, numberedName, placeTap, reachFocus, reachShading, squadCounts, squadOf, whoseName, FLIGHT_PACE, CLIMB_LEG, DIAGONAL_LEG, flightMs, legWeight, HIT_TEXT_MS, PLAYBACK_MS, WALK_STEP_MS, moveFrame, isUnplaced, type BattleCue, type Placement, waveLineOf, reviewParts, withPartState, partLabel, HP_CHIP_MS, HP_TWEEN_MS, stepped, toldAt, toldOf, type TextCue, IMPACT_MS, KNOCK, LUNGE, SHAKE, SHAKE_MS, WALK_BOB, WALK_HOP, shakeAt, shakesOf, shoveAt, shovesOf, endOf, captionAt, legLengthOn, walkEase, walkerAt, walkerGroundAt, walkCameraAt, walkLift, walkSquares, flightAt, hitTextAt, POP_MS, burstAt, slashAt, progressOf, fadeOutAt, fadeInAt, FLIGHT_ARC, type FxPoints, type CaptionCue, type FallCue, type FlightCue, type SlashCue, type WalkCue, BOARD_ZOOM, boardZoomFor } from "./ui";
 import type { OddsBreakdown } from "./rules";
+import { REALM_ARENA_MAPS } from "./maps";
+import { azimuthOf, boardFrame, cameraBasis, topOf } from "./three/iso3d";
+import { zoomLevels } from "@/utils/ui/boardZoom";
 import type { IRealmArenaStepOutcome, RealmArenaPartState } from "./apiModels";
 
 /** Squares as "col,row", sorted, to read a test's expectations by. */
@@ -2201,5 +2204,44 @@ describe("shadedSquares", () => {
 
     it("lays no place shading while nobody is picked up", () => {
         expect(shadedSquares({ ...none, placing: { zone: [1, 2], selected: null } })).toEqual([]);
+    });
+});
+
+describe("boardZoomFor", () => {
+    /** The 3D board's frame width for a map `size` squares a side, as it lays out at every quarter turn. */
+    const frameOf = (grid: { width: number; height: number }, top = 0) => boardFrame(cameraBasis(azimuthOf(0)), grid, top).size.width;
+    /** How many pixels across a square comes to at the deepest step, per pixel of column. */
+    const squareAtDeepest = (grid: { width: number; height: number }) => boardZoomFor(frameOf(grid)).maxWidth / frameOf(grid);
+
+    it("leaves every map there is today on BOARD_ZOOM", () => {
+        for (const field of Object.values(REALM_ARENA_MAPS)) {
+            expect(boardZoomFor(frameOf(field, topOf(field)))).toEqual(BOARD_ZOOM);
+        }
+    });
+
+    it("zooms a bigger map deeper, to the squares the widest map today gets", () => {
+        const widest = Math.max(...Object.values(REALM_ARENA_MAPS).map(field => frameOf(field)));
+        const big = { width: 128, height: 128 };
+        expect(boardZoomFor(frameOf(big)).maxWidth).toBeGreaterThan(BOARD_ZOOM.maxWidth * 2);
+        // Whole percents, so a hair under at most.
+        expect(squareAtDeepest(big)).toBeCloseTo(BOARD_ZOOM.maxWidth / widest, 2);
+        // The middle step keeps its size as well, so a framed reach fits the same way.
+        expect(boardZoomFor(frameOf(big)).zoomWidth / frameOf(big)).toBeCloseTo(BOARD_ZOOM.zoomWidth / widest, 2);
+        expect(boardZoomFor(frameOf({ width: 92, height: 92 })).maxWidth).toBeGreaterThan(BOARD_ZOOM.maxWidth);
+    });
+
+    it("grows with the map and keeps the steps in order", () => {
+        let last = 0;
+        for (const size of [48, 64, 80, 92, 128, 256]) {
+            const { zoomWidth, maxWidth } = boardZoomFor(frameOf({ width: size, height: size }));
+            expect(zoomWidth).toBeLessThan(maxWidth);
+            expect(maxWidth).toBeGreaterThanOrEqual(last);
+            expect(zoomLevels(zoomWidth, maxWidth)).toEqual([100, zoomWidth, maxWidth]);
+            last = maxWidth;
+        }
+    });
+
+    it("falls back to BOARD_ZOOM for a frame it can't measure", () => {
+        for (const width of [0, -1, NaN, Infinity]) expect(boardZoomFor(width)).toEqual(BOARD_ZOOM);
     });
 });

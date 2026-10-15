@@ -32,6 +32,7 @@ import { FigurePools } from "./figurePools";
 import { BattleFx } from "./fx3d";
 import { azimuthOf, cameraBasis, cameraFor, figureMatrix, lerp3, lightOf, lookAtFor, lookAtGround, onScreen, QUARTER, squareCentre, toFrame, type BoardFrame, type BoardLayout, type CameraBasis, type Vec3 } from "./iso3d";
 import { MarkLayer, marksOf, type MarkLevel } from "./marks3d";
+import { GroundOutlines, type Outline } from "./outlines3d";
 import { NO_PREVIEWS, Previews3D, type PreviewSpec } from "./previews3d";
 import type { Shading } from "./shading3d";
 import { lightSolids } from "./solidMaterial";
@@ -39,6 +40,8 @@ import { buildCover, buildTerrain, type Cover, type Sheets, type Terrain } from 
 
 /** How often the wave's breathing is drawn (§30.11): a slow glow needs no more, and every frame of it draws the whole board. */
 const WAVE_FRAME_MS = 66;
+/** Where the strokes round the shaded areas are drawn: over the ground's shading and the wave's (renderOrder 0), under the rings (1). */
+const OUTLINE_ORDER = 0.5;
 /** How long a quarter turn of the view takes. */
 const TURN_MS = 320;
 /** How far a press may move and still be a tap, in pixels. */
@@ -52,7 +55,7 @@ const PULSE_FRAME_MS = 33;
 /** A figure the board can pick: where it stands, roughly, for a tap to find. */
 interface Placed { id: number; feet: Vec3; standing: boolean }
 
-export type { Shading };
+export type { Outline, Shading };
 
 /** What the board is told about a figure, as the React board works it out. */
 export interface FigureSpec {
@@ -174,6 +177,10 @@ export class Board3D {
     private turn: { from: number; to: number; start: number; ground: Vec3; progress: number } | null = null;
     /** What's shaded on the ground, kept to lay again over ground built afresh. */
     private shading: { shade: (square: Square) => Shading | null; wave: ReadonlyMap<Square, Color> | null } | null = null;
+    /** The strokes round the areas shaded on it, and the wave's, which breathe with the wave's shading (`setOutlines`). */
+    private readonly outlines = new GroundOutlines(OUTLINE_ORDER);
+    private readonly waveOutlines = new GroundOutlines(OUTLINE_ORDER + 0.1);
+    private outlined: { outlines: readonly Outline[]; wave: readonly Outline[] } | null = null;
     private animating = 0;
     private waveDue = false;
     private waveDrawn = 0;
@@ -202,7 +209,7 @@ export class Board3D {
 
         this.bars = new HpBars(this.axes);
         this.previews = new Previews3D(this.axes);
-        this.scene.add(this.bars.billboards.mesh, this.previews.billboards.mesh);
+        this.scene.add(this.outlines.mesh, this.waveOutlines.mesh, this.bars.billboards.mesh, this.previews.billboards.mesh);
         this.fx = new BattleFx(this.scene, host, this.axes, () => this.playing && this.frame(this.playedMs));
 
         this.resize = new ResizeObserver(() => this.measure());
@@ -221,6 +228,8 @@ export class Board3D {
         this.marks?.dispose();
         this.bars.dispose();
         this.previews.dispose();
+        this.outlines.dispose();
+        this.waveOutlines.dispose();
         this.clearCovers();
         this.pools.dispose();
         this.renderer.dispose();
@@ -280,6 +289,7 @@ export class Board3D {
         this.relight();
         this.layFigures();
         this.applyShading();
+        this.applyOutlines();
         this.invalidate();
     }
 
@@ -288,6 +298,7 @@ export class Board3D {
         this.figures = figures;
         this.ghosts = ghosts;
         this.layFigures();
+        this.layStanding();
         // A figure arriving with a change to flash on its bar starts the flashing.
         this.animate();
         this.invalidate();
@@ -305,6 +316,7 @@ export class Board3D {
         this.sealed = sealed;
         this.pickedUp = pickedUp;
         this.layFigures(this.playing ? this.playedMs : null);
+        this.layStanding();
         this.invalidate();
     }
 
@@ -318,6 +330,24 @@ export class Board3D {
     setShading(shade: (square: Square) => Shading | null, wave: ReadonlyMap<Square, Color> | null): void {
         this.shading = { shade, wave };
         this.applyShading();
+    }
+
+    /**
+     * The strokes round the areas shaded on the ground, drawn in the order given,
+     * and those of the zones the wave will land in (§30.11), which breathe with
+     * its shading. Their edges lie on the tops of the squares, so they are laid
+     * again with the ground (`setField`).
+     */
+    setOutlines(outlines: readonly Outline[], wave: readonly Outline[]): void {
+        this.outlined = { outlines, wave };
+        this.applyOutlines();
+    }
+
+    private applyOutlines(): void {
+        if (!this.field || !this.outlined) return;
+        this.outlines.set(this.field, this.outlined.outlines);
+        this.waveOutlines.set(this.field, this.outlined.wave);
+        this.invalidate();
     }
 
     /**
@@ -344,6 +374,12 @@ export class Board3D {
         this.layFigures(this.playing ? this.playedMs : null);
         this.animate();
         this.invalidate();
+    }
+
+    /** Tells the previews where figures stand, for the centre's name to keep off them: when they are set, and not as one walks. */
+    private layStanding(): void {
+        this.previews.setFigures([...this.figures.map(({ fighter }) => fighter.square), ...this.sealed.map(({ pick }) => pick.square)]);
+        this.layPreviews();
     }
 
     private layPreviews(): void {
@@ -720,7 +756,9 @@ export class Board3D {
             if (this.waveDue && this.terrain) {
                 more = true;
                 if (moved || now - this.waveDrawn >= WAVE_FRAME_MS) {
-                    this.terrain.wave.material.opacity = 0.15 + 0.4 * (0.5 + 0.5 * Math.sin(now / 1600 * 2 * Math.PI));
+                    const breath = 0.5 + 0.5 * Math.sin(now / 1600 * 2 * Math.PI);
+                    this.terrain.wave.material.opacity = 0.15 + 0.4 * breath;
+                    this.waveOutlines.opacity = breath;
                     this.waveDrawn = now;
                     moved = true;
                 }

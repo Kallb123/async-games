@@ -14,6 +14,12 @@ describe('zoomLevels', () => {
         expect(zoomLevels(240, 180)).toEqual([100, 240, 240]);
     });
 
+    it("keeps a map-sized deep range in order, at 1,500% and more", () => {
+        expect(zoomLevels(625, 1500)).toEqual([100, 625, 1500]);
+        expect(focusZoom(zoomLevels(625, 1500), 10, 181, 390, 28)).toBe(1500);
+        expect(exactZoom({ width: 4, height: 4 }, { width: 181, height: 127 }, { width: 390, height: 270 }, 28, 1500)).toBe(1500);
+    });
+
     it('gives a board that wants no more than its column a single stop', () => {
         expect(zoomLevels(FIT_WIDTH)).toEqual([FIT_WIDTH]);
         expect(zoomLevels(80)).toEqual([FIT_WIDTH]);

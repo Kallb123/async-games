@@ -16,7 +16,7 @@ import { EFFECT_ART, ITEM_ART, WATCH_ART, type Sprite } from "@/games/RealmArena
 import type { EffectId, ItemId } from "@/games/RealmArena/characters";
 import type { Fighter } from "@/games/RealmArena/rules";
 import {
-    AP_PIP_OFFSET, AP_PIP_RADIUS, AP_PIP_STEP, apPips, EFFECT_MARK_OFFSET, EFFECT_MARK_SIZE, EFFECT_MARK_STEP, effectsOn, FIGURE_RISE, ITEM_MARK_OFFSET, ITEM_MARK_SIZE,
+    AP_PIP_OFFSET, AP_PIP_RADIUS, AP_PIP_STEP, apPips, EFFECT_MARK_OFFSET, EFFECT_MARK_SIZE, EFFECT_MARK_STEP, effectsOn, FIGURE_RISE, ITEM_MARK_OFFSET, ITEM_MARK_SIZE, MARK_SHADOW,
 } from "@/games/RealmArena/ui";
 import { Billboards, CanvasAtlas, sheetTexture, spriteRect, type BillboardAxes, type TexRect } from "./billboards";
 import { DISC_BOX, discRect, type RingColours } from "./canvasShapes";
@@ -115,8 +115,10 @@ export class MarkLayer {
     constructor(sheets: Sheets, axes: BillboardAxes) {
         // Hidden by whatever stands in front of the figure they hang from, as the isometric board's are by a wall drawn after them.
         const options = { depthTest: true, lift: MARK_LIFT, order: MARKS_ORDER };
-        this.effects = new Billboards(sheetTexture(sheets, WATCH_ART.sheet), axes, options);
-        this.items = new Billboards(sheetTexture(sheets, "items"), axes, options);
+        // The marks wear a soft shadow, as `.ag-ra-figure-mark` gives them; the pips are drawn flat, as `.ag-ra-ap` has it.
+        const shadowed = { ...options, shadow: MARK_SHADOW };
+        this.effects = new Billboards(sheetTexture(sheets, WATCH_ART.sheet), axes, shadowed);
+        this.items = new Billboards(sheetTexture(sheets, "items"), axes, shadowed);
         this.pips = new Billboards(this.pipAtlas.texture, axes, options);
         const edge = this.pipAtlas.rect("pip-edge", PIP_BOX, PIP_BOX, context => {
             context.beginPath();

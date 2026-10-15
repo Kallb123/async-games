@@ -1,14 +1,16 @@
 // Where the 3D board's previews of a lined-up action stand (docs/realm-arena-3d.md):
 // the pieces a move's path is drawn from, the shields of the cover a square
-// gives, and how far clear of its area the centre's name stands. Pure: no three.js
+// gives, and where the centre's name stands, clear of its area and of the figures
+// on it. Pure: no three.js
 // objects, so it's tested without a GPU (`previewGeometry.test.ts`). Everything
 // across the frame is in the isometric board's units, as `Billboards` takes it.
 
 import { coverBySide, SIDE_STEPS, type Side } from "@/utils/games/battlefield/cover";
 import type { Battlefield, Square } from "@/utils/games/battlefield/terrain";
-import type { Rect } from "@/utils/ui/mapLabels";
+import { circleRect, resolveMapLabels, type PlacedMapLabel, type Rect } from "@/utils/ui/mapLabels";
+import { CENTRE_LABEL, figureRectAt } from "@/games/RealmArena/ui";
 import { BOARD_UNIT, toBoardUnits } from "./billboards";
-import { lerp3, onScreen, squareCentre, type CameraBasis, type Vec3 } from "./iso3d";
+import { lerp3, onScreen, squareCentre, type BoardFrame, type CameraBasis, type Vec3 } from "./iso3d";
 
 /** One straight run of a path, as a rectangle hung from its middle: how long it is across the frame, and the turn it takes (clockwise, in degrees) to lie along it. */
 export interface PathPiece { at: Vec3; length: number; rotate: number }
@@ -63,3 +65,34 @@ export function areaRise(basis: CameraBasis, area: Rect): number {
     const highest = Math.max(...corners.map(([col, row]) => onScreen(basis, [col, 0, row]).y));
     return (highest - middle.y) / BOARD_UNIT;
 }
+
+/**
+ * Where the centre's name goes, as the isometric board's `MapLabelLayer` puts it
+ * (the same `resolveMapLabels`): just clear of the top of the area as the camera
+ * sees it, unless a figure on any of `figures`' squares stands there, when it
+ * moves round to another side. Worked out in the camera's own plane, in board
+ * units, from the middle of the area (x right, y down, as `Billboards` takes a
+ * quad's place), with each figure the rectangle the isometric board gives it
+ * (`figureRectAt`) and the board's `frame` as the edge it keeps within. The name
+ * comes back as `resolveMapLabels` places it: `x` and `y` are where its text is
+ * drawn, a baseline on `textAnchor`'s side of `x`.
+ */
+export function centreLabel(
+    field: Pick<Battlefield, "width" | "tiles">, basis: CameraBasis, area: Rect, figures: readonly Square[], frame: BoardFrame, text: string,
+): PlacedMapLabel {
+    const middle = onScreen(basis, areaMiddle(area));
+    const relative = (across: { x: number; y: number }) => toBoardUnits({ x: across.x - middle.x, y: across.y - middle.y });
+    const rise = areaRise(basis, area);
+    const corner = relative(frame.origin);
+    return resolveMapLabels(
+        [{ x: 0, y: 0, text, fontSize: CENTRE_LABEL.fontSize, offset: rise + CENTRE_LABEL.gap, dir: "n" }],
+        {
+            bounds: { x: corner.x, y: corner.y, width: frame.size.width / BOARD_UNIT, height: frame.size.height / BOARD_UNIT },
+            obstacles: [circleRect(0, 0, rise), ...figures.map(square => figureRectAt(relative(onScreen(basis, squareCentre(field, square)))))],
+        },
+    )[0];
+}
+
+/** Where the middle of a line of text `width` wide is across the frame, given where `resolveMapLabels` anchors it: a name that starts or ends at `x` has half its width on one side. */
+export const textMiddle = ({ x, textAnchor }: Pick<PlacedMapLabel, "x" | "textAnchor">, width: number): number =>
+    textAnchor === "start" ? x + width / 2 : textAnchor === "end" ? x - width / 2 : x;
