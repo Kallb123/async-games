@@ -8,8 +8,9 @@
 // - every raised square is a box from the ground up to its top, one instanced
 //   draw a terrain, its faces and its top coloured from its own sprites;
 // - trees are a trunk and two cones, one instanced draw for every tree;
-// - an overlay with a texel a square carries what's shaded on the ground:
-//   deployment zones, fog (§27), a reach, a range.
+// - an overlay with a texel a square carries what's shaded on the ground — on
+//   the top of a raised square too: deployment zones, fog (§27), smoke, a
+//   reach, a range, a blast.
 
 import {
     BoxGeometry, BufferGeometry, CanvasTexture, Color, ConeGeometry, CylinderGeometry, DataTexture, DoubleSide, Float32BufferAttribute,
@@ -173,7 +174,23 @@ export interface Terrain {
     dispose(): void;
 }
 
-/** A plane over the whole map at `lift` above the ground, its texture's texel per square. */
+/**
+ * How high the ground stands under a square, in the world's units: the top of
+ * a raised block, or — for a tree, whose trunk stands on it — the ground the
+ * tree is rooted in. What an overlay lies on, and so what shows through to the
+ * eye on a raised top rather than being hidden under it.
+ */
+export function groundHeight(field: Battlefield, square: Square): number {
+    const { elevation, terrain } = field.tiles[square];
+    return (terrainLetter(field, square) === "T" ? elevation - terrain.height : elevation) * QUARTER;
+}
+
+/**
+ * A plane over the whole map at `lift` above the ground, its texture's texel
+ * per square. The plane lies on the flat ground, and each raised square wears a
+ * quad of its own lifted onto its top, so what's shaded on a block shows on the
+ * block and not under it. All of it one mesh, one draw.
+ */
 function overlayPlane(field: Battlefield, lift: number, opacity = 1): { data: Uint8Array; texture: DataTexture; mesh: Mesh; material: MeshBasicMaterial } {
     const data = new Uint8Array(field.width * field.height * 4);
     const texture = new DataTexture(data, field.width, field.height, RGBAFormat);
@@ -181,11 +198,104 @@ function overlayPlane(field: Battlefield, lift: number, opacity = 1): { data: Ui
     texture.colorSpace = SRGBColorSpace;
     texture.needsUpdate = true;
     const material = new MeshBasicMaterial({ map: texture, transparent: true, depthWrite: false, opacity, side: DoubleSide });
-    const mesh = new Mesh(new PlaneGeometry(field.width, field.height).rotateX(-Math.PI / 2).translate(field.width / 2, lift, field.height / 2), material);
-    // Flipped so a texture's first row is the map's first row.
-    const uv = mesh.geometry.getAttribute("uv");
-    for (let i = 0; i < uv.count; i++) uv.setY(i, 1 - uv.getY(i));
-    return { data, texture, mesh, material };
+    const { width, height } = field;
+    // The plane first, its texture's first row the map's first row; then a quad a raised square, all four corners on that square's texel.
+    const positions = [0, lift, 0, width, lift, 0, width, lift, height, 0, lift, height];
+    const uvs = [0, 0, 1, 0, 1, 1, 0, 1];
+    const indices = [0, 1, 2, 0, 2, 3];
+    for (let square = 0; square < field.tiles.length; square++) {
+        const top = groundHeight(field, square);
+        if (top <= lift) continue;
+        const col = square % width, row = Math.floor(square / width);
+        const first = positions.length / 3;
+        positions.push(col, top + lift, row, col + 1, top + lift, row, col + 1, top + lift, row + 1, col, top + lift, row + 1);
+        const u = (col + 0.5) / width, v = (row + 0.5) / height;
+        uvs.push(u, v, u, v, u, v, u, v);
+        indices.push(first, first + 1, first + 2, first, first + 2, first + 3);
+    }
+    const geometry = new BufferGeometry();
+    geometry.setAttribute("position", new Float32BufferAttribute(positions, 3));
+    geometry.setAttribute("uv", new Float32BufferAttribute(uvs, 2));
+    geometry.setIndex(indices);
+    return { data, texture, mesh: new Mesh(geometry, material), material };
+}
+
+/** What a set of raised squares is drawn with: an instanced mesh a terrain, and what to turn the light of and to dispose of with them. */
+interface RaisedSquares {
+    meshes: InstancedMesh[];
+    solids: ShaderMaterial[];
+    disposables: { dispose(): void }[];
+}
+
+/**
+ * The raised squares of `field` among `squares` — each a box from the ground up
+ * to its top, or a tree — one instanced draw a terrain. Flat ground, and the
+ * scorched ground cover leaves behind, is the ground's (`groundTexture`).
+ * `material` makes the material a terrain is drawn with.
+ */
+function raisedSquares(field: Battlefield, sheets: Sheets, squares: Iterable<Square>, material: () => ShaderMaterial = solidMaterial): RaisedSquares {
+    const byLetter = new Map<TerrainLetter, Square[]>();
+    for (const square of squares) {
+        if (field.tiles[square].elevation === 0 && field.tiles[square].terrain.height === 0) continue;
+        const letter = terrainLetter(field, square);
+        if (letter === "_" || letter === ".") continue;
+        byLetter.set(letter, [...byLetter.get(letter) ?? [], square]);
+    }
+    const out: RaisedSquares = { meshes: [], solids: [], disposables: [] };
+    const matrix = new Matrix4();
+    for (const [letter, onLetter] of byLetter) {
+        const tree = letter === "T";
+        const { side, top } = blockColours(sheets, letter);
+        const geometry = tree ? treeGeometry(side) : coloured(new BoxGeometry(1, 1, 1).translate(0.5, 0.5, 0.5), side, top);
+        const solid = material();
+        const mesh = new InstancedMesh(geometry, solid, onLetter.length);
+        onLetter.forEach((square, index) => {
+            const col = square % field.width, row = Math.floor(square / field.width);
+            const height = Math.max(field.tiles[square].elevation * QUARTER, 0.02);
+            if (tree) {
+                const ground = (field.tiles[square].elevation - field.tiles[square].terrain.height) * QUARTER;
+                matrix.makeRotationY(variantOf(square, 7)).setPosition(col + 0.5, ground, row + 0.5);
+            } else {
+                matrix.makeScale(1, height, 1).setPosition(col, 0, row);
+            }
+            mesh.setMatrixAt(index, matrix);
+        });
+        out.meshes.push(mesh);
+        out.solids.push(solid);
+        out.disposables.push(geometry, solid);
+    }
+    return out;
+}
+
+/** Cover standing on some squares, drawn as the battlefield had it, to fade (`buildCover`). */
+export interface Cover {
+    group: Group;
+    /** Every material drawn with the solid shader, for the light to turn with the camera. */
+    solids: ShaderMaterial[];
+    /** How much of it is there, 0–1: all of it is drawn at 1, and none of it at 0. */
+    fade(opacity: number): void;
+    dispose(): void;
+}
+
+/**
+ * The raised squares `field` has on `squares`, as a group of their own that
+ * fades as a whole: the cover an action blasts away, standing as it was
+ * (`field` is the battlefield as the action found it) over the scorched ground
+ * the board's own terrain has already laid there.
+ */
+export function buildCover(field: Battlefield, sheets: Sheets, squares: readonly Square[]): Cover {
+    const raised = raisedSquares(field, sheets, squares, () => solidMaterial({ translucent: true }));
+    const group = new Group();
+    group.add(...raised.meshes);
+    return {
+        group,
+        solids: raised.solids,
+        fade(opacity) {
+            for (const material of raised.solids) material.uniforms.opacity.value = opacity;
+            group.visible = opacity > 0;
+        },
+        dispose: () => raised.disposables.forEach(one => one.dispose()),
+    };
 }
 
 export function buildTerrain(field: Battlefield, sheets: Sheets): Terrain {
@@ -200,35 +310,10 @@ export function buildTerrain(field: Battlefield, sheets: Sheets): Terrain {
     disposables.push(ground, groundMaterial, groundMesh.geometry);
 
     // The raised squares, one instanced draw per terrain, and the trees.
-    const byLetter = new Map<TerrainLetter, Square[]>();
-    for (let square = 0; square < field.tiles.length; square++) {
-        if (field.tiles[square].elevation === 0 && field.tiles[square].terrain.height === 0) continue;
-        const letter = terrainLetter(field, square);
-        if (letter === "_" || letter === ".") continue;
-        byLetter.set(letter, [...byLetter.get(letter) ?? [], square]);
-    }
-    const matrix = new Matrix4();
-    for (const [letter, squares] of byLetter) {
-        const tree = letter === "T";
-        const { side, top } = blockColours(sheets, letter);
-        const geometry = tree ? treeGeometry(side) : coloured(new BoxGeometry(1, 1, 1).translate(0.5, 0.5, 0.5), side, top);
-        const material = solidMaterial();
-        const mesh = new InstancedMesh(geometry, material, squares.length);
-        squares.forEach((square, index) => {
-            const col = square % field.width, row = Math.floor(square / field.width);
-            const height = Math.max(field.tiles[square].elevation * QUARTER, 0.02);
-            if (tree) {
-                const ground = (field.tiles[square].elevation - field.tiles[square].terrain.height) * QUARTER;
-                matrix.makeRotationY(variantOf(square, 7)).setPosition(col + 0.5, ground, row + 0.5);
-            } else {
-                matrix.makeScale(1, height, 1).setPosition(col, 0, row);
-            }
-            mesh.setMatrixAt(index, matrix);
-        });
-        group.add(mesh);
-        solids.push(material);
-        disposables.push(geometry, material);
-    }
+    const raised = raisedSquares(field, sheets, field.tiles.keys());
+    group.add(...raised.meshes);
+    solids.push(...raised.solids);
+    disposables.push(...raised.disposables);
 
     const overlay = overlayPlane(field, 0.004);
     const wave = overlayPlane(field, 0.006, 0);

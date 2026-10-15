@@ -16,21 +16,26 @@
 // board draws from (`walkerAt`, `toldAt`, `shakeAt`, the cues' own timings),
 // placed in the world rather than on the isometric board.
 
-import {
-    Color, DynamicDrawUsage, InstancedMesh, Matrix4, Mesh, MeshBasicMaterial, OrthographicCamera, PlaneGeometry, Quaternion, RingGeometry, Scene,
-    SphereGeometry, Vector3, WebGLRenderer, type ShaderMaterial,
-} from "three";
-import type { BurstKind } from "@/games/RealmArena/art";
+import { Color, Matrix4, OrthographicCamera, Scene, Vector3, WebGLRenderer, type ShaderMaterial } from "three";
 import type { CharacterId } from "@/games/RealmArena/characters";
-import { isStanding, type Fighter, type FogGhost } from "@/games/RealmArena/rules";
-import { CLIMB_LEG, endOf, HP_BAR_HEIGHT, HP_BAR_RISE, HP_BAR_WIDTH, hpFraction, shakeAt, toldAt, toldOf, walkerAt, walkLift, type BattleCue, type BurstCue, type FallCue, type FlightCue, type Told, type WalkCue } from "@/games/RealmArena/ui";
+import { isStanding, type Fighter, type FogGhost, type MusterPick } from "@/games/RealmArena/rules";
+import { CLIMB_LEG, endOf, fadeOutAt, shakeAt, shovesOf, toldAt, toldOf, walkerAt, walkLift, type BattleCue, type FallCue, type Ring, type ScorchCue, type Shove, type Told, type WalkCue } from "@/games/RealmArena/ui";
 import { facingTowards, type Battlefield, type Facing, type Square } from "@/utils/games/battlefield/terrain";
 import { easeInOut } from "@/utils/ui/boardZoom";
 import type { Rect } from "@/utils/ui/mapLabels";
-import { characterGeometry, type CharacterModels } from "./characterModels";
-import { azimuthOf, cameraBasis, cameraFor, figureMatrix, lightOf, lookAtFor, lookAtGround, onScreen, QUARTER, squareCentre, toFrame, type BoardFrame, type BoardLayout, type CameraBasis, type Vec3 } from "./iso3d";
-import { lightSolids, solidMaterial } from "./solidMaterial";
-import { buildTerrain, type Sheets, type Terrain } from "./terrain3d";
+import { billboardAxes, fromBoardUnits, setAxes } from "./billboards";
+import { barLevels, HpBars, type BarSpec } from "./bars3d";
+import type { BoardLook } from "./canvasShapes";
+import type { CharacterModels } from "./characterModels";
+import { fallingAt, mayBeHidden, shoveOf, type Falling } from "./figureCues";
+import { FigurePools } from "./figurePools";
+import { BattleFx } from "./fx3d";
+import { azimuthOf, cameraBasis, cameraFor, figureMatrix, lerp3, lightOf, lookAtFor, lookAtGround, onScreen, QUARTER, squareCentre, toFrame, type BoardFrame, type BoardLayout, type CameraBasis, type Vec3 } from "./iso3d";
+import { MarkLayer, marksOf, type MarkLevel } from "./marks3d";
+import { NO_PREVIEWS, Previews3D, type PreviewSpec } from "./previews3d";
+import type { Shading } from "./shading3d";
+import { lightSolids } from "./solidMaterial";
+import { buildCover, buildTerrain, type Cover, type Sheets, type Terrain } from "./terrain3d";
 
 /** How often the wave's breathing is drawn (§30.11): a slow glow needs no more, and every frame of it draws the whole board. */
 const WAVE_FRAME_MS = 66;
@@ -39,24 +44,15 @@ const TURN_MS = 320;
 /** How far a press may move and still be a tap, in pixels. */
 const TAP_SLOP = 8;
 
-/** Board units (the isometric board's) to world units, across the frame and up it: a square's diagonal is 20 board units, a full height 10. */
-const BOARD_UNIT = Math.SQRT2 / 20;
-
 /** A board unit up the frame, in the world's height: a full height is 10 of them. */
 const BOARD_RISE = QUARTER * 4 / 10;
-/** The HP bar: its size and how high its middle is over its figure's feet, in world units, as the isometric board's (`HP_BAR_*`). */
-const HP_BAR = { width: HP_BAR_WIDTH * BOARD_UNIT, height: HP_BAR_HEIGHT * BOARD_RISE, rise: (HP_BAR_RISE + HP_BAR_HEIGHT / 2) * BOARD_RISE };
-/** How many HP bars the board has room for before it grows. */
-const BAR_ROOM = 256;
-
-/** Each burst's colour (§26.1), as its art has it. */
-const BURST_COLOURS: Readonly<Record<BurstKind, number>> = { fire: 0xff8a3a, thunder: 0xe8e4ff, smoke: 0xbcb8b0, acid: 0xb6e04a, blast: 0xffc46a };
+/** How often a lined-up HP change's flash is drawn: smooth enough for a flash of 0.8s, and every frame of it draws the whole board. */
+const PULSE_FRAME_MS = 33;
 
 /** A figure the board can pick: where it stands, roughly, for a tap to find. */
 interface Placed { id: number; feet: Vec3; standing: boolean }
 
-/** What's shaded on the ground, a texel a square: the colour, and how strongly (0–1). */
-export interface Shading { colour: Color; alpha: number }
+export type { Shading };
 
 /** What the board is told about a figure, as the React board works it out. */
 export interface FigureSpec {
@@ -66,17 +62,43 @@ export interface FigureSpec {
     tint: Color | null;
 }
 
+/** A pick of the viewer's sealed squad (the muster), and which way it's drawn facing. */
+export interface SealedSpec {
+    pick: MusterPick;
+    facing: Facing;
+}
+
+/** How much of a stale sighting in the fog (§27) shows: faint. */
+const GHOST_OPACITY = 0.35;
+
+/** How faint the sealed squad is drawn, as the isometric board has it (`.ag-ra-sealed`). */
+const SEALED_OPACITY = 0.7;
+
+/** What the figures are marked with: whose turn it is in battle (their AP shows), and the ring round each figure's feet. */
+export interface Marking {
+    acting: string | null;
+    rings: ReadonlyMap<number, Ring>;
+}
+
 /** What an action plays, ready to place a frame at a time. */
 interface Playing {
     cues: readonly BattleCue[];
     walks: Map<number, WalkCue[]>;
     falls: Map<number, FallCue>;
     told: Map<number, Told>;
-    flights: FlightCue[];
-    bursts: { cue: BurstCue; mesh: Mesh }[];
+    /** The cover each blast takes away, standing as the action found it until its cue (`layCovers`): built once the art is here. */
+    covers: { cue: ScorchCue; cover: Cover | null }[];
+    /** The battlefield as the action found it, which the cover it blasts is drawn from. */
+    field: Battlefield;
+    /** Every blow a figure takes and strike it makes that moves it, by fighter, worked out as they are asked for (`shovesOf`). */
+    shoves: Map<number, Shove[]>;
+    /** When each walker's last walk is over, by fighter. */
+    arrivals: Map<number, number>;
     /** The walker whose walk the camera follows. */
     tracked: number | null;
     end: number;
+    /** Reduced motion: nobody walks, nothing flies, bursts, slashes or shakes the board, and hit text only fades. */
+    still: boolean;
 }
 
 /** What every 3D board has drawn so far, for the rendering bench: frames, and the draw calls and triangles the GPU was handed. */
@@ -92,9 +114,6 @@ export interface Handlers {
     onSquare: (square: Square) => void;
 }
 
-/** One pool of instanced figures: every figure of one character, drawn alike. */
-interface Pool { mesh: InstancedMesh; capacity: number; used: number }
-
 /** What the board draws from: the art sheets (the ground, the terrain's colours) and the characters' models. */
 export interface Art { sheets: Sheets; models: CharacterModels }
 
@@ -109,18 +128,30 @@ export class Board3D {
     private top = 0;
     private art: Art | null = null;
     private readonly solids: ShaderMaterial[] = [];
+    /** Which way the camera faces, for everything drawn flat to it (`Billboards`): set as it turns. */
+    readonly axes = billboardAxes();
 
-    private readonly pools = new Map<string, Pool>();
-    /** Where each figure is drawn: its pool and its place in it. */
-    private readonly slots = new Map<number, { pool: Pool; index: number; spec: FigureSpec }>();
+    private readonly pools = new FigurePools(this.scene);
     private figures: FigureSpec[] = [];
     private ghosts: { ghost: FogGhost; facing: Facing; tint: Color | null }[] = [];
     private placed: Placed[] = [];
 
-    private readonly bars: { back: InstancedMesh; fill: InstancedMesh };
-    private readonly ring: Mesh;
-    private readonly missiles: InstancedMesh;
-    private selectedId: number | null = null;
+    /** The HP bars, and the lined-up action's previews and the centre's name: flat to the camera, one draw each. */
+    private readonly bars: HpBars;
+    private readonly previews: Previews3D;
+    /** What the marks, bars and previews are drawn in, and the HP an action lined up would change, for the bars (`setLook`, `setHpChange`). */
+    private look: BoardLook | null = null;
+    private hpChange: ReadonlyMap<number, number> | null = null;
+    /** Reduced motion, as the board was last told (`play`): the bars' lined-up change holds steady instead of flashing. */
+    private still = false;
+    /** The effects an action plays over the battlefield, and the smoke that stands on it. */
+    private readonly fx: BattleFx;
+    /** What hangs round the figures: marks, pips, items and rings. Made with the art it draws from. */
+    private marks: MarkLayer | null = null;
+    private marking: Marking | null = null;
+    /** The viewer's sealed squad while the muster lasts, and which of them is picked up. Their ids in `placed` are `-(index + 1)`. */
+    private sealed: SealedSpec[] = [];
+    private pickedUp: number | null = null;
 
     // The view: the part of the frame in the pane (`setView`, in the frame's own
     // units), the frame it is measured in, and how far the camera has turned.
@@ -142,10 +173,11 @@ export class Board3D {
      */
     private turn: { from: number; to: number; start: number; ground: Vec3; progress: number } | null = null;
     /** What's shaded on the ground, kept to lay again over ground built afresh. */
-    private shading: { shade: (square: Square) => Shading | null; wave: ReadonlySet<Square> | null } | null = null;
+    private shading: { shade: (square: Square) => Shading | null; wave: ReadonlyMap<Square, Color> | null } | null = null;
     private animating = 0;
     private waveDue = false;
     private waveDrawn = 0;
+    private pulseDrawn = 0;
 
     private playing: Playing | null = null;
     /** How far into the playing action the figures were last laid, for a turn of the view to lay them there again. */
@@ -168,27 +200,10 @@ export class Board3D {
         this.canvas = this.renderer.domElement;
         host.appendChild(this.canvas);
 
-        // Both drawn after everything solid, the fill over the back.
-        const plane = new PlaneGeometry(1, 1);
-        this.bars = {
-            back: new InstancedMesh(plane, new MeshBasicMaterial({ color: 0x000000, transparent: true, opacity: 0.7, depthWrite: false }), BAR_ROOM),
-            fill: new InstancedMesh(plane, new MeshBasicMaterial({ transparent: true, depthWrite: false }), BAR_ROOM),
-        };
-        this.bars.back.renderOrder = 2;
-        this.bars.fill.renderOrder = 3;
-        for (const mesh of [this.bars.back, this.bars.fill]) {
-            mesh.count = 0;
-            mesh.instanceMatrix.setUsage(DynamicDrawUsage);
-            this.scene.add(mesh);
-        }
-        this.ring = new Mesh(new RingGeometry(0.34, 0.42, 32).rotateX(-Math.PI / 2), new MeshBasicMaterial({ transparent: true, opacity: 0.9, depthWrite: false }));
-        this.ring.visible = false;
-        this.ring.renderOrder = 1;
-        this.scene.add(this.ring);
-        this.missiles = new InstancedMesh(new SphereGeometry(0.06, 8, 6).scale(2.2, 0.7, 0.7), new MeshBasicMaterial({ color: 0xffe3a3 }), 16);
-        this.missiles.count = 0;
-        this.missiles.instanceMatrix.setUsage(DynamicDrawUsage);
-        this.scene.add(this.missiles);
+        this.bars = new HpBars(this.axes);
+        this.previews = new Previews3D(this.axes);
+        this.scene.add(this.bars.billboards.mesh, this.previews.billboards.mesh);
+        this.fx = new BattleFx(this.scene, host, this.axes, () => this.playing && this.frame(this.playedMs));
 
         this.resize = new ResizeObserver(() => this.measure());
         this.resize.observe(host);
@@ -202,7 +217,12 @@ export class Board3D {
         cancelAnimationFrame(this.animating);
         this.resize.disconnect();
         this.terrain?.dispose();
-        for (const pool of this.pools.values()) (pool.mesh.material as ShaderMaterial).dispose();
+        this.fx.dispose();
+        this.marks?.dispose();
+        this.bars.dispose();
+        this.previews.dispose();
+        this.clearCovers();
+        this.pools.dispose();
         this.renderer.dispose();
         // Hand the context back now, not whenever it's collected: a page allows only so many at once, and drops the oldest past that.
         this.renderer.forceContextLoss();
@@ -234,6 +254,13 @@ export class Board3D {
     /** What it draws from, arrived: nothing is drawn before it, ground or figure. */
     setArt(art: Art): void {
         this.art = art;
+        this.fx.setArt(art.sheets);
+        if (this.marks) {
+            this.scene.remove(this.marks.group);
+            this.marks.dispose();
+        }
+        this.marks = new MarkLayer(art.sheets, this.axes);
+        this.scene.add(this.marks.group);
         if (this.field) this.setField(this.field, this.top);
     }
 
@@ -241,6 +268,8 @@ export class Board3D {
     setField(field: Battlefield, top: number): void {
         this.field = field;
         this.top = top;
+        this.fx.setField(field);
+        this.previews.lay(field, this.basis);
         if (!this.art) return;
         if (this.terrain) {
             this.scene.remove(this.terrain.group);
@@ -259,21 +288,67 @@ export class Board3D {
         this.figures = figures;
         this.ghosts = ghosts;
         this.layFigures();
+        // A figure arriving with a change to flash on its bar starts the flashing.
+        this.animate();
         this.invalidate();
     }
 
-    /** Who is selected, ringed in `colour` — the isometric board's ring's (`--ag-on-dark`). */
-    setSelected(id: number | null, colour: Color): void {
-        this.selectedId = id;
-        (this.ring.material as MeshBasicMaterial).color.copy(colour).convertSRGBToLinear();
-        this.layRing();
+    /** What the figures are marked with: the ring round each one's feet (chosen, a candidate, aimed at, a watcher) and the AP pips on its owner's turn. */
+    setMarking(marking: Marking): void {
+        this.marking = marking;
+        this.layFigures(this.playing ? this.playedMs : null);
         this.invalidate();
     }
 
-    /** What's shaded on each square of the ground, and the zones the wave will land in (§30.11), if it's due. */
-    setShading(shade: (square: Square) => Shading | null, wave: ReadonlySet<Square> | null): void {
+    /** The viewer's sealed squad, drawn where each pick stands while the muster lasts, and the index of the one picked up to move, if any. */
+    setSealed(sealed: SealedSpec[], pickedUp: number | null): void {
+        this.sealed = sealed;
+        this.pickedUp = pickedUp;
+        this.layFigures(this.playing ? this.playedMs : null);
+        this.invalidate();
+    }
+
+    /** The squares under a smoke pot's cloud, a puff over each, standing on the ground. */
+    setSmoke(squares: ReadonlySet<Square>): void {
+        this.fx.setSmoke(squares);
+        this.invalidate();
+    }
+
+    /** What's shaded on each square of the ground, and the zones the wave will land in (§30.11) in each one's colour, if it's due. */
+    setShading(shade: (square: Square) => Shading | null, wave: ReadonlyMap<Square, Color> | null): void {
         this.shading = { shade, wave };
         this.applyShading();
+    }
+
+    /**
+     * What the marks, the bars and the previews are drawn in: the colours and
+     * typeface the isometric board's CSS gives them. The text in the previews
+     * waits for the typeface to load, and is laid out when it has.
+     */
+    setLook(look: BoardLook): void {
+        this.look = look;
+        this.previews.setLook(look, () => this.layPreviews());
+        this.layFigures(this.playing ? this.playedMs : null);
+        this.layPreviews();
+    }
+
+    /** What's drawn over the board of a lined-up action and of the map: the path, the odds, the cover and the centre's name. */
+    setPreviews(spec: PreviewSpec = NO_PREVIEWS): void {
+        this.previews.set(spec);
+        this.layPreviews();
+    }
+
+    /** What an action lined up would do to the HP of each figure it touches, flashing at the end of its bar. */
+    setHpChange(change: ReadonlyMap<number, number> | null): void {
+        this.hpChange = change;
+        this.layFigures(this.playing ? this.playedMs : null);
+        this.animate();
+        this.invalidate();
+    }
+
+    private layPreviews(): void {
+        this.previews.lay(this.field, this.basis);
+        this.invalidate();
     }
 
     private applyShading(): void {
@@ -291,8 +366,10 @@ export class Board3D {
         };
         paint(terrain.overlay.data, shade);
         terrain.overlay.texture.needsUpdate = true;
-        const warm = new Color(0.86, 0.36, 0.3);
-        paint(terrain.wave.data, square => wave?.has(square) ? { colour: warm, alpha: 0.55 } : null);
+        paint(terrain.wave.data, square => {
+            const colour = wave?.get(square);
+            return colour ? { colour, alpha: 0.55 } : null;
+        });
         terrain.wave.texture.needsUpdate = true;
         this.waveDue = !!wave && wave.size > 0;
         terrain.wave.material.opacity = this.waveDue ? 0.5 : 0;
@@ -349,40 +426,41 @@ export class Board3D {
         if (!this.framing) this.draw();
     }
 
-    /** What an action plays, or none. Ready to draw at a time with `frame`. */
-    play(playback: { cues: readonly BattleCue[]; before: readonly Fighter[] } | null, tracked: boolean): void {
+    /**
+     * What an action plays, or none. Ready to draw at a time with `frame`. With
+     * `still` (reduced motion) nobody walks, nothing flies, bursts, slashes or
+     * shakes the board, and hit text only appears and fades.
+     */
+    play(playback: { cues: readonly BattleCue[]; before: readonly Fighter[]; field: Battlefield } | null, tracked: boolean, still = false): void {
         this.stopFollowing();
-        for (const burst of this.playing?.bursts ?? []) {
-            this.scene.remove(burst.mesh);
-            burst.mesh.geometry.dispose();
-            (burst.mesh.material as MeshBasicMaterial).dispose();
-        }
+        this.clearCovers();
         this.playing = null;
+        this.still = still;
+        this.fx.play(playback?.cues ?? null, still);
         if (playback) {
             const walks = new Map<number, WalkCue[]>();
             const falls = new Map<number, FallCue>();
-            const flights: FlightCue[] = [];
-            const bursts: Playing["bursts"] = [];
+            const covers: Playing["covers"] = [];
             for (const cue of playback.cues) {
-                if (cue.kind === "walk") walks.set(cue.fighter.id, [...walks.get(cue.fighter.id) ?? [], cue]);
+                if (cue.kind === "scorch") covers.push({ cue, cover: null });
+                if (cue.kind === "walk" && !still) walks.set(cue.fighter.id, [...walks.get(cue.fighter.id) ?? [], cue]);
                 if (cue.kind === "fall") falls.set(cue.fighter.id, cue);
-                if (cue.kind === "flight") flights.push(cue);
-                if (cue.kind === "burst") {
-                    const mesh = new Mesh(new SphereGeometry(0.5, 16, 10), new MeshBasicMaterial({ color: BURST_COLOURS[cue.burst], transparent: true, depthWrite: false }));
-                    mesh.visible = false;
-                    this.scene.add(mesh);
-                    bursts.push({ cue, mesh });
-                }
             }
             const before = new Map(playback.before.map(fighter => [fighter.id, fighter]));
             const told = new Map<number, Told>();
             for (const { fighter } of this.figures) {
-                const one = toldOf(playback.cues, before.get(fighter.id), fighter, false);
+                const one = toldOf(playback.cues, before.get(fighter.id), fighter, still);
                 if (one) told.set(fighter.id, one);
             }
-            this.playing = { cues: playback.cues, walks, falls, told, flights, bursts, tracked: tracked ? walks.keys().next().value ?? null : null, end: endOf(playback.cues) };
+            const arrivals = new Map([...walks].map(([id, one]) => [id, endOf(one)]));
+            this.playing = {
+                cues: playback.cues, walks, falls, told, covers, field: playback.field, shoves: new Map(), arrivals, still,
+                tracked: tracked ? walks.keys().next().value ?? null : null, end: endOf(playback.cues),
+            };
         }
         this.frame(0);
+        // Whether a lined-up change on a bar flashes depends on it.
+        this.animate();
     }
 
     /** Draws what's playing as it is `ms` in. */
@@ -395,11 +473,12 @@ export class Board3D {
         try {
             this.layFigures(playing ? ms : null);
             if (playing) {
-                this.layFlights(playing, ms);
-                this.layBursts(playing, ms);
+                this.layCovers(playing, ms);
+                this.fx.lay(ms, this.basis);
                 // The shake is across the frame in board units, down positive.
-                const { x, y } = shakeAt(playing.cues, ms);
-                this.shake = this.basis.right.map((n, i) => (n * x - this.basis.up[i] * y) * BOARD_UNIT) as Vec3;
+                const { x, y } = playing.still ? { x: 0, y: 0 } : shakeAt(playing.cues, ms);
+                const across = fromBoardUnits({ x, y });
+                this.shake = this.basis.right.map((n, i) => n * across.x + this.basis.up[i] * across.y) as Vec3;
                 if (playing.tracked !== null && ms < playing.end) {
                     const walker = this.placed.find(one => one.id === playing.tracked);
                     if (walker && this.layout && this.centre) {
@@ -410,7 +489,7 @@ export class Board3D {
                     this.stopFollowing();
                 }
             } else {
-                this.missiles.count = 0;
+                this.fx.lay(0, this.basis);
                 this.shake = [0, 0, 0];
             }
         } finally {
@@ -421,155 +500,154 @@ export class Board3D {
 
     // ---- Laying things out ----
 
-    /** Every figure in its place — as it stands, or `ms` into what's playing — with its HP bar over it. */
+    /**
+     * Every figure in its place — as it stands, or `ms` into what's playing —
+     * with its HP bar and marks over it. A character the action downs stands as
+     * it was until the blow lands, then fades out as its fallen figure fades in
+     * (`fallingAt`), its bar fading with it and no marks on it. A figure knocked
+     * by a blow, or lunging as it strikes, slides over the ground (`shoveOf`);
+     * its bar, marks and ring stay put. A standing figure something in front
+     * hides is drawn again faintly (`FigurePools`' `hidden`), so it is still
+     * there to see.
+     */
     private layFigures(ms: number | null = null): void {
         const field = this.field;
         if (!field || !this.art) return;
         const { models } = this.art;
-        for (const pool of this.pools.values()) pool.used = 0;
+        this.pools.begin();
         this.placed = [];
         const matrix = new Matrix4();
-        const bars: { feet: Vec3; fraction: number; tint: Color | null }[] = [];
+        const bars: BarSpec[] = [];
         const playing = ms === null ? null : this.playing;
+        this.marks?.begin(this.look);
+        /** One figure of `character`, fully there or, with an `opacity` under 1, fading. */
+        const lay = (character: CharacterId, at: Vec3, facing: Facing, fallen: boolean, tint: Color | null, opacity = 1) => {
+            matrix.fromArray(figureMatrix(at, facing, fallen));
+            if (opacity < 1) this.pools.place(models, character, "faint", matrix, tint, opacity);
+            else this.pools.place(models, character, "solid", matrix, tint);
+        };
 
         for (const spec of this.figures) {
             const { fighter } = spec;
             let square = fighter.square, facing = spec.facing, lift = 0;
             let feet: Vec3 | null = null;
             let standing = isStanding(fighter);
-            let fraction = hpFraction(fighter);
+            // What it wears: all its marks at rest, its item alone while it walks, and none once down. Shown as the action found them until the cue that changed them lands.
+            let level: MarkLevel = standing ? "all" : "none";
+            // The figure as its bar and marks show it, and the level its chip drains down to.
+            let drawn = fighter, chip: number | undefined;
+            let falling: Falling | null = null;
+            let knock: Vec3 = [0, 0, 0];
+            const fall = playing?.falls.get(fighter.id);
             if (playing) {
                 const walks = playing.walks.get(fighter.id);
-                const fall = playing.falls.get(fighter.id);
                 const leg = walks ? walkerAt(walks, ms!, (from, to) => worldLeg(field, from, to)) : null;
                 if (leg) {
                     const a = squareCentre(field, leg.from), b = squareCentre(field, leg.to);
-                    feet = a.map((n, i) => n + (b[i] - n) * leg.across) as Vec3;
+                    feet = lerp3(a, b, leg.across);
                     lift = -walkLift(leg, one => field.tiles[one].elevation) * BOARD_RISE;
                     if (leg.from !== leg.to) facing = facingTowards(field, leg.from, leg.to);
                     standing = true;
+                    level = "item";
                 } else if (walks && ms! < walks[0].start) {
                     square = walks[0].path[0];
                     standing = true;
                 }
-                if (fall && ms! < fall.start) {
-                    standing = true;
-                    if (!leg) square = fall.fighter.square;
+                if (fall) {
+                    // Its bar is as the action found it too, fading with it.
+                    drawn = fall.fighter;
+                    if (ms! < fall.start) {
+                        standing = true;
+                        level = "none";
+                        if (!leg) square = fall.fighter.square;
+                    } else if (!leg) {
+                        falling = fallingAt(fall, playing.arrivals.get(fighter.id), ms!, playing.still);
+                    }
                 }
                 const told = playing.told.get(fighter.id);
-                if (told) fraction = hpFraction(toldAt(told, fighter, ms!).drawn);
+                if (told) ({ drawn, chip } = toldAt(told, fighter, ms!));
+                if (!leg) knock = shoveOf(this.shovesOf(playing, fighter.id), ms!, field, this.basis);
             }
             feet ??= squareCentre(field, square);
             const at: Vec3 = [feet[0], feet[1] + lift, feet[2]];
-            matrix.fromArray(figureMatrix(at, facing, !standing));
-            this.place(models, fighter.character, false, matrix, spec.tint);
-            this.placed.push({ id: fighter.id, feet: at, standing });
-            if (standing) bars.push({ feet: at, fraction, tint: spec.tint });
-        }
-        for (const { ghost, facing, tint } of this.ghosts) {
-            matrix.fromArray(figureMatrix(squareCentre(field, ghost.square), facing, false));
-            this.place(models, ghost.character, true, matrix, tint);
-        }
-        for (const pool of this.pools.values()) {
-            pool.mesh.count = pool.used;
-            pool.mesh.instanceMatrix.needsUpdate = true;
-            if (pool.mesh.instanceColor) pool.mesh.instanceColor.needsUpdate = true;
-        }
-        this.layBars(bars);
-        this.layRing();
-    }
-
-    /** One figure into its character's pool, growing the pool if it's full. */
-    private place(models: CharacterModels, character: CharacterId, ghost: boolean, matrix: Matrix4, tint: Color | null): void {
-        const key = `${character}${ghost ? ":ghost" : ""}`;
-        let pool = this.pools.get(key);
-        if (!pool || pool.used >= pool.capacity) {
-            const capacity = Math.max(8, (pool?.capacity ?? 0) * 2);
-            const material = pool ? pool.mesh.material as ShaderMaterial : solidMaterial({ opacity: ghost ? 0.35 : 1 });
-            if (!pool) this.solids.push(material);
-            const mesh = new InstancedMesh(characterGeometry(models, character), material, capacity);
-            mesh.instanceMatrix.setUsage(DynamicDrawUsage);
-            mesh.frustumCulled = false;
-            mesh.setColorAt(0, new Color(1, 1, 1));
-            if (pool) {
-                // Grown: what's placed so far carried over.
-                mesh.instanceMatrix.array.set(pool.mesh.instanceMatrix.array.subarray(0, pool.used * 16));
-                mesh.instanceColor!.array.set(pool.mesh.instanceColor!.array.subarray(0, pool.used * 3));
-                this.scene.remove(pool.mesh);
-                pool.mesh.dispose();
+            if (falling && fall) {
+                const fell = squareCentre(field, fall.fighter.square);
+                if (falling.standing > 0) {
+                    lay(fighter.character, fell.map((n, i) => n + knock[i]) as Vec3, spec.facing, false, spec.tint, falling.standing);
+                    bars.push({ feet: fell, ...barLevels(drawn, drawn, undefined, undefined), tint: spec.tint, fade: falling.standing });
+                }
+                if (falling.lying !== null && falling.lying > 0) lay(fighter.character, at, spec.facing, true, spec.tint, falling.lying);
+                this.placed.push({ id: fighter.id, feet: at, standing: false });
+                this.layMarks(at, fighter, fighter, "none");
+                continue;
             }
-            pool = { mesh, capacity, used: pool?.used ?? 0 };
-            this.pools.set(key, pool);
-            this.scene.add(mesh);
-            this.relight();
+            const body = at.map((n, i) => n + knock[i]) as Vec3;
+            lay(fighter.character, body, facing, !standing, spec.tint);
+            // Standing figures only: a body on the ground is never the faint figure a wall hides.
+            if (standing && mayBeHidden(field, this.basis, body, this.top)) this.pools.place(models, fighter.character, "hidden", matrix, spec.tint);
+            this.placed.push({ id: fighter.id, feet: at, standing });
+            if (standing) bars.push({ feet: at, ...barLevels(drawn, fighter, chip, this.hpChange?.get(fighter.id)), tint: spec.tint });
+            this.layMarks(at, fighter, drawn, level);
         }
-        pool.mesh.setMatrixAt(pool.used, matrix);
-        pool.mesh.setColorAt(pool.used, tint ?? new Color(1, 1, 1));
-        pool.used++;
+        this.layMuster(models, matrix);
+        for (const { ghost, facing, tint } of this.ghosts) lay(ghost.character, squareCentre(field, ghost.square), facing, false, tint, GHOST_OPACITY);
+        this.pools.end();
+        this.bars.lay(bars, this.look, this.still);
+        this.marks?.end();
     }
 
-    /** The HP bars, over each standing figure, turned to face the camera. */
-    private layBars(bars: { feet: Vec3; fraction: number; tint: Color | null }[]): void {
-        const { back, fill } = this.bars;
-        bars = bars.slice(0, BAR_ROOM);
-        const facing = new Quaternion().setFromRotationMatrix(new Matrix4().lookAt(new Vector3(...this.basis.back), new Vector3(), new Vector3(0, 1, 0)));
-        const right = new Vector3(...this.basis.right), toward = new Vector3(...this.basis.back).multiplyScalar(0.01);
-        const m = new Matrix4();
-        bars.forEach(({ feet, fraction, tint }, index) => {
-            const middle = new Vector3(feet[0], feet[1] + HP_BAR.rise, feet[2]);
-            back.setMatrixAt(index, m.compose(middle, facing, new Vector3(HP_BAR.width, HP_BAR.height, 1)));
-            const width = Math.max(0.0001, HP_BAR.width * fraction);
-            const shifted = middle.clone().addScaledVector(right, (width - HP_BAR.width) / 2).add(toward);
-            fill.setMatrixAt(index, m.compose(shifted, facing, new Vector3(width, HP_BAR.height, 1)));
-            // A plain material takes its colour as linear, and the tint is as written.
-            fill.setColorAt(index, (tint ?? new Color(0.85, 0.85, 0.85)).clone().convertSRGBToLinear());
+    /** Every blow a figure takes and strike it makes that moves it, worked out once an action (`shovesOf`). */
+    private shovesOf(playing: Playing, id: number): Shove[] {
+        let shoves = playing.shoves.get(id);
+        if (!shoves) playing.shoves.set(id, shoves = shovesOf(playing.cues, id, playing.still));
+        return shoves;
+    }
+
+    /** What hangs round a figure whose feet are at `feet`: its ring, and its marks, pips and item as far as `level` allows. */
+    private layMarks(feet: Vec3, fighter: Fighter, drawn: Fighter, level: MarkLevel): void {
+        const { marks, marking } = this;
+        if (!marks || !marking) return;
+        const worn = marksOf(level, drawn, fighter.owner === marking.acting);
+        marks.figure(feet, worn);
+        const ring = marking.rings.get(fighter.id);
+        if (ring) marks.ring(feet, ring);
+        if (worn.watching) marks.ring(feet, "watch");
+    }
+
+    /** The viewer's sealed squad, standing faintly where each pick is to be: with its item, the dashed ring of a squad still sealed, and a ring on the one picked up. */
+    private layMuster(models: CharacterModels, matrix: Matrix4): void {
+        const field = this.field!;
+        this.sealed.forEach(({ pick, facing }, index) => {
+            const feet = squareCentre(field, pick.square);
+            matrix.fromArray(figureMatrix(feet, facing, false));
+            this.pools.place(models, pick.character, "faint", matrix, null, SEALED_OPACITY);
+            this.placed.push({ id: -(index + 1), feet, standing: true });
+            this.marks?.figure(feet, { effects: [], watching: false, item: pick.item });
+            this.marks?.ring(feet, "sealed");
+            if (index === this.pickedUp) this.marks?.ring(feet, "selected");
         });
-        back.count = fill.count = bars.length;
-        back.instanceMatrix.needsUpdate = fill.instanceMatrix.needsUpdate = true;
-        if (fill.instanceColor) fill.instanceColor.needsUpdate = true;
     }
 
-    private layRing(): void {
-        const at = this.placed.find(one => one.id === this.selectedId);
-        this.ring.visible = !!at;
-        if (at) this.ring.position.set(at.feet[0], at.feet[1] + 0.01, at.feet[2]);
-    }
-
-    /** The shots and throws in flight: an arc from the shooter's body to the target's, or its ground for a throw. */
-    private layFlights(playing: Playing, ms: number): void {
-        const field = this.field!;
-        const m = new Matrix4();
-        let count = 0;
-        for (const cue of playing.flights) {
-            const into = ms - cue.start;
-            if (into < 0 || into > cue.length || count >= 16) continue;
-            const from = squareCentre(field, cue.from), to = squareCentre(field, cue.to);
-            from[1] += 0.45;
-            if (cue.result !== "landed") to[1] += cue.result === "miss" ? 0.9 : 0.45;
-            const u = Math.min(1, into / Math.max(1, cue.land));
-            const distance = Math.hypot(to[0] - from[0], to[2] - from[2]);
-            const rise = cue.missile === "bolt" ? 0 : Math.min(distance * (cue.missile === "arrow" ? 0.12 : 0.35), 2.5);
-            const point = new Vector3(...from.map((n, i) => n + (to[i] - n) * u) as Vec3);
-            point.y += rise * 4 * u * (1 - u);
-            const ahead = new Vector3(to[0] - from[0], (to[1] - from[1]) + rise * 4 * (1 - 2 * u), to[2] - from[2]).normalize();
-            m.lookAt(new Vector3(), ahead, new Vector3(0, 1, 0)).multiply(new Matrix4().makeRotationY(Math.PI / 2)).setPosition(point);
-            this.missiles.setMatrixAt(count++, m);
+    /** The cover each blast takes away, built (once the art is here) as the action found it, and `ms` in: standing until the blast, then fading off the scorched ground. */
+    private layCovers(playing: Playing, ms: number): void {
+        let built = false;
+        for (const entry of playing.covers) {
+            if (!entry.cover && this.art) {
+                entry.cover = buildCover(playing.field, this.art.sheets, entry.cue.squares);
+                this.scene.add(entry.cover.group);
+                built = true;
+            }
+            entry.cover?.fade(fadeOutAt(entry.cue, ms));
         }
-        this.missiles.count = count;
-        this.missiles.instanceMatrix.needsUpdate = true;
+        if (built) this.relight();
     }
 
-    /** The bursts: a ball swelling from where it landed and fading. */
-    private layBursts(playing: Playing, ms: number): void {
-        const field = this.field!;
-        for (const { cue, mesh } of playing.bursts) {
-            const progress = (ms - cue.start) / Math.max(1, cue.length);
-            mesh.visible = progress >= 0 && progress <= 1;
-            if (!mesh.visible) continue;
-            const at = squareCentre(field, cue.at);
-            mesh.position.set(at[0], at[1] + 0.2, at[2]);
-            mesh.scale.setScalar((0.4 + progress) * (cue.radius + 0.6));
-            (mesh.material as MeshBasicMaterial).opacity = 0.75 * (1 - progress);
+    /** Takes down the cover an action blasts, built for it (`layCovers`). */
+    private clearCovers(): void {
+        for (const { cover } of this.playing?.covers ?? []) {
+            if (!cover) continue;
+            this.scene.remove(cover.group);
+            cover.dispose();
         }
     }
 
@@ -589,7 +667,7 @@ export class Board3D {
         const shown = cameraFor(this.frameBasis, frame, this.view ?? { x: 0, y: 0, ...frame.size }, this.size.width);
         const from = this.turn?.ground;
         const k = this.turn?.progress ?? 1;
-        const ground = from ? from.map((n, i) => n + (shown.ground[i] - n) * k) as Vec3 : shown.ground;
+        const ground = from ? lerp3(from, shown.ground, k) : shown.ground;
         return { ground, zoom: shown.zoom, target: lookAtGround(this.basis, ground) };
     }
 
@@ -616,12 +694,15 @@ export class Board3D {
 
     private relight(): void {
         this.basis = cameraBasis(this.azimuth);
+        setAxes(this.axes, this.basis);
         const light = lightOf(this.basis);
         lightSolids(this.solids, light);
+        this.pools.light(light);
         if (this.terrain) lightSolids(this.terrain.solids, light);
+        for (const { cover } of this.playing?.covers ?? []) if (cover) lightSolids(cover.solids, light);
     }
 
-    /** Runs the frames a turn or the wave's breathing needs, until there are none. */
+    /** Runs the frames a turn, the wave's breathing or an HP change's flashing needs, until there are none. */
     private animate(): void {
         if (this.animating) return;
         const step = (now: number) => {
@@ -644,6 +725,14 @@ export class Board3D {
                     moved = true;
                 }
             }
+            if (this.bars.pulsing) {
+                more = true;
+                if (moved || now - this.pulseDrawn >= PULSE_FRAME_MS) {
+                    this.bars.pulse(now);
+                    this.pulseDrawn = now;
+                    moved = true;
+                }
+            }
             if (moved) this.draw();
             if (more) this.animating = requestAnimationFrame(step);
         };
@@ -659,6 +748,10 @@ export class Board3D {
         this.azimuth = azimuth;
         this.relight();
         this.layFigures(this.playing ? this.playedMs : null);
+        // A missile's arc is drawn across the frame, as the camera now faces.
+        if (this.playing) this.fx.lay(this.playedMs, this.basis);
+        // A path's runs and the centre's name lie along the frame the camera now sees.
+        this.previews.lay(this.field, this.basis);
     }
 
     /** Draws on the next frame, once, however often it's asked. */

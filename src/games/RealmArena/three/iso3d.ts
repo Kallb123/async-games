@@ -37,6 +37,9 @@ const scale = (a: Vec3, s: number): Vec3 => [a[0] * s, a[1] * s, a[2] * s];
 const add = (a: Vec3, b: Vec3): Vec3 => [a[0] + b[0], a[1] + b[1], a[2] + b[2]];
 const normalise = (a: Vec3): Vec3 => scale(a, 1 / Math.hypot(...a));
 
+/** The point `t` of the way from `a` to `b`. */
+export const lerp3 = (a: Vec3, b: Vec3, t: number): Vec3 => [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t, a[2] + (b[2] - a[2]) * t];
+
 /** The middle of a square's ground, and how high its top stands. */
 export function squareCentre(field: Pick<Battlefield, "width" | "tiles">, square: Square): Vec3 {
     const col = square % field.width, row = Math.floor(square / field.width);

@@ -10,6 +10,7 @@ import { facingTowards, type Battlefield, type Facing, type Square, type Terrain
 import { isoArea, isoBlock, isoBounds, isoCentre, isoCorner, isoDepth, isoGridLines, isoGroundAt, isoPoint, isoPoints, isoRuns, isoSlab, isoSquareAt, isoView, ISO_HALF_HEIGHT, ISO_HALF_WIDTH, type IsoBlock, type IsoRotation, type IsoView, type Point } from '@/utils/ui/isometric';
 import { RealmArenaTerrainArt, RealmArenaTerrainDefs, spriteId, SpriteUse } from '@/games/RealmArena/components/RealmArenaTerrain';
 import { RealmArenaEffectMarks } from '@/games/RealmArena/components/RealmArenaEffects';
+import { CAPTION_INSET, PlaybackCaption, UnplacedMark } from '@/games/RealmArena/components/RealmArenaCaption';
 import RealmArenaFx from '@/games/RealmArena/components/RealmArenaFx';
 import { MIN_ASPECT } from '@/games/RealmArena/boardShape';
 import type { Rect } from '@/utils/ui/mapLabels';
@@ -20,58 +21,17 @@ import { CHARACTER_ART, facingCell, ITEM_ART, SMOKE_ART, spriteBox, TERRAIN_ART,
 import { CHARACTERS, ITEMS, type CharacterId, type ItemId } from '@/games/RealmArena/characters';
 import { CENTRE, isStanding, isWarband, maxHpOf, smokeSquares, type BattleState, type Fighter, type FogGhost, type MusterPick, type ToldEvent } from '@/games/RealmArena/rules';
 import type { AttackOption } from '@/games/RealmArena/tactics';
-import { apPips, areaRect, BOARD_ZOOM, captionAt, eventLines, HP_BAR_HEIGHT, HP_BAR_RISE, HP_BAR_WIDTH, type BattleCue, type BoardFollow, type CaptionCue, type FallCue, type FxPoints, type ScorchCue, type Shove, type Timed, type WalkCue, effectsOn, facingOf, fadeInAt, fadeOutAt, fighterStatus, endOf, hpFraction, legLengthOn, progressOf, shakeAt, shakesOf, shovesOf, shoveAt, terrainLetter, toldAt, toldOf, walkerAt, walkCameraAt, legPoint, walkLift, walkSquares, type Told } from '@/games/RealmArena/ui';
+import { AP_PIP_OFFSET, AP_PIP_RADIUS, AP_PIP_STEP, apPips, areaRect, BOARD_ZOOM, CENTRE_LABEL, EFFECT_MARK_OFFSET, EFFECT_MARK_SIZE, EFFECT_MARK_STEP, FIGURE_RADIUS, FIGURE_RISE, fxPointsAt, HP_BAR_HEIGHT, HP_BAR_RISE, HP_BAR_WIDTH, ITEM_MARK_OFFSET, ITEM_MARK_SIZE, MARKER_RADIUS, ODDS_HEIGHT, ODDS_RISE, ODDS_WIDTH, PATH_END_RADIUS, RING_RADIUS, ringOf, shadedSquares, shieldPath, SMOKE_SIZE, type GroundShade, type Marker, type ShadeKind, type Ring, type BattleCue, type BoardFollow, type FallCue, type FxPoints, type ScorchCue, type Shove, type Timed, type WalkCue, effectsOn, facingOf, fadeInAt, fadeOutAt, fighterStatus, endOf, hpFraction, legLengthOn, progressOf, shakeAt, shakesOf, shovesOf, shoveAt, terrainLetter, toldAt, toldOf, walkerAt, walkCameraAt, legPoint, walkLift, walkSquares, type Told } from '@/games/RealmArena/ui';
 
 /** How deep the ground is drawn under the map's front edges, in quarters. */
 const SLAB_DEPTH = 3;
 
-/**
- * A figure stands on its square as its character's art (`CHARACTER_ART`),
- * facing the way it last stepped, over a shadow; fallen, it lies there. Its
- * body is taken as a disc `FIGURE_RADIUS` across, `FIGURE_RISE` above the
- * middle of the square's top — what a tap lands on, what its marks sit
- * beside and what a shot flies to — and it stands `FIGURE_TOP` high under its
- * HP bar (`HP_BAR_*`, ui.ts, which every way of drawing the board shares).
- * Everything here is in board units, against a square `2 * ISO_HALF_WIDTH` across.
- */
-const FIGURE_RADIUS = 4.5;
-const FIGURE_RISE = 7;
-/**
- * The rings on the ground round a figure's feet, as fractions of its square's
- * diamond: the one it's picked out by, wide enough to show round its feet,
- * and outside that, still inside the square, the dashed one round one on
- * watch or still sealed.
- */
-const RING_RADIUS = 0.62;
-const MARKER_RADIUS = 0.8;
-/** The AP pips: a column of dots down the figure's right, clear of the disc and inside its square's width. */
-const AP_PIP_RADIUS = 0.75;
-const AP_PIP_STEP = 1.9;
-const AP_PIP_OFFSET = 5.6;
-/**
- * The effect marks (§20.2): a column of badges down the figure's left, where
- * the AP pips never are, clear of the disc and inside its square's width.
- * Three stand within the disc's height.
- */
-const EFFECT_MARK_SIZE = 3;
-const EFFECT_MARK_STEP = 3.1;
-const EFFECT_MARK_OFFSET = 6.2;
-/**
- * The item a character carries (§21.1): by its right shoulder, in the AP
- * pips' column above them, so it never covers them, the effect marks or the
- * HP bar over the figure's head.
- */
-const ITEM_MARK_SIZE = 3;
-const ITEM_MARK_OFFSET = { x: AP_PIP_OFFSET, y: -5 };
-/** A puff of a smoke pot's cloud: a square across, its foot just in front of the square's middle. */
-const SMOKE_SIZE = 2 * ISO_HALF_WIDTH;
-/** A target's chance to hit: a pill wide enough for "100%", worn above its figure's HP bar. */
-const ODDS_WIDTH = 10.5;
-const ODDS_HEIGHT = 4;
-const ODDS_RISE = HP_BAR_RISE + HP_BAR_HEIGHT + ODDS_HEIGHT / 2 + 0.6;
-/** A cover shield standing on a square's edge: narrow enough to stay clear of the figure's disc and the HP bar. */
-const SHIELD_WIDTH = 3.6;
-const SHIELD_HEIGHT = 4.6;
+// A figure stands on its square as its character's art (`CHARACTER_ART`),
+// facing the way it last stepped, over a shadow; fallen, it lies there. Its
+// body is a disc `FIGURE_RADIUS` across, `FIGURE_RISE` above the middle of the
+// square's top, and it stands `FIGURE_TOP` high under its HP bar (`HP_BAR_*`):
+// all in ui.ts, which every way of drawing the board shares. Everything here is
+// in board units, against a square `2 * ISO_HALF_WIDTH` across.
 /** How far below its disc's middle a figure is looked for, to tell whether something in front hides it: most of the way to the disc's foot. */
 const FOOT_PROBE = FIGURE_RADIUS * 0.6;
 /** Room over the back of the map for a figure standing there, and the odds above it. */
@@ -203,12 +163,6 @@ interface Aiming {
     onSquare: (square: Square) => void;
 }
 
-/** The ring drawn round a figure's feet: chosen, a candidate for a tap, aimed at, or a watcher a move would set off. */
-type Ring = 'selected' | 'candidate' | 'aimed' | 'flagged';
-
-/** The dashed ring round a figure's feet, outside its `Ring`: on watch, or a squad still sealed. */
-type Marker = 'watch' | 'sealed';
-
 /** Which way a figure — a fighter, or a pick still sealed — is drawn facing (`facingOf`). */
 type FacingFor = (figure: { square: Square; facing?: Facing }) => Facing;
 
@@ -226,6 +180,16 @@ interface Placing {
 /** What a square is shaded with — its reach, a range, a blast — as the class it's drawn with, or undefined for nothing. */
 type Shade = (square: Square) => string | undefined;
 
+/** The class each kind of shading is drawn with. */
+const SHADE_CLASS: Readonly<Record<ShadeKind, string>> = {
+    fog: 'ag-ra-fog', smoke: 'ag-ra-smoke', reach: 'ag-ra-reach', range: 'ag-ra-range', blast: 'ag-ra-blast', place: 'ag-ra-place',
+};
+
+/** The class a `GroundShade` is drawn with on a square it has: a reach deepens with the AP it costs. */
+function shadeClass({ kind, ap }: GroundShade, square: Square): string {
+    return kind === 'reach' ? `${SHADE_CLASS.reach} ag-ra-reach--${ap!(square)}` : SHADE_CLASS[kind];
+}
+
 /** Where a figure's disc is centred: `FIGURE_RISE` over the middle of its square's top. */
 function discCentre(view: IsoView, square: Square): Point {
     const { x, y } = isoCentre(view, square);
@@ -234,8 +198,7 @@ function discCentre(view: IsoView, square: Square): Point {
 
 /** Where the battle visuals go on a square (§26): its ground, a figure's disc there, and the top of that disc. */
 function fxPoints(view: IsoView, square: Square): FxPoints {
-    const body = discCentre(view, square);
-    return { ground: isoCentre(view, square), body, head: { x: body.x, y: body.y - FIGURE_RADIUS } };
+    return fxPointsAt(isoCentre(view, square));
 }
 
 /**
@@ -554,14 +517,6 @@ function Odds({ view, square, chance }: { view: IsoView; square: Square; chance:
     );
 }
 
-/** The outline of a shield, standing on its point at the origin. `left` is just its left half. */
-function shieldPath(left = false): string {
-    const half = SHIELD_WIDTH / 2, shoulder = -SHIELD_HEIGHT * 0.45, belly = -SHIELD_HEIGHT * 0.12;
-    return left
-        ? `M0 ${-SHIELD_HEIGHT}H${-half}V${shoulder}Q${-half} ${belly} 0 0Z`
-        : `M${-half} ${-SHIELD_HEIGHT}H${half}V${shoulder}Q${half} ${belly} 0 0Q${-half} ${belly} ${-half} ${shoulder}Z`;
-}
-
 /**
  * The cover a square gives whoever stands on it, XCOM style: a full shield on
  * each side that gives full cover, a half-filled one on each that gives half,
@@ -790,37 +745,6 @@ interface DepthItem {
     node: React.ReactNode;
 }
 
-/** How much of the foot of the frame a playback's caption takes, with its gap from the edge, in pixels: kept clear by the view framing the action (`BoardZoomFocus.inset`). */
-const CAPTION_INSET = 44;
-
-/**
- * What the playback is doing, in a sentence, as each event lands: the pill at
- * the foot of the frame (`.ag-ra-caption`), which is outside the zoom so it
- * stays put as the board pans. An event the action's lines pass over (a move
- * broken by an overwatch shot is told once) says nothing of its own, so the
- * last sentence stays up until one that does. It keeps the final one when the
- * clock has run out — a review step rests showing what happened — and renders
- * only when the sentence changes (`usePlaybackValue`). Keyed by the playback
- * where it is mounted, so a new one starts from nothing rather than from the
- * last one's closing line. `fighters` is the board after the action, which is
- * what `eventLines` names everyone from.
- */
-function PlaybackCaption({ playback, fighters, viewerId, nameFor }: { playback: Playback; fighters: readonly Fighter[]; viewerId: string; nameFor: (userId: string) => string }) {
-    const { cues, sentences } = useMemo(() => {
-        const sentences = new Map(eventLines(playback.events, fighters, viewerId, nameFor).map(line => [line.event, line.sentence]));
-        return { cues: playback.cues.filter((cue): cue is CaptionCue => cue.kind === 'caption' && sentences.has(cue.event)), sentences };
-    }, [playback.events, playback.cues, fighters, viewerId, nameFor]);
-    const sentence = usePlaybackValue(ms => {
-        const cue = captionAt(cues, ms);
-        return cue ? sentences.get(cue.event) ?? null : null;
-    });
-    return (
-        <div className="ag-ra-caption" role="status" aria-live="polite">
-            {sentence && <span key={sentence}>{sentence}</span>}
-        </div>
-    );
-}
-
 /**
  * The cover the action being played blasted away (§26.1), standing on each
  * square as it did — drawn from the battlefield as the action found it — until
@@ -998,25 +922,9 @@ export default function RealmArenaBoard({ field, fighters, fogGhosts = [], unsee
     const centreSquares = showCentre ? field.objectives[CENTRE] ?? [] : [];
     const centre = centreSquares.length > 0 ? areaRect(field, centreSquares) : null;
 
-    // Everything shaded square by square, in the order it's painted: the fog
-    // over what the viewer can't see (§27), then the smoke a smoke pot left,
-    // under whatever is being aimed (§21.2).
+    // Everything shaded square by square, in the order it's painted.
     const smoke = smokeSquares({ field, fighters, clouds });
-    const shades: Shade[] = [];
-    if (unseen && unseen.size > 0) shades.push(square => unseen.has(square) ? 'ag-ra-fog' : undefined);
-    if (smoke.size > 0) shades.push(square => smoke.has(square) ? 'ag-ra-smoke' : undefined);
-    const reach = aiming?.reach;
-    if (reach) shades.push(square => reach.has(square) ? `ag-ra-reach ag-ra-reach--${reach.get(square)}` : undefined);
-    const range = aiming?.range;
-    if (range) shades.push(square => range.has(square) ? 'ag-ra-range' : undefined);
-    const blast = new Set([...aiming?.area ?? [], ...aiming?.blasts ?? []]);
-    if (blast.size > 0) shades.push(square => blast.has(square) ? 'ag-ra-blast' : undefined);
-    if (placing && placing.selected !== null) {
-        // Somewhere to put the character picked up: anywhere in the zone nobody stands.
-        const free = new Set(placing.zone);
-        sealed?.forEach(pick => free.delete(pick.square));
-        shades.push(square => free.has(square) ? 'ag-ra-place' : undefined);
-    }
+    const shades: Shade[] = shadedSquares({ unseen, smoke, aiming, placing, sealed }).map(shade => square => shade.has(square) ? shadeClass(shade, square) : undefined);
     const flatShades = shades.flatMap(shade => flatRuns(view, shade));
 
     const zones = field.deploymentAreas.flatMap((areas, seat) => {
@@ -1030,14 +938,6 @@ export default function RealmArenaBoard({ field, fighters, fogGhosts = [], unsee
         const change = aiming.hpChange.get(fighter.id);
         return change && isStanding(fighter) ? [{ fighter, change }] : [];
     }) : [];
-
-    const ringOf = (fighter: Fighter): Ring | undefined => {
-        if (fighter.id === selected?.id) return 'selected';
-        if (aiming?.aimed.includes(fighter.id)) return 'aimed';
-        if (aiming?.flagged.includes(fighter.id)) return 'flagged';
-        if (aiming?.candidates.includes(fighter.id)) return 'candidate';
-        return undefined;
-    };
 
     const items: DepthItem[] = ground.blocks.map(block => ({
         depth: block.depth,
@@ -1115,7 +1015,7 @@ export default function RealmArenaBoard({ field, fighters, fogGhosts = [], unsee
         const arrives = arrival(fighter.id);
         const props: FighterNodeProps = {
             artId, view, fighter,
-            ring: ringOf(fighter),
+            ring: ringOf(fighter.id, selected?.id, aiming),
             selected: fighter.id === selected?.id,
             acting: fighter.owner === acting,
             colour: colourFor(fighter.owner),
@@ -1210,7 +1110,7 @@ export default function RealmArenaBoard({ field, fighters, fogGhosts = [], unsee
                             {path && pathEnd && (
                                 <>
                                     <polyline className="ag-ra-path" points={isoPoints(path)} />
-                                    <circle className="ag-ra-path-end" cx={pathEnd.x} cy={pathEnd.y} r={2} />
+                                    <circle className="ag-ra-path-end" cx={pathEnd.x} cy={pathEnd.y} r={PATH_END_RADIUS} />
                                 </>
                             )}
 
@@ -1251,9 +1151,9 @@ export default function RealmArenaBoard({ field, fighters, fogGhosts = [], unsee
                                     }]}
                                     obstacles={figureRects}
                                     width={width} height={height}
-                                    offset={(centre.width + centre.height) * ISO_HALF_HEIGHT / 2 + 4}
-                                    fontSize={10}
-                                    fontWeight={800}
+                                    offset={(centre.width + centre.height) * ISO_HALF_HEIGHT / 2 + CENTRE_LABEL.gap}
+                                    fontSize={CENTRE_LABEL.fontSize}
+                                    fontWeight={CENTRE_LABEL.fontWeight}
                                 />
                             )}
 
@@ -1292,16 +1192,7 @@ export default function RealmArenaBoard({ field, fighters, fogGhosts = [], unsee
                     same spot while a character is selected. */}
                 {playback ? <PlaybackCaption key={playback.key} playback={playback} fighters={fighters} viewerId={viewerId} nameFor={nameFor} /> : overlay}
             </PlaybackProvider>
-            {/* Something happened, but not anywhere the viewer can see: a
-                question mark over the frame, not the board, so it stays in the
-                middle as the board pans and zooms. The layer fades in and out
-                as a step comes and goes; the mark in it, keyed by the step,
-                settles in afresh for each. */}
-            {unplaced !== undefined && (
-                <div className={`ag-ra-unplaced${unplaced ? ' ag-ra-unplaced--on' : ''}`} aria-hidden="true">
-                    <span key={unplaced ?? undefined}>?</span>
-                </div>
-            )}
+            <UnplacedMark unplaced={unplaced} />
         </div>
     );
 }

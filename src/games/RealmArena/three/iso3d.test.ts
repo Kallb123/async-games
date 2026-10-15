@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { FULL_HEIGHT, type Facing } from "@/utils/games/battlefield/terrain";
 import { MIN_ASPECT } from "@/games/RealmArena/boardShape";
-import { azimuthOf, boardFrame, cameraBasis, cameraFor, figureMatrix, frameRect, fromFrame, groundAt, lightOf, lookAtFor, lookAtGround, onScreen, QUARTER, regionOnScreen, toFrame, turnedPoint, type Vec3 } from "./iso3d";
+import { azimuthOf, boardFrame, cameraBasis, cameraFor, figureMatrix, frameRect, fromFrame, groundAt, lerp3, lightOf, lookAtFor, lookAtGround, onScreen, QUARTER, regionOnScreen, toFrame, turnedPoint, type Vec3 } from "./iso3d";
 
 const dot = (a: Vec3, b: Vec3) => a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
 /** Where a column-major matrix takes a point. */
@@ -247,5 +247,13 @@ describe("the frame BoardZoom scrolls and zooms the camera's view of the board i
         const was = cameraFor(a.basis, a.frame, view, 390), now = cameraFor(b.basis, b.frame, after, 390);
         was.ground.forEach((n, i) => expect(now.ground[i]).toBeCloseTo(n, 9));
         expect(now.zoom).toBe(was.zoom);
+    });
+});
+
+describe("lerp3", () => {
+    it("is the point part of the way between two", () => {
+        expect(lerp3([0, 2, 4], [2, 4, 8], 0.5)).toEqual([1, 3, 6]);
+        expect(lerp3([1, 1, 1], [3, 5, 9], 0)).toEqual([1, 1, 1]);
+        expect(lerp3([1, 1, 1], [3, 5, 9], 1)).toEqual([3, 5, 9]);
     });
 });

@@ -31,10 +31,17 @@ Everything lives in `src/games/RealmArena/three/` and
 | `iso3d.ts` | The pure geometry, with no three.js objects, so it's tested without a GPU (`iso3d.test.ts`). It covers: world units (a square's side; a quarter of height is `QUARTER` = √(2/3)/4, so a full height is half a square tall on screen, as in every sheet of the art); the camera's basis at each quarter turn; a figure's instance matrix (facing, fallen); and the frame the whole battlefield lies in as the camera sees it (`boardFrame`, §2.1), with the maths that moves a point of it across a quarter turn (`turnedPoint`) and sets the camera from a view of it (`cameraFor`). |
 | `characterModels.ts` | Builds each character's master into one merged geometry. The masters aren't deployed, so it fetches them as data from `public/art/realmarena/characters.json`, which `npm run ra-characters` writes beside the sprite sheets. A test fails if that file falls behind the masters or misses a character. Box, ball, capsule and taper become three.js solids, transformed as `scripts/lib/isoRender.mjs` places them. Each vertex carries its material's colour and flags: team, glow and shine. The served file holds the solids rather than triangles: the triangle count is set where they're built (`SEGMENTS`). |
 | `solidMaterial.ts` | One shader for every solid, reproducing the sprite renderer's `shade`: a sky ambient brighter on what faces up, a diffuse light from the upper left that turns with the camera, a highlight on what shines, and glow drawn unlit. It works in the colours as written (sRGB), as the sprites did, and tints the team-flagged parts with each instance's owner colour. |
-| `terrain3d.ts` | The ground texture: each square's grass, or scorched ground, unwarped from its diamond on the sheet, with the grid over it. Raised squares are instanced boxes, one draw per terrain. Trees are instanced. An overlay holds one texel per square for zones, fog, reach and range, with a second overlay for the wave. |
-| `board3d.ts` | `Board3D`, the imperative scene. It owns the renderer, the camera, figure pools (one instanced draw per character), HP bars, missiles, bursts, the quarter turn and picking. It sets its camera from the view `BoardZoom` tells it (§2.1), and takes no gesture of its own but a tap. It draws only when something changes, or once a frame while something moves. |
+| `terrain3d.ts` | The ground texture: each square's grass, or scorched ground, unwarped from its diamond on the sheet, with the grid over it. Raised squares are instanced boxes, one draw per terrain. Trees are instanced. An overlay holds one texel per square for everything shaded on the ground, laid on the flat ground and on each raised square's top, with a second overlay for the wave. `buildCover` builds the blocks of just a few squares, for cover an action blasted away to fade from (§2.2). |
+| `board3d.ts` | `Board3D`, the imperative scene. It owns the renderer, the camera, the figures (`FigurePools`), the layers drawn over them (§2.2), the quarter turn and picking. It sets its camera from the view `BoardZoom` tells it (§2.1), and takes no gesture of its own but a tap. It draws only when something changes, or once a frame while something moves. |
+| `figurePools.ts`, `figureCues.ts` | The figures, one instanced draw per character and kind: solid; faint (a per-instance opacity, for a figure fading as it falls, the sealed squad and the fog's stale sightings); hidden (drawn again through a wall, §2.2); and an outline, off (§3). `figureCues.ts` is the pure part, tested: how far a fall has faded, a knock or a lunge (`shoveAt`) as a move across the ground, and whether anything could stand between a figure and the camera. |
+| `billboards.ts` | Quads that face the camera, hung from a point in the world and laid out across the frame in the isometric board's units, so that board's sizes carry over unchanged (§2.2). One `Billboards` is one draw, from an art sheet or a `CanvasAtlas` drawn into as it's needed (text, pills, dots, shields). |
+| `marks3d.ts`, `rings3d.ts` | Each figure's effect and watch marks, AP pips and item, and the rings and dashed markers lying on the ground round its feet. |
+| `bars3d.ts` | The HP bars, as billboards: the fill, the pale chip a blow takes off draining past it, the dark edge, and a lined-up action's change to it, flashing. |
+| `previews3d.ts`, `previewGeometry.ts`, `canvasShapes.ts` | A lined-up action's path over the ground, the odds over its targets and the cover shields where a move ends, and the centre's name: one draw. `canvasShapes.ts` draws text and shapes into an atlas for every layer that needs it. |
+| `fx3d.ts`, `fxLayout.ts` | What an action plays (§26): hit text, slashes, bursts, missiles in flight, and the smoke pot's cloud standing on the ground. The layout is `fxLayout.ts`'s, pure and tested, on the isometric board's constants. |
+| `shading3d.ts` | Lays what's shaded on a square over one another in the isometric board's order — zones, the centre, fog, smoke, a reach, a range, a blast, where a pick may be placed — into the one texel a square has. |
 | `cssColour.ts` | Resolves a player's CSS colour (a token, `oklch()`) to the sRGB the isometric board shows. |
-| `RealmArenaBoard3D.tsx` | The React board. It takes exactly the isometric board's props and shares what decides what to show: where the view goes (`boardFocus`, now in `ui.ts`), the stored turn of the view and its pivot (`useBoardRotation`), the turn buttons (`TurnButtons`), the playback clock (`PlaybackProvider`) and every timing an action plays by (`walkerAt`, `toldAt`, `shakeAt` and the cues). It wraps the canvas in `BoardZoom`'s camera mode with the isometric board's own `BOARD_ZOOM`. |
+| `RealmArenaBoard3D.tsx` | The React board. It takes exactly the isometric board's props and shares what decides what to show: where the view goes (`boardFocus`, now in `ui.ts`), the stored turn of the view and its pivot (`useBoardRotation`), the turn buttons (`TurnButtons`), the playback clock (`PlaybackProvider`) and every timing an action plays by (`walkerAt`, `toldAt`, `shakeAt` and the cues). It wraps the canvas in `BoardZoom`'s camera mode with the isometric board's own `BOARD_ZOOM`. The caption pill and the review's "?" over the frame are `RealmArenaCaption.tsx`, the one copy both boards render. |
 
 ### 2.1 `BoardZoom` is the camera
 
@@ -93,23 +100,75 @@ and `Board3D.setView` draws that, at once, in the frame it arrives in.
 
 **Depth comes from the depth buffer.** A wall hides whoever is behind it by
 being in the way. None of the isometric board's machinery for this is needed:
-no depth sort, no walker depth slots, no figure drawn again over a wall.
+no depth sort and no walker depth slots. A standing figure a wall hides is
+still drawn again faintly through it, as on the isometric board (§2.2).
 
 **The draw calls are few and don't grow with the map:** one for the ground,
-one per terrain kind, one per character kind, and two for the HP bars.
+one per terrain kind, one per character kind, and one per layer drawn over the
+figures (§2.2) that has anything in it. The bench's enemy turn draws about 25 a
+frame.
+
+### 2.2 What's drawn over the figures
+
+Whatever the isometric board draws as a sprite or a label in its SVG — a
+figure's marks, its HP bar, the odds, a cover shield, the hit text, a slash, a
+burst, a missile, a smoke cloud — the 3D board draws as a **billboard**
+(`billboards.ts`): a quad that always faces the camera, hung from a point in
+the world (a figure's feet, a square's top, the edge of a square) and laid out
+across the frame from there in the isometric board's own units. So:
+
+- **The sizes and offsets are that board's,** in `ui.ts` beside `HP_BAR_*`
+  (`FIGURE_*`, `RING_RADIUS`, `EFFECT_MARK_*`, `AP_PIP_*`, `ITEM_MARK_*`,
+  `ODDS_*`, `SHIELD_*` and `shieldPath`, `PATH_*`, `HIT_*`, `FLIGHT`, …), as
+  are the rules for what a figure wears (`ringOf`) and where an action's
+  effects hang (`fxPointsAt`). Both boards draw by them: change one there,
+  never in a board. A `BOARD_UNIT` turns them into the world's.
+- **It moves with the camera for nothing:** a quad hangs from its point, so a
+  pan, a zoom, a turn of the view and the shake carry it along, and a mark
+  follows a walker because it hangs from where the walker is drawn.
+- **One draw a layer, not one a thing.** Each `Billboards` draws every quad
+  from one texture: an art sheet's sprites (`sheetTexture`), or a
+  `CanvasAtlas` that text, pills, pips, rings and shields are drawn into once,
+  under a key, as they're first needed. Text waits for the board's font
+  (`--ag-font`) and is drawn again once it has loaded.
+- **What shows through walls is a choice a layer makes:** the effects of an
+  action, the odds, the path and the shields are drawn over everything, as on
+  the isometric board's effects layer; a figure's marks, its bar and a smoke
+  cloud are hidden by what stands in front, as they are in that board's depth
+  order.
+- **Colours are the design tokens,** resolved under the board (`cssColour`),
+  or read off the isometric board's own classes where a token alone doesn't
+  give the look (the hit text's tones).
+
+The rings round a figure's feet lie flat on the ground instead, one instanced
+draw. What's shaded on the ground is the ground overlay's (`shading3d.ts`),
+which shades a square's colour but can't draw an area's outline.
+
+How figures come and go in an action is the figures' own (`figurePools.ts`):
+one downed stands as it was until the blow lands and then fades, while its
+fallen figure fades in; one struck is knocked and one striking lunges, its bar,
+marks and ring staying put; cover blasted away stands on its scorched ground
+until the burst fades, then fades itself. A standing figure that something in
+front hides is drawn again through it at half strength in its owner's colour,
+as the isometric board's `ghosts` are: a turn of the view would show it, but a
+player shouldn't have to turn the view to know it's there. Only figures that
+something could stand in front of go into that draw.
 
 ## 3. Not yet drawn
 
-These are things the isometric board shows that the 3D one doesn't yet:
+Everything the isometric board shows is drawn (§2.2), but for:
 
-- the muster: the sealed squad and placing it;
-- a lined-up action's path, odds, cover shields and HP preview;
-- the effect marks, AP pips and carried items;
-- hit text, slashes and the caption pill;
-- smoke clouds, the centre's name, and fading on a fall;
-- the faint figure a wall hides: is it needed, now that a turn of the view
-  shows round the wall?
-- outlines on the figures, which the sprites have.
+- **Outlines on the figures,** which the sprites have. An inverted hull is
+  built (`OUTLINES` in `figurePools.ts`) but off: on the bench's enemy turn it
+  took the draw calls from 20 to 27 a frame and the triangles from 95k to
+  182k, for no CPU cost the container could measure. Turn it on once the
+  renderer lab has shown what it costs a phone.
+- **An area's outline:** a blast, the squares a pick may be placed on and the
+  centre are shaded, but without the stroke round their edge the isometric
+  board draws, since the ground overlay holds a colour a square.
+- **The centre's name keeps off the area,** but not off figures standing
+  there, as the isometric board's `MapLabelLayer` keeps it.
+- **The marks' drop shadow** (`.ag-ra-figure-mark`).
 
 ## 4. Measuring it
 
@@ -256,11 +315,10 @@ were played on both boards. The rest are in the lab's *Every run* list.
    `npm run ra-bench -- --renderers svg,three --headed` gives the same
    comparison with the trace as well.
 2. **The remaining work before a player sees it:**
-   - §3's missing pieces;
+   - the last of §3, and outlines on or off from a phone's numbers;
    - a zoom range set by the map (§2.1);
    - culling and a level of detail for maps of 8,000+ tiles. Today it draws
      the whole map every frame, which costs little at 16k tiles and only grows
      with what stands on it.
 3. **Cheaper figures, if the phone wants them.** Fewer segments on the round
-   solids, or outlines with an inverted hull to give back the sprites' look.
-   Measure both on the bench.
+   solids, which would also pay for the outlines (§3). Measure on the bench.
