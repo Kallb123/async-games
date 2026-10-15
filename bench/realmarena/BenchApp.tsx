@@ -5,9 +5,8 @@
 // measures the board before and after a change to how it's drawn.
 //
 // It draws whichever board its entry hands `startBench` — the isometric one
-// (entry-svg.tsx), the 3D one (entry-three.tsx) or the 3D one with its figures
-// outlined (entry-outlined.tsx) — with the same props, so the runner can measure
-// one beside the other (`--renderers`).
+// (entry-svg.tsx) or the 3D one (entry-three.tsx) — with the same props, so the
+// runner can measure one beside the other (`--renderers`).
 //
 // It exposes `window.bench`: `ready` once the board is drawn and its art is
 // decoded, and `run(scenario)`, which plays one scenario and resolves with what

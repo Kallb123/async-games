@@ -547,12 +547,9 @@ it can't measure the 3D board's GPU side
 ([`realm-arena-3d.md`](./realm-arena-3d.md) §4). This page can: open it on a
 phone.
 
-- **Board:** **All three, to compare** (the default), or one board on its
-  own: the isometric board, the 3D board players see, or the 3D board with
-  outlines on its figures, which players don't get yet
-  ([`realm-arena-3d.md`](./realm-arena-3d.md) §3). With all three, each
-  scenario plays on the isometric board, then the 3D one, then the outlined
-  one.
+- **Board:** **Both, to compare** (the default), or either board on its
+  own: the isometric board players see, or the three.js experiment. With
+  both, each scenario plays on the isometric board and then on the 3D one.
   *On screen* names the board drawn, and the button playing names the board
   it's playing on.
 - **Battle:** the bench's frozen Hold Out turn (2,916 tiles), the same battle
@@ -563,18 +560,18 @@ phone.
   on a board drawn afresh for the run, its art decoded and its ground drawn
   first, so every run starts from the same battle.
 - **Results:** a table for each scenario and battle played, with the latest
-  run on each board side by side, a column a board. It holds every number the bench's own
+  run on each board side by side. It holds every number the bench's own
   summary gives (`bench/realmarena/summary.ts`), less the browser trace,
   which a page can't read, and React's commit timings, which only a
-  profiling build reports. Wherever the boards differ by more than 5%, every
-  board within 5% of the best is bold: higher fps, lower everything else. *Every run* folds out
+  profiling build reports. The better board is bold wherever the two differ
+  by more than 5%: higher fps, lower everything else. *Every run* folds out
   the full list. *Copy as Markdown* copies both, headed by the device they
   ran on: screen size, pixel density, the GPU's name as WebGL reports it, and
   the user agent.
 
 **Built from repo data, no API route.** The page reads the bench's harness
 and fixtures from `bench/realmarena/`, so the app and the bench play the
-same thing. Everything heavy is fetched only when the lab opens: the boards,
+same thing. Everything heavy is fetched only when the lab opens: both boards,
 three.js and the fixtures. The `/admin` screens' own JavaScript doesn't carry
 any of it. A scaled battle stands its bigger Sacked Fort in for the real one
 under the same map id while it's on screen, and puts the real one back as the

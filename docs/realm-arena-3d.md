@@ -34,7 +34,7 @@ Everything lives in `src/games/RealmArena/three/` and
 | `solidMaterial.ts` | One shader for every solid, reproducing the sprite renderer's `shade`: a sky ambient brighter on what faces up, a diffuse light from the upper left that turns with the camera, a highlight on what shines, and glow drawn unlit. It works in the colours as written (sRGB), as the sprites did, and tints the team-flagged parts with each instance's owner colour. |
 | `terrain3d.ts` | The ground texture: each square's grass, or scorched ground, unwarped from its diamond on the sheet, with the grid over it. Raised squares are instanced boxes, one draw per terrain, each built of a few boxes (`blockPieces.ts`, pure and tested): rubble and low walls are heaps of chunks of different heights, each turned a little, and a wall or parapet has two merlons along each edge that borders lower ground. Sides are skinned with the brick column's face (unwarped from its sheet, laid on at the world's scale, repeating every three heights, each piece flipped and dropped by its own `instanceSkin` so a run of squares isn't one picture) and tops are paved with the same brick, or the grassed rock for a tower (`BLOCK_SKIN` in `art.ts`; `solidMaterial`'s `mapped`). Trees are instanced. An overlay holds one texel per square for everything shaded on the ground, laid on the flat ground and on each raised square's top, with a second overlay for the wave. `buildCover` builds the blocks of just a few squares, for cover an action blasted away to fade from (§2.2). |
 | `board3d.ts` | `Board3D`, the imperative scene. It owns the renderer, the camera, the figures (`FigurePools`), the layers drawn over them (§2.2), the quarter turn and picking. It sets its camera from the view `BoardZoom` tells it (§2.1), and takes no gesture of its own but a tap. It draws only when something changes, or once a frame while something moves. |
-| `figurePools.ts`, `figureCues.ts` | The figures, one instanced draw per character and kind: solid; faint (a per-instance opacity, for a figure fading as it falls, the sealed squad and the fog's stale sightings); hidden (drawn again through a wall, §2.2); and an outline, off but for the bench's `outlined` board (§3). `figureCues.ts` is the pure part, tested: how far a fall has faded, a knock or a lunge (`shoveAt`) as a move across the ground, and whether anything could stand between a figure and the camera. |
+| `figurePools.ts`, `figureCues.ts` | The figures, one instanced draw per character and kind: solid; faint (a per-instance opacity, for a figure fading as it falls, the sealed squad and the fog's stale sightings); hidden (drawn again through a wall, §2.2); and the outline every solid figure wears (§3). `figureCues.ts` is the pure part, tested: how far a fall has faded, a knock or a lunge (`shoveAt`) as a move across the ground, and whether anything could stand between a figure and the camera. |
 | `billboards.ts` | Quads that face the camera, hung from a point in the world and laid out across the frame in the isometric board's units, so that board's sizes carry over unchanged (§2.2). One `Billboards` is one draw, from an art sheet or a `CanvasAtlas` drawn into as it's needed (text, pills, dots, shields). A layer can ask for a drop shadow (`shadow`), drawn in its shader, so it is still one draw. |
 | `marks3d.ts`, `rings3d.ts` | Each figure's effect and watch marks, AP pips and item, and the rings and dashed markers lying on the ground round its feet. |
 | `bars3d.ts` | The HP bars, as billboards: the fill, the pale chip a blow takes off draining past it, the dark edge, and a lined-up action's change to it, flashing. |
@@ -178,32 +178,22 @@ as the isometric board's `ghosts` are: a turn of the view would show it, but a
 player shouldn't have to turn the view to know it's there. Only figures that
 something could stand in front of go into that draw.
 
-## 3. Not yet drawn
+## 3. Outlines on the figures
 
-Everything the isometric board shows is drawn (§2.2), but for:
+Every solid figure wears a thin dark outline, as the sprites do: the figure
+drawn again as an inverted hull (`figurePools.ts`'s `outline` kind,
+`solidMaterial`'s `outline`). It follows the body, hat, bow, shield and staff.
+It is about a device pixel at the deepest zoom and finer at the fit, with no
+cracks at the boxes' corners and nothing poking through the ground at the
+feet. Faint, hidden and fog figures aren't outlined.
 
-- **Outlines on the figures,** which the sprites have. An inverted hull is
-  built and works, but players' boards don't draw it. It is an option, not a
-  constant: `RealmArenaBoard3D`'s `figureOutlines` prop, which `Board3D` and
-  `FigurePools` take when they're built (a change of it builds the scene
-  again). Nothing a player sees passes it. `RealmArenaBoard3DOutlined` is the
-  board with it on, which the bench (`--renderers three,outlined`) and the
-  renderer lab draw beside the plain one (§4).
-  - **How it looks:** a thin dark edge round each solid figure, following the
-    body, hat, bow, shield and staff as the sprites' outline does. It is about
-    a device pixel at the deepest zoom and finer at the fit, with no cracks at
-    the boxes' corners and nothing poking through the ground at the feet.
-    Faint, hidden and fog figures aren't outlined.
-  - **What it costs in the container**
-    (`npm run ra-bench -- --renderers three,outlined --runs 2`, 2026-10-15):
-    six more draw calls a frame (26 to 32) and about 75% more triangles
-    (113k to 197k on the enemy turn). Script, style, layout, paint and React
-    render don't move beyond their noise. The software GPU's commit and
-    process time rise 10–40% by scenario, which in the container slows the
-    enemy turn's fps by 20% and makes each part end 21% later. That is the
-    container's GPU, not a phone's (§4).
-  - **Turn it on** once the renderer lab has shown what it costs a phone,
-    cheaper phones and iPhones included.
+It costs one more draw a character and about as many triangles again. On the
+bench's enemy turn (`--runs 2`, 2026-10-15) that took the draw calls from 26
+to 32 a frame and the triangles from 113k to 197k. Script, style, layout,
+paint and React render didn't move beyond their noise. The software GPU's
+commit and process time rose 10–40% by scenario, which is the container's
+cost, not a phone's (§4). Measured with the outline as an option beside the
+plain board, it was judged fine to draw everywhere.
 
 ## 4. Measuring it
 
@@ -211,11 +201,7 @@ Everything the isometric board shows is drawn (§2.2), but for:
 npm run ra-bench -- --renderers svg,three                         # today's map, both boards
 npm run ra-bench -- --renderers svg,three --fixture holdout-16k   # the bigger game's scale
 npm run ra-bench -- --renderers svg,three --scenarios load --runs 1 --screenshot   # see what's drawn
-npm run ra-bench -- --renderers three,outlined                    # what outlines on the figures cost (§3)
 ```
-
-`--against` draws its ref with the first renderer named, so name `three`
-first against a ref from before `outlined` existed: that ref can't bundle it.
 
 For the 3D board the bench also reports the WebGL frames it drew, and the
 draw calls and triangles per frame. For every board it reports the GPU
@@ -342,8 +328,8 @@ were played on both boards. The rest are in the lab's *Every run* list.
   fix, and the move to `BoardZoom`'s camera mode that followed it.
 - **Not measured:** a cheaper phone, and an iPhone, where WebGL runs in
   Safari. One phone was enough to decide; they're worth a look before
-  launch, not before building. The 3D board also still draws less than the
-  isometric one (§3), though most of what's missing is overlay, not
+  launch, not before building. The 3D board also still drew less than the
+  isometric one then, though most of what was missing was overlay, not
   geometry.
 
 ## 6. Next
@@ -354,7 +340,6 @@ were played on both boards. The rest are in the lab's *Every run* list.
    `npm run ra-bench -- --renderers svg,three --headed` gives the same
    comparison with the trace as well.
 2. **The remaining work before a player sees it:**
-   - outlines on the figures on or off, from the lab's numbers on phones (§3);
    - culling and a level of detail for maps of 8,000+ tiles. Today it draws
      the whole map every frame, which costs little at 16k tiles and only grows
      with what stands on it.
