@@ -10,6 +10,7 @@ import { facingTowards, type Battlefield, type Facing, type Square, type Terrain
 import { isoArea, isoBlock, isoBounds, isoCentre, isoCorner, isoDepth, isoGridLines, isoGroundAt, isoPoint, isoPoints, isoRuns, isoSlab, isoSquareAt, isoView, ISO_HALF_HEIGHT, ISO_HALF_WIDTH, type IsoBlock, type IsoRotation, type IsoView, type Point } from '@/utils/ui/isometric';
 import { RealmArenaTerrainArt, RealmArenaTerrainDefs, spriteId, SpriteUse } from '@/games/RealmArena/components/RealmArenaTerrain';
 import { RealmArenaEffectMarks } from '@/games/RealmArena/components/RealmArenaEffects';
+import { CAPTION_INSET, PlaybackCaption, UnplacedMark } from '@/games/RealmArena/components/RealmArenaCaption';
 import RealmArenaFx from '@/games/RealmArena/components/RealmArenaFx';
 import { MIN_ASPECT } from '@/games/RealmArena/boardShape';
 import type { Rect } from '@/utils/ui/mapLabels';
@@ -20,22 +21,17 @@ import { CHARACTER_ART, facingCell, ITEM_ART, SMOKE_ART, spriteBox, TERRAIN_ART,
 import { CHARACTERS, ITEMS, type CharacterId, type ItemId } from '@/games/RealmArena/characters';
 import { CENTRE, isStanding, isWarband, maxHpOf, smokeSquares, type BattleState, type Fighter, type FogGhost, type MusterPick, type ToldEvent } from '@/games/RealmArena/rules';
 import type { AttackOption } from '@/games/RealmArena/tactics';
-import { apPips, areaRect, BOARD_ZOOM, captionAt, eventLines, HP_BAR_HEIGHT, HP_BAR_RISE, HP_BAR_WIDTH, type BattleCue, type BoardFollow, type CaptionCue, type FallCue, type FxPoints, type ScorchCue, type Shove, type Timed, type WalkCue, effectsOn, facingOf, fadeInAt, fadeOutAt, fighterStatus, endOf, hpFraction, legLengthOn, progressOf, shakeAt, shakesOf, shovesOf, shoveAt, terrainLetter, toldAt, toldOf, walkerAt, walkCameraAt, legPoint, walkLift, walkSquares, type Told } from '@/games/RealmArena/ui';
+import { apPips, areaRect, BOARD_ZOOM, FIGURE_RADIUS, FIGURE_RISE, fxPointsAt, HP_BAR_HEIGHT, HP_BAR_RISE, HP_BAR_WIDTH, SMOKE_SIZE, type BattleCue, type BoardFollow, type FallCue, type FxPoints, type ScorchCue, type Shove, type Timed, type WalkCue, effectsOn, facingOf, fadeInAt, fadeOutAt, fighterStatus, endOf, hpFraction, legLengthOn, progressOf, shakeAt, shakesOf, shovesOf, shoveAt, terrainLetter, toldAt, toldOf, walkerAt, walkCameraAt, legPoint, walkLift, walkSquares, type Told } from '@/games/RealmArena/ui';
 
 /** How deep the ground is drawn under the map's front edges, in quarters. */
 const SLAB_DEPTH = 3;
 
-/**
- * A figure stands on its square as its character's art (`CHARACTER_ART`),
- * facing the way it last stepped, over a shadow; fallen, it lies there. Its
- * body is taken as a disc `FIGURE_RADIUS` across, `FIGURE_RISE` above the
- * middle of the square's top — what a tap lands on, what its marks sit
- * beside and what a shot flies to — and it stands `FIGURE_TOP` high under its
- * HP bar (`HP_BAR_*`, ui.ts, which every way of drawing the board shares).
- * Everything here is in board units, against a square `2 * ISO_HALF_WIDTH` across.
- */
-const FIGURE_RADIUS = 4.5;
-const FIGURE_RISE = 7;
+// A figure stands on its square as its character's art (`CHARACTER_ART`),
+// facing the way it last stepped, over a shadow; fallen, it lies there. Its
+// body is a disc `FIGURE_RADIUS` across, `FIGURE_RISE` above the middle of the
+// square's top, and it stands `FIGURE_TOP` high under its HP bar (`HP_BAR_*`):
+// all in ui.ts, which every way of drawing the board shares. Everything here is
+// in board units, against a square `2 * ISO_HALF_WIDTH` across.
 /**
  * The rings on the ground round a figure's feet, as fractions of its square's
  * diamond: the one it's picked out by, wide enough to show round its feet,
@@ -63,8 +59,6 @@ const EFFECT_MARK_OFFSET = 6.2;
  */
 const ITEM_MARK_SIZE = 3;
 const ITEM_MARK_OFFSET = { x: AP_PIP_OFFSET, y: -5 };
-/** A puff of a smoke pot's cloud: a square across, its foot just in front of the square's middle. */
-const SMOKE_SIZE = 2 * ISO_HALF_WIDTH;
 /** A target's chance to hit: a pill wide enough for "100%", worn above its figure's HP bar. */
 const ODDS_WIDTH = 10.5;
 const ODDS_HEIGHT = 4;
@@ -234,8 +228,7 @@ function discCentre(view: IsoView, square: Square): Point {
 
 /** Where the battle visuals go on a square (§26): its ground, a figure's disc there, and the top of that disc. */
 function fxPoints(view: IsoView, square: Square): FxPoints {
-    const body = discCentre(view, square);
-    return { ground: isoCentre(view, square), body, head: { x: body.x, y: body.y - FIGURE_RADIUS } };
+    return fxPointsAt(isoCentre(view, square));
 }
 
 /**
@@ -790,37 +783,6 @@ interface DepthItem {
     node: React.ReactNode;
 }
 
-/** How much of the foot of the frame a playback's caption takes, with its gap from the edge, in pixels: kept clear by the view framing the action (`BoardZoomFocus.inset`). */
-const CAPTION_INSET = 44;
-
-/**
- * What the playback is doing, in a sentence, as each event lands: the pill at
- * the foot of the frame (`.ag-ra-caption`), which is outside the zoom so it
- * stays put as the board pans. An event the action's lines pass over (a move
- * broken by an overwatch shot is told once) says nothing of its own, so the
- * last sentence stays up until one that does. It keeps the final one when the
- * clock has run out — a review step rests showing what happened — and renders
- * only when the sentence changes (`usePlaybackValue`). Keyed by the playback
- * where it is mounted, so a new one starts from nothing rather than from the
- * last one's closing line. `fighters` is the board after the action, which is
- * what `eventLines` names everyone from.
- */
-function PlaybackCaption({ playback, fighters, viewerId, nameFor }: { playback: Playback; fighters: readonly Fighter[]; viewerId: string; nameFor: (userId: string) => string }) {
-    const { cues, sentences } = useMemo(() => {
-        const sentences = new Map(eventLines(playback.events, fighters, viewerId, nameFor).map(line => [line.event, line.sentence]));
-        return { cues: playback.cues.filter((cue): cue is CaptionCue => cue.kind === 'caption' && sentences.has(cue.event)), sentences };
-    }, [playback.events, playback.cues, fighters, viewerId, nameFor]);
-    const sentence = usePlaybackValue(ms => {
-        const cue = captionAt(cues, ms);
-        return cue ? sentences.get(cue.event) ?? null : null;
-    });
-    return (
-        <div className="ag-ra-caption" role="status" aria-live="polite">
-            {sentence && <span key={sentence}>{sentence}</span>}
-        </div>
-    );
-}
-
 /**
  * The cover the action being played blasted away (§26.1), standing on each
  * square as it did — drawn from the battlefield as the action found it — until
@@ -1292,16 +1254,7 @@ export default function RealmArenaBoard({ field, fighters, fogGhosts = [], unsee
                     same spot while a character is selected. */}
                 {playback ? <PlaybackCaption key={playback.key} playback={playback} fighters={fighters} viewerId={viewerId} nameFor={nameFor} /> : overlay}
             </PlaybackProvider>
-            {/* Something happened, but not anywhere the viewer can see: a
-                question mark over the frame, not the board, so it stays in the
-                middle as the board pans and zooms. The layer fades in and out
-                as a step comes and goes; the mark in it, keyed by the step,
-                settles in afresh for each. */}
-            {unplaced !== undefined && (
-                <div className={`ag-ra-unplaced${unplaced ? ' ag-ra-unplaced--on' : ''}`} aria-hidden="true">
-                    <span key={unplaced ?? undefined}>?</span>
-                </div>
-            )}
+            <UnplacedMark unplaced={unplaced} />
         </div>
     );
 }

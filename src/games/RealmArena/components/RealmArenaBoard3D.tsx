@@ -4,16 +4,18 @@ import type { Color } from 'three';
 import BoardZoom, { useBoardCentre, type BoardZoomFocus, type BoardZoomPivot } from '@/components/ui/BoardZoom';
 import { useBoardView, type BoardView } from '@/components/ui/boardView';
 import type RealmArenaBoard from '@/games/RealmArena/components/RealmArenaBoard';
+import { CAPTION_INSET, PlaybackCaption, UnplacedMark } from '@/games/RealmArena/components/RealmArenaCaption';
 import { TurnButtons, useBoardRotation } from '@/games/RealmArena/components/RealmArenaTurn';
 import { Board3D, type FigureSpec, type Shading } from '@/games/RealmArena/three/board3d';
 import { cssColour } from '@/games/RealmArena/three/cssColour';
 import { azimuthOf, boardFrame, cameraBasis, frameRect, regionOnScreen, topOf, turnedPoint, type BoardLayout } from '@/games/RealmArena/three/iso3d';
 import { loadSheets } from '@/games/RealmArena/three/terrain3d';
 import { loadCharacterModels } from '@/games/RealmArena/three/characterModels';
-import { isWarband } from '@/games/RealmArena/rules';
+import { isWarband, smokeSquares } from '@/games/RealmArena/rules';
 import { BOARD_ZOOM, endOf, facingOf } from '@/games/RealmArena/ui';
 import { useBoardFocus } from '@/games/RealmArena/useBoardFocus';
 import { PlaybackProvider, usePlaybackFrame } from '@/utils/hooks/usePlayback';
+import { usePrefersReducedMotion } from '@/utils/hooks/usePrefersReducedMotion';
 
 /** The same props as the isometric board: either draws the same battle, and a screen picks one. */
 type RealmArenaBoard3DProps = React.ComponentProps<typeof RealmArenaBoard>;
@@ -69,12 +71,18 @@ function BoardCamera({ board, rotation, glide, layout }: { board: Board3D | null
  * its camera to show it; the one press it takes for itself is a tap. What it
  * draws is `Board3D`'s, imperatively, outside React's renders.
  *
+ * What an action did is drawn over it by `BattleFx` (three/fx3d.ts): hit text,
+ * slashes, bursts, missiles in flight and the smoke pot's cloud. The caption
+ * pill and the review's unplaced "?" are the isometric board's own components
+ * (RealmArenaCaption), over the frame outside the zoom. With reduced motion
+ * nobody walks, nothing flies, bursts, slashes or shakes the board, and the hit
+ * text only appears and fades.
+ *
  * Not yet drawn: the muster's sealed squad and placing it, a lined-up action's
  * path, odds, cover and HP preview, the effect marks, AP pips and items, the
- * hit text, slashes and the caption, smoke, the centre's name, and the faint
- * figure a wall hides.
+ * centre's name, and the faint figure a wall hides.
  */
-export default function RealmArenaBoard3D({ field, fighters, fogGhosts = [], unseen, sides, sealed, owners, waveDue = false, showCentre = true, viewerId, colourFor, selected, onSelect, placing, aiming, acting, refocus = 0, follow, home, overlay, playback, onPlayed }: RealmArenaBoard3DProps) {
+export default function RealmArenaBoard3D({ field, fighters, fogGhosts = [], unseen, sides, sealed, owners, waveDue = false, showCentre = true, viewerId, colourFor, nameFor, selected, onSelect, placing, aiming, acting, refocus = 0, follow, home, overlay, playback, onPlayed, unplaced, clouds }: RealmArenaBoard3DProps) {
     const [board, setBoard] = useState<Board3D | null>(null);
     // Made when its box mounts and gone with it.
     const host = useCallback((element: HTMLDivElement | null) => {
@@ -87,6 +95,8 @@ export default function RealmArenaBoard3D({ field, fighters, fogGhosts = [], uns
         };
     }, []);
     const frame = useRef<HTMLDivElement>(null);
+    // Nothing walks or flies with reduced motion: a character is simply where it ended up.
+    const still = usePrefersReducedMotion();
 
     useEffect(() => {
         if (!board) return;
@@ -112,6 +122,10 @@ export default function RealmArenaBoard3D({ field, fighters, fogGhosts = [], uns
     useEffect(() => {
         if (frame.current) board?.setSelected(selected?.id ?? null, cssColour(frame.current, 'var(--ag-on-dark)'));
     }, [board, selected]);
+
+    // The smoke pot's clouds stand on their squares: the 3×3 round where each landed, thrown by someone the viewer can see or not.
+    const smoke = useMemo(() => smokeSquares({ field, fighters, clouds }), [field, fighters, clouds]);
+    useEffect(() => board?.setSmoke(smoke), [board, smoke]);
 
     // What's shaded on the ground, strongest first: a reach, a range, the fog, the zones, the centre.
     useEffect(() => {
@@ -159,10 +173,11 @@ export default function RealmArenaBoard3D({ field, fighters, fogGhosts = [], uns
 
     // Where the view goes, and what plays waiting for it to get there, as the isometric board decides them.
     const { area, held, onFocused, tracks } = useBoardFocus({ field, fighters, sides, selected, acting, sealed, placing, follow, home, refocus, playing: !!playback });
-    const focus: BoardZoomFocus | null = area && { rect: frameRect(here.frame, regionOnScreen(here.basis, area.area, top)), key: area.key, exact: area.exact };
+    // While an action plays, its caption floats over the foot of the frame, so the view frames the action clear of that strip.
+    const focus: BoardZoomFocus | null = area && { rect: frameRect(here.frame, regionOnScreen(here.basis, area.area, top)), key: area.key, exact: area.exact, ...playback && { inset: CAPTION_INSET } };
     const onTapSquare = placing?.onTap ?? aiming?.onSquare;
     useEffect(() => board?.listen({ onFigure: onSelect, onSquare: square => onTapSquare?.(square) }), [board, onSelect, onTapSquare]);
-    useEffect(() => board?.play(playback ? { cues: playback.cues, before: playback.before } : null, tracks), [board, playback, tracks]);
+    useEffect(() => board?.play(playback ? { cues: playback.cues, before: playback.before } : null, tracks, still), [board, playback, tracks, still]);
 
     return (
         <div ref={frame} className="ag-board-frame ag-realmarena-frame">
@@ -172,9 +187,11 @@ export default function RealmArenaBoard3D({ field, fighters, fogGhosts = [], uns
                     <BoardCamera board={board} rotation={rotation} glide={turned.turns > 0} layout={here} />
                 </BoardZoom>
                 <PlaybackFrames board={board} />
+                <TurnButtons onTurn={turn} />
+                {/* Over the foot of the frame, out of the zoom: while an action plays, what is happening in words; otherwise the targets, which want the same spot. */}
+                {playback ? <PlaybackCaption key={playback.key} playback={playback} fighters={fighters} viewerId={viewerId} nameFor={nameFor} /> : overlay}
             </PlaybackProvider>
-            <TurnButtons onTurn={turn} />
-            {playback ? null : overlay}
+            <UnplacedMark unplaced={unplaced} />
         </div>
     );
 }

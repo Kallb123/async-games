@@ -18,17 +18,17 @@
 
 import {
     Color, DynamicDrawUsage, InstancedMesh, Matrix4, Mesh, MeshBasicMaterial, OrthographicCamera, PlaneGeometry, Quaternion, RingGeometry, Scene,
-    SphereGeometry, Vector3, WebGLRenderer, type ShaderMaterial,
+    Vector3, WebGLRenderer, type ShaderMaterial,
 } from "three";
-import type { BurstKind } from "@/games/RealmArena/art";
 import type { CharacterId } from "@/games/RealmArena/characters";
 import { isStanding, type Fighter, type FogGhost } from "@/games/RealmArena/rules";
-import { CLIMB_LEG, endOf, HP_BAR_HEIGHT, HP_BAR_RISE, HP_BAR_WIDTH, hpFraction, shakeAt, toldAt, toldOf, walkerAt, walkLift, type BattleCue, type BurstCue, type FallCue, type FlightCue, type Told, type WalkCue } from "@/games/RealmArena/ui";
+import { CLIMB_LEG, endOf, HP_BAR_HEIGHT, HP_BAR_RISE, HP_BAR_WIDTH, hpFraction, shakeAt, toldAt, toldOf, walkerAt, walkLift, type BattleCue, type FallCue, type Told, type WalkCue } from "@/games/RealmArena/ui";
 import { facingTowards, type Battlefield, type Facing, type Square } from "@/utils/games/battlefield/terrain";
 import { easeInOut } from "@/utils/ui/boardZoom";
 import type { Rect } from "@/utils/ui/mapLabels";
 import { billboardAxes, setAxes } from "./billboards";
 import { characterGeometry, type CharacterModels } from "./characterModels";
+import { BattleFx } from "./fx3d";
 import { azimuthOf, cameraBasis, cameraFor, figureMatrix, lightOf, lookAtFor, lookAtGround, onScreen, QUARTER, squareCentre, toFrame, type BoardFrame, type BoardLayout, type CameraBasis, type Vec3 } from "./iso3d";
 import { lightSolids, solidMaterial } from "./solidMaterial";
 import { buildTerrain, type Sheets, type Terrain } from "./terrain3d";
@@ -50,9 +50,6 @@ const HP_BAR = { width: HP_BAR_WIDTH * BOARD_UNIT, height: HP_BAR_HEIGHT * BOARD
 /** How many HP bars the board has room for before it grows. */
 const BAR_ROOM = 256;
 
-/** Each burst's colour (§26.1), as its art has it. */
-const BURST_COLOURS: Readonly<Record<BurstKind, number>> = { fire: 0xff8a3a, thunder: 0xe8e4ff, smoke: 0xbcb8b0, acid: 0xb6e04a, blast: 0xffc46a };
-
 /** A figure the board can pick: where it stands, roughly, for a tap to find. */
 interface Placed { id: number; feet: Vec3; standing: boolean }
 
@@ -73,11 +70,11 @@ interface Playing {
     walks: Map<number, WalkCue[]>;
     falls: Map<number, FallCue>;
     told: Map<number, Told>;
-    flights: FlightCue[];
-    bursts: { cue: BurstCue; mesh: Mesh }[];
     /** The walker whose walk the camera follows. */
     tracked: number | null;
     end: number;
+    /** Reduced motion: nobody walks, nothing flies, bursts, slashes or shakes the board, and hit text only fades. */
+    still: boolean;
 }
 
 /** What every 3D board has drawn so far, for the rendering bench: frames, and the draw calls and triangles the GPU was handed. */
@@ -122,7 +119,8 @@ export class Board3D {
 
     private readonly bars: { back: InstancedMesh; fill: InstancedMesh };
     private readonly ring: Mesh;
-    private readonly missiles: InstancedMesh;
+    /** The effects an action plays over the battlefield, and the smoke that stands on it. */
+    private readonly fx: BattleFx;
     private selectedId: number | null = null;
 
     // The view: the part of the frame in the pane (`setView`, in the frame's own
@@ -188,10 +186,7 @@ export class Board3D {
         this.ring.visible = false;
         this.ring.renderOrder = 1;
         this.scene.add(this.ring);
-        this.missiles = new InstancedMesh(new SphereGeometry(0.06, 8, 6).scale(2.2, 0.7, 0.7), new MeshBasicMaterial({ color: 0xffe3a3 }), 16);
-        this.missiles.count = 0;
-        this.missiles.instanceMatrix.setUsage(DynamicDrawUsage);
-        this.scene.add(this.missiles);
+        this.fx = new BattleFx(this.scene, host, this.axes, () => this.playing && this.frame(this.playedMs));
 
         this.resize = new ResizeObserver(() => this.measure());
         this.resize.observe(host);
@@ -205,6 +200,7 @@ export class Board3D {
         cancelAnimationFrame(this.animating);
         this.resize.disconnect();
         this.terrain?.dispose();
+        this.fx.dispose();
         for (const pool of this.pools.values()) (pool.mesh.material as ShaderMaterial).dispose();
         this.renderer.dispose();
         // Hand the context back now, not whenever it's collected: a page allows only so many at once, and drops the oldest past that.
@@ -237,6 +233,7 @@ export class Board3D {
     /** What it draws from, arrived: nothing is drawn before it, ground or figure. */
     setArt(art: Art): void {
         this.art = art;
+        this.fx.setArt(art.sheets);
         if (this.field) this.setField(this.field, this.top);
     }
 
@@ -244,6 +241,7 @@ export class Board3D {
     setField(field: Battlefield, top: number): void {
         this.field = field;
         this.top = top;
+        this.fx.setField(field);
         if (!this.art) return;
         if (this.terrain) {
             this.scene.remove(this.terrain.group);
@@ -270,6 +268,12 @@ export class Board3D {
         this.selectedId = id;
         (this.ring.material as MeshBasicMaterial).color.copy(colour).convertSRGBToLinear();
         this.layRing();
+        this.invalidate();
+    }
+
+    /** The squares under a smoke pot's cloud, a puff over each, standing on the ground. */
+    setSmoke(squares: ReadonlySet<Square>): void {
+        this.fx.setSmoke(squares);
         this.invalidate();
     }
 
@@ -352,38 +356,29 @@ export class Board3D {
         if (!this.framing) this.draw();
     }
 
-    /** What an action plays, or none. Ready to draw at a time with `frame`. */
-    play(playback: { cues: readonly BattleCue[]; before: readonly Fighter[] } | null, tracked: boolean): void {
+    /**
+     * What an action plays, or none. Ready to draw at a time with `frame`. With
+     * `still` (reduced motion) nobody walks, nothing flies, bursts, slashes or
+     * shakes the board, and hit text only appears and fades.
+     */
+    play(playback: { cues: readonly BattleCue[]; before: readonly Fighter[] } | null, tracked: boolean, still = false): void {
         this.stopFollowing();
-        for (const burst of this.playing?.bursts ?? []) {
-            this.scene.remove(burst.mesh);
-            burst.mesh.geometry.dispose();
-            (burst.mesh.material as MeshBasicMaterial).dispose();
-        }
         this.playing = null;
+        this.fx.play(playback?.cues ?? null, still);
         if (playback) {
             const walks = new Map<number, WalkCue[]>();
             const falls = new Map<number, FallCue>();
-            const flights: FlightCue[] = [];
-            const bursts: Playing["bursts"] = [];
             for (const cue of playback.cues) {
-                if (cue.kind === "walk") walks.set(cue.fighter.id, [...walks.get(cue.fighter.id) ?? [], cue]);
+                if (cue.kind === "walk" && !still) walks.set(cue.fighter.id, [...walks.get(cue.fighter.id) ?? [], cue]);
                 if (cue.kind === "fall") falls.set(cue.fighter.id, cue);
-                if (cue.kind === "flight") flights.push(cue);
-                if (cue.kind === "burst") {
-                    const mesh = new Mesh(new SphereGeometry(0.5, 16, 10), new MeshBasicMaterial({ color: BURST_COLOURS[cue.burst], transparent: true, depthWrite: false }));
-                    mesh.visible = false;
-                    this.scene.add(mesh);
-                    bursts.push({ cue, mesh });
-                }
             }
             const before = new Map(playback.before.map(fighter => [fighter.id, fighter]));
             const told = new Map<number, Told>();
             for (const { fighter } of this.figures) {
-                const one = toldOf(playback.cues, before.get(fighter.id), fighter, false);
+                const one = toldOf(playback.cues, before.get(fighter.id), fighter, still);
                 if (one) told.set(fighter.id, one);
             }
-            this.playing = { cues: playback.cues, walks, falls, told, flights, bursts, tracked: tracked ? walks.keys().next().value ?? null : null, end: endOf(playback.cues) };
+            this.playing = { cues: playback.cues, walks, falls, told, still, tracked: tracked ? walks.keys().next().value ?? null : null, end: endOf(playback.cues) };
         }
         this.frame(0);
     }
@@ -398,10 +393,9 @@ export class Board3D {
         try {
             this.layFigures(playing ? ms : null);
             if (playing) {
-                this.layFlights(playing, ms);
-                this.layBursts(playing, ms);
+                this.fx.lay(ms, this.basis);
                 // The shake is across the frame in board units, down positive.
-                const { x, y } = shakeAt(playing.cues, ms);
+                const { x, y } = playing.still ? { x: 0, y: 0 } : shakeAt(playing.cues, ms);
                 this.shake = this.basis.right.map((n, i) => (n * x - this.basis.up[i] * y) * BOARD_UNIT) as Vec3;
                 if (playing.tracked !== null && ms < playing.end) {
                     const walker = this.placed.find(one => one.id === playing.tracked);
@@ -413,7 +407,7 @@ export class Board3D {
                     this.stopFollowing();
                 }
             } else {
-                this.missiles.count = 0;
+                this.fx.lay(0, this.basis);
                 this.shake = [0, 0, 0];
             }
         } finally {
@@ -538,44 +532,6 @@ export class Board3D {
         if (at) this.ring.position.set(at.feet[0], at.feet[1] + 0.01, at.feet[2]);
     }
 
-    /** The shots and throws in flight: an arc from the shooter's body to the target's, or its ground for a throw. */
-    private layFlights(playing: Playing, ms: number): void {
-        const field = this.field!;
-        const m = new Matrix4();
-        let count = 0;
-        for (const cue of playing.flights) {
-            const into = ms - cue.start;
-            if (into < 0 || into > cue.length || count >= 16) continue;
-            const from = squareCentre(field, cue.from), to = squareCentre(field, cue.to);
-            from[1] += 0.45;
-            if (cue.result !== "landed") to[1] += cue.result === "miss" ? 0.9 : 0.45;
-            const u = Math.min(1, into / Math.max(1, cue.land));
-            const distance = Math.hypot(to[0] - from[0], to[2] - from[2]);
-            const rise = cue.missile === "bolt" ? 0 : Math.min(distance * (cue.missile === "arrow" ? 0.12 : 0.35), 2.5);
-            const point = new Vector3(...from.map((n, i) => n + (to[i] - n) * u) as Vec3);
-            point.y += rise * 4 * u * (1 - u);
-            const ahead = new Vector3(to[0] - from[0], (to[1] - from[1]) + rise * 4 * (1 - 2 * u), to[2] - from[2]).normalize();
-            m.lookAt(new Vector3(), ahead, new Vector3(0, 1, 0)).multiply(new Matrix4().makeRotationY(Math.PI / 2)).setPosition(point);
-            this.missiles.setMatrixAt(count++, m);
-        }
-        this.missiles.count = count;
-        this.missiles.instanceMatrix.needsUpdate = true;
-    }
-
-    /** The bursts: a ball swelling from where it landed and fading. */
-    private layBursts(playing: Playing, ms: number): void {
-        const field = this.field!;
-        for (const { cue, mesh } of playing.bursts) {
-            const progress = (ms - cue.start) / Math.max(1, cue.length);
-            mesh.visible = progress >= 0 && progress <= 1;
-            if (!mesh.visible) continue;
-            const at = squareCentre(field, cue.at);
-            mesh.position.set(at[0], at[1] + 0.2, at[2]);
-            mesh.scale.setScalar((0.4 + progress) * (cue.radius + 0.6));
-            (mesh.material as MeshBasicMaterial).opacity = 0.75 * (1 - progress);
-        }
-    }
-
     // ---- The view ----
 
     /**
@@ -663,6 +619,8 @@ export class Board3D {
         this.azimuth = azimuth;
         this.relight();
         this.layFigures(this.playing ? this.playedMs : null);
+        // A missile's arc is drawn across the frame, as the camera now faces.
+        if (this.playing) this.fx.lay(this.playedMs, this.basis);
     }
 
     /** Draws on the next frame, once, however often it's asked. */

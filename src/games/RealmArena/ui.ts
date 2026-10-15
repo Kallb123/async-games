@@ -152,6 +152,13 @@ export const BOARD_ZOOM = { zoomWidth: 250, maxWidth: 600 } as const;
  * wants this raised with it.
  */
 export const FIGURE_TOP = 12.5;
+/**
+ * A figure's body taken as a disc `FIGURE_RADIUS` across, centred `FIGURE_RISE`
+ * over the middle of its square's top: what a tap lands on, what its marks sit
+ * beside, and what a shot flies to and a blow's text hangs from.
+ */
+export const FIGURE_RADIUS = 4.5;
+export const FIGURE_RISE = 7;
 export const HP_BAR_WIDTH = 9;
 export const HP_BAR_HEIGHT = 2;
 /** How high the HP bar's foot is over the middle of its square. */
@@ -1855,6 +1862,12 @@ export interface FxPoints {
     head: Point;
 }
 
+/** Where the visuals go on a square whose ground is at `ground`: a figure's disc (`FIGURE_RISE` over it), and the top of that disc. */
+export function fxPointsAt(ground: Point): FxPoints {
+    const body = { x: ground.x, y: ground.y - FIGURE_RISE };
+    return { ground, body, head: { x: body.x, y: body.y - FIGURE_RADIUS } };
+}
+
 /**
  * How high each missile's arc rises (§26.1), as a share of how far it goes (up
  * to `MAX_ARC`): an arrow on a shallow arc, a bolt in a straight line, a gobbet
@@ -1870,6 +1883,23 @@ export const FLIGHT_ARC: Readonly<Record<Missile, number>> = {
     acid: 0.2,
     dynamite: 0.3,
 };
+/**
+ * How each missile is drawn (§26.1), in board units: how big it is. A flask, a
+ * pot or a stick of dynamite tumbles end over end; anything else points the way
+ * it goes. (How high its arc rises is `FLIGHT_ARC`, with the rest of where it is.)
+ */
+export const FLIGHT: Readonly<Record<Missile, { size: number; tumbles?: true }>> = {
+    arrow: { size: 12 },
+    bolt: { size: 10 },
+    fireball: { size: 14 },
+    fireFlask: { size: 7, tumbles: true },
+    thunderFlask: { size: 7, tumbles: true },
+    smokePot: { size: 7, tumbles: true },
+    acid: { size: 10 },
+    dynamite: { size: 9, tumbles: true },
+};
+/** How fast a flask or a pot turns over, in degrees a millisecond. */
+export const TUMBLE = 0.9;
 /**
  * The highest any arc peaks above the straight line, in board units: three
  * squares' depth on screen. Without it a lob across the map would rise by a
@@ -2002,6 +2032,28 @@ export function fadeInAt(cue: Timed, ms: number): number | null {
     const left = 1 - progressOf(cue, ms);
     return 1 - left * left;
 }
+
+/** The hit text, in board units: the number's middle above the point it's hung from, the label under it, and a mark beside the number. */
+export const HIT_VALUE_RISE = 4;
+export const HIT_LABEL_DROP = 3.6;
+export const HIT_MARK_SIZE = 3.4;
+/**
+ * The room between the end of the big text and the mark beside it, in board
+ * units: clear of the text's outline (half its 1.3 stroke) with a little air.
+ * The mark goes after the text as it is drawn, so a word — "Hunker down" — is
+ * cleared as surely as a number.
+ */
+export const HIT_MARK_GAP = 1.2;
+/**
+ * How much higher each lane of hit text stands (`TextCue.lane`): clear of the
+ * number and the label under it on the lane below, with room for that one to
+ * rise as it fades.
+ */
+export const HIT_LANE_RISE = 9;
+/** A strike's slash, across the figure it lands on, in board units. */
+export const SLASH_SIZE = 14;
+/** A puff of a smoke pot's cloud: a square across, in board units, its foot just in front of the square's middle. */
+export const SMOKE_SIZE = 2 * ISO_HALF_WIDTH;
 
 /** How hit text rises, in board units (down positive): settling in from just below, then floating away. */
 const HIT_SETTLE = 1.5;
