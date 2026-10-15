@@ -36,7 +36,7 @@ Everything lives in `src/games/RealmArena/three/` and
 | `board3d.ts` | `Board3D`, the imperative scene. It owns the renderer, the camera, the figures (`FigurePools`), the layers drawn over them (§2.2), the quarter turn and picking. It sets its camera from the view `BoardZoom` tells it (§2.1), and takes no gesture of its own but a tap. It draws only when something changes, or once a frame while something moves. |
 | `figurePools.ts`, `figureCues.ts` | The figures, one instanced draw per character and kind: solid; faint (a per-instance opacity, for a figure fading as it falls, the sealed squad and the fog's stale sightings); hidden (drawn again through a wall, §2.2); and the outline every solid figure wears (§3). `figureCues.ts` is the pure part, tested: how far a fall has faded, a knock or a lunge (`shoveAt`) as a move across the ground, and whether anything could stand between a figure and the camera. |
 | `billboards.ts` | Quads that face the camera, hung from a point in the world and laid out across the frame in the isometric board's units, so that board's sizes carry over unchanged (§2.2). One `Billboards` is one draw, from an art sheet or a `CanvasAtlas` drawn into as it's needed (text, pills, dots, shields). A layer can ask for a drop shadow (`shadow`), drawn in its shader, so it is still one draw. |
-| `marks3d.ts`, `rings3d.ts` | Each figure's effect and watch marks, AP pips and item, and the rings and dashed markers lying on the ground round its feet. |
+| `marks3d.ts`, `rings3d.ts`, `shadows3d.ts` | Each figure's effect and watch marks, AP pips and item; the rings and dashed markers lying on the ground round its feet; and its soft shadow under them. |
 | `bars3d.ts` | The HP bars, as billboards: the fill, the pale chip a blow takes off draining past it, the dark edge, and a lined-up action's change to it, flashing. |
 | `previews3d.ts`, `previewGeometry.ts`, `canvasShapes.ts` | A lined-up action's path over the ground, the odds over its targets and the cover shields where a move ends, and the centre's name: one draw. `canvasShapes.ts` draws text and shapes into an atlas for every layer that needs it. |
 | `fx3d.ts`, `fxLayout.ts` | What an action plays (§26): hit text, slashes, bursts, missiles in flight, and the smoke pot's cloud standing on the ground. The layout is `fxLayout.ts`'s, pure and tested, on the isometric board's constants. |
@@ -149,7 +149,14 @@ across the frame from there in the isometric board's own units. So:
   give the look (the hit text's tones).
 
 The rings round a figure's feet lie flat on the ground instead, one instanced
-draw. What's shaded on the ground is the ground overlay's (`shading3d.ts`),
+draw. Each figure's soft shadow lies flat on its square too
+(`shadows3d.ts`, one more draw): the isometric board's `.ag-ra-shadow`
+ellipse, sized by `SHADOW_RADIUS` and `SHADOW_ALPHA` in `ui.ts`, a hair over
+the ground's strokes and under the rings, and hidden by a wall in front. It
+stays on the figure's square while the figure bobs or is knocked, and slides
+along the ground under a walker, as the isometric board's does. Standing,
+fallen and sealed figures have one; a fog sighting and the faint figure drawn
+through a wall don't. What's shaded on the ground is the ground overlay's (`shading3d.ts`),
 which shades a square's colour, and the stroke round an area's edge lies
 on the ground beside it (`outlines3d.ts`).
 

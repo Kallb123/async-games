@@ -35,6 +35,7 @@ import { MarkLayer, marksOf, type MarkLevel } from "./marks3d";
 import { GroundOutlines, type Outline } from "./outlines3d";
 import { NO_PREVIEWS, Previews3D, type PreviewSpec } from "./previews3d";
 import type { Shading } from "./shading3d";
+import { GroundShadows } from "./shadows3d";
 import { lightSolids } from "./solidMaterial";
 import { buildCover, buildTerrain, type Cover, type Sheets, type Terrain } from "./terrain3d";
 
@@ -181,6 +182,8 @@ export class Board3D {
     private readonly outlines = new GroundOutlines(OUTLINE_ORDER);
     private readonly waveOutlines = new GroundOutlines(OUTLINE_ORDER + 0.1);
     private outlined: { outlines: readonly Outline[]; wave: readonly Outline[] } | null = null;
+    /** The soft shadow under each figure, lying on the ground. */
+    private readonly shadows = new GroundShadows();
     private animating = 0;
     private waveDue = false;
     private waveDrawn = 0;
@@ -209,7 +212,7 @@ export class Board3D {
 
         this.bars = new HpBars(this.axes);
         this.previews = new Previews3D(this.axes);
-        this.scene.add(this.outlines.mesh, this.waveOutlines.mesh, this.bars.billboards.mesh, this.previews.billboards.mesh);
+        this.scene.add(this.outlines.mesh, this.waveOutlines.mesh, this.shadows.mesh, this.bars.billboards.mesh, this.previews.billboards.mesh);
         this.fx = new BattleFx(this.scene, host, this.axes, () => this.playing && this.frame(this.playedMs));
 
         this.resize = new ResizeObserver(() => this.measure());
@@ -230,6 +233,7 @@ export class Board3D {
         this.previews.dispose();
         this.outlines.dispose();
         this.waveOutlines.dispose();
+        this.shadows.dispose();
         this.clearCovers();
         this.pools.dispose();
         this.renderer.dispose();
@@ -544,13 +548,17 @@ export class Board3D {
      * by a blow, or lunging as it strikes, slides over the ground (`shoveOf`);
      * its bar, marks and ring stay put. A standing figure something in front
      * hides is drawn again faintly (`FigurePools`' `hidden`), so it is still
-     * there to see.
+     * there to see. Each figure has its shadow on the ground (`GroundShadows`),
+     * which stays on its square as the figure bobs or is knocked and goes with a
+     * walker along the ground; a stale sighting in the fog and the faint figure
+     * drawn through a wall have none, as on the isometric board.
      */
     private layFigures(ms: number | null = null): void {
         const field = this.field;
         if (!field || !this.art) return;
         const { models } = this.art;
         this.pools.begin();
+        this.shadows.begin();
         this.placed = [];
         const matrix = new Matrix4();
         const bars: BarSpec[] = [];
@@ -613,12 +621,16 @@ export class Board3D {
                     bars.push({ feet: fell, ...barLevels(drawn, drawn, undefined, undefined), tint: spec.tint, fade: falling.standing });
                 }
                 if (falling.lying !== null && falling.lying > 0) lay(fighter.character, at, spec.facing, true, spec.tint, falling.lying);
+                // One shadow under both, there while either is: it is on the ground where it fell, and stays put.
+                this.shadows.add(feet, Math.max(falling.standing, falling.lying ?? 0));
                 this.placed.push({ id: fighter.id, feet: at, standing: false });
                 this.layMarks(at, fighter, fighter, "none");
                 continue;
             }
             const body = at.map((n, i) => n + knock[i]) as Vec3;
             lay(fighter.character, body, facing, !standing, spec.tint);
+            // On the ground the figure stands on, not where it bobs or is knocked to.
+            this.shadows.add(feet);
             // Standing figures only: a body on the ground is never the faint figure a wall hides.
             if (standing && mayBeHidden(field, this.basis, body, this.top)) this.pools.place(models, fighter.character, "hidden", matrix, spec.tint);
             this.placed.push({ id: fighter.id, feet: at, standing });
@@ -628,6 +640,7 @@ export class Board3D {
         this.layMuster(models, matrix);
         for (const { ghost, facing, tint } of this.ghosts) lay(ghost.character, squareCentre(field, ghost.square), facing, false, tint, GHOST_OPACITY);
         this.pools.end();
+        this.shadows.end();
         this.bars.lay(bars, this.look, this.still);
         this.marks?.end();
     }
@@ -657,6 +670,8 @@ export class Board3D {
             const feet = squareCentre(field, pick.square);
             matrix.fromArray(figureMatrix(feet, facing, false));
             this.pools.place(models, pick.character, "faint", matrix, null, SEALED_OPACITY);
+            // The isometric board dims the sealed figure and not its shadow.
+            this.shadows.add(feet);
             this.placed.push({ id: -(index + 1), feet, standing: true });
             this.marks?.figure(feet, { effects: [], watching: false, item: pick.item });
             this.marks?.ring(feet, "sealed");

@@ -234,7 +234,8 @@ export class Billboards {
             depthTest,
             depthWrite: false,
             defines: { ...!axes && { FLAT: "" }, ...shadow && { SHADOW: "" } },
-            ...!axes && { side: DoubleSide },
+            // A quad lying flat writes no depth, so its back and front need no ordering: one pass, not the two a transparent double-sided material is drawn in.
+            ...!axes && { side: DoubleSide, forceSinglePass: true },
             uniforms: { map: { value: texture }, lift: { value: lift }, ...axes, ...shadow && { shadow: { value: new Vector4(...shadowUniform(shadow)) } } },
         });
         this.mesh = new Mesh(geometry, material);

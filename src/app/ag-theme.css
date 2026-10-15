@@ -5406,7 +5406,7 @@ html:has(.ag-pull) { overscroll-behavior-y: contain; }
 
 /* A character: its art, in its owner's colour, over its shadow, and its HP
    above it. Fallen, it lies there, faded. */
-.ag-ra-shadow { fill: rgba(0, 0, 0, 0.3); pointer-events: none; }
+.ag-ra-shadow { fill: #000; pointer-events: none; } /* as strong as ui.ts's SHADOW_ALPHA, which the board sets */
 /* Only the body is tapped (`.ag-ra-figure-hit`): the art's cell is mostly
    see-through, and would catch taps meant for the square behind it. */
 .ag-ra-figure { pointer-events: none; }
