@@ -74,25 +74,23 @@ export function areaRise(basis: CameraBasis, area: Rect): number {
  * units, from the middle of the area (x right, y down, as `Billboards` takes a
  * quad's place), with each figure the rectangle the isometric board gives it
  * (`figureRectAt`) and the board's `frame` as the edge it keeps within. The name
- * comes back as `resolveMapLabels` places it: `x` and `y` are where its text is
- * drawn, a baseline on `textAnchor`'s side of `x`.
+ * comes back as `resolveMapLabels` places it, with `x` the middle of its line of
+ * text, `textWide` wide (a name `resolveMapLabels` anchors at its start or end has
+ * half that width on one side of where it puts `x`), and `y` its baseline.
  */
 export function centreLabel(
-    field: Pick<Battlefield, "width" | "tiles">, basis: CameraBasis, area: Rect, figures: readonly Square[], frame: BoardFrame, text: string,
-): PlacedMapLabel {
+    field: Pick<Battlefield, "width" | "tiles">, basis: CameraBasis, area: Rect, figures: readonly Square[], frame: BoardFrame, text: string, textWide: number,
+): Omit<PlacedMapLabel, "textAnchor"> {
     const middle = onScreen(basis, areaMiddle(area));
     const relative = (across: { x: number; y: number }) => toBoardUnits({ x: across.x - middle.x, y: across.y - middle.y });
     const rise = areaRise(basis, area);
     const corner = relative(frame.origin);
-    return resolveMapLabels(
+    const { x, textAnchor, ...placed } = resolveMapLabels(
         [{ x: 0, y: 0, text, fontSize: CENTRE_LABEL.fontSize, offset: rise + CENTRE_LABEL.gap, dir: "n" }],
         {
             bounds: { x: corner.x, y: corner.y, width: frame.size.width / BOARD_UNIT, height: frame.size.height / BOARD_UNIT },
             obstacles: [circleRect(0, 0, rise), ...figures.map(square => figureRectAt(relative(onScreen(basis, squareCentre(field, square)))))],
         },
     )[0];
+    return { ...placed, x: textAnchor === "start" ? x + textWide / 2 : textAnchor === "end" ? x - textWide / 2 : x };
 }
-
-/** Where the middle of a line of text `width` wide is across the frame, given where `resolveMapLabels` anchors it: a name that starts or ends at `x` has half its width on one side. */
-export const textMiddle = ({ x, textAnchor }: Pick<PlacedMapLabel, "x" | "textAnchor">, width: number): number =>
-    textAnchor === "start" ? x + width / 2 : textAnchor === "end" ? x - width / 2 : x;

@@ -154,6 +154,11 @@ export interface Battlefield {
     objectives: Readonly<Record<string, readonly Square[]>>;
 }
 
+/** The squares of an area of a map `width` squares across, row by row. The area is taken to fit on the map: `buildBattlefield` is what checks it. */
+export function squaresOfArea(width: number, { col, row, width: w, height: h }: Area): Square[] {
+    return Array.from({ length: w * h }, (_, i) => (row + Math.floor(i / w)) * width + col + (i % w));
+}
+
 /**
  * Reads a map, and throws on anything a hand-drawn grid can get wrong: a
  * ragged row, an unknown letter or ground level, an elevation layer of
@@ -185,7 +190,7 @@ export function buildBattlefield(map: BattlefieldMap): Battlefield {
         if (![col, row, w, h].every(Number.isInteger) || col < 0 || row < 0 || w < 1 || h < 1 || col + w > width || row + h > height) {
             throw new Error(`${map.name}: ${label} doesn't fit on the map`);
         }
-        return Array.from({ length: w * h }, (_, i) => (row + Math.floor(i / w)) * width + col + (i % w));
+        return squaresOfArea(width, area);
     };
 
     const deploymentAreas = map.deployments.map(areas => "col" in areas ? [areas] : areas);

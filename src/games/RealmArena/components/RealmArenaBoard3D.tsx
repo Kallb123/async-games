@@ -16,7 +16,7 @@ import { loadCharacterModels } from '@/games/RealmArena/three/characterModels';
 import { CENTRE, isWarband, smokeSquares } from '@/games/RealmArena/rules';
 import { areaRect, boardZoomFor, endOf, facingOf, ringOf, shadedSquares, type Ring, type ShadeKind } from '@/games/RealmArena/ui';
 import { useBoardFocus } from '@/games/RealmArena/useBoardFocus';
-import type { Area, Battlefield } from '@/utils/games/battlefield/terrain';
+import { squaresOfArea } from '@/utils/games/battlefield/terrain';
 import { PlaybackProvider, usePlaybackFrame } from '@/utils/hooks/usePlayback';
 import { usePrefersReducedMotion } from '@/utils/hooks/usePrefersReducedMotion';
 
@@ -37,9 +37,13 @@ const SHADES: Readonly<Record<ShadeKind, { token: string; alpha: number; stroke?
 };
 const REACH_STEP = 0.12;
 
-/** The squares of a rectangle of the grid, as a set. */
-const squaresOfArea = ({ width }: Battlefield, area: Area): Set<number> =>
-    new Set(Array.from({ length: area.width * area.height }, (_, i) => (area.row + Math.floor(i / area.width)) * width + area.col + i % area.width));
+/** The stroke round each kind of area the board outlines, as the isometric board's CSS has it: `.ag-ra-deployment` (a zone), `.ag-ra-deployment--wave` (a zone the wave is due in), `.ag-ra-wave` (the breathing stroke over it) and `.ag-ra-centre`. Each is the stroke's strength, its width and its dash, none for a solid line. */
+const STROKES = {
+    zone: { alpha: 0.7, width: 0.6, dash: [2, 1.5] },
+    waveDue: { alpha: 0.75, width: 1, dash: [2, 1.5] },
+    wave: { alpha: 1, width: 1 },
+    centre: { alpha: 1, width: 0.9, dash: [3, 1.5] },
+} as const satisfies Record<string, Pick<Outline, 'alpha' | 'width' | 'dash'>>;
 
 /** Hands the board the playback's time, a frame at a time, inside the `PlaybackProvider` it reads. */
 function PlaybackFrames({ board }: { board: Board3D | null }) {
@@ -184,9 +188,9 @@ export default function RealmArenaBoard3D({ field, fighters, fogGhosts = [], uns
             if (due) squares.forEach(square => wave.set(square, colour));
             // A zone drawn in parts is outlined part by part. One the wave is due in is stroked the heavier (`.ag-ra-deployment--wave`), and breathes over it (`.ag-ra-wave`).
             for (const area of field.deploymentAreas[seat]) {
-                const part = squaresOfArea(field, area);
-                outlines.push({ squares: part, colour, alpha: due ? 0.75 : 0.7, width: due ? 1 : 0.6, dash: [2, 1.5] });
-                if (due) waveOutlines.push({ squares: part, colour, alpha: 1, width: 1 });
+                const part = new Set(squaresOfArea(field.width, area));
+                outlines.push({ squares: part, colour, ...due ? STROKES.waveDue : STROKES.zone });
+                if (due) waveOutlines.push({ squares: part, colour, ...STROKES.wave });
             }
         });
         const layers: ShadingLayer[] = [square => zone.get(square) ?? null];
@@ -194,7 +198,7 @@ export default function RealmArenaBoard3D({ field, fighters, fogGhosts = [], uns
         if (centre.size > 0) {
             const colour = token('--ra-centre');
             layers.push(inSet(centre, { colour, alpha: 0.18 }));
-            outlines.push({ squares: centre, colour, alpha: 1, width: 0.9, dash: [3, 1.5] });
+            outlines.push({ squares: centre, colour, ...STROKES.centre });
         }
         for (const shade of shadedSquares({ unseen, smoke, aiming, placing, sealed })) {
             const { token: name, alpha, stroke } = SHADES[shade.kind];

@@ -1,10 +1,11 @@
 import { describe, expect, it } from "vitest";
+import { squaresOfArea } from "@/utils/games/battlefield/terrain";
 import { at, fieldOf, hillOf } from "@/utils/games/battlefield/testFixtures";
 import { CENTRE_LABEL, figureRectAt } from "@/games/RealmArena/ui";
 import type { Rect } from "@/utils/ui/mapLabels";
 import { azimuthOf, boardFrame, cameraBasis, onScreen, QUARTER, squareCentre, type Vec3 } from "./iso3d";
 import { BOARD_UNIT, toBoardUnits } from "./billboards";
-import { areaMiddle, areaRise, centreLabel, pathPieces, pathPoints, shieldsAt, textMiddle } from "./previewGeometry";
+import { areaMiddle, areaRise, centreLabel, pathPieces, pathPoints, shieldsAt } from "./previewGeometry";
 
 const basis = cameraBasis(azimuthOf(0));
 
@@ -109,7 +110,11 @@ describe("centreLabel", () => {
     const field = fieldOf(...Array.from({ length: 12 }, () => "............"));
     const area: Rect = { x: 4, y: 4, width: 4, height: 4 };
     const frameAt = (turn: number) => boardFrame(cameraBasis(azimuthOf(turn)), field, 0);
-    const label = (turn: number, figures: number[] = [], frame = frameAt(turn)) => centreLabel(field, cameraBasis(azimuthOf(turn)), area, figures, frame, "Centre");
+    /** How wide the name's line of text is, in board units. */
+    const WIDE = 6;
+    const label = (turn: number, figures: number[] = [], frame = frameAt(turn)) => centreLabel(field, cameraBasis(azimuthOf(turn)), area, figures, frame, "Centre", WIDE);
+    /** Whether a line of text `WIDE` wide, centred at the label's `x`, lies in the box the label reserved: where it starts or ends, half its width is on one side of the anchor. */
+    const holdsText = (placed: ReturnType<typeof label>) => placed.x - WIDE / 2 >= placed.box.x - 1e-6 && placed.x + WIDE / 2 <= placed.box.x + placed.box.width + 1e-6;
     const overlaps = (a: Rect, b: Rect) => a.x < b.x + b.width && b.x < a.x + a.width && a.y < b.y + b.height && b.y < a.y + a.height;
     /** The rectangle a figure on `square` covers, from the middle of the area, as the camera sees it. */
     const figureAt = (turn: number, square: number): Rect => {
@@ -120,7 +125,7 @@ describe("centreLabel", () => {
     /** The square of the area whose top is highest up the frame at this turn: where a figure stands in the way of a name over the area. */
     const highest = (turn: number): number => {
         const basis = cameraBasis(azimuthOf(turn));
-        const squares = Array.from({ length: area.width * area.height }, (_, i) => at(field, area.x + i % area.width, area.y + Math.floor(i / area.width)));
+        const squares = squaresOfArea(field.width, { col: area.x, row: area.y, width: area.width, height: area.height });
         return squares.reduce((best, square) => onScreen(basis, squareCentre(field, square)).y > onScreen(basis, squareCentre(field, best)).y ? square : best);
     };
 
@@ -128,7 +133,6 @@ describe("centreLabel", () => {
         for (const turn of [0, 1, 2, 3]) {
             const placed = label(turn);
             expect(placed.dir).toBe("n");
-            expect(placed.textAnchor).toBe("middle");
             expect(placed.x).toBeCloseTo(0, 6);
             // The box stands the gap clear of the area's top edge.
             expect(placed.box.y + placed.box.height).toBeCloseTo(-(areaRise(cameraBasis(azimuthOf(turn)), area) + CENTRE_LABEL.gap), 6);
@@ -145,6 +149,8 @@ describe("centreLabel", () => {
             const placed = label(turn, [square]);
             expect(placed.dir).not.toBe("n");
             expect(overlaps(placed.box, figureAt(turn, square))).toBe(false);
+            // Whichever side it goes to, `x` is still the middle of its text.
+            expect(holdsText(placed)).toBe(true);
         }
     });
 
@@ -157,13 +163,5 @@ describe("centreLabel", () => {
         const placed = label(0, [], tight);
         expect(placed.dir).not.toBe("n");
         expect(placed.box.y).toBeGreaterThanOrEqual(toBoardUnits({ x: 0, y: tight.origin.y - onScreen(basis, areaMiddle(area)).y }).y - 1e-6);
-    });
-});
-
-describe("textMiddle", () => {
-    it("is where the text is centred, or half its width in from the side it starts or ends at", () => {
-        expect(textMiddle({ x: 10, textAnchor: "middle" }, 6)).toBe(10);
-        expect(textMiddle({ x: 10, textAnchor: "start" }, 6)).toBe(13);
-        expect(textMiddle({ x: 10, textAnchor: "end" }, 6)).toBe(7);
     });
 });

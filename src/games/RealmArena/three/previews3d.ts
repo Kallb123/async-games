@@ -17,7 +17,7 @@ import type { Rect } from "@/utils/ui/mapLabels";
 import { Billboards, CanvasAtlas, type BillboardAxes } from "./billboards";
 import { DISC_BOX, discRect, drawText, layStable, rgba, solidRect, textWidth, whenFontReady, type BoardLook, type TextStyle } from "./canvasShapes";
 import { boardFrame, squareCentre, topOf, type CameraBasis } from "./iso3d";
-import { areaMiddle, centreLabel, pathPieces, pathPoints, shieldsAt, textMiddle } from "./previewGeometry";
+import { areaMiddle, centreLabel, pathPieces, pathPoints, shieldsAt } from "./previewGeometry";
 
 /** What's previewed: all of it comes from the board's props, and none of it is the board's to decide. */
 export interface PreviewSpec {
@@ -113,9 +113,9 @@ export class Previews3D {
         const baseline = stroke / 2 + style.size * 0.8;
         const height = baseline + style.size * 0.2 + stroke / 2;
         const rect = this.atlas.rect(`${this.looks}:centre`, width, height, context => drawText(context, text, width / 2, baseline, style, LABEL_FILL, { outline: LABEL_OUTLINE }));
-        // The name is drawn from the middle of its box, and `placed` says where its text starts, ends or is centred.
-        const placed = centreLabel(field, basis, centre, this.figures, boardFrame(basis, field, topOf(field)), text);
-        this.billboards.add({ at: areaMiddle(centre), x: textMiddle(placed, textWide), y: placed.y - (baseline - height / 2), width, height, rect });
+        // The name is drawn from the middle of its box, and `placed` says where the middle of its text is.
+        const placed = centreLabel(field, basis, centre, this.figures, boardFrame(basis, field, topOf(field)), text, textWide);
+        this.billboards.add({ at: areaMiddle(centre), x: placed.x, y: placed.y - (baseline - height / 2), width, height, rect });
     }
 
     /** The line a move takes, over the squares' tops, round-jointed, with the dot where it ends. */
