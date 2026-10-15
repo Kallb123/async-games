@@ -12,8 +12,9 @@
 //   wall leaves visible — over the terrain and under the solid figures, so that
 //   only the terrain hides it, never a figure's own limbs or a neighbour.
 // - `outline`: each solid figure again as a dark inverted hull, which shows round
-//   its edge as the sprites' outline does. Off (`OUTLINES`): it doubles the
-//   triangles drawn, for a look the figures do without.
+//   its edge as the sprites' outline does. Only when the pools are made `outlined`
+//   (the live board isn't): it doubles the triangles drawn, which the bench's
+//   `outlined` board and the renderer lab measure before it's turned on.
 
 import { Color, DynamicDrawUsage, InstancedBufferAttribute, InstancedMesh, type Matrix4, type Scene, type ShaderMaterial } from "three";
 import type { CharacterId } from "@/games/RealmArena/characters";
@@ -22,9 +23,6 @@ import type { Vec3 } from "./iso3d";
 import { lightSolids, solidMaterial } from "./solidMaterial";
 
 export type PoolKind = "solid" | "faint" | "hidden" | "outline";
-
-/** Whether every solid figure is drawn again as its dark outline (an inverted hull, `solidMaterial`'s `outline`): one more draw a character. */
-export const OUTLINES = false;
 
 /** How much of a figure shows through what hides it. */
 const HIDDEN_OPACITY = 0.5;
@@ -48,7 +46,8 @@ export class FigurePools {
     private readonly materials = new Map<PoolKind, ShaderMaterial>();
     private lit: { light: Vec3; halfway: Vec3 } | null = null;
 
-    constructor(private readonly scene: Scene) {}
+    /** `outlined`: every solid figure is drawn again as its dark outline (an inverted hull, `solidMaterial`'s `outline`) — one more draw a character, and twice the triangles. */
+    constructor(private readonly scene: Scene, private readonly outlined = false) {}
 
     /** Turns the light of every figure drawn, now and later, to the camera's. */
     light(lit: { light: Vec3; halfway: Vec3 }): void {
@@ -70,7 +69,7 @@ export class FigurePools {
         pool.mesh.setColorAt(pool.used, tint ?? WHITE);
         pool.opacity?.setX(pool.used, opacity);
         pool.used++;
-        if (kind === "solid" && OUTLINES) this.place(models, character, "outline", matrix, null);
+        if (kind === "solid" && this.outlined) this.place(models, character, "outline", matrix, null);
     }
 
     /** Hands the GPU what was placed, and stops drawing the pools nothing was placed in. */

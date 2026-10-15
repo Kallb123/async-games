@@ -7,26 +7,31 @@ import Section from '@/components/ui/Section';
 import type { Board, Fixture, GlStats } from '../../../../bench/realmarena/harness';
 import { formatMetric, scenarioSummary } from '../../../../bench/realmarena/summary';
 
-/** The two ways of drawing the battlefield the lab puts side by side. */
-type Renderer = 'svg' | 'three';
+/** The ways of drawing the battlefield the lab puts side by side. */
+type Renderer = 'svg' | 'three' | 'outlined';
 
 const RENDERERS = [
     { id: 'svg', short: 'SVG', label: 'Isometric (SVG)', description: 'The board players see today.' },
     { id: 'three', short: '3D', label: '3D (three.js)', description: 'The experiment: real geometry, the characters as their models (docs/realm-arena-3d.md).' },
+    { id: 'outlined', short: '3D + outline', label: '3D, outlined', description: 'The 3D board with a dark outline round every figure, which the live board leaves off until this has shown what it costs (§3).' },
 ] as const;
 
-/** What the Board choice offers: both boards, one after the other, or either on its own. */
+/** What the Board choice offers: every board, one after the other, or any on its own. */
 const BOARDS = [
-    { id: 'both', label: 'Both, to compare', description: 'Each scenario plays on the isometric board, then on the 3D one, and their numbers sit side by side.' },
+    { id: 'all', label: 'All three, to compare', description: 'Each scenario plays on the isometric board, then the 3D one, then the 3D one outlined, and their numbers sit side by side.' },
     ...RENDERERS,
 ] as const;
 type BoardChoice = typeof BOARDS[number]['id'];
 
+/** A 3D board's code, `pick`ed from the 3D board's module, with its count of what it has drawn. */
+const threeCode = (pick: (module: typeof import('./RealmArenaBoard3D')) => Board) => Promise.all([import('./RealmArenaBoard3D'), import('../three/board3d')])
+    .then(([board, scene]) => ({ Board: pick(board), glStats: scene.renderStats }));
+
 /** Each board's code, fetched the first time it's drawn: with a WebGL board, its count of what it has drawn. */
 const BOARD_CODE: Record<Renderer, () => Promise<{ Board: Board; glStats?: GlStats }>> = {
     svg: () => import('./RealmArenaBoard').then(module => ({ Board: module.default })),
-    three: () => Promise.all([import('./RealmArenaBoard3D'), import('../three/board3d')])
-        .then(([board, scene]) => ({ Board: board.default, glStats: scene.renderStats })),
+    three: () => threeCode(module => module.default),
+    outlined: () => threeCode(module => module.RealmArenaBoard3DOutlined),
 };
 
 /** The rendering bench's battles (bench/realmarena/fixtures), each loaded only when picked. */
@@ -77,8 +82,8 @@ interface Run {
     summary: Record<string, number>;
 }
 
-/** A table row, the cell at `best` (if any) marked as the better of a comparison. */
-interface Row { cells: string[]; best?: number }
+/** A table row, the cells at `best` (if any) marked as the better of a comparison. */
+interface Row { cells: string[]; best?: readonly number[] }
 
 /** This device, as far as a page can tell: what the numbers were taken on. */
 function deviceLine(): string {
@@ -102,8 +107,22 @@ const runRow = (run: Run): Row => ({
 });
 
 /**
+ * Which of `values` (a board's number each, none for a board that didn't report
+ * it) are the better, if any are: the higher fps, the lower anything else, and
+ * every board within 5% of the best of them, since that close is noise. None
+ * where they are all that close, or fewer than two reported.
+ */
+function bestOf(name: string, values: readonly (number | undefined)[]): number[] {
+    const reported = values.flatMap((value, index) => value === undefined ? [] : [{ value, index }]);
+    if (reported.length < 2) return [];
+    const top = (name === 'fps' ? Math.max : Math.min)(...reported.map(one => one.value));
+    const level = reported.filter(({ value }) => Math.abs(value - top) <= 0.05 * Math.max(Math.abs(value), Math.abs(top)));
+    return level.length === reported.length ? [] : level.map(({ index }) => index + 1);
+}
+
+/**
  * Each scenario played in each battle, its latest run on each board side by
- * side under `COMPARED_HEAD`: every number either board reported, the better
+ * side under `COMPARED_HEAD`: every number any board reported, the better
  * one marked — the higher fps, the lower anything else — where they differ by
  * more than 5%.
  */
@@ -120,13 +139,8 @@ function comparisons(runs: readonly Run[]): { title: string; rows: Row[] }[] {
         return {
             title,
             rows: names.map(name => {
-                const [svg, three] = RENDERERS.map(renderer => latest[renderer.id]?.summary[name]);
-                const row: Row = { cells: [name, formatMetric(svg), formatMetric(three)] };
-                // Within 5% of each other is noise, not a winner.
-                if (svg !== undefined && three !== undefined && Math.abs(svg - three) > 0.05 * Math.max(Math.abs(svg), Math.abs(three))) {
-                    row.best = (svg > three) === (name === 'fps') ? 1 : 2;
-                }
-                return row;
+                const values = RENDERERS.map(renderer => latest[renderer.id]?.summary[name]);
+                return { cells: [name, ...values.map(formatMetric)], best: bestOf(name, values) };
             }),
         };
     });
@@ -135,7 +149,7 @@ function comparisons(runs: readonly Run[]): { title: string; rows: Row[] }[] {
 function markdownTable(head: readonly string[], rows: readonly Row[]): string[] {
     return [
         `| ${head.join(' | ')} |`, `|${head.map(() => '---').join('|')}|`,
-        ...rows.map(row => `| ${row.cells.map((cell, index) => index === row.best ? `**${cell}**` : cell).join(' | ')} |`),
+        ...rows.map(row => `| ${row.cells.map((cell, index) => row.best?.includes(index) ? `**${cell}**` : cell).join(' | ')} |`),
     ];
 }
 
@@ -157,7 +171,7 @@ function LabTable({ head, rows }: { head: readonly string[]; rows: readonly Row[
                 </thead>
                 <tbody>
                     {rows.map((row, index) => (
-                        <tr key={index}>{row.cells.map((cell, column) => <td key={column} className={column === row.best ? 'ag-chart-table-best' : undefined}>{cell}</td>)}</tr>
+                        <tr key={index}>{row.cells.map((cell, column) => <td key={column} className={row.best?.includes(column) ? 'ag-chart-table-best' : undefined}>{cell}</td>)}</tr>
                     ))}
                 </tbody>
             </table>
@@ -170,17 +184,17 @@ function LabTable({ head, rows }: { head: readonly string[]; rows: readonly Row[
  * rendering bench's battles and scenarios — the harness `npm run ra-bench`
  * drives, bench/realmarena/harness.tsx — on whatever device opens it, so the
  * 3D board's GPU side is measured on a real phone rather than a container's
- * software one. Pick a battle and play a scenario: on both boards, one after
- * the other, with their numbers side by side, or on either alone. Each run
+ * software one. Pick a battle and play a scenario: on every board, one after
+ * the other, with their numbers side by side, or on any alone. Each run
  * draws its board afresh, so every one starts from the same battle. The
  * results copy as Markdown with the device they ran on.
  *
- * Everything heavy — both boards, three.js, the fixtures — is fetched as the
+ * Everything heavy — the boards, three.js, the fixtures — is fetched as the
  * lab opens, never with the admin screens. A scaled battle stands its bigger
  * Sacked Fort in for the real one only while it's on screen.
  */
 export default function RealmArenaRendererLab() {
-    const [choice, setChoice] = useState<BoardChoice>('both');
+    const [choice, setChoice] = useState<BoardChoice>('all');
     const [battle, setBattle] = useState<Battle>('holdout');
     const [stage, setStage] = useState<Stage | null>(null);
     const [onScreen, setOnScreen] = useState<OnScreen | null>(null);
@@ -208,10 +222,10 @@ export default function RealmArenaRendererLab() {
         };
     }, [battle]);
 
-    // The board picked — the isometric one first, when it's both — until a run puts up another.
+    // The board picked — the isometric one first, when it's all of them — until a run puts up another.
     useEffect(() => {
         let live = true;
-        const renderer = choice === 'both' ? 'svg' : choice;
+        const renderer = choice === 'all' ? 'svg' : choice;
         BOARD_CODE[renderer]().then(code => {
             if (live) setOnScreen({ renderer, ...code, mount: ++mounts.current });
         }).catch(error => { if (live) setFailed(String(error)); });
@@ -227,7 +241,7 @@ export default function RealmArenaRendererLab() {
         setFailed(null);
         setDevice(deviceLine());
         try {
-            for (const renderer of choice === 'both' ? RENDERERS.map(one => one.id) : [choice]) {
+            for (const renderer of choice === 'all' ? RENDERERS.map(one => one.id) : [choice]) {
                 setRunning({ scenario, renderer });
                 const code = await BOARD_CODE[renderer]();
                 // Drawn afresh, so each board starts from the battle as it was frozen rather than where the last scenario left it.
@@ -251,9 +265,9 @@ export default function RealmArenaRendererLab() {
                 label="Board" value={choice} choices={BOARDS} onChange={setChoice} disabled={!!running}
                 footer={
                     <p className="ag-hint">
-                        The rendering bench&apos;s battles, played on this device. Pick a battle and play a scenario: on both boards
-                        it plays on the isometric one and then the 3D one, each drawn afresh, and their numbers sit side by side
-                        below. The enemy turn takes up to a minute on each.
+                        The rendering bench&apos;s battles, played on this device. Pick a battle and play a scenario: on all three
+                        boards it plays on the isometric one, the 3D one and then the 3D one with its figures outlined, each drawn
+                        afresh, and their numbers sit side by side below. The enemy turn takes up to a minute on each.
                     </p>
                 }
             />
@@ -280,7 +294,7 @@ export default function RealmArenaRendererLab() {
                 <>
                     <Section label="Results" count={runs.length} action={<CopyAction label="Copy as Markdown" text={() => markdown(runs, device)} />}>
                         <p className="ag-hint">
-                            On {device}. Each scenario shows its latest run on each board, the better board in bold where they
+                            On {device}. Each scenario shows its latest run on each board, the better boards in bold where they
                             differ by more than 5%: higher fps, lower everything else.
                         </p>
                     </Section>

@@ -20,8 +20,15 @@ import { squaresOfArea } from '@/utils/games/battlefield/terrain';
 import { PlaybackProvider, usePlaybackFrame } from '@/utils/hooks/usePlayback';
 import { usePrefersReducedMotion } from '@/utils/hooks/usePrefersReducedMotion';
 
-/** The same props as the isometric board: either draws the same battle, and a screen picks one. */
-type RealmArenaBoard3DProps = React.ComponentProps<typeof RealmArenaBoard>;
+/**
+ * The same props as the isometric board: either draws the same battle, and a
+ * screen picks one. And one of its own: `figureOutlines` draws a dark outline
+ * round every solid figure (three/figurePools.ts), which costs a second draw a
+ * character. Off, and passed by nothing a player sees: only the bench's
+ * `outlined` board and the renderer lab turn it on, to measure that cost
+ * (`RealmArenaBoard3DOutlined`). Changing it rebuilds the scene.
+ */
+type RealmArenaBoard3DProps = React.ComponentProps<typeof RealmArenaBoard> & { figureOutlines?: boolean };
 
 /** A layer that paints `shading` on each of `squares`. */
 const inSet = (squares: ReadonlySet<number>, shading: Shading): ShadingLayer => square => squares.has(square) ? shading : null;
@@ -113,18 +120,18 @@ function BoardCamera({ board, rotation, glide, layout }: { board: Board3D | null
  * nobody walks, nothing flies, bursts, slashes or shakes the board, and the hit
  * text only appears and fades.
  */
-export default function RealmArenaBoard3D({ field, fighters, fogGhosts = [], unseen, sides, sealed, owners, waveDue = false, showCentre = true, viewerId, colourFor, nameFor, selected, onSelect, placing, aiming, acting, refocus = 0, follow, home, odds, coverAt, overlay, playback, onPlayed, unplaced, clouds }: RealmArenaBoard3DProps) {
+export default function RealmArenaBoard3D({ field, fighters, fogGhosts = [], unseen, sides, sealed, owners, waveDue = false, showCentre = true, viewerId, colourFor, nameFor, selected, onSelect, placing, aiming, acting, refocus = 0, follow, home, odds, coverAt, overlay, playback, onPlayed, unplaced, clouds, figureOutlines = false }: RealmArenaBoard3DProps) {
     const [board, setBoard] = useState<Board3D | null>(null);
-    // Made when its box mounts and gone with it.
+    // Made when its box mounts and gone with it; made afresh if `figureOutlines` changes.
     const host = useCallback((element: HTMLDivElement | null) => {
         if (!element) return;
-        const made = new Board3D(element);
+        const made = new Board3D(element, { figureOutlines });
         setBoard(made);
         return () => {
             made.dispose();
             setBoard(null);
         };
-    }, []);
+    }, [figureOutlines]);
     const frame = useRef<HTMLDivElement>(null);
     // Nothing walks or flies with reduced motion: a character is simply where it ended up.
     const still = usePrefersReducedMotion();
@@ -277,4 +284,9 @@ export default function RealmArenaBoard3D({ field, fighters, fogGhosts = [], uns
             <UnplacedMark unplaced={unplaced} />
         </div>
     );
+}
+
+/** The 3D board with a dark outline round every figure: the bench's `outlined` board and the renderer lab's, so what the outline costs is measured on the board the rest are (docs/realm-arena-3d.md §3). */
+export function RealmArenaBoard3DOutlined(props: RealmArenaBoard3DProps) {
+    return <RealmArenaBoard3D {...props} figureOutlines />;
 }

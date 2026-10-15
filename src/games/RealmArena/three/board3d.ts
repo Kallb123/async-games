@@ -134,7 +134,7 @@ export class Board3D {
     /** Which way the camera faces, for everything drawn flat to it (`Billboards`): set as it turns. */
     readonly axes = billboardAxes();
 
-    private readonly pools = new FigurePools(this.scene);
+    private readonly pools: FigurePools;
     private figures: FigureSpec[] = [];
     private ghosts: { ghost: FogGhost; facing: Facing; tint: Color | null }[] = [];
     private placed: Placed[] = [];
@@ -200,7 +200,9 @@ export class Board3D {
     /** Who hears of a tap on a figure, or on a square where none stands. */
     private handlers: Handlers = { onFigure: () => {}, onSquare: () => {} };
 
-    constructor(private readonly host: HTMLElement) {
+    /** `figureOutlines`: every solid figure wears a dark outline (`FigurePools`). Fixed for the board's life; off for a player's board, on for the bench's `outlined` one. */
+    constructor(private readonly host: HTMLElement, { figureOutlines = false }: { figureOutlines?: boolean } = {}) {
+        this.pools = new FigurePools(this.scene, figureOutlines);
         this.renderer = new WebGLRenderer({ antialias: true, alpha: true, powerPreference: "high-performance" });
         this.renderer.setPixelRatio(window.devicePixelRatio);
         this.renderer.setClearColor(0x000000, 0);

@@ -9,12 +9,15 @@
 //   npm run ra-bench -- --against main        and the same against `main`, interleaved
 //   npm run ra-bench -- --scenarios enemy-turn,idle --runs 5 --label fewer-filters
 //   npm run ra-bench -- --renderers svg,three  the isometric board beside the 3D one (docs/realm-arena-3d.md)
+//   npm run ra-bench -- --renderers three,outlined  the 3D board beside the 3D board with an outline round each figure
 //
 // Options:
 //   --against <ref>    also measure <ref>'s src/ (a git worktree outside the repo),
 //                      interleaving the two so drift on the machine hits both alike
 //   --renderers <a,b>  which boards to draw this checkout with: svg (the isometric board, the
-//                      default) and three (the 3D experiment); --against draws its ref with the first
+//                      default), three (the 3D experiment) and outlined (the 3D board with a dark
+//                      outline round every figure); --against draws its ref with the first
+//                      (a ref from before `outlined` existed fails to bundle it: name `three` first)
 //   --scenarios <a,b>  any of load, idle, wave, pan, turn, select, enemy-turn (default: all)
 //   --runs <n>         runs of each scenario per checkout (default 3); medians are reported
 //   --fixture <name>   holdout (default), holdout-fog, or holdout-8k / holdout-16k (the same
@@ -70,7 +73,7 @@ const runs = Number(options.runs);
 const cpu = Number(options.cpu);
 const scenarios = (options.scenarios?.split(",") ?? [...SCENARIOS]) as Scenario[];
 for (const scenario of scenarios) if (!SCENARIOS.includes(scenario)) throw new Error(`no scenario "${scenario}": ${SCENARIOS.join(", ")}`);
-const RENDERERS = ["svg", "three"] as const;
+const RENDERERS = ["svg", "three", "outlined"] as const;
 type Renderer = typeof RENDERERS[number];
 const renderers = options.renderers!.split(",") as Renderer[];
 for (const renderer of renderers) if (!RENDERERS.includes(renderer)) throw new Error(`no renderer "${renderer}": ${RENDERERS.join(", ")}`);
