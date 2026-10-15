@@ -11,6 +11,7 @@ import { isoArea, isoBlock, isoBounds, isoCentre, isoCorner, isoDepth, isoGridLi
 import { RealmArenaTerrainArt, RealmArenaTerrainDefs, spriteId, SpriteUse } from '@/games/RealmArena/components/RealmArenaTerrain';
 import { RealmArenaEffectMarks } from '@/games/RealmArena/components/RealmArenaEffects';
 import RealmArenaFx from '@/games/RealmArena/components/RealmArenaFx';
+import { MIN_ASPECT } from '@/games/RealmArena/boardShape';
 import type { Rect } from '@/utils/ui/mapLabels';
 import { useSvgId } from '@/utils/hooks/useSvgId';
 import { usePrefersReducedMotion } from '@/utils/hooks/usePrefersReducedMotion';
@@ -23,14 +24,6 @@ import { apPips, areaRect, BOARD_ZOOM, captionAt, eventLines, HP_BAR_HEIGHT, HP_
 
 /** How deep the ground is drawn under the map's front edges, in quarters. */
 const SLAB_DEPTH = 3;
-/**
- * The least the board's height may be as a fraction of its width: an
- * isometric map is twice as wide as it's tall, which fitted to a phone would
- * leave a strip of a frame to pan around in once zoomed. Raised from 0.62 for
- * a little more battlefield on a phone; much more and the controls under it
- * fall off the first screen.
- */
-const MIN_ASPECT = 0.7;
 
 /**
  * A figure stands on its square as its character's art (`CHARACTER_ART`),
@@ -776,13 +769,6 @@ function WalkCamera({ view, walks }: { view: IsoView; walks: readonly WalkCue[] 
     return null;
 }
 
-/** The view turned a quarter at a time, and how it got there: what the board keeps its place across. */
-interface Turned {
-    from: IsoRotation;
-    /** How many times it's been turned, so each turn is its own pivot. */
-    turns: number;
-}
-
 /**
  * Where the thing under a point of the board as it was drawn is drawn now:
  * the square under it, if any, at the point's same offset from its middle —
@@ -955,12 +941,7 @@ function blasting(artId: string, view: IsoView, playback: Playback, cue: ScorchC
  * there after it (`BoardZoom`'s `pivot`).
  */
 export default function RealmArenaBoard({ field, fighters, fogGhosts = [], unseen, clouds, sides, sealed, owners, waveDue = false, showCentre = true, viewerId, colourFor, nameFor, selected, onSelect, placing, aiming, acting, refocus = 0, follow, home, odds, coverAt, overlay, playback, onPlayed, unplaced }: RealmArenaBoardProps) {
-    const [rotation, turnBy] = useBoardRotation(viewerId);
-    const [turned, setTurned] = useState<Turned>({ from: rotation, turns: 0 });
-    const turn = (by: 1 | 3) => {
-        setTurned(({ turns }) => ({ from: rotation, turns: turns + 1 }));
-        turnBy(by);
-    };
+    const [rotation, turn, turned] = useBoardRotation(viewerId);
 
     // The ground changes only when cover is blasted away, so it's laid out once a battlefield, and again each turn of the view.
     const ground = useMemo(() => {

@@ -4,6 +4,8 @@
  * Everything else in that component is DOM and gestures.
  */
 
+import type { Rect } from '@/utils/ui/mapLabels';
+
 /** The width the board is drawn at when it's fitted to the column, as a percentage. */
 export const FIT_WIDTH = 100;
 
@@ -154,6 +156,38 @@ export interface ZoomView {
     zoom: number;
     scroll: { x: number; y: number };
     content: { x: number; y: number };
+}
+
+/**
+ * The board as it's drawn `scale` times its laid-out size (`laid`, in pixels),
+ * `offset` into the pane: what a pinch, a glide or a follow is drawing between
+ * frames. The scroll that would leave the board where it's drawn is the offset
+ * turned round, and its size is the laid-out size scaled.
+ */
+export function drawnView(laid: { x: number; y: number }, offset: { x: number; y: number }, scale: number): Pick<ZoomView, 'scroll' | 'content'> {
+    return {
+        scroll: { x: -offset.x, y: -offset.y },
+        content: { x: laid.x * scale, y: laid.y * scale },
+    };
+}
+
+/**
+ * The part of the board a pane shows, in the board's own `viewBox` units: where
+ * it is scrolled to and how big it is on screen, as fractions of the board.
+ * What a board drawn by a camera is told, rather than being laid out at the
+ * zoomed size and scrolled (`BoardZoom`'s camera mode). A board no bigger than
+ * its pane along an axis shows all of it, so the region never runs past the
+ * viewBox.
+ */
+export function viewRegion({ scroll, content }: Pick<ZoomView, 'scroll' | 'content'>, pane: { x: number; y: number }, viewBox: Size): Rect {
+    const axis = (at: number, size: number, room: number, view: number) => {
+        const whole = size || 1;
+        const shown = Math.min(1, room / whole);
+        return { start: Math.min(1 - shown, Math.max(0, at / whole)) * view, length: shown * view };
+    };
+    const across = axis(scroll.x, content.x, pane.x, viewBox.width);
+    const down = axis(scroll.y, content.y, pane.y, viewBox.height);
+    return { x: across.start, y: down.start, width: across.length, height: down.length };
 }
 
 /**

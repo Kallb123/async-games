@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { centredScroll, exactZoom, FIT_WIDTH, focusZoom, glideFrame, pinchOffset, wheelZoomFactor, zoomLevels } from './boardZoom';
+import { centredScroll, drawnView, exactZoom, FIT_WIDTH, focusZoom, glideFrame, pinchOffset, viewRegion, wheelZoomFactor, zoomLevels } from './boardZoom';
 
 describe('zoomLevels', () => {
     it("steps fit, the board's own width, then twice it", () => {
@@ -214,5 +214,82 @@ describe('centredScroll', () => {
 
     it('takes a fraction of the board as readily as a point, for a viewBox of one', () => {
         expect(centredScroll({ x: 0.5, y: 0.5 }, { width: 1, height: 1 }, content, pane, 100)).toEqual({ x: 640, y: 410 });
+    });
+});
+
+describe('drawnView', () => {
+    it('is the board as laid out when it is drawn at its own size, unscrolled', () => {
+        const view = drawnView({ x: 800, y: 600 }, { x: 0, y: 0 }, 1);
+        expect(view.scroll.x).toBeCloseTo(0, 9);
+        expect(view.scroll.y).toBeCloseTo(0, 9);
+        expect(view.content).toEqual({ x: 800, y: 600 });
+    });
+
+    it('scrolls by the offset turned round, and sizes the board by the scale', () => {
+        expect(drawnView({ x: 800, y: 600 }, { x: -120, y: -40 }, 1.5)).toEqual({ scroll: { x: 120, y: 40 }, content: { x: 1200, y: 900 } });
+    });
+});
+
+describe('viewRegion', () => {
+    const viewBox = { width: 400, height: 300 };
+    const pane = { x: 320, y: 240 };
+
+    it('shows the whole viewBox of a board fitted to its pane', () => {
+        expect(viewRegion({ scroll: { x: 0, y: 0 }, content: { x: 320, y: 240 } }, pane, viewBox)).toEqual({ x: 0, y: 0, width: 400, height: 300 });
+    });
+
+    it('shows a pane-sized part of a zoomed board, from where it is scrolled to', () => {
+        // Four times the size, a quarter of the way along and half way down.
+        const region = viewRegion({ scroll: { x: 320, y: 480 }, content: { x: 1280, y: 960 } }, pane, viewBox);
+        expect(region).toEqual({ x: 100, y: 150, width: 100, height: 75 });
+    });
+
+    it('scales with the board, so a pinch halfway between two zooms shows a region halfway between', () => {
+        const wide = viewRegion({ scroll: { x: 0, y: 0 }, content: { x: 640, y: 480 } }, pane, viewBox);
+        expect(wide.width).toBe(200);
+        expect(wide.height).toBe(150);
+    });
+
+    it('keeps the middle of the pane on the same point of the board when the board is zoomed about it', () => {
+        const middle = (region: { x: number; y: number; width: number; height: number }) => ({ x: region.x + region.width / 2, y: region.y + region.height / 2 });
+        // The point at (240, 150) of the viewBox is 192px across a 320px-wide board, 120px down a 240px-high one.
+        const at = (zoom: number) => viewRegion({ scroll: { x: 240 / 400 * 320 * zoom - 160, y: 150 / 300 * 240 * zoom - 120 }, content: { x: 320 * zoom, y: 240 * zoom } }, pane, viewBox);
+        for (const zoom of [2, 3.3, 6]) {
+            expect(middle(at(zoom)).x).toBeCloseTo(240, 9);
+            expect(middle(at(zoom)).y).toBeCloseTo(150, 9);
+        }
+    });
+
+    it('never runs past the board, however far a scroll has been over-run or rounded', () => {
+        const past = viewRegion({ scroll: { x: 970, y: -8 }, content: { x: 1280, y: 960 } }, pane, viewBox);
+        expect(past.x + past.width).toBeLessThanOrEqual(400);
+        expect(past.y).toBe(0);
+    });
+
+    it('shows all of an axis the board does not overflow', () => {
+        expect(viewRegion({ scroll: { x: 0, y: 100 }, content: { x: 300, y: 960 } }, pane, viewBox)).toEqual({ x: 0, y: 31.25, width: 400, height: 75 });
+    });
+
+    it('is where centredScroll puts the point: the point is the middle of the region', () => {
+        const content = { x: 1280, y: 960 };
+        const point = { x: 123, y: 211 };
+        const scroll = centredScroll(point, viewBox, content, { x: pane.x, y: pane.y });
+        const region = viewRegion({ scroll, content }, pane, viewBox);
+        expect(region.x + region.width / 2).toBeCloseTo(point.x, 9);
+        expect(region.y + region.height / 2).toBeCloseTo(point.y, 9);
+    });
+
+    it('is what a glide shows at either end: the view it set off from, then the one it is heading for', () => {
+        const from = { zoom: 100, scroll: { x: 0, y: 0 }, content: { x: 320, y: 240 } };
+        const to = { zoom: 400, scroll: { x: 640, y: 480 }, content: { x: 1280, y: 960 } };
+        const shown = (t: number) => {
+            const frame = glideFrame(from, to, { x: 320, y: 240 }, t);
+            const scale = frame.zoom / to.zoom;
+            return viewRegion(drawnView(to.content, frame.offset, scale), pane, viewBox);
+        };
+        expect(shown(0)).toEqual({ x: 0, y: 0, width: 400, height: 300 });
+        const end = shown(1);
+        expect(end.x).toBeCloseTo(200, 6);
+        expect(end.width).toBeCloseTo(100, 6);
     });
 });

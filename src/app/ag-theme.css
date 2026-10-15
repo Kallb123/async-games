@@ -1836,6 +1836,26 @@ a.ag-list-row, a.ag-list-row-main {
    board a little soft mid-pinch, sharp again the moment it lands. */
 .ag-board-zoom-content--moving { will-change: transform; }
 .ag-board-scroll svg { width: var(--ag-board-zoom, 100%); max-width: none; }
+/* Camera mode (BoardZoom `camera`): a board drawn by a camera, which a browser
+   can't lay out at 600% of the column. What the pane scrolls over is an empty
+   spacer, the zoomed board's shape, so the scrolling, the scroll bars and the
+   momentum are the browser's; the box the camera draws into is pinned over it
+   (`sticky`) at exactly what the pane shows — BoardZoom writes the pane's size
+   to `--ag-board-pane-w` and `--ag-board-pane-h` — and is never transformed or
+   laid out bigger. Both share the one grid cell, so the box takes no room of
+   its own. */
+.ag-board-zoom-content--camera { display: grid; width: var(--ag-board-zoom, 100%); }
+.ag-board-zoom-spacer { grid-area: 1 / 1; width: 100%; }
+.ag-board-zoom-slot {
+    grid-area: 1 / 1;
+    position: sticky;
+    top: 0;
+    left: 0;
+    align-self: start;
+    justify-self: start;
+    width: var(--ag-board-pane-w, 100%);
+    height: var(--ag-board-pane-h, auto);
+}
 .ag-board-tag {
     position: absolute;
     bottom: 12px;
@@ -5329,9 +5349,10 @@ html:has(.ag-pull) { overscroll-behavior-y: contain; }
 .ag-realmarena-frame .ag-board-zoom-content { position: relative; }
 .ag-ra-fx-layer { position: absolute; top: 0; left: 0; pointer-events: none; }
 /* The 3D board (RealmArenaBoard3D, an experiment: docs/realm-arena-3d.md): one
-   canvas the shape the isometric board fits a phone at (its `MIN_ASPECT`), which
-   takes every press itself — it pans, pinches and taps on its own. */
-.ag-ra-3d { position: relative; width: 100%; aspect-ratio: 10 / 7; touch-action: none; }
+   canvas filling the box BoardZoom's camera mode pins to the pane
+   (`.ag-board-zoom-slot`). The pane takes the pan and the pinch; the canvas
+   only hears a tap. */
+.ag-ra-3d { position: relative; width: 100%; height: 100%; }
 .ag-ra-3d > canvas { display: block; width: 100%; height: 100%; }
 
 /* ---- The battlefield ---- */
