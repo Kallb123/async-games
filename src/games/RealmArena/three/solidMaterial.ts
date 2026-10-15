@@ -9,12 +9,30 @@
 // Each vertex brings its colour and its flags (team, glow, shine:
 // characterModels.ts). An instance's colour (`InstancedMesh.setColorAt`) is
 // its owner's: it tints the vertices flagged team.
+//
+// A solid can also be drawn faded a figure at a time (`perInstance`: a figure
+// the action downs fading out as its fallen one fades in), or only where
+// something nearer hides it (`behind`: the faint figure a wall hides), or as
+// its outline alone (`outline`: an inverted hull, the solid's back faces pushed
+// out along their normals and drawn dark, which shows round the solid's edge).
 
-import { ShaderMaterial, Vector3 } from "three";
+import { BackSide, CustomBlending, FrontSide, GreaterDepth, OneMinusSrcAlphaFactor, ShaderMaterial, SrcAlphaFactor, Vector3 } from "three";
 import type { Vec3 } from "./iso3d";
+
+/** How far nearer the camera a figure drawn `behind` is drawn, in world units: so a figure's feet, level with the ground they stand on, are never taken for hidden by it. */
+const BEHIND_BIAS = 0.04;
+
+/** How far an outline stands out from its solid, in world units (a square's side): about a pixel on a phone at the fit. */
+export const OUTLINE_WIDTH = 0.018;
+/** The colour an outline is drawn in. */
+const OUTLINE_COLOUR = "vec3(0.07, 0.05, 0.04)";
 
 const vertexShader = /* glsl */ `
 attribute vec3 flags;
+#ifdef INSTANCE_OPACITY
+attribute float instanceOpacity;
+#endif
+varying float vOpacity;
 varying vec3 vColour;
 varying vec3 vNormal;
 varying vec3 vFlags;
@@ -35,13 +53,25 @@ void main() {
     vTint = instanceColor;
 #endif
     vFlags = flags;
-    gl_Position = projectionMatrix * viewMatrix * placed * vec4(position, 1.0);
+    vOpacity = 1.0;
+#ifdef INSTANCE_OPACITY
+    vOpacity = instanceOpacity;
+#endif
+    vec3 where = position;
+#ifdef OUTLINE
+    where += normal * OUTLINE;
+#endif
+    gl_Position = projectionMatrix * viewMatrix * placed * vec4(where, 1.0);
+#ifdef BEHIND
+    gl_Position.z -= BEHIND * abs(projectionMatrix[2][2]) * gl_Position.w;
+#endif
 }`;
 
 const fragmentShader = /* glsl */ `
 uniform vec3 light;
 uniform vec3 halfway;
 uniform float opacity;
+varying float vOpacity;
 varying vec3 vColour;
 varying vec3 vNormal;
 varying vec3 vFlags;
@@ -57,20 +87,47 @@ void main() {
         float highlight = vFlags.z * pow(max(0.0, dot(n, halfway)), 24.0);
         shaded = min(vec3(1.0), base * (ambient + 0.72 * diffuse) + highlight);
     }
-    gl_FragColor = vec4(shaded, opacity);
+#ifdef OUTLINE
+    shaded = OUTLINE_SHADE;
+#endif
+    gl_FragColor = vec4(shaded, opacity * vOpacity);
 }`;
+
+/** How a solid is drawn, beyond opaque and lit. */
+export interface SolidOptions {
+    /** How much of it is there, 0–1. */
+    opacity?: number;
+    /** Each instance fades by its own `instanceOpacity` attribute on the geometry, on top of `opacity`: blended and not written to the depth buffer. */
+    perInstance?: boolean;
+    /** Drawn only where something already drawn is nearer — the faint figure a wall hides — and so drawn before the figures that might hide it, after the terrain that does. */
+    behind?: boolean;
+    /** Blended even at full opacity, but still written to the depth buffer: whole solids fading, like cover blasted away. */
+    translucent?: boolean;
+    /** Only the solid's outline: its back faces, pushed out `OUTLINE_WIDTH` and dark. */
+    outline?: boolean;
+}
 
 /**
  * A material for solids drawn this way. Its light follows the camera
  * (`lightSolids`). Geometry needs a `color` and a `flags` attribute: a plain
  * solid gets one colour and zero flags (`coloured`, terrain3d.ts).
  */
-export function solidMaterial({ opacity = 1 }: { opacity?: number } = {}): ShaderMaterial {
+export function solidMaterial({ opacity = 1, perInstance = false, behind = false, translucent = false, outline = false }: SolidOptions = {}): ShaderMaterial {
+    const blended = opacity < 1 || perInstance || translucent;
     return new ShaderMaterial({
         vertexShader,
         fragmentShader,
         vertexColors: true,
-        transparent: opacity < 1,
+        defines: {
+            ...(perInstance && { INSTANCE_OPACITY: "" }),
+            ...(behind && { BEHIND: BEHIND_BIAS.toFixed(3) }),
+            ...(outline && { OUTLINE: OUTLINE_WIDTH.toFixed(4), OUTLINE_SHADE: OUTLINE_COLOUR }),
+        },
+        side: outline ? BackSide : FrontSide,
+        transparent: blended && !behind,
+        // Blended by hand, so it stays among the opaque draws and its place in them is its render order's.
+        ...(behind && { blending: CustomBlending, blendSrc: SrcAlphaFactor, blendDst: OneMinusSrcAlphaFactor, depthFunc: GreaterDepth }),
+        depthWrite: !perInstance && !behind,
         uniforms: {
             light: { value: new Vector3(0, 1, 0) },
             halfway: { value: new Vector3(0, 1, 0) },

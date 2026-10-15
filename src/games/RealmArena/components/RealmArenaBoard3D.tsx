@@ -71,8 +71,7 @@ function BoardCamera({ board, rotation, glide, layout }: { board: Board3D | null
  *
  * Not yet drawn: the muster's sealed squad and placing it, a lined-up action's
  * path, odds, cover and HP preview, the effect marks, AP pips and items, the
- * hit text, slashes and the caption, smoke, the centre's name, and the faint
- * figure a wall hides.
+ * hit text, slashes and the caption, smoke, and the centre's name.
  */
 export default function RealmArenaBoard3D({ field, fighters, fogGhosts = [], unseen, sides, sealed, owners, waveDue = false, showCentre = true, viewerId, colourFor, selected, onSelect, placing, aiming, acting, refocus = 0, follow, home, overlay, playback, onPlayed }: RealmArenaBoard3DProps) {
     const [board, setBoard] = useState<Board3D | null>(null);
@@ -162,7 +161,7 @@ export default function RealmArenaBoard3D({ field, fighters, fogGhosts = [], uns
     const focus: BoardZoomFocus | null = area && { rect: frameRect(here.frame, regionOnScreen(here.basis, area.area, top)), key: area.key, exact: area.exact };
     const onTapSquare = placing?.onTap ?? aiming?.onSquare;
     useEffect(() => board?.listen({ onFigure: onSelect, onSquare: square => onTapSquare?.(square) }), [board, onSelect, onTapSquare]);
-    useEffect(() => board?.play(playback ? { cues: playback.cues, before: playback.before } : null, tracks), [board, playback, tracks]);
+    useEffect(() => board?.play(playback ? { cues: playback.cues, before: playback.before, field: playback.field } : null, tracks), [board, playback, tracks]);
 
     return (
         <div ref={frame} className="ag-board-frame ag-realmarena-frame">
