@@ -7,8 +7,8 @@
 import { coverBySide, SIDE_STEPS, type Side } from "@/utils/games/battlefield/cover";
 import type { Battlefield, Square } from "@/utils/games/battlefield/terrain";
 import type { Rect } from "@/utils/ui/mapLabels";
-import { BOARD_UNIT } from "./billboards";
-import { onScreen, squareCentre, type CameraBasis, type Vec3 } from "./iso3d";
+import { BOARD_UNIT, toBoardUnits } from "./billboards";
+import { lerp3, onScreen, squareCentre, type CameraBasis, type Vec3 } from "./iso3d";
 
 /** One straight run of a path, as a rectangle hung from its middle: how long it is across the frame, and the turn it takes (clockwise, in degrees) to lie along it. */
 export interface PathPiece { at: Vec3; length: number; rotate: number }
@@ -21,12 +21,12 @@ export interface PathPiece { at: Vec3; length: number; rotate: number }
 export function pathPieces(points: readonly Vec3[], basis: CameraBasis): PathPiece[] {
     const pieces: PathPiece[] = [];
     for (let i = 1; i < points.length; i++) {
-        const a = onScreen(basis, points[i - 1]), b = onScreen(basis, points[i]);
+        const a = toBoardUnits(onScreen(basis, points[i - 1])), b = toBoardUnits(onScreen(basis, points[i]));
         const dx = b.x - a.x, dy = b.y - a.y;
-        const length = Math.hypot(dx, dy) / BOARD_UNIT;
+        const length = Math.hypot(dx, dy);
         if (length < 1e-6) continue;
-        const at = points[i - 1].map((n, axis) => (n + points[i][axis]) / 2) as Vec3;
-        pieces.push({ at, length, rotate: -Math.atan2(dy, dx) * 180 / Math.PI });
+        // Across the frame y is down, which is the way an SVG's `rotate` turns.
+        pieces.push({ at: lerp3(points[i - 1], points[i], 0.5), length, rotate: Math.atan2(dy, dx) * 180 / Math.PI });
     }
     return pieces;
 }

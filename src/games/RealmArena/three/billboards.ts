@@ -19,7 +19,7 @@
 // are, so a mark in 3D is the colour of its sprite.
 
 import {
-    CanvasTexture, Color, DynamicDrawUsage, InstancedBufferAttribute, InstancedBufferGeometry, LinearFilter, LinearMipmapLinearFilter, Mesh, PlaneGeometry,
+    CanvasTexture, Color, DoubleSide, DynamicDrawUsage, InstancedBufferAttribute, InstancedBufferGeometry, LinearFilter, LinearMipmapLinearFilter, Mesh, PlaneGeometry,
     ShaderMaterial, Texture, Vector3,
 } from "three";
 import type { Sprite } from "@/games/RealmArena/art";
@@ -33,6 +33,12 @@ import type { CameraBasis, Vec3 } from "./iso3d";
  * is √2/2. The same both ways, so a quad sized in board units keeps its shape.
  */
 export const BOARD_UNIT = Math.SQRT2 / 20;
+
+/** A point across the camera's frame (`onScreen`'s world units, y up) in board units, as the isometric board has it: x right, y down. */
+export const toBoardUnits = ({ x, y }: { x: number; y: number }): { x: number; y: number } => ({ x: x / BOARD_UNIT, y: -y / BOARD_UNIT });
+
+/** And a point in board units (x right, y down) across the camera's frame, in world units. */
+export const fromBoardUnits = ({ x, y }: { x: number; y: number }): { x: number; y: number } => ({ x: x * BOARD_UNIT, y: -y * BOARD_UNIT });
 
 /** A rectangle of a texture, in its pixels from the top left. */
 export interface TexRect { x: number; y: number; width: number; height: number }
@@ -79,10 +85,13 @@ export function setAxes(axes: BillboardAxes, { right, up, back }: CameraBasis): 
     axes.back.value.set(...back);
 }
 
+// A quad lying flat (`FLAT`, no camera axes) is across the world's x and z and lifted in y.
 const vertexShader = /* glsl */ `
+#ifndef FLAT
 uniform vec3 right;
 uniform vec3 up;
 uniform vec3 back;
+#endif
 uniform float lift;
 attribute vec3 at;
 attribute vec4 place;
@@ -97,7 +106,11 @@ void main() {
     float s = sin(spin), c = cos(spin);
     corner = vec2(c * corner.x + s * corner.y, -s * corner.x + c * corner.y);
     vec2 across = place.xy + corner;
+    #ifdef FLAT
+    vec3 world = at + vec3(across.x, lift, across.y);
+    #else
     vec3 world = at + right * across.x + up * across.y + back * lift;
+    #endif
     vUv = vec2(mix(rect.x, rect.z, uv.x), mix(rect.w, rect.y, uv.y));
     vTint = tint;
     gl_Position = projectionMatrix * viewMatrix * vec4(world, 1.0);
@@ -123,20 +136,24 @@ export interface BillboardOptions {
     depthTest?: boolean;
     /** Drawn after anything with a lower order: the HP bars are 2 and 3. */
     order?: number;
-    /** How far towards the camera it's drawn from what it hangs from, in the world's units, so the figure it hangs from never cuts into it. */
+    /** How far towards the camera it's drawn from what it hangs from, in the world's units, so the figure it hangs from never cuts into it; for a quad lying flat, how far over the ground. */
     lift?: number;
 }
 
 const WHITE = new Color(1, 1, 1);
 
-/** Quads facing the camera, every one from `texture`, in one draw. */
+/**
+ * Quads facing the camera, every one from `texture`, in one draw. Given no
+ * `axes` they face nothing: they lie flat on the ground instead (`GroundRings`),
+ * across the world's x (their width) and z (their height), `lift` over it.
+ */
 export class Billboards {
     readonly mesh: Mesh<InstancedBufferGeometry, ShaderMaterial>;
     private capacity = 0;
     private count = 0;
     private attributes!: { at: InstancedBufferAttribute; place: InstancedBufferAttribute; rect: InstancedBufferAttribute; spin: InstancedBufferAttribute; tint: InstancedBufferAttribute };
 
-    constructor(private readonly texture: Texture, axes: BillboardAxes, { depthTest = false, order = 10, lift = 0.5 }: BillboardOptions = {}) {
+    constructor(private readonly texture: Texture, axes: BillboardAxes | null, { depthTest = false, order = 10, lift = 0.5 }: BillboardOptions = {}) {
         const geometry = new InstancedBufferGeometry();
         const plane = new PlaneGeometry(1, 1);
         geometry.index = plane.index;
@@ -148,6 +165,7 @@ export class Billboards {
             transparent: true,
             depthTest,
             depthWrite: false,
+            ...!axes && { side: DoubleSide, defines: { FLAT: "" } },
             uniforms: { map: { value: texture }, lift: { value: lift }, ...axes },
         });
         this.mesh = new Mesh(geometry, material);
@@ -188,7 +206,8 @@ export class Billboards {
         const i = this.count++;
         const { at: where, place, rect: area, spin, tint } = this.attributes;
         where.setXYZ(i, at[0], at[1], at[2]);
-        place.setXYZW(i, x * BOARD_UNIT, -y * BOARD_UNIT, width * scale * BOARD_UNIT, tall * scale * BOARD_UNIT);
+        const across = fromBoardUnits({ x, y });
+        place.setXYZW(i, across.x, across.y, width * scale * BOARD_UNIT, tall * scale * BOARD_UNIT);
         area.setXYZW(i, rect.x / image.width, rect.y / image.height, (rect.x + rect.width) / image.width, (rect.y + rect.height) / image.height);
         spin.setX(i, rotate * Math.PI / 180);
         tint.setXYZW(i, colour.r, colour.g, colour.b, opacity);

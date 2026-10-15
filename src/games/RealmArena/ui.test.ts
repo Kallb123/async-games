@@ -7,7 +7,7 @@ import { at, fieldOf, hillOf } from "@/utils/games/battlefield/testFixtures";
 import { ACTION_POINTS, isWarband, newFighter, reachOf, warbandOwner, type BattleEvent, type Fighter, type ToldEvent } from "./rules";
 import { ABILITIES, kitOf, type CharacterId } from "./characters";
 import { EFFECT_ART, ITEM_ART, type Missile } from "./art";
-import { abilityWait, actionFollow, boardFocus, oddsLines, aimFocus, coopColourOf, ALLY_COLOUR, ENEMY_COLOUR, TEAM_COLOUR, actionSquares, apPips, friendlySquares, spreadWide, areaRect, battleCues, canAct, effectsOn, eventLines, facingOf, fighterName, fighterStatus, focusOn, handItem, handOut, hpFraction, itemsOf, NO_ITEMS, numberedName, placeTap, reachFocus, reachShading, squadCounts, squadOf, whoseName, FLIGHT_PACE, CLIMB_LEG, DIAGONAL_LEG, flightMs, legWeight, HIT_TEXT_MS, PLAYBACK_MS, WALK_STEP_MS, moveFrame, isUnplaced, type BattleCue, type Placement, waveLineOf, reviewParts, withPartState, partLabel, HP_CHIP_MS, HP_TWEEN_MS, stepped, toldAt, toldOf, type TextCue, IMPACT_MS, KNOCK, LUNGE, SHAKE, SHAKE_MS, WALK_BOB, WALK_HOP, shakeAt, shakesOf, shoveAt, shovesOf, endOf, captionAt, legLengthOn, walkEase, walkerAt, walkerGroundAt, walkCameraAt, walkLift, walkSquares, flightAt, hitTextAt, POP_MS, burstAt, slashAt, progressOf, fadeOutAt, fadeInAt, FLIGHT_ARC, type FxPoints, type CaptionCue, type FallCue, type FlightCue, type SlashCue, type WalkCue } from "./ui";
+import { abilityWait, ringOf, shieldPath, shadedSquares, SHIELD_WIDTH, actionFollow, boardFocus, oddsLines, aimFocus, coopColourOf, ALLY_COLOUR, ENEMY_COLOUR, TEAM_COLOUR, actionSquares, apPips, friendlySquares, spreadWide, areaRect, battleCues, canAct, effectsOn, eventLines, facingOf, fighterName, fighterStatus, focusOn, handItem, handOut, hpFraction, itemsOf, NO_ITEMS, numberedName, placeTap, reachFocus, reachShading, squadCounts, squadOf, whoseName, FLIGHT_PACE, CLIMB_LEG, DIAGONAL_LEG, flightMs, legWeight, HIT_TEXT_MS, PLAYBACK_MS, WALK_STEP_MS, moveFrame, isUnplaced, type BattleCue, type Placement, waveLineOf, reviewParts, withPartState, partLabel, HP_CHIP_MS, HP_TWEEN_MS, stepped, toldAt, toldOf, type TextCue, IMPACT_MS, KNOCK, LUNGE, SHAKE, SHAKE_MS, WALK_BOB, WALK_HOP, shakeAt, shakesOf, shoveAt, shovesOf, endOf, captionAt, legLengthOn, walkEase, walkerAt, walkerGroundAt, walkCameraAt, walkLift, walkSquares, flightAt, hitTextAt, POP_MS, burstAt, slashAt, progressOf, fadeOutAt, fadeInAt, FLIGHT_ARC, type FxPoints, type CaptionCue, type FallCue, type FlightCue, type SlashCue, type WalkCue } from "./ui";
 import type { OddsBreakdown } from "./rules";
 import type { IRealmArenaStepOutcome, RealmArenaPartState } from "./apiModels";
 
@@ -2132,5 +2132,74 @@ describe("oddsLines", () => {
     it("names a shield wall's cover and a hunkered target's doubling", () => {
         const [, cover] = oddsLines({ base: 80, factors: [{ kind: "cover", amount: -40, cover: "half", doubled: "hunkered", shield: true }], raw: 40, chance: 40 }, "Bow accuracy");
         expect(cover).toEqual({ label: "Shield wall (counts as half cover)", note: "doubled: hunkered down", amount: -40 });
+    });
+});
+
+describe("ringOf", () => {
+    it("picks the ring a figure wears in the order the isometric board does", () => {
+        const aiming = { aimed: [2], flagged: [2, 3], candidates: [2, 3, 4] };
+        expect(ringOf(1, 1, aiming)).toBe("selected");
+        expect(ringOf(2, 1, aiming)).toBe("aimed");
+        expect(ringOf(3, 1, aiming)).toBe("flagged");
+        expect(ringOf(4, 1, aiming)).toBe("candidate");
+        expect(ringOf(5, 1, aiming)).toBeUndefined();
+        expect(ringOf(5, undefined, null)).toBeUndefined();
+    });
+});
+
+describe("shieldPath", () => {
+    /** Every x the path visits: the arguments of M and H, and the x of each pair of a Q. */
+    const xsOf = (path: string): number[] => [...path.matchAll(/([MHVQ])([^MHVQZ]*)/g)].flatMap(([, command, args]) => {
+        const numbers = args.trim().split(/\s+/).map(Number);
+        return command === "H" ? numbers : command === "V" ? [] : numbers.filter((_, i) => i % 2 === 0);
+    });
+
+    it("closes the outline", () => {
+        expect(shieldPath().endsWith("Z")).toBe(true);
+        expect(shieldPath(true).endsWith("Z")).toBe(true);
+    });
+
+    it("spans the shield's width, and its left half just from its left edge to its middle", () => {
+        const half = SHIELD_WIDTH / 2;
+        expect([Math.min(...xsOf(shieldPath())), Math.max(...xsOf(shieldPath()))]).toEqual([-half, half]);
+        expect([Math.min(...xsOf(shieldPath(true))), Math.max(...xsOf(shieldPath(true)))]).toEqual([-half, 0]);
+    });
+});
+
+describe("shadedSquares", () => {
+    const none = { smoke: new Set<number>() };
+
+    it("shades nothing when nothing is hidden or lined up", () => {
+        expect(shadedSquares(none)).toEqual([]);
+        expect(shadedSquares({ ...none, unseen: new Set(), placing: { zone: [1], selected: null } })).toEqual([]);
+    });
+
+    it("lists the fog, then the smoke, under the reach, the range, the blast and the squares to place on", () => {
+        const shades = shadedSquares({
+            unseen: new Set([1]),
+            smoke: new Set([2]),
+            aiming: { reach: new Map([[3, 2]]), range: new Set([4]), area: [5], blasts: [6, 5] },
+            placing: { zone: [7, 8, 9], selected: 0 },
+            sealed: [{ square: 8 }],
+        });
+        expect(shades.map(shade => shade.kind)).toEqual(["fog", "smoke", "reach", "range", "blast", "place"]);
+        const squaresOf = (kind: string) => [...Array(12).keys()].filter(square => shades.find(shade => shade.kind === kind)!.has(square));
+        expect(squaresOf("fog")).toEqual([1]);
+        expect(squaresOf("smoke")).toEqual([2]);
+        expect(squaresOf("reach")).toEqual([3]);
+        expect(squaresOf("range")).toEqual([4]);
+        // The blast is the area and the cover it would blast away.
+        expect(squaresOf("blast")).toEqual([5, 6]);
+        // Somewhere to put the character picked up: the zone, less where the sealed squad stands.
+        expect(squaresOf("place")).toEqual([7, 9]);
+    });
+
+    it("deepens a reach by what each square costs", () => {
+        const reach = shadedSquares({ ...none, aiming: { reach: new Map([[3, 2], [4, 1]]), range: null, area: null, blasts: null } })[0];
+        expect([reach.ap!(3), reach.ap!(4)]).toEqual([2, 1]);
+    });
+
+    it("lays no place shading while nobody is picked up", () => {
+        expect(shadedSquares({ ...none, placing: { zone: [1, 2], selected: null } })).toEqual([]);
     });
 });

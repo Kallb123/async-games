@@ -7,15 +7,14 @@ import type RealmArenaBoard from '@/games/RealmArena/components/RealmArenaBoard'
 import { CAPTION_INSET, PlaybackCaption, UnplacedMark } from '@/games/RealmArena/components/RealmArenaCaption';
 import { TurnButtons, useBoardRotation } from '@/games/RealmArena/components/RealmArenaTurn';
 import { Board3D, type FigureSpec } from '@/games/RealmArena/three/board3d';
-import { previewLook } from '@/games/RealmArena/three/canvasShapes';
+import { boardLook } from '@/games/RealmArena/three/canvasShapes';
 import { cssColour } from '@/games/RealmArena/three/cssColour';
-import { markColours } from '@/games/RealmArena/three/marks3d';
 import { azimuthOf, boardFrame, cameraBasis, frameRect, regionOnScreen, topOf, turnedPoint, type BoardLayout } from '@/games/RealmArena/three/iso3d';
 import { overlaid, type Shading, type ShadingLayer } from '@/games/RealmArena/three/shading3d';
 import { loadSheets } from '@/games/RealmArena/three/terrain3d';
 import { loadCharacterModels } from '@/games/RealmArena/three/characterModels';
 import { CENTRE, isWarband, smokeSquares } from '@/games/RealmArena/rules';
-import { areaRect, BOARD_ZOOM, endOf, facingOf, ringOf, type Ring } from '@/games/RealmArena/ui';
+import { areaRect, BOARD_ZOOM, endOf, facingOf, ringOf, shadedSquares, type Ring, type ShadeKind } from '@/games/RealmArena/ui';
 import { useBoardFocus } from '@/games/RealmArena/useBoardFocus';
 import { PlaybackProvider, usePlaybackFrame } from '@/utils/hooks/usePlayback';
 import { usePrefersReducedMotion } from '@/utils/hooks/usePrefersReducedMotion';
@@ -25,6 +24,17 @@ type RealmArenaBoard3DProps = React.ComponentProps<typeof RealmArenaBoard>;
 
 /** A layer that paints `shading` on each of `squares`. */
 const inSet = (squares: ReadonlySet<number>, shading: Shading): ShadingLayer => square => squares.has(square) ? shading : null;
+
+/** The token and strength each kind of ground shading is painted in, as the isometric board's CSS has it (`.ag-ra-fog` and the rest). A reach deepens by `REACH_STEP` for each AP it costs beyond the first. */
+const SHADES: Readonly<Record<ShadeKind, { token: string; alpha: number }>> = {
+    fog: { token: '--ag-ink', alpha: 0.4 },
+    smoke: { token: '--ag-ink-softer', alpha: 0.35 },
+    reach: { token: '--ra-reach', alpha: 0.18 },
+    range: { token: '--ra-range', alpha: 0.3 },
+    blast: { token: '--ag-danger', alpha: 0.3 },
+    place: { token: '--ra-centre', alpha: 0.28 },
+};
+const REACH_STEP = 0.12;
 
 /** Hands the board the playback's time, a frame at a time, inside the `PlaybackProvider` it reads. */
 function PlaybackFrames({ board }: { board: Board3D | null }) {
@@ -133,13 +143,13 @@ export default function RealmArenaBoard3D({ field, fighters, fogGhosts = [], uns
     }, [board, field, fighters, fogGhosts, tintOf]);
     // What hangs round them: a ring each for who is chosen, a candidate, aimed at or a watcher a move would set off; and the AP of whoever's turn it is.
     useEffect(() => {
-        if (!board || !frame.current) return;
+        if (!board) return;
         const rings = new Map<number, Ring>();
         for (const { id } of fighters) {
             const ring = ringOf(id, selected?.id, aiming);
             if (ring) rings.set(id, ring);
         }
-        board.setMarking({ acting: acting ?? null, rings, colours: markColours(frame.current) });
+        board.setMarking({ acting: acting ?? null, rings });
     }, [board, fighters, selected, aiming, acting]);
     // The viewer's sealed squad, drawn where each pick stands, with the one picked up ringed.
     useEffect(() => {
@@ -151,8 +161,8 @@ export default function RealmArenaBoard3D({ field, fighters, fogGhosts = [], uns
     useEffect(() => board?.setSmoke(smoke), [board, smoke]);
 
     // What's shaded on the ground, laid over one another in the order the isometric
-    // board paints them: the zones, the centre, the fog, a smoke cloud, a reach, a
-    // range, a blast, and the squares a picked-up character may be placed on.
+    // board paints them: the zones and the centre (which it draws as polygons), then
+    // what both boards shade a square at a time (`shadedSquares`).
     useEffect(() => {
         const scope = frame.current;
         if (!board || !scope) return;
@@ -168,32 +178,18 @@ export default function RealmArenaBoard3D({ field, fighters, fogGhosts = [], uns
         const layers: ShadingLayer[] = [square => zone.get(square) ?? null];
         const centre = new Set(showCentre ? field.objectives[CENTRE] ?? [] : []);
         if (centre.size > 0) layers.push(inSet(centre, { colour: token('--ra-centre'), alpha: 0.18 }));
-        if (unseen && unseen.size > 0) layers.push(inSet(unseen, { colour: token('--ag-ink'), alpha: 0.4 }));
-        if (smoke.size > 0) layers.push(inSet(smoke, { colour: token('--ag-ink-softer'), alpha: 0.35 }));
-        const reach = aiming?.reach;
-        if (reach) {
-            const colour = token('--ra-reach');
-            layers.push(square => {
-                const ap = reach.get(square);
-                return ap === undefined ? null : { colour, alpha: 0.18 + 0.12 * (ap - 1) };
-            });
-        }
-        if (aiming?.range) layers.push(inSet(aiming.range, { colour: token('--ra-range'), alpha: 0.3 }));
-        const blast = new Set([...aiming?.area ?? [], ...aiming?.blasts ?? []]);
-        if (blast.size > 0) layers.push(inSet(blast, { colour: token('--ag-danger'), alpha: 0.3 }));
-        if (placing && placing.selected !== null) {
-            // Somewhere to put the character picked up: anywhere in the zone nobody stands.
-            const free = new Set(placing.zone);
-            sealed?.forEach(pick => free.delete(pick.square));
-            layers.push(inSet(free, { colour: token('--ra-centre'), alpha: 0.28 }));
+        for (const shade of shadedSquares({ unseen, smoke, aiming, placing, sealed })) {
+            const { token: name, alpha } = SHADES[shade.kind];
+            const colour = token(name);
+            layers.push(square => shade.has(square) ? { colour, alpha: shade.ap ? alpha + REACH_STEP * (shade.ap(square) - 1) : alpha } : null);
         }
         board.setShading(square => overlaid(layers, square), wave.size > 0 ? wave : null);
     }, [board, field, smoke, owners, colourFor, waveDue, showCentre, aiming, unseen, placing, sealed]);
 
     // What an action lined up and the map show over the figures: the path, the
-    // chance to hit, the cover, the centre's name; and the colours they wear.
+    // chance to hit, the cover, the centre's name; and the colours they, the marks and the bars wear.
     useEffect(() => {
-        if (frame.current) board?.setLook(previewLook(frame.current));
+        if (frame.current) board?.setLook(boardLook(frame.current));
     }, [board]);
     useEffect(() => {
         const centreSquares = showCentre ? field.objectives[CENTRE] ?? [] : [];

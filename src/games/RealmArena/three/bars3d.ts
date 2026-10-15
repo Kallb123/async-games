@@ -11,7 +11,7 @@ import { Color } from "three";
 import type { Fighter } from "@/games/RealmArena/rules";
 import { HP_BAR_HEIGHT, HP_BAR_RISE, HP_BAR_WIDTH, hpFraction } from "@/games/RealmArena/ui";
 import { Billboards, CanvasAtlas, type BillboardAxes } from "./billboards";
-import { solidRect, type PreviewLook } from "./canvasShapes";
+import { solidRect, type BoardLook } from "./canvasShapes";
 import type { Vec3 } from "./iso3d";
 
 /** How far the dark edge's stroke is wide (`.ag-ra-hp-edge`). */
@@ -66,9 +66,10 @@ export class HpBars {
     /** Behind a wall that stands in front of a figure, as the figure is. */
     readonly billboards: Billboards;
     private bars: readonly BarSpec[] = [];
-    private look: PreviewLook | null = null;
+    private look: BoardLook | null = null;
     private opacity = 1;
-    private readonly reduced = typeof matchMedia === "function" && matchMedia("(prefers-reduced-motion: reduce)").matches;
+    /** Reduced motion: a lined-up change shows at a steady middle opacity, not flashing. */
+    private still = false;
 
     constructor(axes: BillboardAxes) {
         // Drawn after the solids and the ring, before the previews and the marks.
@@ -77,13 +78,14 @@ export class HpBars {
 
     /** Whether any bar has a change to flash, which the board runs frames for. */
     get pulsing(): boolean {
-        return !this.reduced && this.bars.some(bar => bar.preview);
+        return !this.still && this.bars.some(bar => bar.preview);
     }
 
-    /** Every standing figure's bar, as they are now. */
-    lay(bars: readonly BarSpec[], look: PreviewLook | null): void {
+    /** Every standing figure's bar, as they are now; `still` is reduced motion, from the board. */
+    lay(bars: readonly BarSpec[], look: BoardLook | null, still: boolean): void {
         this.bars = bars;
         this.look = look;
+        this.still = still;
         this.build();
     }
 
@@ -118,7 +120,7 @@ export class HpBars {
             }
         }
         // After every bar, as the isometric board draws its pulses after everything else.
-        const opacity = this.reduced ? (1 + PULSE_MIN) / 2 : this.opacity;
+        const opacity = this.still ? (1 + PULSE_MIN) / 2 : this.opacity;
         if (look) {
             for (const { feet, preview } of this.bars) {
                 if (preview) stretch(feet, preview.from, preview.to, preview.gain ? look.hpLight : look.hpDark, opacity);

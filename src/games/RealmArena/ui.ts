@@ -212,6 +212,50 @@ export function ringOf(id: number, selected: number | undefined, aiming: { aimed
     return undefined;
 }
 
+/** The kinds of shading the ground takes, bottom to top in the order the boards paint them (`shadedSquares`). */
+export type ShadeKind = "fog" | "smoke" | "reach" | "range" | "blast" | "place";
+
+/** One kind of shading and the squares it lies on. */
+export interface GroundShade {
+    kind: ShadeKind;
+    has: (square: Square) => boolean;
+    /** For a `reach`: the AP it costs to stop on a square of it, which the shading deepens by. */
+    ap?: (square: Square) => number;
+}
+
+/**
+ * Everything shaded on the ground square by square, in the order a board
+ * paints it, bottom first, whichever way the board is drawn: the fog over what
+ * the viewer can't see (§27), then the smoke a smoke pot left, under whatever
+ * is being aimed (§21.2) — the reach by the AP each square costs, the range, the
+ * blast (the area plus the cover it would blast away) — and, over the lot, the
+ * squares a character picked up may be placed on: the deployment zone, less
+ * where a pick of the sealed squad already stands.
+ */
+export function shadedSquares({ unseen, smoke, aiming, placing, sealed }: {
+    unseen?: ReadonlySet<Square> | null;
+    smoke: ReadonlySet<Square>;
+    aiming?: { reach: ReadonlyMap<Square, number> | null; range: ReadonlySet<Square> | null; area: readonly Square[] | null; blasts: readonly Square[] | null } | null;
+    placing?: { zone: readonly Square[]; selected: number | null } | null;
+    sealed?: readonly { square: Square }[] | null;
+}): GroundShade[] {
+    const shades: GroundShade[] = [];
+    if (unseen && unseen.size > 0) shades.push({ kind: "fog", has: square => unseen.has(square) });
+    if (smoke.size > 0) shades.push({ kind: "smoke", has: square => smoke.has(square) });
+    const reach = aiming?.reach;
+    if (reach) shades.push({ kind: "reach", has: square => reach.has(square), ap: square => reach.get(square)! });
+    const range = aiming?.range;
+    if (range) shades.push({ kind: "range", has: square => range.has(square) });
+    const blast = new Set([...aiming?.area ?? [], ...aiming?.blasts ?? []]);
+    if (blast.size > 0) shades.push({ kind: "blast", has: square => blast.has(square) });
+    if (placing && placing.selected !== null) {
+        const free = new Set(placing.zone);
+        sealed?.forEach(pick => free.delete(pick.square));
+        shades.push({ kind: "place", has: square => free.has(square) });
+    }
+    return shades;
+}
+
 /** A target's chance to hit: a pill wide enough for "100%", worn above its figure's HP bar. */
 export const ODDS_WIDTH = 10.5;
 export const ODDS_HEIGHT = 4;

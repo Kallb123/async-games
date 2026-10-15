@@ -8,7 +8,7 @@
 
 import { fadeInAt, fadeOutAt, shoveAt, type Shove, type Timed } from "@/games/RealmArena/ui";
 import type { Battlefield } from "@/utils/games/battlefield/terrain";
-import { BOARD_UNIT } from "./billboards";
+import { fromBoardUnits, toBoardUnits } from "./billboards";
 import { onScreen, QUARTER, squareCentre, type CameraBasis, type Vec3 } from "./iso3d";
 
 /** How much of each of a downed character's two figures is there: how much of the one still standing as the action found it, and of the one lying where it fell (null while that one isn't drawn at all). */
@@ -40,7 +40,7 @@ export function fallingAt(fall: Timed, arrives: number | undefined, ms: number, 
  * out of it, and looks the same size and way on screen.
  */
 export function groundMove(basis: CameraBasis, offset: { x: number; y: number }): Vec3 {
-    const sx = offset.x * BOARD_UNIT, sy = -offset.y * BOARD_UNIT;
+    const { x: sx, y: sy } = fromBoardUnits(offset);
     const { right, up } = basis;
     // right·g = sx, up·g = sy, for g on the ground (its y is nothing).
     const det = right[0] * up[2] - right[2] * up[0];
@@ -50,10 +50,7 @@ export function groundMove(basis: CameraBasis, offset: { x: number; y: number })
 /** The ground move of `shoves` `ms` in, from where the camera has the squares: `shoveAt`, through `groundMove`. */
 export function shoveOf(shoves: readonly Shove[], ms: number, field: Pick<Battlefield, "width" | "tiles">, basis: CameraBasis): Vec3 {
     if (shoves.length === 0) return [0, 0, 0];
-    const offset = shoveAt(shoves, ms, square => {
-        const { x, y } = onScreen(basis, squareCentre(field, square));
-        return { x: x / BOARD_UNIT, y: -y / BOARD_UNIT };
-    });
+    const offset = shoveAt(shoves, ms, square => toBoardUnits(onScreen(basis, squareCentre(field, square))));
     return groundMove(basis, offset);
 }
 

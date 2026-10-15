@@ -21,7 +21,7 @@ import { CHARACTER_ART, facingCell, ITEM_ART, SMOKE_ART, spriteBox, TERRAIN_ART,
 import { CHARACTERS, ITEMS, type CharacterId, type ItemId } from '@/games/RealmArena/characters';
 import { CENTRE, isStanding, isWarband, maxHpOf, smokeSquares, type BattleState, type Fighter, type FogGhost, type MusterPick, type ToldEvent } from '@/games/RealmArena/rules';
 import type { AttackOption } from '@/games/RealmArena/tactics';
-import { AP_PIP_OFFSET, AP_PIP_RADIUS, AP_PIP_STEP, apPips, areaRect, BOARD_ZOOM, CENTRE_LABEL, EFFECT_MARK_OFFSET, EFFECT_MARK_SIZE, EFFECT_MARK_STEP, FIGURE_RADIUS, FIGURE_RISE, fxPointsAt, HP_BAR_HEIGHT, HP_BAR_RISE, HP_BAR_WIDTH, ITEM_MARK_OFFSET, ITEM_MARK_SIZE, MARKER_RADIUS, ODDS_HEIGHT, ODDS_RISE, ODDS_WIDTH, PATH_END_RADIUS, RING_RADIUS, ringOf, shieldPath, SMOKE_SIZE, type Marker, type Ring, type BattleCue, type BoardFollow, type FallCue, type FxPoints, type ScorchCue, type Shove, type Timed, type WalkCue, effectsOn, facingOf, fadeInAt, fadeOutAt, fighterStatus, endOf, hpFraction, legLengthOn, progressOf, shakeAt, shakesOf, shovesOf, shoveAt, terrainLetter, toldAt, toldOf, walkerAt, walkCameraAt, legPoint, walkLift, walkSquares, type Told } from '@/games/RealmArena/ui';
+import { AP_PIP_OFFSET, AP_PIP_RADIUS, AP_PIP_STEP, apPips, areaRect, BOARD_ZOOM, CENTRE_LABEL, EFFECT_MARK_OFFSET, EFFECT_MARK_SIZE, EFFECT_MARK_STEP, FIGURE_RADIUS, FIGURE_RISE, fxPointsAt, HP_BAR_HEIGHT, HP_BAR_RISE, HP_BAR_WIDTH, ITEM_MARK_OFFSET, ITEM_MARK_SIZE, MARKER_RADIUS, ODDS_HEIGHT, ODDS_RISE, ODDS_WIDTH, PATH_END_RADIUS, RING_RADIUS, ringOf, shadedSquares, shieldPath, SMOKE_SIZE, type GroundShade, type Marker, type ShadeKind, type Ring, type BattleCue, type BoardFollow, type FallCue, type FxPoints, type ScorchCue, type Shove, type Timed, type WalkCue, effectsOn, facingOf, fadeInAt, fadeOutAt, fighterStatus, endOf, hpFraction, legLengthOn, progressOf, shakeAt, shakesOf, shovesOf, shoveAt, terrainLetter, toldAt, toldOf, walkerAt, walkCameraAt, legPoint, walkLift, walkSquares, type Told } from '@/games/RealmArena/ui';
 
 /** How deep the ground is drawn under the map's front edges, in quarters. */
 const SLAB_DEPTH = 3;
@@ -179,6 +179,16 @@ interface Placing {
 
 /** What a square is shaded with — its reach, a range, a blast — as the class it's drawn with, or undefined for nothing. */
 type Shade = (square: Square) => string | undefined;
+
+/** The class each kind of shading is drawn with. */
+const SHADE_CLASS: Readonly<Record<ShadeKind, string>> = {
+    fog: 'ag-ra-fog', smoke: 'ag-ra-smoke', reach: 'ag-ra-reach', range: 'ag-ra-range', blast: 'ag-ra-blast', place: 'ag-ra-place',
+};
+
+/** The class a `GroundShade` is drawn with on a square it has: a reach deepens with the AP it costs. */
+function shadeClass({ kind, ap }: GroundShade, square: Square): string {
+    return kind === 'reach' ? `${SHADE_CLASS.reach} ag-ra-reach--${ap!(square)}` : SHADE_CLASS[kind];
+}
 
 /** Where a figure's disc is centred: `FIGURE_RISE` over the middle of its square's top. */
 function discCentre(view: IsoView, square: Square): Point {
@@ -912,25 +922,9 @@ export default function RealmArenaBoard({ field, fighters, fogGhosts = [], unsee
     const centreSquares = showCentre ? field.objectives[CENTRE] ?? [] : [];
     const centre = centreSquares.length > 0 ? areaRect(field, centreSquares) : null;
 
-    // Everything shaded square by square, in the order it's painted: the fog
-    // over what the viewer can't see (§27), then the smoke a smoke pot left,
-    // under whatever is being aimed (§21.2).
+    // Everything shaded square by square, in the order it's painted.
     const smoke = smokeSquares({ field, fighters, clouds });
-    const shades: Shade[] = [];
-    if (unseen && unseen.size > 0) shades.push(square => unseen.has(square) ? 'ag-ra-fog' : undefined);
-    if (smoke.size > 0) shades.push(square => smoke.has(square) ? 'ag-ra-smoke' : undefined);
-    const reach = aiming?.reach;
-    if (reach) shades.push(square => reach.has(square) ? `ag-ra-reach ag-ra-reach--${reach.get(square)}` : undefined);
-    const range = aiming?.range;
-    if (range) shades.push(square => range.has(square) ? 'ag-ra-range' : undefined);
-    const blast = new Set([...aiming?.area ?? [], ...aiming?.blasts ?? []]);
-    if (blast.size > 0) shades.push(square => blast.has(square) ? 'ag-ra-blast' : undefined);
-    if (placing && placing.selected !== null) {
-        // Somewhere to put the character picked up: anywhere in the zone nobody stands.
-        const free = new Set(placing.zone);
-        sealed?.forEach(pick => free.delete(pick.square));
-        shades.push(square => free.has(square) ? 'ag-ra-place' : undefined);
-    }
+    const shades: Shade[] = shadedSquares({ unseen, smoke, aiming, placing, sealed }).map(shade => square => shade.has(square) ? shadeClass(shade, square) : undefined);
     const flatShades = shades.flatMap(shade => flatRuns(view, shade));
 
     const zones = field.deploymentAreas.flatMap((areas, seat) => {

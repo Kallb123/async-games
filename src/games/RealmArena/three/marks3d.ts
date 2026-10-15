@@ -11,18 +11,17 @@
 // isometric board is drawn by (ui.ts). `MarkLayer` draws them: three draws of
 // marks (the effects' sheet, the items' sheet, the pips' atlas) and one of rings.
 
-import { Group, type Color } from "three";
+import { Color, Group } from "three";
 import { EFFECT_ART, ITEM_ART, WATCH_ART, type Sprite } from "@/games/RealmArena/art";
 import type { EffectId, ItemId } from "@/games/RealmArena/characters";
 import type { Fighter } from "@/games/RealmArena/rules";
 import {
     AP_PIP_OFFSET, AP_PIP_RADIUS, AP_PIP_STEP, apPips, EFFECT_MARK_OFFSET, EFFECT_MARK_SIZE, EFFECT_MARK_STEP, effectsOn, FIGURE_RISE, ITEM_MARK_OFFSET, ITEM_MARK_SIZE,
 } from "@/games/RealmArena/ui";
-import { Billboards, CanvasAtlas, sheetTexture, spriteRect, type BillboardAxes } from "./billboards";
-import { cssColour } from "./cssColour";
+import { Billboards, CanvasAtlas, sheetTexture, spriteRect, type BillboardAxes, type TexRect } from "./billboards";
+import { DISC_BOX, discRect, type RingColours } from "./canvasShapes";
 import type { Vec3 } from "./iso3d";
-import { rgba } from "./canvasShapes";
-import { GroundRings, type RingColours, type RingKind } from "./rings3d";
+import { GroundRings, type RingKind } from "./rings3d";
 import type { Sheets } from "./terrain3d";
 
 /** Where something hangs from a figure's feet, in the isometric board's units: right, and down. */
@@ -85,20 +84,17 @@ export function marksOf(level: MarkLevel, drawn: Fighter, acting: boolean): Figu
     return { effects: effectsOn(drawn), watching: drawn.banked > 0, item: drawn.item, pips: acting ? apPips(drawn) : [] };
 }
 
-/** The tokens the marks are drawn in, resolved under `scope` (`cssColour`): `.ag-ra-ring--*`, `.ag-ra-marker--*` and `.ag-ra-ap` use them. */
-export function markColours(scope: Element): RingColours {
-    const token = (name: string) => cssColour(scope, `var(${name})`);
-    return { onDark: token("--ag-on-dark"), gold: token("--ag-gold"), danger: token("--ag-danger"), oxblood: token("--ra-oxblood") };
-}
-
-/** A colour as a canvas writes it, as written (`cssColour` keeps sRGB). */
-
 /** Drawn after the HP bars (2 and 3, board3d.ts) and over the figures. */
 const MARKS_ORDER = 4;
 /** How far a mark is drawn towards the camera from where it hangs, in the world's units, so the figure beside it never cuts into it. */
 const MARK_LIFT = 0.5;
 /** The width of a pip's edge, as `.ag-ra-ap` strokes it. */
 const PIP_EDGE = 0.25;
+/** The side of the box a pip is drawn in: its diameter and its edge. */
+const PIP_BOX = 2 * AP_PIP_RADIUS + PIP_EDGE;
+/** A pip not lit is a faint black (`.ag-ra-ap`, which has no token for it). */
+const PIP_OFF = new Color(0, 0, 0);
+const PIP_OFF_OPACITY = 0.35;
 
 /**
  * Everything drawn round the figures: laid out afresh with `begin`, a
@@ -112,6 +108,8 @@ export class MarkLayer {
     private readonly pips: Billboards;
     private readonly rings = new GroundRings();
     private readonly pipAtlas = new CanvasAtlas(24, 256);
+    /** A pip is a disc for its fill, and a ring over it for its edge, each tinted when it's added. */
+    private readonly pipShapes: { disc: TexRect; edge: TexRect };
     private colours: RingColours | null = null;
 
     constructor(sheets: Sheets, axes: BillboardAxes) {
@@ -120,6 +118,14 @@ export class MarkLayer {
         this.effects = new Billboards(sheetTexture(sheets, WATCH_ART.sheet), axes, options);
         this.items = new Billboards(sheetTexture(sheets, "items"), axes, options);
         this.pips = new Billboards(this.pipAtlas.texture, axes, options);
+        const edge = this.pipAtlas.rect("pip-edge", PIP_BOX, PIP_BOX, context => {
+            context.beginPath();
+            context.arc(PIP_BOX / 2, PIP_BOX / 2, AP_PIP_RADIUS, 0, 2 * Math.PI);
+            context.lineWidth = PIP_EDGE;
+            context.strokeStyle = "#fff";
+            context.stroke();
+        });
+        this.pipShapes = { disc: discRect(this.pipAtlas), edge };
         this.group.add(this.effects.mesh, this.items.mesh, this.pips.mesh, this.rings.mesh);
     }
 
@@ -142,17 +148,8 @@ export class MarkLayer {
         }
         if (item) this.items.add({ at: feet, x: item.x, y: item.y, width: ITEM_MARK_SIZE, height: ITEM_MARK_SIZE, rect: spriteRect(item.sprite) });
         for (const { on, x, y } of pips) {
-            const box = 2 * AP_PIP_RADIUS + PIP_EDGE;
-            const rect = this.pipAtlas.rect(`pip:${on}:${rgba(colours.gold)}:${rgba(colours.onDark)}`, box, box, context => {
-                context.beginPath();
-                context.arc(box / 2, box / 2, AP_PIP_RADIUS, 0, 2 * Math.PI);
-                context.fillStyle = on ? rgba(colours.gold) : "rgba(0, 0, 0, 0.35)"; // `.ag-ra-ap`, which has no token
-                context.fill();
-                context.lineWidth = PIP_EDGE;
-                context.strokeStyle = rgba(colours.onDark);
-                context.stroke();
-            });
-            this.pips.add({ at: feet, x, y, width: box, height: box, rect });
+            this.pips.add({ at: feet, x, y, width: 2 * AP_PIP_RADIUS * DISC_BOX, rect: this.pipShapes.disc, colour: on ? colours.gold : PIP_OFF, opacity: on ? 1 : PIP_OFF_OPACITY });
+            this.pips.add({ at: feet, x, y, width: PIP_BOX, height: PIP_BOX, rect: this.pipShapes.edge, colour: colours.onDark });
         }
     }
 

@@ -9,25 +9,34 @@ import { Color } from "three";
 import { cssColour } from "./cssColour";
 import type { CanvasAtlas, TexRect } from "./billboards";
 
-/** The colours and the typeface the previews are drawn in, resolved from the design tokens the isometric board's CSS draws them with. */
-export interface PreviewLook {
+/** The colours and the typeface the board draws its flat marks in, resolved once from the design tokens the isometric board's CSS draws them with. */
+export interface BoardLook {
     /** The typeface (`--ag-font`), as a canvas font family. */
     font: string;
     /** The dark ground of the odds and the cover shields (`--ra-night`), and the gold on it (`--ag-gold`). */
     night: Color;
     gold: Color;
-    /** A lined-up move's path (`--ag-on-dark`). */
+    /** A lined-up move's path and a chosen figure's ring (`--ag-on-dark`). */
     onDark: Color;
+    /** The ring round a figure aimed at or a watcher a move would set off (`--ag-danger`), and round a squad still sealed (`--ra-oxblood`). */
+    danger: Color;
+    oxblood: Color;
     /** An HP bar's dark edge and what a blow would take off it, and the pale chip and what a heal would give (`--ra-hp-dark`, `--ra-hp-light`). */
     hpDark: Color;
     hpLight: Color;
 }
 
+/** The colours a ring is drawn in (`rings3d.ts`). */
+export type RingColours = Pick<BoardLook, "onDark" | "gold" | "danger" | "oxblood">;
+
 /** The look under `scope`, where the game's tokens (`.ag-game--realmarena`) resolve. */
-export function previewLook(scope: Element): PreviewLook {
+export function boardLook(scope: Element): BoardLook {
     const token = (name: string) => cssColour(scope, `var(${name})`);
     const font = getComputedStyle(scope).getPropertyValue("--ag-font").trim() || getComputedStyle(scope).fontFamily;
-    return { font, night: token("--ra-night"), gold: token("--ag-gold"), onDark: token("--ag-on-dark"), hpDark: token("--ra-hp-dark"), hpLight: token("--ra-hp-light") };
+    return {
+        font, night: token("--ra-night"), gold: token("--ag-gold"), onDark: token("--ag-on-dark"), danger: token("--ag-danger"), oxblood: token("--ra-oxblood"),
+        hpDark: token("--ra-hp-dark"), hpLight: token("--ra-hp-light"),
+    };
 }
 
 /** A colour as the canvas writes it, at `alpha`: what `color-mix(in oklch, colour N%, transparent)` is. */
@@ -80,11 +89,12 @@ export const textWidth = (atlas: CanvasAtlas, text: string, style: TextStyle): n
 /**
  * Draws `text` at (`x`, `y`) in board units, centred across, on `baseline`.
  * Given `outline`, stroked that wide in that colour first (`paint-order:
- * stroke`) so it reads over whatever colour is under it.
+ * stroke`) so it reads over whatever colour is under it, with corners joined
+ * as `join` (a canvas's own default, a miter, as an SVG's is).
  */
 export function drawText(
     context: CanvasRenderingContext2D, text: string, x: number, y: number, style: TextStyle, fill: string,
-    { baseline = "alphabetic", outline }: { baseline?: CanvasTextBaseline; outline?: { colour: string; width: number } } = {},
+    { baseline = "alphabetic", outline }: { baseline?: CanvasTextBaseline; outline?: { colour: string; width: number; join?: CanvasLineJoin } } = {},
 ): void {
     context.save();
     context.scale(1 / TEXT_SCALE, 1 / TEXT_SCALE);
@@ -94,11 +104,24 @@ export function drawText(
     if (outline) {
         context.strokeStyle = outline.colour;
         context.lineWidth = outline.width * TEXT_SCALE;
+        if (outline.join) context.lineJoin = outline.join;
         context.strokeText(text, x * TEXT_SCALE, y * TEXT_SCALE);
     }
     context.fillStyle = fill;
     context.fillText(text, x * TEXT_SCALE, y * TEXT_SCALE);
     context.restore();
+}
+
+/**
+ * Calls `then` once `font` (a canvas font, e.g. `800 16px Bricolage Grotesque`)
+ * has loaded, or has failed to: text drawn before then would be drawn in the
+ * typeface that stands in for it, for good. Answers whether it will; a page
+ * without the font API has nothing to wait for, and draws in what it has.
+ */
+export function whenFontReady(font: string, then: () => void): boolean {
+    if (typeof document === "undefined" || !document.fonts) return false;
+    document.fonts.load(font).then(then, then);
+    return true;
 }
 
 /**

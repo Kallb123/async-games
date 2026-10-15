@@ -23,16 +23,15 @@ import { CLIMB_LEG, endOf, fadeOutAt, shakeAt, shovesOf, toldAt, toldOf, walkerA
 import { facingTowards, type Battlefield, type Facing, type Square } from "@/utils/games/battlefield/terrain";
 import { easeInOut } from "@/utils/ui/boardZoom";
 import type { Rect } from "@/utils/ui/mapLabels";
-import { billboardAxes, setAxes } from "./billboards";
+import { billboardAxes, fromBoardUnits, setAxes } from "./billboards";
 import { barLevels, HpBars, type BarSpec } from "./bars3d";
-import type { PreviewLook } from "./canvasShapes";
+import type { BoardLook } from "./canvasShapes";
 import type { CharacterModels } from "./characterModels";
 import { fallingAt, mayBeHidden, shoveOf, type Falling } from "./figureCues";
 import { FigurePools } from "./figurePools";
 import { BattleFx } from "./fx3d";
-import { azimuthOf, cameraBasis, cameraFor, figureMatrix, lightOf, lookAtFor, lookAtGround, onScreen, QUARTER, squareCentre, toFrame, type BoardFrame, type BoardLayout, type CameraBasis, type Vec3 } from "./iso3d";
+import { azimuthOf, cameraBasis, cameraFor, figureMatrix, lerp3, lightOf, lookAtFor, lookAtGround, onScreen, QUARTER, squareCentre, toFrame, type BoardFrame, type BoardLayout, type CameraBasis, type Vec3 } from "./iso3d";
 import { MarkLayer, marksOf, type MarkLevel } from "./marks3d";
-import type { RingColours } from "./rings3d";
 import { NO_PREVIEWS, Previews3D, type PreviewSpec } from "./previews3d";
 import type { Shading } from "./shading3d";
 import { lightSolids } from "./solidMaterial";
@@ -44,9 +43,6 @@ const WAVE_FRAME_MS = 66;
 const TURN_MS = 320;
 /** How far a press may move and still be a tap, in pixels. */
 const TAP_SLOP = 8;
-
-/** Board units (the isometric board's) to world units, across the frame and up it: a square's diagonal is 20 board units, a full height 10. */
-const BOARD_UNIT = Math.SQRT2 / 20;
 
 /** A board unit up the frame, in the world's height: a full height is 10 of them. */
 const BOARD_RISE = QUARTER * 4 / 10;
@@ -78,11 +74,10 @@ const GHOST_OPACITY = 0.35;
 /** How faint the sealed squad is drawn, as the isometric board has it (`.ag-ra-sealed`). */
 const SEALED_OPACITY = 0.7;
 
-/** What the figures are marked with: whose turn it is in battle (their AP shows), the ring round each figure's feet, and the colours the marks are drawn in. */
+/** What the figures are marked with: whose turn it is in battle (their AP shows), and the ring round each figure's feet. */
 export interface Marking {
     acting: string | null;
     rings: ReadonlyMap<number, Ring>;
-    colours: RingColours;
 }
 
 /** What an action plays, ready to place a frame at a time. */
@@ -144,9 +139,11 @@ export class Board3D {
     /** The HP bars, and the lined-up action's previews and the centre's name: flat to the camera, one draw each. */
     private readonly bars: HpBars;
     private readonly previews: Previews3D;
-    /** What the previews are drawn in, and the HP an action lined up would change, for the bars (`setLook`, `setHpChange`). */
-    private look: PreviewLook | null = null;
+    /** What the marks, bars and previews are drawn in, and the HP an action lined up would change, for the bars (`setLook`, `setHpChange`). */
+    private look: BoardLook | null = null;
     private hpChange: ReadonlyMap<number, number> | null = null;
+    /** Reduced motion, as the board was last told (`play`): the bars' lined-up change holds steady instead of flashing. */
+    private still = false;
     /** The effects an action plays over the battlefield, and the smoke that stands on it. */
     private readonly fx: BattleFx;
     /** What hangs round the figures: marks, pips, items and rings. Made with the art it draws from. */
@@ -296,7 +293,7 @@ export class Board3D {
         this.invalidate();
     }
 
-    /** What the figures are marked with: the ring round each one's feet (chosen, a candidate, aimed at, a watcher), the AP pips on its owner's turn, and the colours. */
+    /** What the figures are marked with: the ring round each one's feet (chosen, a candidate, aimed at, a watcher) and the AP pips on its owner's turn. */
     setMarking(marking: Marking): void {
         this.marking = marking;
         this.layFigures(this.playing ? this.playedMs : null);
@@ -324,11 +321,11 @@ export class Board3D {
     }
 
     /**
-     * What the previews are drawn in: the colours and typeface the isometric
-     * board's CSS gives them. The text in them waits for the typeface to load,
-     * and is laid out when it has.
+     * What the marks, the bars and the previews are drawn in: the colours and
+     * typeface the isometric board's CSS gives them. The text in the previews
+     * waits for the typeface to load, and is laid out when it has.
      */
-    setLook(look: PreviewLook): void {
+    setLook(look: BoardLook): void {
         this.look = look;
         this.previews.setLook(look, () => this.layPreviews());
         this.layFigures(this.playing ? this.playedMs : null);
@@ -438,6 +435,7 @@ export class Board3D {
         this.stopFollowing();
         this.clearCovers();
         this.playing = null;
+        this.still = still;
         this.fx.play(playback?.cues ?? null, still);
         if (playback) {
             const walks = new Map<number, WalkCue[]>();
@@ -461,6 +459,8 @@ export class Board3D {
             };
         }
         this.frame(0);
+        // Whether a lined-up change on a bar flashes depends on it.
+        this.animate();
     }
 
     /** Draws what's playing as it is `ms` in. */
@@ -477,7 +477,8 @@ export class Board3D {
                 this.fx.lay(ms, this.basis);
                 // The shake is across the frame in board units, down positive.
                 const { x, y } = playing.still ? { x: 0, y: 0 } : shakeAt(playing.cues, ms);
-                this.shake = this.basis.right.map((n, i) => (n * x - this.basis.up[i] * y) * BOARD_UNIT) as Vec3;
+                const across = fromBoardUnits({ x, y });
+                this.shake = this.basis.right.map((n, i) => n * across.x + this.basis.up[i] * across.y) as Vec3;
                 if (playing.tracked !== null && ms < playing.end) {
                     const walker = this.placed.find(one => one.id === playing.tracked);
                     if (walker && this.layout && this.centre) {
@@ -518,7 +519,7 @@ export class Board3D {
         const matrix = new Matrix4();
         const bars: BarSpec[] = [];
         const playing = ms === null ? null : this.playing;
-        this.marks?.begin(this.marking?.colours ?? null);
+        this.marks?.begin(this.look);
         /** One figure of `character`, fully there or, with an `opacity` under 1, fading. */
         const lay = (character: CharacterId, at: Vec3, facing: Facing, fallen: boolean, tint: Color | null, opacity = 1) => {
             matrix.fromArray(figureMatrix(at, facing, fallen));
@@ -543,7 +544,7 @@ export class Board3D {
                 const leg = walks ? walkerAt(walks, ms!, (from, to) => worldLeg(field, from, to)) : null;
                 if (leg) {
                     const a = squareCentre(field, leg.from), b = squareCentre(field, leg.to);
-                    feet = a.map((n, i) => n + (b[i] - n) * leg.across) as Vec3;
+                    feet = lerp3(a, b, leg.across);
                     lift = -walkLift(leg, one => field.tiles[one].elevation) * BOARD_RISE;
                     if (leg.from !== leg.to) facing = facingTowards(field, leg.from, leg.to);
                     standing = true;
@@ -591,7 +592,7 @@ export class Board3D {
         this.layMuster(models, matrix);
         for (const { ghost, facing, tint } of this.ghosts) lay(ghost.character, squareCentre(field, ghost.square), facing, false, tint, GHOST_OPACITY);
         this.pools.end();
-        this.bars.lay(bars, this.look);
+        this.bars.lay(bars, this.look, this.still);
         this.marks?.end();
     }
 
@@ -666,7 +667,7 @@ export class Board3D {
         const shown = cameraFor(this.frameBasis, frame, this.view ?? { x: 0, y: 0, ...frame.size }, this.size.width);
         const from = this.turn?.ground;
         const k = this.turn?.progress ?? 1;
-        const ground = from ? from.map((n, i) => n + (shown.ground[i] - n) * k) as Vec3 : shown.ground;
+        const ground = from ? lerp3(from, shown.ground, k) : shown.ground;
         return { ground, zoom: shown.zoom, target: lookAtGround(this.basis, ground) };
     }
 

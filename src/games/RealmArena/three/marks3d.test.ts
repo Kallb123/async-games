@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { EFFECT_ART, ITEM_ART, WATCH_ART } from "@/games/RealmArena/art";
 import type { Fighter } from "@/games/RealmArena/rules";
 import { ACTION_POINTS } from "@/games/RealmArena/rules";
-import { AP_PIP_OFFSET, AP_PIP_STEP, EFFECT_MARK_OFFSET, EFFECT_MARK_STEP, FIGURE_RISE, ITEM_MARK_OFFSET, ringOf } from "@/games/RealmArena/ui";
+import { AP_PIP_OFFSET, AP_PIP_STEP, EFFECT_MARK_OFFSET, EFFECT_MARK_STEP, FIGURE_RISE, ITEM_MARK_OFFSET } from "@/games/RealmArena/ui";
 import { ISO_HALF_WIDTH } from "@/utils/ui/isometric";
 import { columnAt, figureMarks, marksOf } from "./marks3d";
 import { dashCount, ringBox } from "./rings3d";
@@ -68,16 +68,6 @@ describe("what a figure wears", () => {
 });
 
 describe("the rings round the feet", () => {
-    it("picks the ring a figure wears in the order the isometric board does", () => {
-        const aiming = { aimed: [2], flagged: [2, 3], candidates: [2, 3, 4] };
-        expect(ringOf(1, 1, aiming)).toBe("selected");
-        expect(ringOf(2, 1, aiming)).toBe("aimed");
-        expect(ringOf(3, 1, aiming)).toBe("flagged");
-        expect(ringOf(4, 1, aiming)).toBe("candidate");
-        expect(ringOf(5, 1, aiming)).toBeUndefined();
-        expect(ringOf(5, undefined, null)).toBeUndefined();
-    });
-
     it("draws a ring in a box that holds its diameter and its stroke, the dashed marker outside the ring", () => {
         expect(ringBox("selected")).toBeGreaterThan(2 * ISO_HALF_WIDTH * 0.62);
         expect(ringBox("aimed")).toBeGreaterThan(ringBox("selected"));

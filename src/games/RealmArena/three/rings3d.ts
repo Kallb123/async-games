@@ -6,25 +6,21 @@
 // (billboards.ts), so they're foreshortened with the ground as the isometric
 // board's ellipses are.
 //
-// One `GroundRings` is one draw, of as many rings as it's handed. Each kind is
-// drawn once, white, into a canvas atlas and tinted by its instance's colour;
-// the sizes are the isometric board's (`RING_RADIUS`, `MARKER_RADIUS`, in its
-// board units: a circle on the ground of that radius is the ellipse its SVG
-// draws).
+// One `GroundRings` is one draw, of as many rings as it's handed: a
+// `Billboards` that lies flat, with no camera axes. Each kind is drawn once,
+// white, into a canvas atlas and tinted by its instance's colour; the sizes
+// are the isometric board's (`RING_RADIUS`, `MARKER_RADIUS`, in its board
+// units: a circle on the ground of that radius is the ellipse its SVG draws).
 
-import {
-    Color, DoubleSide, DynamicDrawUsage, InstancedBufferAttribute, InstancedBufferGeometry, Mesh, PlaneGeometry, ShaderMaterial,
-} from "three";
+import type { Mesh } from "three";
 import { MARKER_RADIUS, RING_RADIUS, type Marker, type Ring } from "@/games/RealmArena/ui";
 import { ISO_HALF_HEIGHT, ISO_HALF_WIDTH } from "@/utils/ui/isometric";
-import { BOARD_UNIT, CanvasAtlas, type TexRect } from "./billboards";
+import { Billboards, CanvasAtlas, type TexRect } from "./billboards";
+import type { RingColours } from "./canvasShapes";
 import type { Vec3 } from "./iso3d";
 
 /** What is drawn round a figure's feet: a `Ring`, or the `Marker` outside it. */
 export type RingKind = Ring | Marker;
-
-/** The design tokens a ring is drawn in, resolved to colours (`markColours`, marks3d.ts). */
-export interface RingColours { onDark: Color; gold: Color; danger: Color; oxblood: Color }
 
 /**
  * How each kind is drawn, as `.ag-ra-ring--*` and `.ag-ra-marker--*` write it
@@ -73,94 +69,33 @@ export function ringBox(kind: RingKind): number {
     return 2 * (ISO_HALF_WIDTH * radius + width * STROKE_BOOST / 2);
 }
 
-const vertexShader = /* glsl */ `
-attribute vec3 at;
-attribute float size;
-attribute vec4 rect;
-attribute vec4 tint;
-varying vec2 vUv;
-varying vec4 vTint;
-void main() {
-    vec3 world = at + vec3(position.x * size, ${ABOVE_GROUND}, position.y * size);
-    vUv = vec2(mix(rect.x, rect.z, uv.x), mix(rect.w, rect.y, uv.y));
-    vTint = tint;
-    gl_Position = projectionMatrix * viewMatrix * vec4(world, 1.0);
-}`;
-
-const fragmentShader = /* glsl */ `
-uniform sampler2D map;
-varying vec2 vUv;
-varying vec4 vTint;
-void main() {
-    vec4 texel = texture2D(map, vUv) * vTint;
-    if (texel.a < 0.004) discard;
-    gl_FragColor = texel;
-}`;
-
 /** Rings lying on the ground, every one from one atlas, in one draw. */
 export class GroundRings {
-    readonly mesh: Mesh<InstancedBufferGeometry, ShaderMaterial>;
     private readonly atlas = new CanvasAtlas(ATLAS_SCALE, 1024);
-    private capacity = 0;
-    private count = 0;
-    private attributes!: { at: InstancedBufferAttribute; size: InstancedBufferAttribute; rect: InstancedBufferAttribute; tint: InstancedBufferAttribute };
+    private readonly billboards: Billboards;
+    readonly mesh: Mesh;
 
     constructor() {
-        const geometry = new InstancedBufferGeometry();
-        const plane = new PlaneGeometry(1, 1);
-        geometry.index = plane.index;
-        geometry.setAttribute("position", plane.getAttribute("position"));
-        geometry.setAttribute("uv", plane.getAttribute("uv"));
         // Under the figures' marks and over the shading on the ground; hidden by a wall that stands in front, as the figure's feet are.
-        const material = new ShaderMaterial({
-            vertexShader, fragmentShader, transparent: true, depthWrite: false, side: DoubleSide,
-            uniforms: { map: { value: this.atlas.texture } },
-        });
-        this.mesh = new Mesh(geometry, material);
-        this.mesh.frustumCulled = false;
-        this.mesh.renderOrder = 1;
-        this.grow(16);
-        geometry.instanceCount = 0;
-    }
-
-    private grow(capacity: number): void {
-        const geometry = this.mesh.geometry;
-        const make = (size: number, old?: InstancedBufferAttribute) => {
-            const attribute = new InstancedBufferAttribute(new Float32Array(capacity * size), size);
-            attribute.setUsage(DynamicDrawUsage);
-            if (old) (attribute.array as Float32Array).set(old.array as Float32Array);
-            return attribute;
-        };
-        const old = this.attributes;
-        this.attributes = { at: make(3, old?.at), size: make(1, old?.size), rect: make(4, old?.rect), tint: make(4, old?.tint) };
-        for (const [name, attribute] of Object.entries(this.attributes)) geometry.setAttribute(name, attribute);
-        this.capacity = capacity;
+        this.billboards = new Billboards(this.atlas.texture, null, { depthTest: true, order: 1, lift: ABOVE_GROUND });
+        this.mesh = this.billboards.mesh;
     }
 
     /** Starts laying the rings out afresh: none are drawn until they're added again. */
     begin(): void {
-        this.count = 0;
+        this.billboards.begin();
     }
 
     /** A ring of `kind` round `feet`, on the top of the square they stand on. */
     add(feet: Vec3, kind: RingKind, colours: RingColours): void {
-        if (this.count >= this.capacity) this.grow(this.capacity * 2);
         const rect = this.drawn(kind);
-        const i = this.count++;
-        const { at, size, rect: area, tint } = this.attributes;
-        at.setXYZ(i, feet[0], feet[1], feet[2]);
         // The rectangle the ring was drawn in is as many pixels as it's board units across.
-        size.setX(i, rect.width / ATLAS_SCALE * BOARD_UNIT);
-        const image = this.atlas.texture.image as { width: number; height: number };
-        area.setXYZW(i, rect.x / image.width, rect.y / image.height, (rect.x + rect.width) / image.width, (rect.y + rect.height) / image.height);
-        const colour = colours[LOOKS[kind].colour];
-        tint.setXYZW(i, colour.r, colour.g, colour.b, 1);
+        this.billboards.add({ at: feet, width: rect.width / ATLAS_SCALE, rect, colour: colours[LOOKS[kind].colour] });
     }
 
     /** Done laying out: what was added is what's drawn. */
     end(): void {
-        this.mesh.geometry.instanceCount = this.count;
-        for (const attribute of Object.values(this.attributes)) attribute.needsUpdate = true;
+        this.billboards.end();
     }
 
     /** A ring of `kind` in white, drawn into the atlas the first time it's asked for. */
@@ -186,8 +121,7 @@ export class GroundRings {
     }
 
     dispose(): void {
-        this.mesh.geometry.dispose();
-        this.mesh.material.dispose();
+        this.billboards.dispose();
         this.atlas.dispose();
     }
 }

@@ -14,7 +14,7 @@ import { CENTRE_LABEL, ODDS_HEIGHT, ODDS_RISE, ODDS_WIDTH, PATH_END_RADIUS, PATH
 import type { Battlefield, Square } from "@/utils/games/battlefield/terrain";
 import type { Rect } from "@/utils/ui/mapLabels";
 import { Billboards, CanvasAtlas, type BillboardAxes } from "./billboards";
-import { DISC_BOX, discRect, drawText, layStable, rgba, solidRect, textWidth, type PreviewLook, type TextStyle } from "./canvasShapes";
+import { DISC_BOX, discRect, drawText, layStable, rgba, solidRect, textWidth, whenFontReady, type BoardLook, type TextStyle } from "./canvasShapes";
 import { squareCentre, type CameraBasis } from "./iso3d";
 import { areaMiddle, areaRise, pathPieces, pathPoints, shieldsAt } from "./previewGeometry";
 
@@ -47,7 +47,7 @@ export class Previews3D {
     private readonly atlas = new CanvasAtlas(16);
     readonly billboards: Billboards;
     private spec: PreviewSpec = NO_PREVIEWS;
-    private look: PreviewLook | null = null;
+    private look: BoardLook | null = null;
     /** Which look the atlas was drawn in: keys carry it, so a new look draws afresh. */
     private looks = 0;
     /** The typeface has loaded, so text is drawn in it and not in whatever stands in until it has. */
@@ -59,7 +59,7 @@ export class Previews3D {
     }
 
     /** The colours and typeface to draw in; `typeset` is told when text can be drawn, which is once the typeface has loaded. */
-    setLook(look: PreviewLook, typeset: () => void): void {
+    setLook(look: BoardLook, typeset: () => void): void {
         this.look = look;
         this.looks++;
         this.typeset = false;
@@ -69,8 +69,7 @@ export class Previews3D {
             typeset();
         };
         // A page without the font API, or a typeface that won't load, draws in what stands in for it.
-        if (typeof document === "undefined" || !document.fonts) return ready();
-        document.fonts.load(`${CENTRE_LABEL.fontWeight} 16px ${look.font}`).then(ready, ready);
+        if (!whenFontReady(`${CENTRE_LABEL.fontWeight} 16px ${look.font}`, ready)) ready();
     }
 
     set(spec: PreviewSpec): void {
@@ -94,7 +93,7 @@ export class Previews3D {
     }
 
     /** The centre's name, just clear of the top of its area as the camera sees it. */
-    private layCentre(basis: CameraBasis, look: PreviewLook): void {
+    private layCentre(basis: CameraBasis, look: BoardLook): void {
         const { centre } = this.spec;
         if (!centre || !this.typeset) return;
         const style: TextStyle = { family: look.font, weight: CENTRE_LABEL.fontWeight, size: CENTRE_LABEL.fontSize };
@@ -109,7 +108,7 @@ export class Previews3D {
     }
 
     /** The line a move takes, over the squares' tops, round-jointed, with the dot where it ends. */
-    private layPath(field: Battlefield, basis: CameraBasis, look: PreviewLook): void {
+    private layPath(field: Battlefield, basis: CameraBasis, look: BoardLook): void {
         const { path } = this.spec;
         if (!path || path.length === 0) return;
         const points = pathPoints(field, path);
@@ -122,7 +121,7 @@ export class Previews3D {
     }
 
     /** A shield standing on the middle of each side of a square that gives cover: whole for full cover, half-filled for half. */
-    private layCover(field: Battlefield, look: PreviewLook): void {
+    private layCover(field: Battlefield, look: BoardLook): void {
         const { coverAt } = this.spec;
         if (coverAt === null) return;
         const width = SHIELD_WIDTH + SHIELD_STROKE + 0.6, height = SHIELD_HEIGHT + SHIELD_STROKE + 0.6;
@@ -146,7 +145,7 @@ export class Previews3D {
     }
 
     /** The chance to hit, a pill over each target, above its HP bar. */
-    private layOdds(field: Battlefield, look: PreviewLook): void {
+    private layOdds(field: Battlefield, look: BoardLook): void {
         if (!this.typeset) return;
         const style: TextStyle = { family: look.font, ...ODDS_FONT };
         const width = ODDS_WIDTH + ODDS_STROKE, height = ODDS_HEIGHT + ODDS_STROKE;
@@ -156,15 +155,10 @@ export class Previews3D {
         }
     }
 
-    private drawPill(context: CanvasRenderingContext2D, text: string, width: number, height: number, style: TextStyle, look: PreviewLook): void {
-        const inset = ODDS_STROKE / 2, radius = ODDS_HEIGHT / 2;
+    private drawPill(context: CanvasRenderingContext2D, text: string, width: number, height: number, style: TextStyle, look: BoardLook): void {
+        const inset = ODDS_STROKE / 2;
         context.beginPath();
-        context.moveTo(inset + radius, inset);
-        context.lineTo(width - inset - radius, inset);
-        context.arc(width - inset - radius, height / 2, radius, -Math.PI / 2, Math.PI / 2);
-        context.lineTo(inset + radius, height - inset);
-        context.arc(inset + radius, height / 2, radius, Math.PI / 2, -Math.PI / 2);
-        context.closePath();
+        context.roundRect(inset, inset, width - 2 * inset, height - 2 * inset, ODDS_HEIGHT / 2);
         context.fillStyle = rgba(look.night, ODDS_GROUND);
         context.fill();
         context.strokeStyle = rgba(look.gold);

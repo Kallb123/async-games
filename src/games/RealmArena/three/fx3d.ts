@@ -23,7 +23,8 @@ import {
     type BattleCue, type BurstCue, type FlightCue, type HitTone, type SlashCue, type TextCue,
 } from "@/games/RealmArena/ui";
 import { squareCentre, onScreen, type CameraBasis, type Vec3 } from "./iso3d";
-import { Billboards, BOARD_UNIT, CanvasAtlas, sheetTexture, spriteRect, type BillboardAxes } from "./billboards";
+import { Billboards, CanvasAtlas, sheetTexture, spriteRect, toBoardUnits, type BillboardAxes } from "./billboards";
+import { drawText, textWidth, whenFontReady, type TextStyle } from "./canvasShapes";
 import { BODY, burstBox, flightPlace, hitTextLayout, SMOKE_PUFF } from "./fxLayout";
 import type { Sheets } from "./terrain3d";
 import type { Battlefield, Square } from "@/utils/games/battlefield/terrain";
@@ -39,13 +40,12 @@ interface Cues {
     flights: FlightCue[];
 }
 
-/** How one line of hit text is painted, as the stylesheet has it (`.ag-ra-hit-value`, `.ag-ra-hit-label`): the fill and outline as CSS colours, the outline's width and the font in board units. */
+/** How one line of hit text is painted, as the stylesheet has it (`.ag-ra-hit-value`, `.ag-ra-hit-label`): its font in board units, the fill and outline as CSS colours, and the outline's width. */
 interface TextLook {
+    style: TextStyle;
     fill: string;
     stroke: string;
     strokeWidth: number;
-    size: number;
-    font: string;
 }
 
 /** The look of the big text and the small text of one tone of hit text. */
@@ -103,8 +103,8 @@ function readHitLook(host: HTMLElement, tone: HitTone): HitLook {
     }, ([value, label]) => {
         const lookOf = (element: Element): TextLook => {
             const style = getComputedStyle(element);
-            const size = parseFloat(style.fontSize);
-            return { fill: style.fill, stroke: style.stroke, strokeWidth: parseFloat(style.strokeWidth), size, font: `${style.fontWeight} ${size}px ${style.fontFamily}` };
+            const text: TextStyle = { family: style.fontFamily, weight: parseFloat(style.fontWeight), size: parseFloat(style.fontSize) };
+            return { style: text, fill: style.fill, stroke: style.stroke, strokeWidth: parseFloat(style.strokeWidth) };
         };
         return { value: lookOf(value), label: lookOf(label) };
     });
@@ -113,19 +113,6 @@ function readHitLook(host: HTMLElement, tone: HitTone): HitLook {
 /** How faint a puff of smoke is (`.ag-ra-smoke-puff`). */
 function readPuffOpacity(host: HTMLElement): number {
     return probe(host, svg => [svgElement(svg, "use", "ag-ra-smoke-puff")], ([puff]) => parseFloat(getComputedStyle(puff).opacity));
-}
-
-/** Paints `text` centred in a box of `width` by `height`: the outline first, the fill over it, as the stylesheet's `paint-order: stroke` has it. */
-function drawWord(context: CanvasRenderingContext2D, text: string, look: TextLook, width: number, height: number): void {
-    context.font = look.font;
-    context.textAlign = "center";
-    context.textBaseline = "middle";
-    context.lineJoin = "round";
-    context.lineWidth = look.strokeWidth;
-    context.strokeStyle = look.stroke;
-    context.fillStyle = look.fill;
-    context.strokeText(text, width / 2, height / 2);
-    context.fillText(text, width / 2, height / 2);
 }
 
 export class BattleFx {
@@ -223,10 +210,7 @@ export class BattleFx {
      */
     private layFlights(flights: readonly FlightCue[], ms: number, basis: CameraBasis): void {
         const field = this.field!, { effects } = this.layers!;
-        const across = (point: Vec3): Point => {
-            const on = onScreen(basis, point);
-            return { x: on.x / BOARD_UNIT, y: -on.y / BOARD_UNIT };
-        };
+        const across = (point: Vec3): Point => toBoardUnits(onScreen(basis, point));
         const pointsOf = (square: Square) => fxPointsAt(across(squareCentre(field, square)));
         for (const cue of flights) {
             const now = flightAt(cue, pointsOf, ms);
@@ -257,9 +241,11 @@ export class BattleFx {
         const { atlas } = this.layers!;
         const key = `${this.generation}|${tone}|${part}|${text}`;
         let advance = this.advances.get(key);
-        if (advance === undefined) this.advances.set(key, advance = atlas.measure(text, look.font));
-        const width = advance + look.strokeWidth + 1, height = look.size * 1.35 + look.strokeWidth;
-        return { rect: atlas.rect(key, width, height, context => drawWord(context, text, look, width, height)), advance };
+        if (advance === undefined) this.advances.set(key, advance = textWidth(atlas, text, look.style));
+        // Centred in a box a little wider than the text and its outline, and taller than the line.
+        const width = advance + look.strokeWidth + 1, height = look.style.size * 1.35 + look.strokeWidth;
+        const outline = { colour: look.stroke, width: look.strokeWidth, join: "round" as const };
+        return { rect: atlas.rect(key, width, height, context => drawText(context, text, width / 2, height / 2, look.style, look.fill, { baseline: "middle", outline })), advance };
     }
 
     /** How a tone of hit text looks, read from the stylesheet the first time it's wanted. */
@@ -268,8 +254,8 @@ export class BattleFx {
         if (!look) {
             this.styles.set(tone, look = readHitLook(this.host, tone));
             // Text drawn before its font arrives would be drawn in the fallback for good: draw it again once it does.
-            const fonts = document.fonts, font = look.value.font;
-            if (fonts && !fonts.check(font)) fonts.load(font).then(() => { this.generation++; this.relay(); }, () => {});
+            const { weight, size, family } = look.value.style;
+            whenFontReady(`${weight} ${size}px ${family}`, () => { this.generation++; this.relay(); });
         }
         return look;
     }
