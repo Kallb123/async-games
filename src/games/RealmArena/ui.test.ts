@@ -2213,9 +2213,9 @@ describe("boardZoomFor", () => {
     /** How many pixels across a square comes to at the deepest step, per pixel of column. */
     const squareAtDeepest = (grid: { width: number; height: number }) => boardZoomFor(frameOf(grid)).maxWidth / frameOf(grid);
 
-    it("leaves every map there is today on BOARD_ZOOM's middle step and a third deeper at the deepest", () => {
+    it("leaves every map there is today on BOARD_ZOOM's middle step and two thirds deeper at the deepest", () => {
         for (const field of Object.values(REALM_ARENA_MAPS)) {
-            expect(boardZoomFor(frameOf(field, topOf(field)))).toEqual({ zoomWidth: BOARD_ZOOM.zoomWidth, maxWidth: Math.round(BOARD_ZOOM.maxWidth * 4 / 3) });
+            expect(boardZoomFor(frameOf(field, topOf(field)))).toEqual({ zoomWidth: BOARD_ZOOM.zoomWidth, maxWidth: Math.round(BOARD_ZOOM.maxWidth * 5 / 3) });
         }
     });
 
@@ -2223,7 +2223,7 @@ describe("boardZoomFor", () => {
         const widest = Math.max(...Object.values(REALM_ARENA_MAPS).map(field => frameOf(field)));
         const big = { width: 128, height: 128 };
         expect(boardZoomFor(frameOf(big)).maxWidth).toBeGreaterThan(BOARD_ZOOM.maxWidth * 2);
-        const deep = 4 / 3;
+        const deep = 5 / 3;
         // Whole percents, so a hair under at most.
         expect(squareAtDeepest(big)).toBeCloseTo(BOARD_ZOOM.maxWidth * deep / widest, 2);
         // The middle step keeps its size as well, so a framed reach fits the same way.
