@@ -82,6 +82,11 @@ export const WHATS_NEW: WhatsNewGroup[] = [
         icon: "✨",
         items: [
             {
+                title: "Realm Arena: take turns in blocks against the computer",
+                detail: "A co-op battle can now have all of you take your turns one after another and then every warband take theirs, instead of a warband after each of you. It's a switch on the setup screen, off by default, so battles already under way play as before.",
+                game: "realmarena",
+            },
+            {
                 title: "Realm Arena is now in 3D",
                 detail: "The battlefield is now drawn as a real 3D board: walls and towers stand up off the ground, trees have trunks, and every character is a model that turns to face where it's going. Turn the view a quarter at a time, pinch to zoom, and everything else works as before. If your browser can't draw 3D, you get the old flat board.",
                 game: "realmarena",
@@ -122,11 +127,6 @@ export const WHATS_NEW: WhatsNewGroup[] = [
                 title: "World Domination and Fires Out: a few seconds to take a move back",
                 detail: "World Domination: put armies in the wrong territory, cashed in cards you meant to hold, or moved too many into a conquest? Tap Undo and put it right — battles are dice, so those stay. And when you fortify or skip fortifying, your turn now waits ten seconds before it passes, so you can still change your mind. Fires Out's End turn now does the same: tap it straight after a move you regret and it waits ten seconds, with Undo and Pass now beside the countdown, before the fire advances.",
                 game: "worlddomination",
-            },
-            {
-                title: "Realm Arena: watch the battle play back",
-                detail: "Open Review actions and press Play to watch the match play itself forward, every action animated over the board in turn — characters walking along the path they took — with the view following each one, a move framed from where it began to where it ended — and in a co-op battle, each of the enemy's moves played out one at a time rather than all at once. The \"since you were last here\" screen has a button to replay everything from your last turn. The board now opens on your own squad, and comes back to it rather than zooming out across the whole map when there's nothing in particular to look at. Hunkering down, shield walls, overwatch and guard now say so over the character, and a step that happened out of sight shows a faint question mark over the map.",
-                game: "realmarena",
             },
         ],
     },

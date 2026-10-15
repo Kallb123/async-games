@@ -3840,6 +3840,43 @@ and `hiddenHands.test.ts` follow them.
 
 ---
 
+### 30.14 Teams take turns in blocks
+
+An option on the co-op setup screen (*Teams take turns in blocks*, off by
+default) changes the order of play, and nothing else.
+
+- **Alternating (the default).** A warband takes its turn straight after each
+  player's: Human 1, Warband 1, Human 2, Warband 2.
+- **Blocks.** Every player takes their own turn, in seat order, then every
+  warband still standing takes its own, in order: Human 1, Human 2, Warband 1,
+  Warband 2. Turns stay individual either way; the humans are not merged into
+  one. The round ends, and a Hold Out wave lands, after the warbands' block,
+  as it does after the last warband in the alternating order.
+- **Stored as `coop.teamBlocks: true`**, on the invitation (`coopInviteOf`
+  accepts a boolean, and false is not kept; anything else refuses the co-op
+  setting) and on the battle, so a replay rebuilds it (`settingsOf`). It is
+  dropped when the team is a single player, where the two orders are the same
+  (`buildInitialRealmArenaState`), and solo and free-for-all never carry it,
+  having no `coop` or no second player. The setup screen shows it for co-op
+  with a team, not for solo.
+- **No rules version.** Absent is the alternating order every battle had, so
+  a battle in progress and every recorded one play as they did
+  (docs/command-versions.md): the flag is read at the hand-off, never branched
+  on by command version.
+- **How it plays.** `handOff` runs the block when the turn would pass from the
+  last standing seat back round the table (`warbandBlock`, one `warbandTurn`
+  for each warband standing, ahead of the round count and the wave), then works
+  out the next seat again, since a warband may have wiped a squad out. The
+  End turn's recap holds the first warband's turn as `enemy` and the others
+  as `thenEnemy`; the actions of the others are recorded in
+  `recordedMoreEnemyActions`, one list a turn, beside `recordedEnemyActions`.
+  An End turn that is not the last of the round plays no warband at all. The
+  turn timer, undo and the stalled-turn sweep see only End turns and are
+  unchanged.
+- **Known limit.** If the last player to go is burned out at the start of
+  their own turn, the block follows that, and the log and the command's events
+  hold the burning ahead of the block rather than in the order it happened.
+
 ## 31. The Swarm: a second faction (B6)
 
 The first faction that isn't the Realm, and the one §29.3 was built to take:
