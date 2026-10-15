@@ -27,6 +27,7 @@ import { CLIMB_LEG, endOf, HP_BAR_HEIGHT, HP_BAR_RISE, HP_BAR_WIDTH, hpFraction,
 import { facingTowards, type Battlefield, type Facing, type Square } from "@/utils/games/battlefield/terrain";
 import { easeInOut } from "@/utils/ui/boardZoom";
 import type { Rect } from "@/utils/ui/mapLabels";
+import { billboardAxes, setAxes } from "./billboards";
 import { characterGeometry, type CharacterModels } from "./characterModels";
 import { azimuthOf, cameraBasis, cameraFor, figureMatrix, lightOf, lookAtFor, lookAtGround, onScreen, QUARTER, squareCentre, toFrame, type BoardFrame, type BoardLayout, type CameraBasis, type Vec3 } from "./iso3d";
 import { lightSolids, solidMaterial } from "./solidMaterial";
@@ -109,6 +110,8 @@ export class Board3D {
     private top = 0;
     private art: Art | null = null;
     private readonly solids: ShaderMaterial[] = [];
+    /** Which way the camera faces, for everything drawn flat to it (`Billboards`): set as it turns. */
+    readonly axes = billboardAxes();
 
     private readonly pools = new Map<string, Pool>();
     /** Where each figure is drawn: its pool and its place in it. */
@@ -616,6 +619,7 @@ export class Board3D {
 
     private relight(): void {
         this.basis = cameraBasis(this.azimuth);
+        setAxes(this.axes, this.basis);
         const light = lightOf(this.basis);
         lightSolids(this.solids, light);
         if (this.terrain) lightSolids(this.terrain.solids, light);
