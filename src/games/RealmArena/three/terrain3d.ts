@@ -137,8 +137,8 @@ function sampled(sheets: Sheets, sprite: Sprite, top = false): Color {
 const CROWN_LIFT = 1.3;
 /** The same for a block's brick, which the art draws darker still, in shade, and a flat colour can't make up (the texture's detail is what's left to see). */
 const UNSHADED = 2.3;
-/** The same for a paved top, which the art draws in shade too, and which the sky lights fully. */
-const TOP_LIFT = 2;
+/** The same for a top paved with that brick, cut from a face the art draws in shade. A top the art draws itself (a tower's grassed rock) is already lit full on, and isn't lifted: it would burn out yellow. */
+const PAVED_LIFT = 2;
 
 /** A tree's crown colour, from its sprite: the art's own shading is in it, so it is lifted back towards the lit face's. */
 function crownColour(sheets: Sheets): Color {
@@ -194,6 +194,8 @@ function repeating(texture: CanvasTexture): CanvasTexture {
 
 /** A block's skin: its sides and top, and how tall the side's picture is in the world's units. */
 interface BlockTextures {
+    /** The top is the art's own, lit full on in it, rather than paved with the side's shaded brick. */
+    drawn: boolean;
     side: Texture;
     top: Texture;
     rows: number;
@@ -211,7 +213,7 @@ function blockTextures(sheets: Sheets, letter: TerrainLetter): BlockTextures | u
     let side = made.sides.get(skin.side), top = made.tops.get(skin.top ?? skin.side);
     if (!side) made.sides.set(skin.side, side = sideTexture(sheets, skin.side));
     if (!top) made.tops.set(skin.top ?? skin.side, top = skin.top ? topTexture(sheets, skin.top) : pavedTexture(side as CanvasTexture));
-    return { side, top, rows: (skin.side.rise ?? 0) * QUARTER };
+    return { drawn: !!skin.top, side, top, rows: (skin.side.rise ?? 0) * QUARTER };
 }
 
 /** Every vertex `colour`, its top face `top`, and no flags: a solid the solid shader draws as it is. Its `uv` stays for a solid with a skin to lay over the colour. */
@@ -321,7 +323,7 @@ function raisedSquares(field: Battlefield, sheets: Sheets, squares: Iterable<Squ
         const tree = letter === "T";
         const skin = blockTextures(sheets, letter);
         // A skin brings the colour the art is drawn in: its sides are lifted as a crown is, its top is lit full on.
-        const side = new Color(UNSHADED, UNSHADED, UNSHADED), top = new Color(TOP_LIFT, TOP_LIFT, TOP_LIFT);
+        const side = new Color(UNSHADED, UNSHADED, UNSHADED), top = skin?.drawn ? new Color(1, 1, 1) : new Color(PAVED_LIFT, PAVED_LIFT, PAVED_LIFT);
         const geometry = tree ? treeGeometry(crownColour(sheets)) : coloured(new BoxGeometry(1, 1, 1).translate(0.5, 0.5, 0.5), side, top, !!skin);
         const solid = solidMaterial({ ...options, mapped: skin });
         // A tree is one instance a square; any other terrain is a few boxes a square (`piecesOf`).
