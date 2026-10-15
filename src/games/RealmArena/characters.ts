@@ -100,8 +100,6 @@ export interface Ability {
      * owner's next turn begins (`Fighter.usedThisTurn`).
      */
     oncePerTurn?: true;
-    /** Always on rather than used: it has no AP to spend and never shows as an action (Shield wall). */
-    passive?: true;
     /** Added to a shot's chance to hit (Aimed shot). */
     hitBonus?: number;
     /** How far away, in squares, it can be aimed (Fireball, Dynamite, Hunter's mark, Heal, Regrowth). */
@@ -122,11 +120,11 @@ export interface Ability {
 }
 
 /** Whether an ability is always on rather than used: it shows on a character's card but never as an action (Shield wall). */
-export const isPassive = (id: AbilityId): id is "shieldWall" => (ABILITIES[id] as Ability).passive === true;
+export const isPassive = (id: AbilityId): id is "shieldWall" => id === "shieldWall";
 
 export const ABILITIES = {
     cleave: { name: "Cleave", ap: 2, cooldown: 3, description: "Strike two enemies next to them" },
-    shieldWall: { name: "Shield wall", ap: 0, cooldown: 0, passive: true, description: "Passive: any character next to them, friend or foe, counts as in half cover" },
+    shieldWall: { name: "Shield wall", ap: 0, cooldown: 0, description: "Passive: any character next to them, friend or foe, counts as in half cover" },
     aimedShot: { name: "Aimed shot", ap: 3, cooldown: 2, hitBonus: 20, description: "A shot at +20% to hit" },
     sneak: { name: "Sneak", ap: 2, cooldown: 0, description: "Move without setting off overwatch or guard" },
     fireball: { name: "Fireball", ap: 3, cooldown: 3, range: 12, damage: 3, effect: "burning", blasts: "area", description: "Hits every character in a 3×3 area, friend or foe, sets them burning, and blasts away the low cover there" },

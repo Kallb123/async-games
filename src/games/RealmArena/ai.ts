@@ -34,7 +34,7 @@ import { costsFrom, DEFAULT_CLIMB, reachFrom, pathTo, type Reach } from "@/utils
 import { battlefieldWith, coordsOf, type Battlefield, type Square } from "@/utils/games/battlefield/terrain";
 import { ABILITIES, CHARACTERS, type AbilityId } from "./characters";
 import {
-    abilitiesOf, act, allied, areaAround, ATTACK_AP, blastedIn, CENTRE, CENTRE_SCORES_FROM_ROUND, centrePoints, check, fighterById, isStanding, landedSmoke,
+    abilitiesOf, act, holdsShieldWall, allied, areaAround, ATTACK_AP, blastedIn, CENTRE, CENTRE_SCORES_FROM_ROUND, centrePoints, check, fighterById, isStanding, landedSmoke,
     damageTo, maxHpOf, moveAp, movementOf, reachOf, ROLL_SIDES, shotOdds, squadSight, strikeChance, watchedSquares, weaponOf, weaponReaches,
     type Action, type BattleEvent, type BattleState, type Fighter, type FogGhost, type ShotOdds,
 } from "./rules";
@@ -491,7 +491,7 @@ function harmKnown(plan: Plan, fighter: Fighter, enemies: readonly Fighter[]): M
     // overwatch a move sets off among them. Of the character itself, not
     // where it stands either.
     const read = ({ id, owner, character, option, hp, maxHp, effects }: Fighter) => [id, owner, character, option ?? null, hp, maxHp ?? null, effects];
-    const walls = state.fighters.filter(one => isStanding(one) && abilitiesOf(one).includes("shieldWall")).map(({ id, owner, square }) => [id, owner, square]);
+    const walls = state.fighters.filter(holdsShieldWall).map(({ id, owner, square }) => [id, owner, square]);
     const key = JSON.stringify([fieldId(memo, state.field), read(fighter), enemies.map(enemy => [...read(enemy), enemy.square]), walls, state.clouds ?? [], landedSmoke(state.fighters), state.sides ?? null, state.balanced ?? false, state.armoured ?? false]);
     let known = memo.harm.get(key);
     if (!known) memo.harm.set(key, known = new Map());

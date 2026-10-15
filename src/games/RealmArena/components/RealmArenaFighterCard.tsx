@@ -49,13 +49,14 @@ export default function RealmArenaFighterCard({ fighter, battle, label, children
                         <ListRow icon={weaponMark(fighter.character, fighter.option)} title={weapon.name} sub={weaponLine(weapon)} />
                         {abilitiesOf(fighter).map(id => {
                             const ability = ABILITIES[id];
+                            const passive = isPassive(id);
                             return (
                                 <ListRow
                                     key={id}
                                     icon={ABILITY_MARK}
                                     title={ability.name}
-                                    sub={isPassive(id) ? ability.description : `${ability.ap} AP · ${ability.description}`}
-                                    action={<span className="ag-tag ag-tag--quiet">{isPassive(id) ? 'Passive' : abilityWait(fighter, id) ?? 'Ready'}</span>}
+                                    sub={passive ? ability.description : `${ability.ap} AP · ${ability.description}`}
+                                    action={<span className="ag-tag ag-tag--quiet">{passive ? 'Passive' : abilityWait(fighter, id) ?? 'Ready'}</span>}
                                 />
                             );
                         })}

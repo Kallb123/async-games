@@ -566,10 +566,12 @@ export interface ShotOdds {
     flanked: boolean;
 }
 
+/** Whether a character stands with the passive Shield wall, which covers whoever is next to it (§13.6). */
+export const holdsShieldWall = (fighter: Fighter): boolean => isStanding(fighter) && abilitiesOf(fighter).includes("shieldWall");
+
 /** Whether a standing character with the passive Shield wall, friend or foe, is next to this one (§13.6). */
 function shielded(state: BattleState, target: Fighter): boolean {
-    return state.fighters.some(knight => isStanding(knight) && knight.id !== target.id
-        && abilitiesOf(knight).includes("shieldWall") && nextTo(state.field, knight.square, target.square));
+    return state.fighters.some(knight => knight.id !== target.id && holdsShieldWall(knight) && nextTo(state.field, knight.square, target.square));
 }
 
 /**
