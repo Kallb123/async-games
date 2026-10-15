@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { FULL_HEIGHT, type Facing } from "@/utils/games/battlefield/terrain";
-import { MIN_ASPECT } from "@/games/RealmArena/ui";
+import { MIN_ASPECT } from "@/games/RealmArena/boardShape";
 import { azimuthOf, boardFrame, cameraBasis, cameraFor, figureMatrix, frameRect, fromFrame, groundAt, lightOf, lookAtFor, lookAtGround, onScreen, QUARTER, regionOnScreen, toFrame, turnedPoint, type Vec3 } from "./iso3d";
 
 const dot = (a: Vec3, b: Vec3) => a[0] * b[0] + a[1] * b[1] + a[2] * b[2];

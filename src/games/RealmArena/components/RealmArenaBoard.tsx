@@ -11,6 +11,7 @@ import { isoArea, isoBlock, isoBounds, isoCentre, isoCorner, isoDepth, isoGridLi
 import { RealmArenaTerrainArt, RealmArenaTerrainDefs, spriteId, SpriteUse } from '@/games/RealmArena/components/RealmArenaTerrain';
 import { RealmArenaEffectMarks } from '@/games/RealmArena/components/RealmArenaEffects';
 import RealmArenaFx from '@/games/RealmArena/components/RealmArenaFx';
+import { MIN_ASPECT } from '@/games/RealmArena/boardShape';
 import type { Rect } from '@/utils/ui/mapLabels';
 import { useSvgId } from '@/utils/hooks/useSvgId';
 import { usePrefersReducedMotion } from '@/utils/hooks/usePrefersReducedMotion';
@@ -19,7 +20,7 @@ import { CHARACTER_ART, facingCell, ITEM_ART, SMOKE_ART, spriteBox, TERRAIN_ART,
 import { CHARACTERS, ITEMS, type CharacterId, type ItemId } from '@/games/RealmArena/characters';
 import { CENTRE, isStanding, isWarband, maxHpOf, smokeSquares, type BattleState, type Fighter, type FogGhost, type MusterPick, type ToldEvent } from '@/games/RealmArena/rules';
 import type { AttackOption } from '@/games/RealmArena/tactics';
-import { apPips, areaRect, BOARD_ZOOM, captionAt, eventLines, HP_BAR_HEIGHT, HP_BAR_RISE, HP_BAR_WIDTH, MIN_ASPECT, type BattleCue, type BoardFollow, type CaptionCue, type FallCue, type FxPoints, type ScorchCue, type Shove, type Timed, type WalkCue, effectsOn, facingOf, fadeInAt, fadeOutAt, fighterStatus, endOf, hpFraction, legLengthOn, progressOf, shakeAt, shakesOf, shovesOf, shoveAt, terrainLetter, toldAt, toldOf, walkerAt, walkCameraAt, legPoint, walkLift, walkSquares, type Told } from '@/games/RealmArena/ui';
+import { apPips, areaRect, BOARD_ZOOM, captionAt, eventLines, HP_BAR_HEIGHT, HP_BAR_RISE, HP_BAR_WIDTH, type BattleCue, type BoardFollow, type CaptionCue, type FallCue, type FxPoints, type ScorchCue, type Shove, type Timed, type WalkCue, effectsOn, facingOf, fadeInAt, fadeOutAt, fighterStatus, endOf, hpFraction, legLengthOn, progressOf, shakeAt, shakesOf, shovesOf, shoveAt, terrainLetter, toldAt, toldOf, walkerAt, walkCameraAt, legPoint, walkLift, walkSquares, type Told } from '@/games/RealmArena/ui';
 
 /** How deep the ground is drawn under the map's front edges, in quarters. */
 const SLAB_DEPTH = 3;

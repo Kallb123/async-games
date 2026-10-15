@@ -4,6 +4,8 @@
  * Everything else in that component is DOM and gestures.
  */
 
+import type { Rect } from '@/utils/ui/mapLabels';
+
 /** The width the board is drawn at when it's fitted to the column, as a percentage. */
 export const FIT_WIDTH = 100;
 
@@ -177,7 +179,7 @@ export function drawnView(laid: { x: number; y: number }, offset: { x: number; y
  * its pane along an axis shows all of it, so the region never runs past the
  * viewBox.
  */
-export function viewRegion({ scroll, content }: Pick<ZoomView, 'scroll' | 'content'>, pane: { x: number; y: number }, viewBox: Size): { x: number; y: number; width: number; height: number } {
+export function viewRegion({ scroll, content }: Pick<ZoomView, 'scroll' | 'content'>, pane: { x: number; y: number }, viewBox: Size): Rect {
     const axis = (at: number, size: number, room: number, view: number) => {
         const whole = size || 1;
         const shown = Math.min(1, room / whole);

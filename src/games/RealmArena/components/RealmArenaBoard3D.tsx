@@ -1,12 +1,13 @@
 'use client'
 import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import type { Color } from 'three';
-import BoardZoom, { useBoardCentre, useBoardView, type BoardView, type BoardZoomFocus, type BoardZoomPivot } from '@/components/ui/BoardZoom';
+import BoardZoom, { useBoardCentre, type BoardZoomFocus, type BoardZoomPivot } from '@/components/ui/BoardZoom';
+import { useBoardView, type BoardView } from '@/components/ui/boardView';
 import type RealmArenaBoard from '@/games/RealmArena/components/RealmArenaBoard';
 import { TurnButtons, useBoardRotation } from '@/games/RealmArena/components/RealmArenaTurn';
 import { Board3D, type FigureSpec, type Shading } from '@/games/RealmArena/three/board3d';
 import { cssColour } from '@/games/RealmArena/three/cssColour';
-import { azimuthOf, boardFrame, cameraBasis, frameRect, regionOnScreen, topOf, turnedPoint } from '@/games/RealmArena/three/iso3d';
+import { azimuthOf, boardFrame, cameraBasis, frameRect, regionOnScreen, topOf, turnedPoint, type BoardLayout } from '@/games/RealmArena/three/iso3d';
 import { loadSheets } from '@/games/RealmArena/three/terrain3d';
 import { loadCharacterModels } from '@/games/RealmArena/three/characterModels';
 import { isWarband } from '@/games/RealmArena/rules';
@@ -29,12 +30,15 @@ function PlaybackFrames({ board }: { board: Board3D | null }) {
  * and gives it the way to follow a walker (`useBoardCentre`). It draws nothing.
  * A child of `BoardZoom`, so that its layout effects run before `BoardZoom`'s
  * own: the camera is turned before the `pivot` that lands with the turn tells
- * it where the view is after.
+ * it where the view is after. The frame is laid out (`layout`, which the page
+ * works out once, for `BoardZoom`'s viewBox too) after the turn, in the same
+ * pass, so a turn notes the ground it was showing in the frame it is leaving.
  */
-function BoardCamera({ board, rotation, glide }: { board: Board3D | null; rotation: number; glide: boolean }) {
+function BoardCamera({ board, rotation, glide, layout }: { board: Board3D | null; rotation: number; glide: boolean; layout: BoardLayout }) {
     const centre = useBoardCentre();
     const onView = useCallback((view: BoardView) => board?.setView(view), [board]);
     useLayoutEffect(() => board?.setRotation(rotation, glide), [board, rotation, glide]);
+    useLayoutEffect(() => board?.setFrame(layout), [board, layout]);
     useLayoutEffect(() => board?.follow(centre), [board, centre]);
     useBoardView(onView);
     return null;
@@ -91,7 +95,9 @@ export default function RealmArenaBoard3D({ field, fighters, fogGhosts = [], uns
         return () => { live = false; };
     }, [board]);
 
-    useEffect(() => board?.setField(field), [board, field]);
+    // The battlefield's tallest top: the camera's frame is laid out round it (below), and a tap on a tall square finds its way down from it.
+    const top = useMemo(() => topOf(field), [field]);
+    useEffect(() => board?.setField(field, top), [board, field, top]);
 
     // Each squad's characters wear its owner's colour; anyone else keeps the art's grey.
     const tintOf = useCallback((owner: string): Color | null => {
@@ -136,9 +142,9 @@ export default function RealmArenaBoard3D({ field, fighters, fogGhosts = [], uns
     const [rotation, turn, turned] = useBoardRotation(viewerId);
 
     // The battlefield as the camera sees it, laid out as the isometric board's SVG is
-    // (`boardFrame`): `BoardZoom`'s viewBox, the same size at every turn.
-    const top = useMemo(() => topOf(field), [field]);
-    const here = useMemo(() => {
+    // (`boardFrame`): `BoardZoom`'s viewBox, the same size at every turn. Worked out
+    // here once, and handed to the camera (`BoardCamera`) as well.
+    const here = useMemo<BoardLayout>(() => {
         const basis = cameraBasis(azimuthOf(rotation));
         return { basis, frame: boardFrame(basis, field, top) };
     }, [field, top, rotation]);
@@ -163,7 +169,7 @@ export default function RealmArenaBoard3D({ field, fighters, fogGhosts = [], uns
             <PlaybackProvider playKey={playback?.key ?? null} end={playback ? endOf(playback.cues) : 0} held={held} onEnd={onPlayed}>
                 <BoardZoom camera zoomWidth={BOARD_ZOOM.zoomWidth} maxWidth={BOARD_ZOOM.maxWidth} viewBox={here.frame.size} focus={focus} onFocused={onFocused} pivot={pivot}>
                     <div ref={host} className="ag-ra-3d" role="img" aria-label={`The ${field.name}`} />
-                    <BoardCamera board={board} rotation={rotation} glide={turned.turns > 0} />
+                    <BoardCamera board={board} rotation={rotation} glide={turned.turns > 0} layout={here} />
                 </BoardZoom>
                 <PlaybackFrames board={board} />
             </PlaybackProvider>

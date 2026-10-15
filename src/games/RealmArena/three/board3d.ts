@@ -28,7 +28,7 @@ import { facingTowards, type Battlefield, type Facing, type Square } from "@/uti
 import { easeInOut } from "@/utils/ui/boardZoom";
 import type { Rect } from "@/utils/ui/mapLabels";
 import { characterGeometry, type CharacterModels } from "./characterModels";
-import { azimuthOf, boardFrame, cameraBasis, cameraFor, figureMatrix, lightOf, lookAtFor, lookAtGround, onScreen, QUARTER, squareCentre, toFrame, topOf, type BoardFrame, type CameraBasis, type Vec3 } from "./iso3d";
+import { azimuthOf, cameraBasis, cameraFor, figureMatrix, lightOf, lookAtFor, lookAtGround, onScreen, QUARTER, squareCentre, toFrame, type BoardFrame, type BoardLayout, type CameraBasis, type Vec3 } from "./iso3d";
 import { lightSolids, solidMaterial } from "./solidMaterial";
 import { buildTerrain, type Sheets, type Terrain } from "./terrain3d";
 
@@ -105,7 +105,7 @@ export class Board3D {
     private readonly lens = new OrthographicCamera(-1, 1, 1, -1, 0.1, 400);
     private terrain: Terrain | null = null;
     private field: Battlefield | null = null;
-    /** The battlefield's tallest top, in quarters. */
+    /** The battlefield's tallest top, in quarters (`setField`). */
     private top = 0;
     private art: Art | null = null;
     private readonly solids: ShaderMaterial[] = [];
@@ -130,7 +130,7 @@ export class Board3D {
     private basis: CameraBasis = cameraBasis(azimuthOf(0));
     /** The camera at the turn the view is going to: the turn the frame, and so the view, is laid out at. Differs from `basis` only while the view is turning. */
     private frameBasis: CameraBasis = this.basis;
-    /** The whole battlefield's frame, at the turn `frameBasis` is at. */
+    /** The whole battlefield's frame, at the turn `frameBasis` is at (`setFrame`). */
     private layout: BoardFrame | null = null;
     private shake: Vec3 = [0, 0, 0];
     private size = { width: 1, height: 1 };
@@ -234,14 +234,13 @@ export class Board3D {
     /** What it draws from, arrived: nothing is drawn before it, ground or figure. */
     setArt(art: Art): void {
         this.art = art;
-        if (this.field) this.setField(this.field);
+        if (this.field) this.setField(this.field, this.top);
     }
 
-    /** The battlefield: its ground and terrain built again, as they are only when cover is blasted. */
-    setField(field: Battlefield): void {
+    /** The battlefield, and its tallest top in quarters: its ground and terrain built again, as they are only when cover is blasted. */
+    setField(field: Battlefield, top: number): void {
         this.field = field;
-        this.top = topOf(field);
-        this.layout = boardFrame(this.frameBasis, field, this.top);
+        this.top = top;
         if (!this.art) return;
         if (this.terrain) {
             this.scene.remove(this.terrain.group);
@@ -302,17 +301,29 @@ export class Board3D {
     }
 
     /**
+     * The frame the view is measured in (`BoardZoom`'s viewBox), laid out at the
+     * turn the view is going to — `layout` is `boardFrame` at that turn's camera,
+     * which the page works out once, for `BoardZoom` as well. Called after
+     * `setRotation` for the same turn, and before `BoardZoom`'s `pivot` puts the
+     * view where that turn leaves the middle of the pane: until it does, the
+     * view is the turn's before, and the camera is kept on the ground it showed
+     * (`setRotation` notes that ground, in the frame it is still laid out in).
+     */
+    setFrame({ basis, frame }: BoardLayout): void {
+        this.frameBasis = basis;
+        this.layout = frame;
+        this.invalidate();
+    }
+
+    /**
      * Turns the view a quarter at a time (`IsoRotation`), gliding round unless
-     * told to jump. The frame the view is measured in is laid out at the turn it
-     * is going to, so called before `BoardZoom`'s `pivot` puts the view where
-     * that turn leaves the middle of the pane: until it does, the view is the
-     * turn's before, and the camera is kept on the ground it showed.
+     * told to jump. Called before the `setFrame` that lays the frame out at the
+     * turn it is going to, so it notes the ground the view shows in the frame it
+     * is leaving.
      */
     setRotation(rotation: number, glide: boolean): void {
         const to = azimuthOf(rotation);
         const before = glide ? this.camera() : null;
-        this.frameBasis = cameraBasis(to);
-        if (this.field) this.layout = boardFrame(this.frameBasis, this.field, this.top);
         if (!before) {
             this.turn = null;
             this.turnTo(to);

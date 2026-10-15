@@ -20,7 +20,7 @@
 // map, the world staying put; the light turns with it, as the sprites' light
 // never moves from the upper left.
 
-import { MIN_ASPECT } from "@/games/RealmArena/ui";
+import { MIN_ASPECT } from "@/games/RealmArena/boardShape";
 import { FULL_HEIGHT, type Battlefield, type Facing, type Square } from "@/utils/games/battlefield/terrain";
 import type { IsoRotation } from "@/utils/ui/isometric";
 import type { Rect } from "@/utils/ui/mapLabels";
@@ -175,6 +175,9 @@ export interface BoardFrame {
     origin: { x: number; y: number };
 }
 
+/** A frame and the camera it is laid out at: what a point of the frame means. */
+export interface BoardLayout { basis: CameraBasis; frame: BoardFrame }
+
 /**
  * The frame round a `grid`-sized battlefield standing `top` quarters high, at
  * `basis`'s turn: the ground and its tallest tops, with `HEADROOM` over the back,
@@ -215,7 +218,7 @@ export function frameRect(frame: BoardFrame, region: { x: number; y: number; wid
  * point meets, found again at the new turn. What `BoardZoom`'s `pivot` asks for
  * when the view is turned, with the middle of the pane as the point.
  */
-export function turnedPoint(from: { basis: CameraBasis; frame: BoardFrame }, to: { basis: CameraBasis; frame: BoardFrame }, point: { x: number; y: number }): { x: number; y: number } {
+export function turnedPoint(from: BoardLayout, to: BoardLayout, point: { x: number; y: number }): { x: number; y: number } {
     return toFrame(to.frame, onScreen(to.basis, groundAt(from.basis, fromFrame(from.frame, point))));
 }
 
