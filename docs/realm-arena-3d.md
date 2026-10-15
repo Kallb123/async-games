@@ -41,7 +41,7 @@ Everything lives in `src/games/RealmArena/three/` and
 | `fx3d.ts`, `fxLayout.ts` | What an action plays (§26): hit text, slashes, bursts, missiles in flight, and the smoke pot's cloud standing on the ground. The layout is `fxLayout.ts`'s, pure and tested, on the isometric board's constants. |
 | `shading3d.ts` | Lays what's shaded on a square over one another in the isometric board's order — zones, the centre, fog, smoke, a reach, a range, a blast, where a pick may be placed — into the one texel a square has. |
 | `cssColour.ts` | Resolves a player's CSS colour (a token, `oklch()`) to the sRGB the isometric board shows. |
-| `RealmArenaBoard3D.tsx` | The React board. It takes exactly the isometric board's props and shares what decides what to show: where the view goes (`boardFocus`, now in `ui.ts`), the stored turn of the view and its pivot (`useBoardRotation`), the turn buttons (`TurnButtons`), the playback clock (`PlaybackProvider`) and every timing an action plays by (`walkerAt`, `toldAt`, `shakeAt` and the cues). It wraps the canvas in `BoardZoom`'s camera mode with the isometric board's own `BOARD_ZOOM`. |
+| `RealmArenaBoard3D.tsx` | The React board. It takes exactly the isometric board's props and shares what decides what to show: where the view goes (`boardFocus`, now in `ui.ts`), the stored turn of the view and its pivot (`useBoardRotation`), the turn buttons (`TurnButtons`), the playback clock (`PlaybackProvider`) and every timing an action plays by (`walkerAt`, `toldAt`, `shakeAt` and the cues). It wraps the canvas in `BoardZoom`'s camera mode with the isometric board's own `BOARD_ZOOM`. The caption pill and the review's "?" over the frame are `RealmArenaCaption.tsx`, the one copy both boards render. |
 
 ### 2.1 `BoardZoom` is the camera
 
@@ -117,9 +117,12 @@ burst, a missile, a smoke cloud — the 3D board draws as a **billboard**
 the world (a figure's feet, a square's top, the edge of a square) and laid out
 across the frame from there in the isometric board's own units. So:
 
-- **The sizes and offsets are that board's,** imported from `ui.ts`
-  (`EFFECT_MARK_*`, `AP_PIP_*`, `ODDS_*`, `HIT_*`, …), and both boards place
-  things by the same numbers. A `BOARD_UNIT` turns them into the world's.
+- **The sizes and offsets are that board's,** in `ui.ts` beside `HP_BAR_*`
+  (`FIGURE_*`, `RING_RADIUS`, `EFFECT_MARK_*`, `AP_PIP_*`, `ITEM_MARK_*`,
+  `ODDS_*`, `SHIELD_*` and `shieldPath`, `PATH_*`, `HIT_*`, `FLIGHT`, …), as
+  are the rules for what a figure wears (`ringOf`) and where an action's
+  effects hang (`fxPointsAt`). Both boards draw by them: change one there,
+  never in a board. A `BOARD_UNIT` turns them into the world's.
 - **It moves with the camera for nothing:** a quad hangs from its point, so a
   pan, a zoom, a turn of the view and the shake carry it along, and a mark
   follows a walker because it hangs from where the walker is drawn.
