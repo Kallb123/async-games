@@ -153,21 +153,25 @@ export const BOARD_ZOOM = { zoomWidth: 250, maxWidth: 600 } as const;
  */
 const REFERENCE_FRAME_WIDTH = (64 + 48) / Math.SQRT2;
 
+/** How much deeper than `BOARD_ZOOM` the 3D board's deepest step goes: a camera can draw close in without the isometric board's layout cost, and a player wanted a closer look — a third more. */
+const DEEP_3D = 4 / 3;
+
 /**
  * `BoardZoom`'s steps for the 3D board, set by the map and not the column: a frame
  * `frameWidth` units across (`boardFrame`'s `size.width`) gets the steps that leave
  * a square the size `BOARD_ZOOM` leaves one on today's widest map, at the middle
  * step and the deepest. Zoom is a width in percent of the column, so the squares
  * stay the same size when both steps grow with the frame. Never less than
- * `BOARD_ZOOM`, so every map today is unchanged, and the two grow together, so the
- * middle step stays below the deepest (`zoomLevels`). The isometric board keeps
+ * `BOARD_ZOOM`, and its deepest step goes a third (`DEEP_3D`) further than that,
+ * and the two grow together, so the middle step stays below the deepest
+ * (`zoomLevels`). The isometric board keeps
  * `BOARD_ZOOM`: its zoomed board is laid out at this width, and a camera's is only
  * an empty spacer to scroll over.
  */
 export function boardZoomFor(frameWidth: number): { zoomWidth: number; maxWidth: number } {
     const grown = frameWidth / REFERENCE_FRAME_WIDTH;
-    if (!(grown > 1) || !Number.isFinite(grown)) return BOARD_ZOOM;
-    return { zoomWidth: Math.round(BOARD_ZOOM.zoomWidth * grown), maxWidth: Math.round(BOARD_ZOOM.maxWidth * grown) };
+    const factor = grown > 1 && Number.isFinite(grown) ? grown : 1;
+    return { zoomWidth: Math.round(BOARD_ZOOM.zoomWidth * factor), maxWidth: Math.round(BOARD_ZOOM.maxWidth * factor * DEEP_3D) };
 }
 
 /**
