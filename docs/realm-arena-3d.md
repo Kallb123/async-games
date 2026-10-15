@@ -35,11 +35,12 @@ Everything lives in `src/games/RealmArena/three/` and
 | `terrain3d.ts` | The ground texture: each square's grass, or scorched ground, unwarped from its diamond on the sheet, with the grid over it. Raised squares are instanced boxes, one draw per terrain, each built of a few boxes (`blockPieces.ts`, pure and tested): rubble and low walls are heaps of chunks of different heights, each turned a little, and a wall or parapet has two merlons along each edge that borders lower ground. Sides are skinned with the brick column's face (unwarped from its sheet, laid on at the world's scale, repeating every three heights, each piece flipped and dropped by its own `instanceSkin` so a run of squares isn't one picture) and tops are paved with the same brick, or the grassed rock for a tower (`BLOCK_SKIN` in `art.ts`; `solidMaterial`'s `mapped`). Trees are instanced. An overlay holds one texel per square for everything shaded on the ground, laid on the flat ground and on each raised square's top, with a second overlay for the wave. `buildCover` builds the blocks of just a few squares, for cover an action blasted away to fade from (§2.2). |
 | `board3d.ts` | `Board3D`, the imperative scene. It owns the renderer, the camera, the figures (`FigurePools`), the layers drawn over them (§2.2), the quarter turn and picking. It sets its camera from the view `BoardZoom` tells it (§2.1), and takes no gesture of its own but a tap. It draws only when something changes, or once a frame while something moves. |
 | `figurePools.ts`, `figureCues.ts` | The figures, one instanced draw per character and kind: solid; faint (a per-instance opacity, for a figure fading as it falls, the sealed squad and the fog's stale sightings); hidden (drawn again through a wall, §2.2); and an outline, off (§3). `figureCues.ts` is the pure part, tested: how far a fall has faded, a knock or a lunge (`shoveAt`) as a move across the ground, and whether anything could stand between a figure and the camera. |
-| `billboards.ts` | Quads that face the camera, hung from a point in the world and laid out across the frame in the isometric board's units, so that board's sizes carry over unchanged (§2.2). One `Billboards` is one draw, from an art sheet or a `CanvasAtlas` drawn into as it's needed (text, pills, dots, shields). |
+| `billboards.ts` | Quads that face the camera, hung from a point in the world and laid out across the frame in the isometric board's units, so that board's sizes carry over unchanged (§2.2). One `Billboards` is one draw, from an art sheet or a `CanvasAtlas` drawn into as it's needed (text, pills, dots, shields). A layer can ask for a drop shadow (`shadow`), drawn in its shader, so it is still one draw. |
 | `marks3d.ts`, `rings3d.ts` | Each figure's effect and watch marks, AP pips and item, and the rings and dashed markers lying on the ground round its feet. |
 | `bars3d.ts` | The HP bars, as billboards: the fill, the pale chip a blow takes off draining past it, the dark edge, and a lined-up action's change to it, flashing. |
 | `previews3d.ts`, `previewGeometry.ts`, `canvasShapes.ts` | A lined-up action's path over the ground, the odds over its targets and the cover shields where a move ends, and the centre's name: one draw. `canvasShapes.ts` draws text and shapes into an atlas for every layer that needs it. |
 | `fx3d.ts`, `fxLayout.ts` | What an action plays (§26): hit text, slashes, bursts, missiles in flight, and the smoke pot's cloud standing on the ground. The layout is `fxLayout.ts`'s, pure and tested, on the isometric board's constants. |
+| `outlines.ts`, `outlines3d.ts` | The stroke round an area's edge, which the ground overlay's one texel a square can't draw. `outlines.ts` is pure and tested: `boundaryRuns` finds every edge of a set of squares whose neighbour across it is out of the set (or off the map), at that square's own top height, and chains edges that meet end to end into one run, so a step in height inside a set draws nothing and the line appears only where the set ends. `dashesOf` fits a dash pattern to a run (a whole number of periods, half a dash at each end, so every corner is lit), and `strokeWidth` and `strokeLength` turn the isometric board's stroke units into the ground's, exactly, from the diamond's size. `GroundOutlines` lays the runs and dashes as strips a hair over the shading in one draw, with vertex colours and no shader, hidden by a wall in front as the shading is. `Board3D.setOutlines` hands it the areas in the isometric board's paint order: the zones, the centre, a blast, the squares to place on. A second `GroundOutlines`, empty unless a wave is due, holds the stroke of the zones it will land in, which breathes with the wave's shading. |
 | `shading3d.ts` | Lays what's shaded on a square over one another in the isometric board's order — zones, the centre, fog, smoke, a reach, a range, a blast, where a pick may be placed — into the one texel a square has. |
 | `cssColour.ts` | Resolves a player's CSS colour (a token, `oklch()`) to the sRGB the isometric board shows. |
 | `RealmArenaBoard3D.tsx` | The React board. It takes exactly the isometric board's props and shares what decides what to show: where the view goes (`boardFocus`, now in `ui.ts`), the stored turn of the view and its pivot (`useBoardRotation`), the turn buttons (`TurnButtons`), the playback clock (`PlaybackProvider`) and every timing an action plays by (`walkerAt`, `toldAt`, `shakeAt` and the cues). It wraps the canvas in `BoardZoom`'s camera mode with the isometric board's own `BOARD_ZOOM`. The caption pill and the review's "?" over the frame are `RealmArenaCaption.tsx`, the one copy both boards render. |
@@ -94,7 +95,13 @@ and `Board3D.setView` draws that, at once, in the frame it arrives in.
   or the player, and lets go once the walk is over.
 - **A deeper range,** set by the map and not the column (the plan's §7.2), is
   a bigger `maxWidth`: the spacer is empty, so nothing here lays out or
-  rasters the zoomed board. It isn't built.
+  rasters the zoomed board. `boardZoomFor` (`ui.ts`) sets the steps from the
+  frame's width. The widest map today, the Three Gate Fort at 79.2 units,
+  keeps `BOARD_ZOOM`'s 250% and 600%, as does every smaller one. A wider frame
+  scales both steps up in proportion, so a square stays the size on screen it
+  is on that map: a map 92 squares a side gets 411% and 986%, and 128 a side
+  572% and 1,371%. The isometric board keeps the fixed steps, since it lays
+  out its zoomed board at that width.
 - **No drag with a mouse.** The isometric board doesn't pan on a mouse drag
   either: a pane scrolls with a wheel, a trackpad, its scroll bars and a
   finger. The old 3D board did, on its own.
@@ -143,7 +150,23 @@ across the frame from there in the isometric board's own units. So:
 
 The rings round a figure's feet lie flat on the ground instead, one instanced
 draw. What's shaded on the ground is the ground overlay's (`shading3d.ts`),
-which shades a square's colour but can't draw an area's outline.
+which shades a square's colour, and the stroke round an area's edge lies
+on the ground beside it (`outlines3d.ts`).
+
+The centre's name is placed by the same `resolveMapLabels` the isometric
+board's `MapLabelLayer` uses (`centreLabel` in `previewGeometry.ts`). It is
+placed in the camera's plane, in board units, with the standing figures'
+`figureRectAt` rects as obstacles and the frame as its bounds. It is placed
+again when the figures are set and as the view turns, but not a frame at a
+time while someone walks.
+
+The marks, and the hit text's mark, wear the soft shadow
+`.ag-ra-figure-mark` gives them on the isometric board. It is drawn in the
+billboard shader and sized by `MARK_SHADOW` in `ui.ts`, which must match that
+rule's `drop-shadow`. The shader takes the sprite's alpha at the shadow's
+offset over nine taps and lays it dark under the sprite. The quad grows by
+the shadow's reach, and the sampling is clamped to the sprite's own rect on
+the sheet.
 
 How figures come and go in an action is the figures' own (`figurePools.ts`):
 one downed stands as it was until the blow lands and then fades, while its
@@ -164,12 +187,6 @@ Everything the isometric board shows is drawn (§2.2), but for:
   took the draw calls from 20 to 27 a frame and the triangles from 95k to
   182k, for no CPU cost the container could measure. Turn it on once the
   renderer lab has shown what it costs a phone.
-- **An area's outline:** a blast, the squares a pick may be placed on and the
-  centre are shaded, but without the stroke round their edge the isometric
-  board draws, since the ground overlay holds a colour a square.
-- **The centre's name keeps off the area,** but not off figures standing
-  there, as the isometric board's `MapLabelLayer` keeps it.
-- **The marks' drop shadow** (`.ag-ra-figure-mark`).
 
 ## 4. Measuring it
 
@@ -316,8 +333,7 @@ were played on both boards. The rest are in the lab's *Every run* list.
    `npm run ra-bench -- --renderers svg,three --headed` gives the same
    comparison with the trace as well.
 2. **The remaining work before a player sees it:**
-   - the last of §3, and outlines on or off from a phone's numbers;
-   - a zoom range set by the map (§2.1);
+   - outlines on the figures on or off, from a phone's numbers (§3);
    - culling and a level of detail for maps of 8,000+ tiles. Today it draws
      the whole map every frame, which costs little at 16k tiles and only grows
      with what stands on it.
