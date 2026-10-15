@@ -16,7 +16,7 @@
 // its outline alone (`outline`: an inverted hull, the solid's back faces pushed
 // out along their normals and drawn dark, which shows round the solid's edge).
 
-import { BackSide, CustomBlending, FrontSide, GreaterDepth, OneMinusSrcAlphaFactor, ShaderMaterial, SrcAlphaFactor, Vector3 } from "three";
+import { BackSide, CustomBlending, FrontSide, GreaterDepth, OneMinusSrcAlphaFactor, ShaderMaterial, SrcAlphaFactor, type Texture, Vector3 } from "three";
 import type { Vec3 } from "./iso3d";
 
 /** How far nearer the camera a figure drawn `behind` is drawn, in world units: so a figure's feet, level with the ground they stand on, are never taken for hidden by it. */
@@ -29,6 +29,12 @@ const OUTLINE_COLOUR = "vec3(0.07, 0.05, 0.04)";
 
 const vertexShader = /* glsl */ `
 attribute vec3 flags;
+#ifdef MAPPED
+attribute vec3 instanceSkin;
+varying vec2 vUv;
+varying float vFacesUp;
+varying float vFoot;
+#endif
 #ifdef INSTANCE_OPACITY
 attribute float instanceOpacity;
 #endif
@@ -53,6 +59,16 @@ void main() {
     vTint = instanceColor;
 #endif
     vFlags = flags;
+#ifdef MAPPED
+    // A unit box stood to a size: the texture is laid on at the world's scale, so a narrow chunk shows a part of the brick and not all of it squeezed in. Its side's v runs down from the top by the world height (MAPPED_ROWS of it a repeat of the texture). Each instance is shifted by its own skin (a flip, a drop, a slide across) so a run of squares isn't one picture repeated.
+    float stood = length(placed[1].xyz);
+    vFacesUp = step(0.5, normal.y);
+    float along = abs(normal.x) > 0.5 ? length(placed[2].xyz) : length(placed[0].xyz);
+    float across = vFacesUp > 0.5 ? length(placed[2].xyz) : along;
+    float u = instanceSkin.x > 0.5 ? 1.0 - uv.x : uv.x;
+    vUv = vFacesUp > 0.5 ? vec2(uv.x * length(placed[0].xyz), uv.y * across) + instanceSkin.z : vec2(u * along + instanceSkin.z, 1.0 - (1.0 - position.y) * stood / MAPPED_ROWS - instanceSkin.y / MAPPED_ROWS);
+    vFoot = position.y * stood;
+#endif
     vOpacity = 1.0;
 #ifdef INSTANCE_OPACITY
     vOpacity = instanceOpacity;
@@ -71,6 +87,13 @@ const fragmentShader = /* glsl */ `
 uniform vec3 light;
 uniform vec3 halfway;
 uniform float opacity;
+#ifdef MAPPED
+uniform sampler2D sideMap;
+uniform sampler2D topMap;
+varying vec2 vUv;
+varying float vFacesUp;
+varying float vFoot;
+#endif
 varying float vOpacity;
 varying vec3 vColour;
 varying vec3 vNormal;
@@ -79,6 +102,9 @@ varying vec3 vTint;
 void main() {
     vec3 n = normalize(vNormal);
     vec3 base = vColour;
+#ifdef MAPPED
+    base *= vFacesUp > 0.5 ? texture2D(topMap, vUv).rgb : texture2D(sideMap, vUv).rgb * mix(0.72, 1.0, smoothstep(0.0, 0.14, vFoot));
+#endif
     if (vFlags.x > 0.5) base *= vTint;
     vec3 shaded = base;
     if (vFlags.y < 0.5) {
@@ -105,6 +131,13 @@ export interface SolidOptions {
     translucent?: boolean;
     /** Only the solid's outline: its back faces, pushed out `OUTLINE_WIDTH` and dark. */
     outline?: boolean;
+    /**
+     * Coloured by textures as well as by each vertex's colour (multiplied): a
+     * unit box's sides by `side`, which repeats every `rows` world units up, and
+     * its top by `top`, both laid on at the world's scale. The geometry needs its
+     * `uv`, and each instance an `instanceSkin` (flip, drop and slide).
+     */
+    mapped?: { side: Texture; top: Texture; rows: number };
 }
 
 /**
@@ -112,7 +145,7 @@ export interface SolidOptions {
  * (`lightSolids`). Geometry needs a `color` and a `flags` attribute: a plain
  * solid gets one colour and zero flags (`coloured`, terrain3d.ts).
  */
-export function solidMaterial({ opacity = 1, perInstance = false, behind = false, translucent = false, outline = false }: SolidOptions = {}): ShaderMaterial {
+export function solidMaterial({ opacity = 1, perInstance = false, behind = false, translucent = false, outline = false, mapped }: SolidOptions = {}): ShaderMaterial {
     const blended = opacity < 1 || perInstance || translucent;
     return new ShaderMaterial({
         vertexShader,
@@ -121,6 +154,7 @@ export function solidMaterial({ opacity = 1, perInstance = false, behind = false
         defines: {
             ...(perInstance && { INSTANCE_OPACITY: "" }),
             ...(behind && { BEHIND: BEHIND_BIAS.toFixed(3) }),
+            ...(mapped && { MAPPED: "", MAPPED_ROWS: mapped.rows.toFixed(4) }),
             ...(outline && { OUTLINE: OUTLINE_WIDTH.toFixed(4), OUTLINE_SHADE: OUTLINE_COLOUR }),
         },
         side: outline ? BackSide : FrontSide,
@@ -132,6 +166,7 @@ export function solidMaterial({ opacity = 1, perInstance = false, behind = false
             light: { value: new Vector3(0, 1, 0) },
             halfway: { value: new Vector3(0, 1, 0) },
             opacity: { value: opacity },
+            ...(mapped && { sideMap: { value: mapped.side }, topMap: { value: mapped.top } }),
         },
     });
 }
