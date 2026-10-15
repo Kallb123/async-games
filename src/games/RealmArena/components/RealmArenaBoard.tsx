@@ -21,7 +21,7 @@ import { CHARACTER_ART, facingCell, ITEM_ART, SMOKE_ART, spriteBox, TERRAIN_ART,
 import { CHARACTERS, ITEMS, type CharacterId, type ItemId } from '@/games/RealmArena/characters';
 import { CENTRE, isStanding, isWarband, maxHpOf, smokeSquares, type BattleState, type Fighter, type FogGhost, type MusterPick, type ToldEvent } from '@/games/RealmArena/rules';
 import type { AttackOption } from '@/games/RealmArena/tactics';
-import { apPips, areaRect, BOARD_ZOOM, FIGURE_RADIUS, FIGURE_RISE, fxPointsAt, HP_BAR_HEIGHT, HP_BAR_RISE, HP_BAR_WIDTH, SMOKE_SIZE, type BattleCue, type BoardFollow, type FallCue, type FxPoints, type ScorchCue, type Shove, type Timed, type WalkCue, effectsOn, facingOf, fadeInAt, fadeOutAt, fighterStatus, endOf, hpFraction, legLengthOn, progressOf, shakeAt, shakesOf, shovesOf, shoveAt, terrainLetter, toldAt, toldOf, walkerAt, walkCameraAt, legPoint, walkLift, walkSquares, type Told } from '@/games/RealmArena/ui';
+import { AP_PIP_OFFSET, AP_PIP_RADIUS, AP_PIP_STEP, apPips, areaRect, BOARD_ZOOM, EFFECT_MARK_OFFSET, EFFECT_MARK_SIZE, EFFECT_MARK_STEP, FIGURE_RADIUS, FIGURE_RISE, fxPointsAt, HP_BAR_HEIGHT, HP_BAR_RISE, HP_BAR_WIDTH, ITEM_MARK_OFFSET, ITEM_MARK_SIZE, MARKER_RADIUS, RING_RADIUS, ringOf, SMOKE_SIZE, type Marker, type Ring, type BattleCue, type BoardFollow, type FallCue, type FxPoints, type ScorchCue, type Shove, type Timed, type WalkCue, effectsOn, facingOf, fadeInAt, fadeOutAt, fighterStatus, endOf, hpFraction, legLengthOn, progressOf, shakeAt, shakesOf, shovesOf, shoveAt, terrainLetter, toldAt, toldOf, walkerAt, walkCameraAt, legPoint, walkLift, walkSquares, type Told } from '@/games/RealmArena/ui';
 
 /** How deep the ground is drawn under the map's front edges, in quarters. */
 const SLAB_DEPTH = 3;
@@ -32,33 +32,6 @@ const SLAB_DEPTH = 3;
 // square's top, and it stands `FIGURE_TOP` high under its HP bar (`HP_BAR_*`):
 // all in ui.ts, which every way of drawing the board shares. Everything here is
 // in board units, against a square `2 * ISO_HALF_WIDTH` across.
-/**
- * The rings on the ground round a figure's feet, as fractions of its square's
- * diamond: the one it's picked out by, wide enough to show round its feet,
- * and outside that, still inside the square, the dashed one round one on
- * watch or still sealed.
- */
-const RING_RADIUS = 0.62;
-const MARKER_RADIUS = 0.8;
-/** The AP pips: a column of dots down the figure's right, clear of the disc and inside its square's width. */
-const AP_PIP_RADIUS = 0.75;
-const AP_PIP_STEP = 1.9;
-const AP_PIP_OFFSET = 5.6;
-/**
- * The effect marks (§20.2): a column of badges down the figure's left, where
- * the AP pips never are, clear of the disc and inside its square's width.
- * Three stand within the disc's height.
- */
-const EFFECT_MARK_SIZE = 3;
-const EFFECT_MARK_STEP = 3.1;
-const EFFECT_MARK_OFFSET = 6.2;
-/**
- * The item a character carries (§21.1): by its right shoulder, in the AP
- * pips' column above them, so it never covers them, the effect marks or the
- * HP bar over the figure's head.
- */
-const ITEM_MARK_SIZE = 3;
-const ITEM_MARK_OFFSET = { x: AP_PIP_OFFSET, y: -5 };
 /** A target's chance to hit: a pill wide enough for "100%", worn above its figure's HP bar. */
 const ODDS_WIDTH = 10.5;
 const ODDS_HEIGHT = 4;
@@ -196,12 +169,6 @@ interface Aiming {
     /** A tap on a square of the board, anywhere no character stands. */
     onSquare: (square: Square) => void;
 }
-
-/** The ring drawn round a figure's feet: chosen, a candidate for a tap, aimed at, or a watcher a move would set off. */
-type Ring = 'selected' | 'candidate' | 'aimed' | 'flagged';
-
-/** The dashed ring round a figure's feet, outside its `Ring`: on watch, or a squad still sealed. */
-type Marker = 'watch' | 'sealed';
 
 /** Which way a figure — a fighter, or a pick still sealed — is drawn facing (`facingOf`). */
 type FacingFor = (figure: { square: Square; facing?: Facing }) => Facing;
@@ -993,14 +960,6 @@ export default function RealmArenaBoard({ field, fighters, fogGhosts = [], unsee
         return change && isStanding(fighter) ? [{ fighter, change }] : [];
     }) : [];
 
-    const ringOf = (fighter: Fighter): Ring | undefined => {
-        if (fighter.id === selected?.id) return 'selected';
-        if (aiming?.aimed.includes(fighter.id)) return 'aimed';
-        if (aiming?.flagged.includes(fighter.id)) return 'flagged';
-        if (aiming?.candidates.includes(fighter.id)) return 'candidate';
-        return undefined;
-    };
-
     const items: DepthItem[] = ground.blocks.map(block => ({
         depth: block.depth,
         node: <RaisedSquare key={`block-${block.square}`} id={artId} block={block} shades={shades} />,
@@ -1077,7 +1036,7 @@ export default function RealmArenaBoard({ field, fighters, fogGhosts = [], unsee
         const arrives = arrival(fighter.id);
         const props: FighterNodeProps = {
             artId, view, fighter,
-            ring: ringOf(fighter),
+            ring: ringOf(fighter.id, selected?.id, aiming),
             selected: fighter.id === selected?.id,
             acting: fighter.owner === acting,
             colour: colourFor(fighter.owner),

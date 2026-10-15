@@ -164,6 +164,54 @@ export const HP_BAR_HEIGHT = 2;
 /** How high the HP bar's foot is over the middle of its square. */
 export const HP_BAR_RISE = FIGURE_TOP + 0.5;
 
+/**
+ * What hangs round a figure, in the same units, shared by every way of drawing
+ * the board. The rings on the ground round its feet, as fractions of its square's
+ * diamond: the one it's picked out by, wide enough to show round its feet,
+ * and outside that, still inside the square, the dashed one round one on
+ * watch or still sealed.
+ */
+export const RING_RADIUS = 0.62;
+export const MARKER_RADIUS = 0.8;
+/** The AP pips: a column of dots down the figure's right, clear of the disc and inside its square's width. */
+export const AP_PIP_RADIUS = 0.75;
+export const AP_PIP_STEP = 1.9;
+export const AP_PIP_OFFSET = 5.6;
+/**
+ * The effect marks (§20.2): a column of badges down the figure's left, where
+ * the AP pips never are, clear of the disc and inside its square's width.
+ * Three stand within the disc's height.
+ */
+export const EFFECT_MARK_SIZE = 3;
+export const EFFECT_MARK_STEP = 3.1;
+export const EFFECT_MARK_OFFSET = 6.2;
+/**
+ * The item a character carries (§21.1): by its right shoulder, in the AP
+ * pips' column above them, so it never covers them, the effect marks or the
+ * HP bar over the figure's head.
+ */
+export const ITEM_MARK_SIZE = 3;
+export const ITEM_MARK_OFFSET = { x: AP_PIP_OFFSET, y: -5 };
+
+/** The ring drawn round a figure's feet: chosen, a candidate for a tap, aimed at, or a watcher a move would set off. */
+export type Ring = "selected" | "candidate" | "aimed" | "flagged";
+
+/** The dashed ring round a figure's feet, outside its `Ring`: on watch, or a squad still sealed. */
+export type Marker = "watch" | "sealed";
+
+/**
+ * The ring round a figure's feet, if any, in the order they win: chosen, then
+ * aimed at, then a watcher a move would set off, then a candidate for a tap.
+ * `aiming` is the lined-up action's, if there is one.
+ */
+export function ringOf(id: number, selected: number | undefined, aiming: { aimed: readonly number[]; flagged: readonly number[]; candidates: readonly number[] } | null | undefined): Ring | undefined {
+    if (id === selected) return "selected";
+    if (aiming?.aimed.includes(id)) return "aimed";
+    if (aiming?.flagged.includes(id)) return "flagged";
+    if (aiming?.candidates.includes(id)) return "candidate";
+    return undefined;
+}
+
 /** Where the board's view goes, in squares, the key that reapplies it, and whether it's zoomed to just fit (`BoardZoomFocus.exact`). */
 export interface BoardFocusArea {
     area: Rect;
