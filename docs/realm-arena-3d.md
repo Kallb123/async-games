@@ -6,9 +6,10 @@ geometry rather than isometric sprites. It follows
 a GPU renderer for a bigger game of 8,000+ tiles, and to three.js should that
 game want real 3D.
 
-**Status: experiment.** The 3D board draws the bench's battles and plays their
-enemy turns, and the rendering bench measures it beside the isometric board
-(§4, §5). No screen a player sees uses it yet.
+**Status: live.** Players see the 3D board in every battle
+(`RealmArenaPlayBoard`), falling back to the isometric SVG board only where the
+browser has no WebGL. The SVG board stays in the codebase, and the rendering
+bench still measures the two side by side (§4, §5).
 
 ---
 
