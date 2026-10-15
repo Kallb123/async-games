@@ -115,11 +115,12 @@ export function drawText(
 /**
  * Calls `then` once `font` (a canvas font, e.g. `800 16px Bricolage Grotesque`)
  * has loaded, or has failed to: text drawn before then would be drawn in the
- * typeface that stands in for it, for good. Answers whether it will; a page
- * without the font API has nothing to wait for, and draws in what it has.
+ * typeface that stands in for it, for good. Answers whether it will: a font
+ * already loaded has nothing to wait for, and nor has a page without the font
+ * API, which draws in what it has.
  */
 export function whenFontReady(font: string, then: () => void): boolean {
-    if (typeof document === "undefined" || !document.fonts) return false;
+    if (typeof document === "undefined" || !document.fonts || document.fonts.check(font)) return false;
     document.fonts.load(font).then(then, then);
     return true;
 }
