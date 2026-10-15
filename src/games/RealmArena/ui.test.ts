@@ -133,9 +133,9 @@ describe("fighterStatus", () => {
         expect(fighterStatus(knight)).toEqual([]);
     });
 
-    it("names the watch, hunkering down and the shield wall", () => {
-        expect(fighterStatus({ ...knight, banked: 4, effects: { hunkered: 1, shieldWall: 1 } }))
-            .toEqual(["On watch (4 AP banked)", "Hunkered down", "Shield wall"]);
+    it("names the watch and hunkering down", () => {
+        expect(fighterStatus({ ...knight, banked: 4, effects: { hunkered: 1 } }))
+            .toEqual(["On watch (4 AP banked)", "Hunkered down"]);
     });
 
     it("says only that a fallen character is down", () => {
@@ -156,7 +156,7 @@ describe("effectsOn", () => {
     const knight = newFighter(0, "alice", "knight", 0);
 
     it("lists what the board marks a figure with, in EFFECT_IDS order, leaving out a count run down", () => {
-        expect(effectsOn({ ...knight, effects: { shieldWall: 1, slowed: 0, burning: 2 } })).toEqual(["burning", "shieldWall"]);
+        expect(effectsOn({ ...knight, effects: { hunkered: 1, slowed: 0, burning: 2 } })).toEqual(["burning", "hunkered"]);
         expect(effectsOn(knight)).toEqual([]);
     });
 
@@ -680,10 +680,9 @@ describe("battleCues", () => {
     });
 
     it("says what a stance is as it's taken, with the stance's mark beside it", () => {
-        const cues = battleCues(FIELD, [{ kind: "hunkered", fighter: 0 }, { kind: "shieldWall", fighter: 0 }], before);
+        const cues = battleCues(FIELD, [{ kind: "hunkered", fighter: 0 }], before);
         expect(drawn(cues)).toMatchObject([
             { kind: "text", fighter: 0, square: 10, value: "Hunker down", tone: "word", mark: "hunkered", start: 0, length: HIT_TEXT_MS },
-            { kind: "text", fighter: 0, square: 10, value: "Shield wall", tone: "word", mark: "shieldWall", start: 450 },
         ]);
     });
 
@@ -1928,7 +1927,6 @@ describe("eventLines as sentences", () => {
             { kind: "marked", fighter: 0, target: 1 },
             { kind: "raised", fighter: 3, target: 0, hp: 2 },
             { kind: "hunkered", fighter: 1 },
-            { kind: "shieldWall", fighter: 1 },
             { kind: "watching", fighter: 0, banked: 2 },
             { kind: "spotted", fighter: 1, by: 0 },
             { kind: "effect", fighter: 1, effect: "burning", change: "applied" },
@@ -1942,7 +1940,6 @@ describe("eventLines as sentences", () => {
             "Alice's Archer used Hunter's mark on your Knight",
             "Alice's Cleric raised Alice's Archer to 2 HP",
             "Your Knight hunkered down",
-            "Your Knight raised a shield wall",
             "Alice's Archer is on watch",
             "Your Knight found Alice's Archer in its way",
             "Your Knight is burning",

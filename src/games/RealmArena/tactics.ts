@@ -69,7 +69,6 @@ export const ACTION_AIMS: Readonly<Record<ActionKind, ActionAim>> = {
     demolish: { at: "square", range: "cover" },
     hunker: { at: "self" },
     watch: { at: "self" },
-    shieldWall: { at: "self" },
     purify: { at: "self" },
     rend: { at: "enemy", range: "weapon" },
     regrowth: { at: "ally", range: ABILITIES.regrowth.range },

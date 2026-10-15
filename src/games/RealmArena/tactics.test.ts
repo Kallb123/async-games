@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { buildBattlefield } from "@/utils/games/battlefield/terrain";
 import { at } from "@/utils/games/battlefield/testFixtures";
-import { ABILITIES, type CharacterId } from "./characters";
+import { ABILITIES, isPassive, type AbilityId, type CharacterId } from "./characters";
 import { ACTION_POINTS, check, newFighter, type Action, type Fighter } from "./rules";
 import { ACTION_AIMS, attackOptions, rangeSquares, reactionPreviews, shotOf, targetsOf } from "./tactics";
 
@@ -19,7 +19,7 @@ function ready(id: number, owner: string, character: CharacterId, square: number
 
 describe("ACTION_AIMS (§29.3)", () => {
     it("aims every ability, so a new one is usable by a player and the computer the day it's added", () => {
-        for (const ability of Object.keys(ABILITIES)) expect(ACTION_AIMS).toHaveProperty(ability);
+        for (const ability of (Object.keys(ABILITIES) as AbilityId[]).filter(id => !isPassive(id))) expect(ACTION_AIMS).toHaveProperty(ability);
     });
 
     it("aims every kind of action check takes", () => {

@@ -265,7 +265,7 @@ describe("far shots, cover counts double (§13.3)", () => {
     });
 
     it("counts a shield wall's half cover like any other", () => {
-        const wall = fighter(3, "b", "knight", row(13), { effects: { shieldWall: 1 } });
+        const wall = fighter(3, "b", "knight", row(13), {});
         const from = (col: number) => {
             const attacker = fighter(1, "a", "archer", at(OPEN_LONG, col, 1));
             const ally = fighter(2, "b", "mage", at(OPEN_LONG, 14, 1));

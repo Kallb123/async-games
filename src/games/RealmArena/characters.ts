@@ -29,9 +29,9 @@ export type AbilityId =
 
 /**
  * Something that happens to a character for a few of its owner's turns
- * (§20.1): the five conditions, and the two stances a character takes itself.
+ * (§20.1): the five conditions, and the stance a character takes itself.
  */
-export type EffectId = "burning" | "stunned" | "slowed" | "marked" | "corroded" | "hunkered" | "shieldWall";
+export type EffectId = "burning" | "stunned" | "slowed" | "marked" | "corroded" | "hunkered";
 
 export interface Effect {
     name: string;
@@ -61,14 +61,13 @@ export const EFFECTS = {
     // The Swarm's acid, eating through armour (§31.2): easier to hit, and a heal washes it off.
     corroded: { name: "Corroded", state: "corroded", count: 2, hitBonus: 10, healed: true },
     hunkered: { name: "Hunkered down", state: "hunkered down", count: 1 },
-    shieldWall: { name: "Shield wall", state: "holding a shield wall", count: 1 },
 } as const satisfies Record<EffectId, Effect>;
 
 /** Every effect, in the order a character's are listed. */
 export const EFFECT_IDS = Object.keys(EFFECTS) as EffectId[];
 
 /** The effects a character takes up itself. */
-const STANCES = ["hunkered", "shieldWall"] as const satisfies readonly EffectId[];
+const STANCES = ["hunkered"] as const satisfies readonly EffectId[];
 
 /** The effects something else puts on a character, rather than stances it takes up itself. */
 export type Affliction = Exclude<EffectId, typeof STANCES[number]>;
@@ -101,6 +100,8 @@ export interface Ability {
      * owner's next turn begins (`Fighter.usedThisTurn`).
      */
     oncePerTurn?: true;
+    /** Always on rather than used: it has no AP to spend and never shows as an action (Shield wall). */
+    passive?: true;
     /** Added to a shot's chance to hit (Aimed shot). */
     hitBonus?: number;
     /** How far away, in squares, it can be aimed (Fireball, Dynamite, Hunter's mark, Heal, Regrowth). */
@@ -120,14 +121,17 @@ export interface Ability {
     description: string;
 }
 
+/** Whether an ability is always on rather than used: it shows on a character's card but never as an action (Shield wall). */
+export const isPassive = (id: AbilityId): id is "shieldWall" => (ABILITIES[id] as Ability).passive === true;
+
 export const ABILITIES = {
     cleave: { name: "Cleave", ap: 2, cooldown: 3, description: "Strike two enemies next to them" },
-    shieldWall: { name: "Shield wall", ap: 2, cooldown: 3, description: "Allies next to them count as in half cover until its next turn" },
+    shieldWall: { name: "Shield wall", ap: 0, cooldown: 0, passive: true, description: "Passive: any character next to them, friend or foe, counts as in half cover" },
     aimedShot: { name: "Aimed shot", ap: 3, cooldown: 2, hitBonus: 20, description: "A shot at +20% to hit" },
     sneak: { name: "Sneak", ap: 2, cooldown: 0, description: "Move without setting off overwatch or guard" },
     fireball: { name: "Fireball", ap: 3, cooldown: 3, range: 12, damage: 3, effect: "burning", blasts: "area", description: "Hits every character in a 3×3 area, friend or foe, sets them burning, and blasts away the low cover there" },
     heal: { name: "Heal", ap: 2, cooldown: 0, oncePerTurn: true, range: 12, hp: 4, description: "Restore 4 HP to itself or an ally it can see within 12 squares, and clear burning, slowed, stunned and corroded. Once a turn" },
-    raise: { name: "Raise", ap: 3, cooldown: 4, description: "Bring a downed ally next to them back at half HP" },
+    raise: { name: "Raise", ap: 3, cooldown: 4, description: "Bring a downed ally next to them back at half HP, with 2 AP to spend if it is their owner's turn" },
     shieldBash: { name: "Shield bash", ap: 2, cooldown: 3, damage: 2, effect: "stunned", description: "Strike one enemy next to them for 2, and stun it" },
     demolish: { name: "Demolish", ap: 2, cooldown: 2, damage: 2, blasts: "target", description: "Blast away one square of low cover next to them, and strike everyone else beside it for 2, friend or foe" },
     cripplingShot: { name: "Crippling shot", ap: 3, cooldown: 2, effect: "slowed", description: "A shot that slows on a hit" },

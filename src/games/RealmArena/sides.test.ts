@@ -84,12 +84,19 @@ describe("an ally is no enemy (§29.1)", () => {
         expect(purified(solo([cleric, hurt]), cleric)).toEqual([]);
     });
 
-    it("is covered by a teammate's shield wall", () => {
+    it("raises a teammate's character with no AP, since it isn't its owner's turn", () => {
+        const cleric = ready(0, "a", "cleric", at(OPEN, 3, 2));
+        const fallen = ready(1, "b", "knight", at(OPEN, 4, 2), { hp: 0, ap: 0 });
+        const raised = act(team([cleric, fallen]), "a", { kind: "raise", fighter: 0, target: 1 }, fixedRolls([])).fighters.find(one => one.id === 1);
+        expect(raised).toMatchObject({ hp: 6, ap: 0 });
+    });
+
+    it("is covered by any Knight's shield wall, a teammate's or not", () => {
         const archer = ready(0, "x", "archer", at(OPEN, 0, 0));
         const target = ready(1, "a", "manAtArms", at(OPEN, 6, 2));
-        const wall = ready(2, "b", "knight", at(OPEN, 7, 2), { effects: { shieldWall: 1 } });
+        const wall = ready(2, "b", "knight", at(OPEN, 7, 2), {});
         expect(shotOdds(team([archer, target, wall]), archer, target)?.cover).toBe("half");
-        expect(shotOdds(solo([archer, target, wall]), archer, target)?.cover).toBe("none");
+        expect(shotOdds(solo([archer, target, wall]), archer, target)?.cover).toBe("half");
     });
 
     it("never sets off a teammate's overwatch or guard", () => {

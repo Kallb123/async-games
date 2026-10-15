@@ -900,8 +900,6 @@ export function eventLines(events: readonly ToldEvent[], fighters: readonly Figh
                 return [{ icon: "✚", title: `${Name(event.target)} is back up at ${event.hp} HP`, sentence: `${Name(event.fighter)} raised ${name(event.target)} to ${event.hp} HP` }];
             case "hunkered":
                 return [{ mark: EFFECT_ART.hunkered, title: `${Name(event.fighter)} hunkered down` }];
-            case "shieldWall":
-                return [{ mark: EFFECT_ART.shieldWall, title: `${Name(event.fighter)} raised a shield wall` }];
             case "watching":
                 return [{ icon: "👁", title: `${Name(event.fighter)} is on watch`, sub: `${event.banked} AP banked` }];
             case "spotted":
@@ -1193,7 +1191,7 @@ const THROWN_BURST: Readonly<Record<ThrownItem, BurstKind>> = { fireFlask: "fire
  * the words the log has for it, short enough to read in a glance at the board
  * — a stance, a watch, a reaction.
  */
-const STANCE_WORD: Readonly<Record<"hunkered" | "shieldWall", string>> = { hunkered: "Hunker down", shieldWall: "Shield wall" };
+const STANCE_WORD: Readonly<Record<"hunkered", string>> = { hunkered: "Hunker down" };
 /**
  * A watch is told by the weapon the watcher keeps — "Overwatch" for a ranged
  * one, "On guard" for a melee one — and what it sets off by what it does: an
@@ -1419,7 +1417,6 @@ function timeline(field: Battlefield, events: readonly ToldEvent[], before: read
                 text(event.fighter, beat(), minus(event.damage), "hit", { mark: "burning", hpChange: -event.damage });
                 break;
             case "hunkered":
-            case "shieldWall":
                 say(event.fighter, beat(), STANCE_WORD[event.kind], event.kind);
                 break;
             case "watching": {

@@ -67,7 +67,7 @@ const AREA = "3×3, friend or foe";
 
 const ABILITY_USE: Readonly<Record<AbilityId, AbilityUse>> = {
     cleave: { reach: "weapon", note: "Two enemies next to it" },
-    shieldWall: { reach: "self", note: "Allies next to it with no cover count as in half cover, until its next turn" },
+    shieldWall: { reach: "self", note: "Passive: anyone next to it, friend or foe, with no cover counts as in half cover" },
     aimedShot: { reach: "weapon" },
     sneak: { reach: "move" },
     fireball: { reach: "aimed", note: AREA },

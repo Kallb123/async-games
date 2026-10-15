@@ -4,7 +4,7 @@ import ListRow from '@/components/ui/ListRow';
 import Section from '@/components/ui/Section';
 import Stat from '@/components/ui/Stat';
 import { ITEM_ART } from '@/games/RealmArena/art';
-import { ABILITIES, CHARACTERS, ITEMS } from '@/games/RealmArena/characters';
+import { ABILITIES, CHARACTERS, ITEMS, isPassive } from '@/games/RealmArena/characters';
 import { abilitiesOf, armourOf, isStanding, maxHpOf, weaponOf, type BattleState, type Fighter } from '@/games/RealmArena/rules';
 import { abilityWait, effectsOn, watchStatus } from '@/games/RealmArena/ui';
 import { ABILITY_MARK, weaponLine, weaponMark } from '@/games/RealmArena/roster';
@@ -54,8 +54,8 @@ export default function RealmArenaFighterCard({ fighter, battle, label, children
                                     key={id}
                                     icon={ABILITY_MARK}
                                     title={ability.name}
-                                    sub={`${ability.ap} AP · ${ability.description}`}
-                                    action={<span className="ag-tag ag-tag--quiet">{abilityWait(fighter, id) ?? 'Ready'}</span>}
+                                    sub={isPassive(id) ? ability.description : `${ability.ap} AP · ${ability.description}`}
+                                    action={<span className="ag-tag ag-tag--quiet">{isPassive(id) ? 'Passive' : abilityWait(fighter, id) ?? 'Ready'}</span>}
                                 />
                             );
                         })}

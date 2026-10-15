@@ -7,9 +7,9 @@ import InfoModal from '@/components/ui/InfoModal';
 import ListRow from '@/components/ui/ListRow';
 import PendingTag from '@/components/ui/PendingTag';
 import Stat from '@/components/ui/Stat';
-import { ABILITIES, CHARACTERS, EFFECTS, type AbilityId, type Affliction } from '@/games/RealmArena/characters';
+import { ABILITIES, CHARACTERS, EFFECTS, isPassive, type AbilityId, type Affliction } from '@/games/RealmArena/characters';
 import { ITEM_ART } from '@/games/RealmArena/art';
-import { ATTACK_AP, HUNKER_AP, REACTION_COST, abilitiesOf, allied, check, damageTo, fighterById, hasEffect, healedEffects, isStanding, itemOf, maxHpOf, shotEffect, shotOdds, smokeSquares, strikeChance, weaponOf, type Action, type BattleState, type Fighter, type OddsBreakdown } from '@/games/RealmArena/rules';
+import { ATTACK_AP, HUNKER_AP, RAISED_AP, REACTION_COST, abilitiesOf, allied, check, damageTo, fighterById, hasEffect, healedEffects, isStanding, itemOf, maxHpOf, shotEffect, shotOdds, smokeSquares, strikeChance, weaponOf, type Action, type BattleState, type Fighter, type OddsBreakdown } from '@/games/RealmArena/rules';
 import { abilityWait, AREA_BLAST, oddsLines, whoseName } from '@/games/RealmArena/ui';
 import { rangeSquares, shotOf, targetsOf, type TargetKind } from '@/games/RealmArena/tactics';
 import { ABILITY_MARK, CHARACTER_MARK, weaponLine, weaponMark } from '@/games/RealmArena/roster';
@@ -75,7 +75,7 @@ const SEND_LABEL: Readonly<Record<Aim, string>> = {
  */
 const ABILITY_ROW: Readonly<Record<AbilityId, { icon: string; tag: string; needs?: TargetKind | 'cover'; least?: number }>> = {
     sneak: { icon: '🤫', tag: 'Sneak' },
-    shieldWall: { icon: '🛡️', tag: 'Raise it' },
+    shieldWall: { icon: '🛡️', tag: 'Passive' },
     fireball: { icon: AREA_BLAST.fireball.icon, tag: 'Aim' },
     dynamite: { icon: AREA_BLAST.dynamite.icon, tag: 'Aim' },
     cleave: { icon: ABILITY_MARK, tag: 'Aim', needs: 'attack', least: 2 },
@@ -177,7 +177,7 @@ export default function RealmArenaTurnSheet({ draft, battle, player, pendingTarg
             {row('move', '👣', 'Move', `1 AP per ${character.movement} squares`, needs(1), 'Move')}
             {row('attack', weaponMark(fighter.character, fighter.option), weapon.name, `${ATTACK_AP} AP · ${weaponLine(weapon)}`,
                 needs(ATTACK_AP) ?? reachable('attack'), 'Attack')}
-            {abilitiesOf(fighter).map(id => {
+            {abilitiesOf(fighter).filter((id): id is Exclude<AbilityId, "shieldWall"> => !isPassive(id)).map(id => {
                 const ability = ABILITIES[id];
                 const { icon, tag } = ABILITY_ROW[id];
                 const per = id === 'sneak' ? ` per ${character.movement} squares` : '';
@@ -382,7 +382,7 @@ function Detail({ draft, battle, name, ap, target }: DetailProps) {
         const clears = cleared.length > 0 ? `is no longer ${cleared.join(' or ')}` : '';
         return hint(`${Name(target.id)} ${[heals, clears].filter(Boolean).join(', and ')}.`);
     }
-    if (aim === 'raise') return hint(`${Name(target.id)} stands again at ${Math.ceil(max / 2)} HP, and acts from your next turn.`);
+    if (aim === 'raise') return hint(`${Name(target.id)} stands again at ${Math.ceil(max / 2)} HP, ${target.owner === fighter.owner ? `with ${RAISED_AP} AP to spend now` : 'and acts from its owner\'s next turn'}.`);
     if (aim === 'huntersMark') {
         return hint(`${Name(target.id)} is marked: +${EFFECTS.marked.hitBonus}% to hit them, for every attacker, until their turn after next.`);
     }
