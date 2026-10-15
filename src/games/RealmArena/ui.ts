@@ -205,6 +205,13 @@ export function figureRectAt(ground: Point): Rect {
  */
 export const RING_RADIUS = 0.62;
 export const MARKER_RADIUS = 0.8;
+/**
+ * The soft shadow on the ground under a figure, standing or lying: an ellipse
+ * `SHADOW_RADIUS` of its square's diamond across (a circle that size on the 3D
+ * board's ground), as dark as `SHADOW_ALPHA`. Both boards draw it by these.
+ */
+export const SHADOW_RADIUS = 0.5;
+export const SHADOW_ALPHA = 0.3;
 /** The AP pips: a column of dots down the figure's right, clear of the disc and inside its square's width. */
 export const AP_PIP_RADIUS = 0.75;
 export const AP_PIP_STEP = 1.9;

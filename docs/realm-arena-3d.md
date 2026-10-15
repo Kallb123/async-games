@@ -34,9 +34,9 @@ Everything lives in `src/games/RealmArena/three/` and
 | `solidMaterial.ts` | One shader for every solid, reproducing the sprite renderer's `shade`: a sky ambient brighter on what faces up, a diffuse light from the upper left that turns with the camera, a highlight on what shines, and glow drawn unlit. It works in the colours as written (sRGB), as the sprites did, and tints the team-flagged parts with each instance's owner colour. |
 | `terrain3d.ts` | The ground texture: each square's grass, or scorched ground, unwarped from its diamond on the sheet, with the grid over it. Raised squares are instanced boxes, one draw per terrain, each built of a few boxes (`blockPieces.ts`, pure and tested): rubble and low walls are heaps of chunks of different heights, each turned a little, and a wall or parapet has two merlons along each edge that borders lower ground. Sides are skinned with the brick column's face (unwarped from its sheet, laid on at the world's scale, repeating every three heights, each piece flipped and dropped by its own `instanceSkin` so a run of squares isn't one picture) and tops are paved with the same brick, or the grassed rock for a tower (`BLOCK_SKIN` in `art.ts`; `solidMaterial`'s `mapped`). Trees are instanced. An overlay holds one texel per square for everything shaded on the ground, laid on the flat ground and on each raised square's top, with a second overlay for the wave. `buildCover` builds the blocks of just a few squares, for cover an action blasted away to fade from (§2.2). |
 | `board3d.ts` | `Board3D`, the imperative scene. It owns the renderer, the camera, the figures (`FigurePools`), the layers drawn over them (§2.2), the quarter turn and picking. It sets its camera from the view `BoardZoom` tells it (§2.1), and takes no gesture of its own but a tap. It draws only when something changes, or once a frame while something moves. |
-| `figurePools.ts`, `figureCues.ts` | The figures, one instanced draw per character and kind: solid; faint (a per-instance opacity, for a figure fading as it falls, the sealed squad and the fog's stale sightings); hidden (drawn again through a wall, §2.2); and an outline, off (§3). `figureCues.ts` is the pure part, tested: how far a fall has faded, a knock or a lunge (`shoveAt`) as a move across the ground, and whether anything could stand between a figure and the camera. |
+| `figurePools.ts`, `figureCues.ts` | The figures, one instanced draw per character and kind: solid; faint (a per-instance opacity, for a figure fading as it falls, the sealed squad and the fog's stale sightings); hidden (drawn again through a wall, §2.2); and the outline every solid figure wears (§3). `figureCues.ts` is the pure part, tested: how far a fall has faded, a knock or a lunge (`shoveAt`) as a move across the ground, and whether anything could stand between a figure and the camera. |
 | `billboards.ts` | Quads that face the camera, hung from a point in the world and laid out across the frame in the isometric board's units, so that board's sizes carry over unchanged (§2.2). One `Billboards` is one draw, from an art sheet or a `CanvasAtlas` drawn into as it's needed (text, pills, dots, shields). A layer can ask for a drop shadow (`shadow`), drawn in its shader, so it is still one draw. |
-| `marks3d.ts`, `rings3d.ts` | Each figure's effect and watch marks, AP pips and item, and the rings and dashed markers lying on the ground round its feet. |
+| `marks3d.ts`, `rings3d.ts`, `shadows3d.ts` | Each figure's effect and watch marks, AP pips and item; the rings and dashed markers lying on the ground round its feet; and its soft shadow under them. |
 | `bars3d.ts` | The HP bars, as billboards: the fill, the pale chip a blow takes off draining past it, the dark edge, and a lined-up action's change to it, flashing. |
 | `previews3d.ts`, `previewGeometry.ts`, `canvasShapes.ts` | A lined-up action's path over the ground, the odds over its targets and the cover shields where a move ends, and the centre's name: one draw. `canvasShapes.ts` draws text and shapes into an atlas for every layer that needs it. |
 | `fx3d.ts`, `fxLayout.ts` | What an action plays (§26): hit text, slashes, bursts, missiles in flight, and the smoke pot's cloud standing on the ground. The layout is `fxLayout.ts`'s, pure and tested, on the isometric board's constants. |
@@ -149,7 +149,14 @@ across the frame from there in the isometric board's own units. So:
   give the look (the hit text's tones).
 
 The rings round a figure's feet lie flat on the ground instead, one instanced
-draw. What's shaded on the ground is the ground overlay's (`shading3d.ts`),
+draw. Each figure's soft shadow lies flat on its square too
+(`shadows3d.ts`, one more draw): the isometric board's `.ag-ra-shadow`
+ellipse, sized by `SHADOW_RADIUS` and `SHADOW_ALPHA` in `ui.ts`, a hair over
+the ground's strokes and under the rings, and hidden by a wall in front. It
+stays on the figure's square while the figure bobs or is knocked, and slides
+along the ground under a walker, as the isometric board's does. Standing,
+fallen and sealed figures have one; a fog sighting and the faint figure drawn
+through a wall don't. What's shaded on the ground is the ground overlay's (`shading3d.ts`),
 which shades a square's colour, and the stroke round an area's edge lies
 on the ground beside it (`outlines3d.ts`).
 
@@ -178,15 +185,22 @@ as the isometric board's `ghosts` are: a turn of the view would show it, but a
 player shouldn't have to turn the view to know it's there. Only figures that
 something could stand in front of go into that draw.
 
-## 3. Not yet drawn
+## 3. Outlines on the figures
 
-Everything the isometric board shows is drawn (§2.2), but for:
+Every solid figure wears a thin dark outline, as the sprites do: the figure
+drawn again as an inverted hull (`figurePools.ts`'s `outline` kind,
+`solidMaterial`'s `outline`). It follows the body, hat, bow, shield and staff.
+It is about a device pixel at the deepest zoom and finer at the fit, with no
+cracks at the boxes' corners and nothing poking through the ground at the
+feet. Faint, hidden and fog figures aren't outlined.
 
-- **Outlines on the figures,** which the sprites have. An inverted hull is
-  built (`OUTLINES` in `figurePools.ts`) but off: on the bench's enemy turn it
-  took the draw calls from 20 to 27 a frame and the triangles from 95k to
-  182k, for no CPU cost the container could measure. Turn it on once the
-  renderer lab has shown what it costs a phone.
+It costs one more draw a character and about as many triangles again. On the
+bench's enemy turn (`--runs 2`, 2026-10-15) that took the draw calls from 26
+to 32 a frame and the triangles from 113k to 197k. Script, style, layout,
+paint and React render didn't move beyond their noise. The software GPU's
+commit and process time rose 10–40% by scenario, which is the container's
+cost, not a phone's (§4). Measured with the outline as an option beside the
+plain board, it was judged fine to draw everywhere.
 
 ## 4. Measuring it
 
@@ -321,8 +335,8 @@ were played on both boards. The rest are in the lab's *Every run* list.
   fix, and the move to `BoardZoom`'s camera mode that followed it.
 - **Not measured:** a cheaper phone, and an iPhone, where WebGL runs in
   Safari. One phone was enough to decide; they're worth a look before
-  launch, not before building. The 3D board also still draws less than the
-  isometric one (§3), though most of what's missing is overlay, not
+  launch, not before building. The 3D board also still drew less than the
+  isometric one then, though most of what was missing was overlay, not
   geometry.
 
 ## 6. Next
@@ -333,7 +347,6 @@ were played on both boards. The rest are in the lab's *Every run* list.
    `npm run ra-bench -- --renderers svg,three --headed` gives the same
    comparison with the trace as well.
 2. **The remaining work before a player sees it:**
-   - outlines on the figures on or off, from a phone's numbers (§3);
    - culling and a level of detail for maps of 8,000+ tiles. Today it draws
      the whole map every frame, which costs little at 16k tiles and only grows
      with what stands on it.
