@@ -77,16 +77,22 @@ function BoardCamera({ board, rotation, glide, layout }: { board: Board3D | null
  * its camera to show it; the one press it takes for itself is a tap. What it
  * draws is `Board3D`'s, imperatively, outside React's renders.
  *
- * What an action did is drawn over it by `BattleFx` (three/fx3d.ts): hit text,
- * slashes, bursts, missiles in flight and the smoke pot's cloud. The caption
- * pill and the review's unplaced "?" are the isometric board's own components
- * (RealmArenaCaption), over the frame outside the zoom. With reduced motion
+ * Everything the isometric board draws as a sprite or a label over its
+ * figures is drawn here flat to the camera (three/billboards.ts), on that
+ * board's own sizes and clock: each figure's marks, AP pips and item
+ * (three/marks3d.ts) over its rings (three/rings3d.ts); its HP bar with its
+ * chip and a lined-up action's change to it (three/bars3d.ts); a lined-up
+ * action's path, odds and cover, and the centre's name (three/previews3d.ts);
+ * and what an action did — hit text, slashes, bursts, missiles in flight —
+ * with the smoke pot's cloud (three/fx3d.ts). What's shaded on the ground is
+ * laid in the isometric board's order (three/shading3d.ts). The caption pill
+ * and the review's unplaced "?" are the isometric board's own components
+ * (RealmArenaCaption), over the frame outside the zoom. A figure downed fades
+ * as it falls, one struck is knocked, cover blasted away fades off its
+ * scorched ground, and a standing figure a wall hides is drawn again faintly
+ * through it (three/figurePools.ts, three/figureCues.ts). With reduced motion
  * nobody walks, nothing flies, bursts, slashes or shakes the board, and the hit
  * text only appears and fades.
- *
- * Not yet drawn: the muster's sealed squad and placing it, a lined-up action's
- * path, odds, cover and HP preview, the effect marks, AP pips and items, and
- * the centre's name.
  */
 export default function RealmArenaBoard3D({ field, fighters, fogGhosts = [], unseen, sides, sealed, owners, waveDue = false, showCentre = true, viewerId, colourFor, nameFor, selected, onSelect, placing, aiming, acting, refocus = 0, follow, home, odds, coverAt, overlay, playback, onPlayed, unplaced, clouds }: RealmArenaBoard3DProps) {
     const [board, setBoard] = useState<Board3D | null>(null);
