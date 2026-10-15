@@ -32,13 +32,28 @@ export interface Outline {
  */
 const ABOVE_GROUND = 0.009;
 
+/** Whether `a` and `b` are the same strokes round the same squares, which are laid out the same wherever the field is. */
+function sameOutlines(a: readonly Outline[], b: readonly Outline[]): boolean {
+    return a.length === b.length && a.every((one, i) => {
+        const other = b[i];
+        return one.alpha === other.alpha && one.width === other.width && one.colour.equals(other.colour)
+            && one.dash?.[0] === other.dash?.[0] && one.dash?.[1] === other.dash?.[1]
+            && one.squares.size === other.squares.size && [...one.squares].every(square => other.squares.has(square));
+    });
+}
+
 /** The strokes of some areas, drawn in one draw: later ones over earlier, as the isometric board paints them. */
 export class GroundOutlines {
     readonly mesh: Mesh;
     private readonly material = new MeshBasicMaterial({
         vertexColors: true, transparent: true, depthWrite: false, side: DoubleSide,
+        // A strip lies flat and writes no depth, so its back and front need no ordering: one pass, not the two a transparent double-sided material is drawn in.
+        forceSinglePass: true,
         polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2,
     });
+
+    /** What is laid out now, so asking for the same again, as the board does whenever anything it shades changes, costs nothing. */
+    private laid: { field: Battlefield; outlines: readonly Outline[] } | null = null;
 
     /** Drawn after what's under it: `order` over the shading and rings. */
     constructor(order: number) {
@@ -55,6 +70,8 @@ export class GroundOutlines {
 
     /** Lays `outlines` out afresh on `field`'s ground. */
     set(field: Battlefield, outlines: readonly Outline[]): void {
+        if (this.laid?.field === field && sameOutlines(this.laid.outlines, outlines)) return;
+        this.laid = { field, outlines };
         const positions: number[] = [], colours: number[] = [], indices: number[] = [];
         for (const { squares, colour, alpha, width, dash } of outlines) {
             const across = strokeWidth(width);

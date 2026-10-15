@@ -344,7 +344,8 @@ export class Board3D {
     }
 
     private applyOutlines(): void {
-        if (!this.field || !this.outlined) return;
+        // With no ground yet there is nothing for them to lie on, and drawing them before it is a frame, and a program compiled, for strips floating in the dark.
+        if (!this.field || !this.terrain || !this.outlined) return;
         this.outlines.set(this.field, this.outlined.outlines);
         this.waveOutlines.set(this.field, this.outlined.wave);
         this.invalidate();
@@ -378,8 +379,7 @@ export class Board3D {
 
     /** Tells the previews where figures stand, for the centre's name to keep off them: when they are set, and not as one walks. */
     private layStanding(): void {
-        this.previews.setFigures([...this.figures.map(({ fighter }) => fighter.square), ...this.sealed.map(({ pick }) => pick.square)]);
-        this.layPreviews();
+        if (this.previews.setFigures([...this.figures.map(({ fighter }) => fighter.square), ...this.sealed.map(({ pick }) => pick.square)])) this.layPreviews();
     }
 
     private layPreviews(): void {

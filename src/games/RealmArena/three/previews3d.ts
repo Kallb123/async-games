@@ -79,9 +79,14 @@ export class Previews3D {
         this.spec = spec;
     }
 
-    /** Where figures stand, standing or fallen, and the sealed squad: told when they move, not a frame at a time while one walks. */
-    setFigures(squares: readonly Square[]): void {
+    /**
+     * Where figures stand, standing or fallen, and the sealed squad: told when they move, not a frame at a time while one walks.
+     * Says whether that changes what's laid out, which is only the centre's name, and only if they stand on other squares than they did.
+     */
+    setFigures(squares: readonly Square[]): boolean {
+        const before = this.figures;
         this.figures = squares;
+        return !!this.spec.centre && (before.length !== squares.length || before.some((square, i) => square !== squares[i]));
     }
 
     /** Lays everything out for a battlefield and the camera it is seen by. */
