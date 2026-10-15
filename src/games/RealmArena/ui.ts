@@ -157,6 +157,27 @@ export const HP_BAR_HEIGHT = 2;
 /** How high the HP bar's foot is over the middle of its square. */
 export const HP_BAR_RISE = FIGURE_TOP + 0.5;
 
+/** A target's chance to hit: a pill wide enough for "100%", worn above its figure's HP bar. */
+export const ODDS_WIDTH = 10.5;
+export const ODDS_HEIGHT = 4;
+export const ODDS_RISE = HP_BAR_RISE + HP_BAR_HEIGHT + ODDS_HEIGHT / 2 + 0.6;
+/** A cover shield standing on a square's edge: narrow enough to stay clear of the figure's disc and the HP bar. */
+export const SHIELD_WIDTH = 3.6;
+export const SHIELD_HEIGHT = 4.6;
+/** The path a lined-up move takes: how wide the line is, and the radius of the dot where it ends. */
+export const PATH_WIDTH = 1.2;
+export const PATH_END_RADIUS = 2;
+/** The centre's name: its size and weight, and how far clear of the area's edge its baseline stands. */
+export const CENTRE_LABEL = { fontSize: 10, fontWeight: 800, gap: 4 } as const;
+
+/** The outline of a cover shield, standing on its point at the origin. `left` is just its left half. */
+export function shieldPath(left = false): string {
+    const half = SHIELD_WIDTH / 2, shoulder = -SHIELD_HEIGHT * 0.45, belly = -SHIELD_HEIGHT * 0.12;
+    return left
+        ? `M0 ${-SHIELD_HEIGHT}H${-half}V${shoulder}Q${-half} ${belly} 0 0Z`
+        : `M${-half} ${-SHIELD_HEIGHT}H${half}V${shoulder}Q${half} ${belly} 0 0Q${-half} ${belly} ${-half} ${shoulder}Z`;
+}
+
 /** Where the board's view goes, in squares, the key that reapplies it, and whether it's zoomed to just fit (`BoardZoomFocus.exact`). */
 export interface BoardFocusArea {
     area: Rect;

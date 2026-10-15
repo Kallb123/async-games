@@ -8,8 +8,9 @@
 // - every raised square is a box from the ground up to its top, one instanced
 //   draw a terrain, its faces and its top coloured from its own sprites;
 // - trees are a trunk and two cones, one instanced draw for every tree;
-// - an overlay with a texel a square carries what's shaded on the ground:
-//   deployment zones, fog (§27), a reach, a range.
+// - an overlay with a texel a square carries what's shaded on the ground — on
+//   the top of a raised square too: deployment zones, fog (§27), smoke, a
+//   reach, a range, a blast.
 
 import {
     BoxGeometry, BufferGeometry, CanvasTexture, Color, ConeGeometry, CylinderGeometry, DataTexture, DoubleSide, Float32BufferAttribute,
@@ -173,7 +174,23 @@ export interface Terrain {
     dispose(): void;
 }
 
-/** A plane over the whole map at `lift` above the ground, its texture's texel per square. */
+/**
+ * How high the ground stands under a square, in the world's units: the top of
+ * a raised block, or — for a tree, whose trunk stands on it — the ground the
+ * tree is rooted in. What an overlay lies on, and so what shows through to the
+ * eye on a raised top rather than being hidden under it.
+ */
+export function groundHeight(field: Battlefield, square: Square): number {
+    const { elevation, terrain } = field.tiles[square];
+    return (terrainLetter(field, square) === "T" ? elevation - terrain.height : elevation) * QUARTER;
+}
+
+/**
+ * A plane over the whole map at `lift` above the ground, its texture's texel
+ * per square. The plane lies on the flat ground, and each raised square wears a
+ * quad of its own lifted onto its top, so what's shaded on a block shows on the
+ * block and not under it. All of it one mesh, one draw.
+ */
 function overlayPlane(field: Battlefield, lift: number, opacity = 1): { data: Uint8Array; texture: DataTexture; mesh: Mesh; material: MeshBasicMaterial } {
     const data = new Uint8Array(field.width * field.height * 4);
     const texture = new DataTexture(data, field.width, field.height, RGBAFormat);
@@ -181,11 +198,26 @@ function overlayPlane(field: Battlefield, lift: number, opacity = 1): { data: Ui
     texture.colorSpace = SRGBColorSpace;
     texture.needsUpdate = true;
     const material = new MeshBasicMaterial({ map: texture, transparent: true, depthWrite: false, opacity, side: DoubleSide });
-    const mesh = new Mesh(new PlaneGeometry(field.width, field.height).rotateX(-Math.PI / 2).translate(field.width / 2, lift, field.height / 2), material);
-    // Flipped so a texture's first row is the map's first row.
-    const uv = mesh.geometry.getAttribute("uv");
-    for (let i = 0; i < uv.count; i++) uv.setY(i, 1 - uv.getY(i));
-    return { data, texture, mesh, material };
+    const { width, height } = field;
+    // The plane first, its texture's first row the map's first row; then a quad a raised square, all four corners on that square's texel.
+    const positions = [0, lift, 0, width, lift, 0, width, lift, height, 0, lift, height];
+    const uvs = [0, 0, 1, 0, 1, 1, 0, 1];
+    const indices = [0, 1, 2, 0, 2, 3];
+    for (let square = 0; square < field.tiles.length; square++) {
+        const top = groundHeight(field, square);
+        if (top <= lift) continue;
+        const col = square % width, row = Math.floor(square / width);
+        const first = positions.length / 3;
+        positions.push(col, top + lift, row, col + 1, top + lift, row, col + 1, top + lift, row + 1, col, top + lift, row + 1);
+        const u = (col + 0.5) / width, v = (row + 0.5) / height;
+        uvs.push(u, v, u, v, u, v, u, v);
+        indices.push(first, first + 1, first + 2, first, first + 2, first + 3);
+    }
+    const geometry = new BufferGeometry();
+    geometry.setAttribute("position", new Float32BufferAttribute(positions, 3));
+    geometry.setAttribute("uv", new Float32BufferAttribute(uvs, 2));
+    geometry.setIndex(indices);
+    return { data, texture, mesh: new Mesh(geometry, material), material };
 }
 
 export function buildTerrain(field: Battlefield, sheets: Sheets): Terrain {

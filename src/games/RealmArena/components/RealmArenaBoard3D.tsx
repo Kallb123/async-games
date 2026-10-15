@@ -5,18 +5,23 @@ import BoardZoom, { useBoardCentre, type BoardZoomFocus, type BoardZoomPivot } f
 import { useBoardView, type BoardView } from '@/components/ui/boardView';
 import type RealmArenaBoard from '@/games/RealmArena/components/RealmArenaBoard';
 import { TurnButtons, useBoardRotation } from '@/games/RealmArena/components/RealmArenaTurn';
-import { Board3D, type FigureSpec, type Shading } from '@/games/RealmArena/three/board3d';
+import { Board3D, type FigureSpec } from '@/games/RealmArena/three/board3d';
+import { previewLook } from '@/games/RealmArena/three/canvasShapes';
 import { cssColour } from '@/games/RealmArena/three/cssColour';
 import { azimuthOf, boardFrame, cameraBasis, frameRect, regionOnScreen, topOf, turnedPoint, type BoardLayout } from '@/games/RealmArena/three/iso3d';
+import { overlaid, type Shading, type ShadingLayer } from '@/games/RealmArena/three/shading3d';
 import { loadSheets } from '@/games/RealmArena/three/terrain3d';
 import { loadCharacterModels } from '@/games/RealmArena/three/characterModels';
-import { isWarband } from '@/games/RealmArena/rules';
-import { BOARD_ZOOM, endOf, facingOf } from '@/games/RealmArena/ui';
+import { CENTRE, isWarband, smokeSquares } from '@/games/RealmArena/rules';
+import { areaRect, BOARD_ZOOM, endOf, facingOf } from '@/games/RealmArena/ui';
 import { useBoardFocus } from '@/games/RealmArena/useBoardFocus';
 import { PlaybackProvider, usePlaybackFrame } from '@/utils/hooks/usePlayback';
 
 /** The same props as the isometric board: either draws the same battle, and a screen picks one. */
 type RealmArenaBoard3DProps = React.ComponentProps<typeof RealmArenaBoard>;
+
+/** A layer that paints `shading` on each of `squares`. */
+const inSet = (squares: ReadonlySet<number>, shading: Shading): ShadingLayer => square => squares.has(square) ? shading : null;
 
 /** Hands the board the playback's time, a frame at a time, inside the `PlaybackProvider` it reads. */
 function PlaybackFrames({ board }: { board: Board3D | null }) {
@@ -69,12 +74,11 @@ function BoardCamera({ board, rotation, glide, layout }: { board: Board3D | null
  * its camera to show it; the one press it takes for itself is a tap. What it
  * draws is `Board3D`'s, imperatively, outside React's renders.
  *
- * Not yet drawn: the muster's sealed squad and placing it, a lined-up action's
- * path, odds, cover and HP preview, the effect marks, AP pips and items, the
- * hit text, slashes and the caption, smoke, the centre's name, and the faint
+ * Not yet drawn: the muster's sealed squad, the effect marks, AP pips and
+ * items, the hit text, slashes and the caption, smoke puffs, and the faint
  * figure a wall hides.
  */
-export default function RealmArenaBoard3D({ field, fighters, fogGhosts = [], unseen, sides, sealed, owners, waveDue = false, showCentre = true, viewerId, colourFor, selected, onSelect, placing, aiming, acting, refocus = 0, follow, home, overlay, playback, onPlayed }: RealmArenaBoard3DProps) {
+export default function RealmArenaBoard3D({ field, fighters, fogGhosts = [], unseen, sides, sealed, clouds, owners, waveDue = false, showCentre = true, viewerId, colourFor, selected, onSelect, placing, aiming, acting, refocus = 0, follow, home, odds, coverAt, overlay, playback, onPlayed }: RealmArenaBoard3DProps) {
     const [board, setBoard] = useState<Board3D | null>(null);
     // Made when its box mounts and gone with it.
     const host = useCallback((element: HTMLDivElement | null) => {
@@ -113,7 +117,9 @@ export default function RealmArenaBoard3D({ field, fighters, fogGhosts = [], uns
         if (frame.current) board?.setSelected(selected?.id ?? null, cssColour(frame.current, 'var(--ag-on-dark)'));
     }, [board, selected]);
 
-    // What's shaded on the ground, strongest first: a reach, a range, the fog, the zones, the centre.
+    // What's shaded on the ground, laid over one another in the order the isometric
+    // board paints them: the zones, the centre, the fog, a smoke cloud, a reach, a
+    // range, a blast, and the squares a picked-up character may be placed on.
     useEffect(() => {
         const scope = frame.current;
         if (!board || !scope) return;
@@ -126,17 +132,48 @@ export default function RealmArenaBoard3D({ field, fighters, fogGhosts = [], uns
             for (const square of squares) zone.set(square, { colour, alpha: 0.16 });
             if (waveDue && owner !== undefined && isWarband(owner)) squares.forEach(square => wave.add(square));
         });
-        const centre = new Set(showCentre ? field.objectives.centre ?? [] : []);
-        const reach = aiming?.reach, range = aiming?.range;
-        const [reachColour, rangeColour, fogColour, centreColour] = [token('--ra-reach'), token('--ra-range'), token('--ag-ink'), token('--ra-centre')];
-        board.setShading(square => {
-            const ap = reach?.get(square);
-            if (ap !== undefined) return { colour: reachColour, alpha: 0.18 + 0.12 * (ap - 1) };
-            if (range?.has(square)) return { colour: rangeColour, alpha: 0.3 };
-            if (unseen?.has(square)) return { colour: fogColour, alpha: 0.4 };
-            return zone.get(square) ?? (centre.has(square) ? { colour: centreColour, alpha: 0.18 } : null);
-        }, wave.size > 0 ? wave : null);
-    }, [board, field, owners, colourFor, waveDue, showCentre, aiming, unseen]);
+        const layers: ShadingLayer[] = [square => zone.get(square) ?? null];
+        const centre = new Set(showCentre ? field.objectives[CENTRE] ?? [] : []);
+        if (centre.size > 0) layers.push(inSet(centre, { colour: token('--ra-centre'), alpha: 0.18 }));
+        if (unseen && unseen.size > 0) layers.push(inSet(unseen, { colour: token('--ag-ink'), alpha: 0.4 }));
+        const smoke = smokeSquares({ field, fighters, clouds });
+        if (smoke.size > 0) layers.push(inSet(smoke, { colour: token('--ag-ink-softer'), alpha: 0.35 }));
+        const reach = aiming?.reach;
+        if (reach) {
+            const colour = token('--ra-reach');
+            layers.push(square => {
+                const ap = reach.get(square);
+                return ap === undefined ? null : { colour, alpha: 0.18 + 0.12 * (ap - 1) };
+            });
+        }
+        if (aiming?.range) layers.push(inSet(aiming.range, { colour: token('--ra-range'), alpha: 0.3 }));
+        const blast = new Set([...aiming?.area ?? [], ...aiming?.blasts ?? []]);
+        if (blast.size > 0) layers.push(inSet(blast, { colour: token('--ag-danger'), alpha: 0.3 }));
+        if (placing && placing.selected !== null) {
+            // Somewhere to put the character picked up: anywhere in the zone nobody stands.
+            const free = new Set(placing.zone);
+            sealed?.forEach(pick => free.delete(pick.square));
+            layers.push(inSet(free, { colour: token('--ra-centre'), alpha: 0.28 }));
+        }
+        board.setShading(square => overlaid(layers, square), wave.size > 0 ? wave : null);
+    }, [board, field, fighters, clouds, owners, colourFor, waveDue, showCentre, aiming, unseen, placing, sealed]);
+
+    // What an action lined up and the map show over the figures: the path, the
+    // chance to hit, the cover, the centre's name; and the colours they wear.
+    useEffect(() => {
+        if (frame.current) board?.setLook(previewLook(frame.current));
+    }, [board]);
+    useEffect(() => {
+        const centreSquares = showCentre ? field.objectives[CENTRE] ?? [] : [];
+        board?.setPreviews({
+            path: aiming?.path ?? null,
+            odds: odds?.map(({ target, chance }) => ({ square: target.square, chance })) ?? [],
+            coverAt: coverAt ?? null,
+            centre: centreSquares.length > 0 ? areaRect(field, centreSquares) : null,
+        });
+    }, [board, field, showCentre, aiming?.path, odds, coverAt]);
+    // What the lined-up action would do to each standing figure's HP, flashing at the end of its bar.
+    useEffect(() => board?.setHpChange(aiming?.hpChange ?? null), [board, aiming?.hpChange]);
 
     // The view glides round when the player turns it, and opens already turned.
     const [rotation, turn, turned] = useBoardRotation(viewerId);
