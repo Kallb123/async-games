@@ -4,7 +4,8 @@ import { usePathname } from "next/navigation";
 import { FcmTokenComp } from "@/components/FirebaseForeground";
 import { uuidString } from "@/utils/apiModels/GameDataApi";
 import type { IRealmArenaGameDataResponse, IRealmArenaSpecificGameStateResponse, IRealmArenaStepOutcome, RealmArenaPartState } from "@/games/RealmArena/apiModels";
-import RealmArenaBoard, { type AimFollow, type Playback } from "@/games/RealmArena/components/RealmArenaBoard";
+import type { AimFollow, Playback } from "@/games/RealmArena/components/RealmArenaBoard";
+import RealmArenaPlayBoard from "@/games/RealmArena/components/RealmArenaPlayBoard";
 import RealmArenaFighterCard from "@/games/RealmArena/components/RealmArenaFighterCard";
 import RealmArenaMusterSheet from "@/games/RealmArena/components/RealmArenaMusterSheet";
 import RealmArenaResults from "@/games/RealmArena/components/RealmArenaResults";
@@ -603,7 +604,7 @@ export default function GameRealmArena({ params }: { params: Promise<{ gameid: u
             {gs && (
                 <>
                     <div className="ag-board-area" ref={boardRef}>
-                        <RealmArenaBoard
+                        <RealmArenaPlayBoard
                             field={field}
                             fighters={fighters}
                             fogGhosts={gs.ghosts}

@@ -82,6 +82,11 @@ export const WHATS_NEW: WhatsNewGroup[] = [
         icon: "✨",
         items: [
             {
+                title: "Realm Arena is now in 3D",
+                detail: "The battlefield is now drawn as a real 3D board: walls and towers stand up off the ground, trees have trunks, and every character is a model that turns to face where it's going. Turn the view a quarter at a time, pinch to zoom, and everything else works as before. If your browser can't draw 3D, you get the old flat board.",
+                game: "realmarena",
+            },
+            {
                 title: "Realm Arena: choose your faction — the Realm, the Swarm or the Miners",
                 detail: "Each player now picks a faction as they muster, from those the host allows, and co-op can pit you against any of them. The Swarm fields more, cheaper and weaker beasts whose acid corrodes; the new Miners are dwarves out of the deep mines, each one tougher than the Realm's and a little dearer for it, so you field fewer of them. Miners hack through cover with their pickaxes, Stonewardens hold the line behind slabs of stone, Prospectors shoot steady crossbows, Runepriests heal and raise the fallen, and Sappers throw dynamite that blasts a 3×3 and the low cover in it. Miners of your own are tough enough that they don't wear Hold Out's armour against the Renegades.",
                 game: "realmarena",
@@ -122,10 +127,6 @@ export const WHATS_NEW: WhatsNewGroup[] = [
                 title: "Realm Arena: watch the battle play back",
                 detail: "Open Review actions and press Play to watch the match play itself forward, every action animated over the board in turn — characters walking along the path they took — with the view following each one, a move framed from where it began to where it ended — and in a co-op battle, each of the enemy's moves played out one at a time rather than all at once. The \"since you were last here\" screen has a button to replay everything from your last turn. The board now opens on your own squad, and comes back to it rather than zooming out across the whole map when there's nothing in particular to look at. Hunkering down, shield walls, overwatch and guard now say so over the character, and a step that happened out of sight shows a faint question mark over the map.",
                 game: "realmarena",
-            },
-            {
-                title: "Board zooming keeps up with your fingers, and Realm Arena zooms in closer",
-                detail: "Pinching to zoom a big board — Realm Arena's battlefield above all, but World Domination, Outbreak, Race Cars and the rest too — used to redraw the whole map on every frame, so it lagged well behind your fingers while scrolling around stayed smooth. The map now just stretches while you pinch, looking a touch soft until you let go, when it sharpens at its new zoom. In Realm Arena, picking a target from the list now zooms in close on your character and the target rather than out across the map, and selecting a character frames the nearer half of where it could move instead of most of it.",
             },
         ],
     },
