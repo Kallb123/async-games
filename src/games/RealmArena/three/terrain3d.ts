@@ -15,12 +15,13 @@
 
 import {
     BoxGeometry, BufferGeometry, CanvasTexture, Color, ConeGeometry, CylinderGeometry, DataTexture, DoubleSide, Float32BufferAttribute,
-    Group, InstancedMesh, LinearMipmapLinearFilter, Matrix4, Mesh, MeshBasicMaterial, NearestFilter, PlaneGeometry, RepeatWrapping, RGBAFormat, SRGBColorSpace, type ShaderMaterial, type Texture,
+    Group, InstancedBufferAttribute, InstancedMesh, LinearMipmapLinearFilter, Matrix4, Mesh, MeshBasicMaterial, NearestFilter, PlaneGeometry, Quaternion, RepeatWrapping, RGBAFormat, SRGBColorSpace, type ShaderMaterial, type Texture, Vector3,
 } from "three";
 import { mergeGeometries } from "three/addons/utils/BufferGeometryUtils.js";
 import { ART_SHEETS, BLOCK_SKIN, grassOf, TERRAIN_ART, variantOf, type ArtSheet, type Sprite } from "@/games/RealmArena/art";
 import { terrainLetter } from "@/games/RealmArena/ui";
 import type { Battlefield, Square, TerrainLetter } from "@/utils/games/battlefield/terrain";
+import { piecesOf, pieceCorner } from "./blockPieces";
 import { QUARTER } from "./iso3d";
 import { solidMaterial, type SolidOptions } from "./solidMaterial";
 
@@ -132,17 +133,17 @@ function sampled(sheets: Sheets, sprite: Sprite, top = false): Color {
     return n === 0 ? new Color(0.5, 0.5, 0.5) : new Color(r / n / 255, g / n / 255, b / n / 255);
 }
 
-/**
- * How much brighter a sprite's colour is taken than it's drawn: the art's own
- * shading is in what's sampled, and the solid shader shades it again, so the
- * colour is lifted back towards the lit face's before it is.
- */
-const UNSHADED = 1.3;
+/** How much brighter a tree's crown is taken than it's drawn: the art's own shading is in what's sampled, and the solid shader shades it again, so the colour is lifted back towards the lit face's before it is. */
+const CROWN_LIFT = 1.3;
+/** The same for a block's brick, which the art draws darker still, in shade, and a flat colour can't make up (the texture's detail is what's left to see). */
+const UNSHADED = 2.3;
+/** The same for a paved top, which the art draws in shade too, and which the sky lights fully. */
+const TOP_LIFT = 2;
 
 /** A tree's crown colour, from its sprite: the art's own shading is in it, so it is lifted back towards the lit face's. */
 function crownColour(sheets: Sheets): Color {
     const colour = sampled(sheets, TERRAIN_ART.T[0].sprites[0]);
-    return new Color(Math.min(1, colour.r * UNSHADED), Math.min(1, colour.g * UNSHADED), Math.min(1, colour.b * UNSHADED));
+    return new Color(Math.min(1, colour.r * CROWN_LIFT), Math.min(1, colour.g * CROWN_LIFT), Math.min(1, colour.b * CROWN_LIFT));
 }
 
 /** How many texels wide a block's side and top textures are. */
@@ -174,6 +175,15 @@ function topTexture(sheets: Sheets, sprite: Sprite): CanvasTexture {
     return repeating(new CanvasTexture(unwarped(sheets, sprite, SKIN_TEXELS, (sprite.rise ?? 0) * QUARTER_PX)));
 }
 
+/** A top paved with a face's brick: a square cut from the middle of the face, which has no hollow tower mouth in it. */
+function pavedTexture(side: CanvasTexture): CanvasTexture {
+    const face = side.image as HTMLCanvasElement;
+    const canvas = document.createElement("canvas");
+    canvas.width = canvas.height = SKIN_TEXELS;
+    canvas.getContext("2d")!.drawImage(face, 0, (face.height - SKIN_TEXELS) / 2, SKIN_TEXELS, SKIN_TEXELS, 0, 0, SKIN_TEXELS, SKIN_TEXELS);
+    return repeating(new CanvasTexture(canvas));
+}
+
 /** In the colours as written, as the solid shader works in, and mipmapped. */
 function repeating(texture: CanvasTexture): CanvasTexture {
     texture.wrapS = texture.wrapT = RepeatWrapping;
@@ -198,9 +208,9 @@ function blockTextures(sheets: Sheets, letter: TerrainLetter): BlockTextures | u
     if (!skin) return undefined;
     let made = skins.get(sheets);
     if (!made) skins.set(sheets, made = { sides: new Map(), tops: new Map() });
-    let side = made.sides.get(skin.side), top = made.tops.get(skin.top);
+    let side = made.sides.get(skin.side), top = made.tops.get(skin.top ?? skin.side);
     if (!side) made.sides.set(skin.side, side = sideTexture(sheets, skin.side));
-    if (!top) made.tops.set(skin.top, top = topTexture(sheets, skin.top));
+    if (!top) made.tops.set(skin.top ?? skin.side, top = skin.top ? topTexture(sheets, skin.top) : pavedTexture(side as CanvasTexture));
     return { side, top, rows: (skin.side.rise ?? 0) * QUARTER };
 }
 
@@ -281,6 +291,8 @@ function overlayPlane(field: Battlefield, lift: number, opacity = 1): { data: Ui
     return { data, texture, mesh: new Mesh(geometry, material), material };
 }
 
+const UP = new Vector3(0, 1, 0);
+
 /** What a set of raised squares is drawn with: an instanced mesh a terrain, and what to turn the light of and to dispose of with them. */
 interface RaisedSquares {
     meshes: InstancedMesh[];
@@ -304,25 +316,33 @@ function raisedSquares(field: Battlefield, sheets: Sheets, squares: Iterable<Squ
     }
     const out: RaisedSquares = { meshes: [], solids: [], disposables: [] };
     const matrix = new Matrix4();
+    const turned = new Quaternion();
     for (const [letter, onLetter] of byLetter) {
         const tree = letter === "T";
         const skin = blockTextures(sheets, letter);
         // A skin brings the colour the art is drawn in: its sides are lifted as a crown is, its top is lit full on.
-        const side = new Color(UNSHADED, UNSHADED, UNSHADED), top = new Color(1, 1, 1);
+        const side = new Color(UNSHADED, UNSHADED, UNSHADED), top = new Color(TOP_LIFT, TOP_LIFT, TOP_LIFT);
         const geometry = tree ? treeGeometry(crownColour(sheets)) : coloured(new BoxGeometry(1, 1, 1).translate(0.5, 0.5, 0.5), side, top, !!skin);
         const solid = solidMaterial({ ...options, mapped: skin });
-        const mesh = new InstancedMesh(geometry, solid, onLetter.length);
-        onLetter.forEach((square, index) => {
-            const col = square % field.width, row = Math.floor(square / field.width);
-            const height = Math.max(field.tiles[square].elevation * QUARTER, 0.02);
-            if (tree) {
+        // A tree is one instance a square; any other terrain is a few boxes a square (`piecesOf`).
+        const pieces = tree ? [] : onLetter.flatMap(square => piecesOf(field, square, skin?.rows ?? 0));
+        const mesh = new InstancedMesh(geometry, solid, tree ? onLetter.length : pieces.length);
+        if (tree) {
+            onLetter.forEach((square, index) => {
+                const col = square % field.width, row = Math.floor(square / field.width);
                 const ground = (field.tiles[square].elevation - field.tiles[square].terrain.height) * QUARTER;
                 matrix.makeRotationY(variantOf(square, 7)).setPosition(col + 0.5, ground, row + 0.5);
-            } else {
-                matrix.makeScale(1, height, 1).setPosition(col, 0, row);
-            }
-            mesh.setMatrixAt(index, matrix);
-        });
+                mesh.setMatrixAt(index, matrix);
+            });
+        } else {
+            const skins = new Float32Array(pieces.length * 3);
+            pieces.forEach((p, index) => {
+                matrix.compose(new Vector3(...pieceCorner(p)), turned.setFromAxisAngle(UP, p.turn), new Vector3(p.sx, p.sy, p.sz));
+                mesh.setMatrixAt(index, matrix);
+                skins.set([p.flip ? 1 : 0, p.drop, p.slide], index * 3);
+            });
+            geometry.setAttribute("instanceSkin", new InstancedBufferAttribute(skins, 3));
+        }
         out.meshes.push(mesh);
         out.solids.push(solid);
         out.disposables.push(geometry, solid);

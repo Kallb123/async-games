@@ -189,7 +189,7 @@ describe("the 3D board's block skins", () => {
         }
         for (const skin of Object.values(BLOCK_SKIN)) {
             expect(skin.side.rise).toBeGreaterThanOrEqual(TERRAIN["^"].height);
-            expect(skin.top.rise).toBeDefined();
+            if (skin.top) expect(skin.top.rise).toBeDefined();
         }
     });
 });

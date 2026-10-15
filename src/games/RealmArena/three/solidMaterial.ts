@@ -30,8 +30,10 @@ const OUTLINE_COLOUR = "vec3(0.07, 0.05, 0.04)";
 const vertexShader = /* glsl */ `
 attribute vec3 flags;
 #ifdef MAPPED
+attribute vec3 instanceSkin;
 varying vec2 vUv;
 varying float vFacesUp;
+varying float vFoot;
 #endif
 #ifdef INSTANCE_OPACITY
 attribute float instanceOpacity;
@@ -58,10 +60,14 @@ void main() {
 #endif
     vFlags = flags;
 #ifdef MAPPED
-    // A unit box stood to a height: a side's v runs up the face by the world height it stands (MAPPED_ROWS of it a repeat of the texture), its top is the top's whole.
+    // A unit box stood to a size: the texture is laid on at the world's scale, so a narrow chunk shows a part of the brick and not all of it squeezed in. Its side's v runs down from the top by the world height (MAPPED_ROWS of it a repeat of the texture). Each instance is shifted by its own skin (a flip, a drop, a slide across) so a run of squares isn't one picture repeated.
     float stood = length(placed[1].xyz);
     vFacesUp = step(0.5, normal.y);
-    vUv = vFacesUp > 0.5 ? uv : vec2(uv.x, 1.0 - (1.0 - position.y) * stood / MAPPED_ROWS);
+    float along = abs(normal.x) > 0.5 ? length(placed[2].xyz) : length(placed[0].xyz);
+    float across = vFacesUp > 0.5 ? length(placed[2].xyz) : along;
+    float u = instanceSkin.x > 0.5 ? 1.0 - uv.x : uv.x;
+    vUv = vFacesUp > 0.5 ? vec2(uv.x * length(placed[0].xyz), uv.y * across) + instanceSkin.z : vec2(u * along + instanceSkin.z, 1.0 - (1.0 - position.y) * stood / MAPPED_ROWS - instanceSkin.y / MAPPED_ROWS);
+    vFoot = position.y * stood;
 #endif
     vOpacity = 1.0;
 #ifdef INSTANCE_OPACITY
@@ -86,6 +92,7 @@ uniform sampler2D sideMap;
 uniform sampler2D topMap;
 varying vec2 vUv;
 varying float vFacesUp;
+varying float vFoot;
 #endif
 varying float vOpacity;
 varying vec3 vColour;
@@ -96,7 +103,7 @@ void main() {
     vec3 n = normalize(vNormal);
     vec3 base = vColour;
 #ifdef MAPPED
-    base *= vFacesUp > 0.5 ? texture2D(topMap, vUv).rgb : texture2D(sideMap, vUv).rgb;
+    base *= vFacesUp > 0.5 ? texture2D(topMap, vUv).rgb : texture2D(sideMap, vUv).rgb * mix(0.72, 1.0, smoothstep(0.0, 0.14, vFoot));
 #endif
     if (vFlags.x > 0.5) base *= vTint;
     vec3 shaded = base;
@@ -127,7 +134,8 @@ export interface SolidOptions {
     /**
      * Coloured by textures as well as by each vertex's colour (multiplied): a
      * unit box's sides by `side`, which repeats every `rows` world units up, and
-     * its top by `top`. The geometry needs its `uv`.
+     * its top by `top`, both laid on at the world's scale. The geometry needs its
+     * `uv`, and each instance an `instanceSkin` (flip, drop and slide).
      */
     mapped?: { side: Texture; top: Texture; rows: number };
 }
