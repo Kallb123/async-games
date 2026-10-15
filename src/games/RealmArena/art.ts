@@ -152,6 +152,22 @@ export const TERRAIN_ART: Readonly<Record<TerrainLetter, readonly ArtLayer[]>> =
     "_": [{ sprites: SCORCHED, at: 0 }],
 };
 
+/**
+ * What the 3D board skins a raised block with, cut from the same sheets as
+ * `TERRAIN_ART`: a plain face of brick for its sides — the brick column, three
+ * heights of it — and the top it is capped with, a flagstone (or, for the
+ * tower's stair and top, the grassed rock they are floored with). Trees are
+ * built from primitives, and open and scorched ground are the ground's.
+ */
+export const BLOCK_SKIN: Readonly<Partial<Record<TerrainLetter, { side: Sprite; top: Sprite }>>> = {
+    ",": { side: BRICK_COLUMN, top: BRICK_COLUMN },
+    "o": { side: BRICK_COLUMN, top: BRICK_COLUMN },
+    "#": { side: BRICK_COLUMN, top: BRICK_COLUMN },
+    "P": { side: BRICK_COLUMN, top: BRICK_COLUMN },
+    "s": { side: BRICK_COLUMN, top: MOSSY_ROCK },
+    "^": { side: BRICK_COLUMN, top: MOSSY_ROCK },
+};
+
 const LAYERS = Object.values(TERRAIN_ART).flat();
 
 /** The width and height of an effect's or an item's mark on its sheet. */

@@ -3,7 +3,7 @@ import path from "node:path";
 import { describe, expect, it } from "vitest";
 import { FACING_COUNT, TERRAIN, type Facing, type TerrainLetter } from "@/utils/games/battlefield/terrain";
 import { CHARACTERS, EFFECT_IDS, ITEM_IDS, type CharacterId } from "./characters";
-import { ART_SHEETS, BURST_ART, CHARACTER_ART, CHARACTER_CELL, CHARACTER_POSES, CLIPS, EFFECT_ART, facingCell, GRASS, ITEM_ART, MISSILE_ART, SLASH_ART, SMOKE_ART, grassOf, SPRITES, spriteBox, TERRAIN_ART, variantOf } from "./art";
+import { ART_SHEETS, BLOCK_SKIN, BURST_ART, CHARACTER_ART, CHARACTER_CELL, CHARACTER_POSES, CLIPS, EFFECT_ART, facingCell, GRASS, ITEM_ART, MISSILE_ART, SLASH_ART, SMOKE_ART, grassOf, SPRITES, spriteBox, TERRAIN_ART, variantOf } from "./art";
 import { FLIGHT_PACE } from "./ui";
 
 /** A PNG's size, read off its header: the served sheet is the one the sprites are cut from. */
@@ -177,6 +177,19 @@ describe("variantOf", () => {
             expect(kind).toBeGreaterThanOrEqual(0);
             expect(kind).toBeLessThan(3);
             expect(variantOf(square, 3)).toBe(kind);
+        }
+    });
+});
+
+describe("the 3D board's block skins", () => {
+    it("cover every raised terrain but trees, with a side as tall as a full-height column and a top that is one block's", () => {
+        for (const letter of Object.keys(TERRAIN) as TerrainLetter[]) {
+            const raised = TERRAIN[letter].height > 0 && letter !== "T";
+            expect(BLOCK_SKIN[letter] !== undefined, letter).toBe(raised);
+        }
+        for (const skin of Object.values(BLOCK_SKIN)) {
+            expect(skin.side.rise).toBeGreaterThanOrEqual(TERRAIN["^"].height);
+            expect(skin.top.rise).toBeDefined();
         }
     });
 });
