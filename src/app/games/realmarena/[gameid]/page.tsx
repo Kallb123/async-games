@@ -20,8 +20,8 @@ import { enemyNameOf, RA_SOLO_PARAM, REALM_ONLY } from "@/games/RealmArena/chara
 import { rematchFlag } from "@/utils/ui/rematch";
 import { reachAfter, useTurnDraft } from "@/games/RealmArena/useTurnDraft";
 import { battlefieldOf } from "@/games/RealmArena/maps";
-import { ACTION_POINTS, allied, armouredTeam, battleFrom, centreHolders, ENEMY_SIDE, isStanding, isWarband, maxHpOf, sideScore, stoutTeam, TEAM_SIDE, warbandsFor, type Action, type BattleEvent, type Fighter } from "@/games/RealmArena/rules";
-import { actionFollow, battleCues, centreInSight, endOf, coopColourOf, ENEMY_COLOUR, fighterName, friendlySquares, isFollowedPart, isUnplaced, partFollow, partLabel, reviewParts, STEP_BEAT_MS, STEP_MIN_MS, TEAM_COLOUR, TEAM_NAME, unseenSquares, waveLineOf, withPartState } from "@/games/RealmArena/ui";
+import { ACTION_POINTS, allied, armouredTeam, battleFrom, centreHolders, ENEMY_SIDE, isStanding, isWarband, sideScore, stoutTeam, TEAM_SIDE, warbandsFor, type Action, type BattleEvent, type Fighter } from "@/games/RealmArena/rules";
+import { actionFollow, battleCues, centreInSight, endOf, coopColourOf, ENEMY_COLOUR, fighterName, friendlySquares, isFollowedPart, isUnplaced, partFollow, partLabel, reviewParts, STEP_BEAT_MS, STEP_MIN_MS, squadHp, TEAM_COLOUR, TEAM_NAME, unseenSquares, waveLineOf, withPartState } from "@/games/RealmArena/ui";
 import type { IRealmArenaOutcome } from "@/games/RealmArena/RealmArenaLogic";
 import type { ICommandResponse } from "@/app/api/game/command/route";
 import TurnNavControls from "@/components/games/TurnNavControls";
@@ -475,12 +475,12 @@ export default function GameRealmArena({ params }: { params: Promise<{ gameid: u
         if (mustering) return musterSub(userId);
         if (dropped.includes(userId)) return 'left the battle';
         const squad = fighters.filter(fighter => fighter.owner === userId);
-        const friendly = allied(battle, userId, myUserId);
-        const standing = standingLine(squad, fogged && !friendly);
+        const ally = allied(battle, userId, myUserId);
+        const standing = standingLine(squad, fogged && !ally);
         // Allies share vision, so their whole squad and its HP are known too.
-        return detailed && friendly
-            ? `${standing} · ${squad.reduce((hp, fighter) => hp + fighter.hp, 0)}/${squad.reduce((hp, fighter) => hp + maxHpOf(fighter), 0)} HP`
-            : standing;
+        if (!detailed || !ally) return standing;
+        const hp = squadHp(squad);
+        return `${standing} · ${hp.remaining}/${hp.total} HP`;
     };
     const seatOrder = scoreboardSeatOrder(gameData, myUserId);
     const scores = gs?.scores ?? {};
@@ -513,7 +513,6 @@ export default function GameRealmArena({ params }: { params: Promise<{ gameid: u
         name: playerName(userId),
         color: colourFor(userId),
         sub: squadSub(userId),
-        detail: squadSub(userId, true),
         score: scores[userId] ?? 0,
         isMe: userId === myUserId,
         isActive: userId === currentTurn && !complete,

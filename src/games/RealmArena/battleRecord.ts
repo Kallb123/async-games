@@ -18,6 +18,7 @@ import type { IReplayStep } from "@/utils/games/replay";
 import { CHARACTERS, type CharacterId } from "./characters";
 import type { IRealmArenaSpecificGameState } from "./RealmArenaModels";
 import { CHARACTER_IDS } from "./roster";
+import { squadHp } from "./ui";
 import { allied, battleRounds, ENEMY_SIDE, isStanding, isWarband, knockoutPoints, sideOf, TEAM_SIDE, waveArrives, type BattleEvent, type BattleState, type Fighter } from "./rules";
 
 /** What one player's characters of one kind did in a battle, pooled as their mastery is (§23.1). */
@@ -304,7 +305,7 @@ export function battleRecorder(seats: readonly string[], sides?: BattleState["si
             const left = (column: string) => !fighters.some(ours(column)) && [...known.values()].some(ours(column));
             const before = squadHpPerRound[index] ?? squadHpPerRound[index - 1];
             squadHpPerRound[index] = new Map(columns.map(column => [column, left(column) ? before?.get(column) ?? 0
-                : fighters.filter(ours(column)).reduce((sum, fighter) => sum + fighter.hp, 0)]));
+                : squadHp(fighters.filter(ours(column))).remaining]));
             if (holdOut) {
                 const standing = (enemy: boolean) => fighters.filter(fighter => isStanding(fighter) && isWarband(fighter.owner) === enemy).length;
                 standingPerRound[index] = new Map([[TEAM_SIDE, standing(false)], [ENEMY_SIDE, standing(true)]]);
