@@ -31,35 +31,36 @@
 import { coverAgainst } from "@/utils/games/battlefield/cover";
 import { canSee } from "@/utils/games/battlefield/lineOfSight";
 import { DEFAULT_CLIMB, pathCost, pathTo, reachFrom, type MoveRules, type Reach } from "@/utils/games/battlefield/pathfinding";
-import { coordsOf, distance, facingTowards, HALF_HEIGHT, isNeighbour, riseOf, squareAt, type Area, type Battlefield, type Cover, type Facing, type Square } from "@/utils/games/battlefield/terrain";
+import { coordsOf, distance, facingTowards, isNeighbour, riseOf, squareAt, type Area, type Battlefield, type Cover, type Facing, type Square } from "@/utils/games/battlefield/terrain";
 import {
-    ABILITIES, AFFLICTIONS, CHARACTERS, EFFECT_IDS, EFFECTS, factionOf, HOLD_OUT_ENEMY_STEPS, isCharacterId, isItemId, isOptionId, ITEMS, kitOf, OPTIONS, squadPoints,
+    AFFLICTIONS, factionOf, isCharacterId, isItemId, isOptionId, kitOf, squadPoints,
     type Ability, type AbilityId, type Affliction, type CharacterId, type Effect, type EffectId, type Faction, type FactionId, type Item, type ItemId, type OptionId, type PlayerCount, type Weapon,
 } from "./characters";
+import { currentRuleset, ruleValuesOf, rulesetOf, type RulesContext } from "./rulesets";
 import { addTally, NO_TALLY, type Ranks, type Tally } from "./mastery";
 
 // ─── Numbers (§13) ──────────────────────────────────────────────────────────
 
 /** Every character starts each of its owner's turns with this many AP (§13.2). */
-export const ACTION_POINTS = 4;
-export const ATTACK_AP = 2;
-export const HUNKER_AP = 1;
+export const ACTION_POINTS = currentRuleset.RULES.ACTION_POINTS;
+export const ATTACK_AP = currentRuleset.RULES.ATTACK_AP;
+export const HUNKER_AP = currentRuleset.RULES.HUNKER_AP;
 /** AP a reaction takes from the bank, so 4 banked buy two and 2 or 3 buy one (§13.4). */
-export const REACTION_COST = 2;
-export const OVERWATCH_PENALTY = 15;
-export const HIGH_GROUND_BONUS = 10;
+export const REACTION_COST = currentRuleset.RULES.REACTION_COST;
+export const OVERWATCH_PENALTY = currentRuleset.RULES.OVERWATCH_PENALTY;
+export const HIGH_GROUND_BONUS = currentRuleset.RULES.HIGH_GROUND_BONUS;
 /** How far above its target, in quarters, an attacker has to stand to have the high ground: half a height (§25.2). */
-export const HIGH_GROUND_RISE = HALF_HEIGHT;
+export const HIGH_GROUND_RISE = currentRuleset.RULES.HIGH_GROUND_RISE;
 /** What a target's cover takes off a shot's chance to hit. Hunkering down doubles it (§13.2, §13.3). */
-export const COVER_PENALTY: Readonly<Record<Cover, number>> = { none: 0, half: 20, full: 40 };
+export const COVER_PENALTY = currentRuleset.RULES.COVER_PENALTY;
 /** A shot that misses by this much or less grazes, for half damage (§13.3). */
-export const GRAZE_BAND = 10;
+export const GRAZE_BAND = currentRuleset.RULES.GRAZE_BAND;
 /** A shot at a flanked target does this much more damage, instead of a critical hit (§13.3). */
-export const FLANK_BONUS = 1;
+export const FLANK_BONUS = currentRuleset.RULES.FLANK_BONUS;
 export const ROLL_SIDES = 100;
 
 /**
- * The command version whose rules this file's balance changes are: a melee
+ * The ruleset release whose rules this file's balance changes are: a melee
  * strike rolls to hit (`MELEE_ACCURACY`), cover counts double against a
  * far shot (`FAR_SHOT_DISTANCE`), a Cleric's Heal is once a turn and its Raise on a
  * cooldown (`abilityRules`), and in Hold Out the team has more HP
@@ -74,28 +75,28 @@ export const BALANCE_VERSION = 7;
 export const isBalanced = (rulesVersion: number | undefined): boolean => (rulesVersion ?? 0) >= BALANCE_VERSION;
 
 /** A melee strike's chance to hit, before what's on its target (`strikeChance`): it hits four times in five (§13.3). */
-export const MELEE_ACCURACY = 80;
+export const MELEE_ACCURACY = currentRuleset.RULES.MELEE_ACCURACY;
 /**
  * A ranged shot from further than this many squares away (measured as the
  * range is) is a far shot: the target's cover counts double against it
  * (§13.3), so those in cover are much safer at a distance and those in the
  * open no safer at all.
  */
-export const FAR_SHOT_DISTANCE = 10;
+export const FAR_SHOT_DISTANCE = currentRuleset.RULES.FAR_SHOT_DISTANCE;
 /** Hold Out's team characters have this many times their table HP, rounded up (`teamHp`). */
-export const TEAM_HP_FACTOR = 1.5;
+export const TEAM_HP_FACTOR = currentRuleset.RULES.TEAM_HP_FACTOR;
 /** What the Realm's hits take off a hit on Hold Out's team, never leaving less than 1 (`armourOf`, `BattleState.armoured`). */
-export const ARMOUR = 1;
+export const ARMOUR = currentRuleset.RULES.ARMOUR;
 
 /** The mission's scoring area, by the id a map gives its objective (§13.7). */
 export const CENTRE = "centre";
-export const CENTRE_POINTS = 5;
+export const CENTRE_POINTS = currentRuleset.RULES.CENTRE_POINTS;
 /** The centre scores from this battle round, so neither side can reach it before the other has moved (§15.3). */
-export const CENTRE_SCORES_FROM_ROUND = 3;
+export const CENTRE_SCORES_FROM_ROUND = currentRuleset.RULES.CENTRE_SCORES_FROM_ROUND;
 /** A knock-out scores the fallen character's points cost divided by this (§13.7). */
-export const KNOCKOUT_DIVISOR = 5;
+export const KNOCKOUT_DIVISOR = currentRuleset.RULES.KNOCKOUT_DIVISOR;
 /** An assist scores the knock-out's points divided by this, rounded up (§13.7). */
-export const ASSIST_DIVISOR = 2;
+export const ASSIST_DIVISOR = currentRuleset.RULES.ASSIST_DIVISOR;
 
 /**
  * How far most characters see, in squares, wherever nothing blocks their
@@ -105,10 +106,10 @@ export const ASSIST_DIVISOR = 2;
  * at, aim at or throw at, it can see: fog takes nothing away from what can be
  * done, only from what's known.
  */
-export const SIGHT_RANGE = 20;
+export const SIGHT_RANGE = currentRuleset.RULES.SIGHT_RANGE;
 
 /** How many battle rounds a battle lasts, by player count (§13.8). */
-export const BATTLE_ROUNDS: Readonly<Record<PlayerCount, number>> = { 2: 15, 3: 13, 4: 12 };
+export const BATTLE_ROUNDS = currentRuleset.RULES.BATTLE_ROUNDS;
 
 // ─── State ──────────────────────────────────────────────────────────────────
 //
@@ -138,8 +139,14 @@ export interface Fighter {
      * through `maxHpOf`.
      */
     maxHp?: number;
+    /** Derived for the response: base turn AP, including catalogue bonuses. */
+    maxAp?: number;
     /** AP left to spend this turn. */
     ap: number;
+    /** Own attack actions this turn, present only in a catalogue with a limit. */
+    attacksThisTurn?: number;
+    /** Private sources of damaging effects other than legacy burning. */
+    effectSources?: Partial<Record<EffectId, number>>;
     /** AP banked on overwatch or guard, spent 2 a reaction until its owner's next turn (§13.4). */
     banked: number;
     /**
@@ -188,7 +195,7 @@ export type FogGhost = Pick<Fighter, "id" | "owner" | "character" | "square" | "
 export const fogGhost = ({ id, owner, character, square, facing }: FogGhost): FogGhost => ({ id, owner, character, square, ...(facing === undefined ? {} : { facing }) });
 
 /** What every rule reads: the ground, and everyone on it. */
-export interface BattleState {
+export interface BattleState extends RulesContext {
     /** The map with whatever has been blasted away so far already cleared from it (`battlefieldWith`, §22). */
     field: Battlefield;
     fighters: readonly Fighter[];
@@ -273,7 +280,7 @@ export const ENEMY_SIDE = "enemy";
 export function battleFrom(field: Battlefield, { fighters, fog, clouds, seats = [], coop, rulesVersion, armoured }: BattleSource): BattleState {
     const sides = coop ? Object.fromEntries([...seats.map(player => [player, TEAM_SIDE]), ...warbandsFor(seats).map(warband => [warband, ENEMY_SIDE])]) : undefined;
     return {
-        field, fighters, ...(fog ? { fog: true } : {}), ...(clouds && clouds.length > 0 ? { clouds } : {}), ...(sides ? { sides } : {}),
+        field, fighters, ...(rulesVersion !== undefined ? { rulesVersion } : {}), ...(fog ? { fog: true } : {}), ...(clouds && clouds.length > 0 ? { clouds } : {}), ...(sides ? { sides } : {}),
         ...(isBalanced(rulesVersion) ? { balanced: true as const } : {}),
         ...(coop && armoured ? { armoured: true as const } : {}),
     };
@@ -347,7 +354,7 @@ export type BattleEvent =
     /** An effect put on a character, put on again (the longer count stands), or cleared by a heal. Not the stances, which have their own events, nor an effect running out. */
     | { kind: "effect"; fighter: number; effect: EffectId; change: "applied" | "refreshed" | "cleared" }
     /** Burning doing its damage at the start of its owner's turn. */
-    | { kind: "burned"; fighter: number; damage: number }
+    | { kind: "burned"; fighter: number; damage: number; effect?: EffectId }
     | { kind: "scored"; player: string; points: number; reason: "centre" | "knockout" | "assist" };
 
 /** What a player scored for, as the log and the board say it (§13.7). */
@@ -388,36 +395,27 @@ export const isStanding = (fighter: Fighter): boolean => fighter.hp > 0;
 export const hasEffect = (fighter: Fighter, effect: EffectId): boolean => (fighter.effects[effect] ?? 0) > 0;
 
 /** The item a character carries, if any (§21.1). */
-export const itemOf = (fighter: Pick<Fighter, "item">): Item | undefined => fighter.item ? ITEMS[fighter.item] : undefined;
+export const itemOf = (fighter: Pick<Fighter, "item">, context?: RulesContext): Item | undefined => fighter.item ? rulesetOf(context).ITEMS[fighter.item] : undefined;
 
 /** What an item adds to a muster's cost: nothing for none. */
-export const itemPoints = (item: ItemId | null | undefined): number => item ? ITEMS[item].points : 0;
+export const itemPoints = (item: ItemId | null | undefined, context?: RulesContext): number => item ? rulesetOf(context).ITEMS[item].points : 0;
 
 /** What a set of items costs at muster, a missing one nothing. */
-export const itemsPoints = (items: readonly (ItemId | null | undefined)[]): number => items.reduce((total, item) => total + itemPoints(item), 0);
+export const itemsPoints = (items: readonly (ItemId | null | undefined)[], context?: RulesContext): number => items.reduce((total, item) => total + itemPoints(item, context), 0);
 
 /** What a character's kit says it fights with: its character's weapon, or the one its option swaps in (§23.2). Read only through `weaponOf`, which knows the battle's rules. */
-const kitWeapon = (fighter: Pick<Fighter, "character" | "option">): Weapon => kitOf(fighter.character, fighter.option).weapon;
+const kitWeapon = (fighter: Pick<Fighter, "character" | "option">, context?: RulesContext): Weapon => kitOf(fighter.character, fighter.option, context).weapon;
 
-/** The Mage's Bolt as a battle created before `BALANCE_VERSION` has it: 70% to hit, range 10, under its old name (`weaponOf`). */
-const UNBALANCED_BOLT: Weapon = ((bolt: Weapon): Weapon => bolt.kind === "ranged" ? { ...bolt, name: "Bolt", accuracy: 70, range: 10 } : bolt)(CHARACTERS.mage.weapon);
-
-/**
- * What a character fights with in this battle (§23.2): its character's weapon,
- * or the one its option swaps in — except that the Mage's own bolt is the old
- * one in a battle from before `BALANCE_VERSION` (the character table is the
- * current rules). The one way to read a weapon's accuracy, range, damage or
- * name: nothing reads the table's behind the battle's back.
- */
-export function weaponOf(state: Pick<BattleState, "balanced">, fighter: Pick<Fighter, "character" | "option">): Weapon {
-    return !state.balanced && fighter.character === "mage" && !fighter.option ? UNBALANCED_BOLT : kitWeapon(fighter);
+/** The weapon this character's selected catalogue and mastery option give it. */
+export function weaponOf(state: Pick<BattleState, "balanced" | "rulesVersion">, fighter: Pick<Fighter, "character" | "option">): Weapon {
+    return kitWeapon(fighter, state);
 }
 
-/** Whether a character shoots rather than strikes. A weapon's kind is the same in every battle, so this needs no battle. */
-export const shoots = (fighter: Pick<Fighter, "character" | "option">): boolean => kitWeapon(fighter).kind === "ranged";
+/** Whether a character shoots rather than strikes under the selected catalogue. */
+export const shoots = (fighter: Pick<Fighter, "character" | "option">, context?: RulesContext): boolean => kitWeapon(fighter, context).kind === "ranged";
 
 /** The abilities a character has: its character's, with the one its option swaps out swapped for its own (§23.2). */
-export const abilitiesOf = (fighter: Pick<Fighter, "character" | "option">): readonly AbilityId[] => kitOf(fighter.character, fighter.option).abilities;
+export const abilitiesOf = (fighter: Pick<Fighter, "character" | "option">, context?: RulesContext): readonly AbilityId[] => kitOf(fighter.character, fighter.option, context).abilities;
 
 /**
  * The most HP a character can have: its character's, or — for Hold Out's team
@@ -425,28 +423,29 @@ export const abilitiesOf = (fighter: Pick<Fighter, "character" | "option">): rea
  * full HP the rules, the computer and the board read comes through here: heals
  * and the rally cap at it, a raise gives back half of it, a HP bar fills to it.
  */
-export const maxHpOf = (fighter: Pick<Fighter, "character" | "maxHp">): number => fighter.maxHp ?? CHARACTERS[fighter.character].hp;
+export const maxHpOf = (fighter: Pick<Fighter, "character" | "maxHp">, context?: RulesContext): number => fighter.maxHp ?? rulesetOf(context).CHARACTERS[fighter.character].hp;
 
 /**
  * Whether a battle's team is the tougher one `BALANCE_VERSION` gives Hold Out
  * (`teamHp`, and warbands a rung smaller): the mission, created under the
  * balance rules. The one test the server, the muster sheet and the tests all use.
  */
-export const stoutTeam = (mission: string | undefined, rulesVersion: number | undefined): boolean => mission === "holdOut" && isBalanced(rulesVersion);
+export const stoutTeam = (mission: string | undefined, rulesVersion: number | undefined): boolean => mission === "holdOut" && ruleValuesOf({ rulesVersion }).TEAM_HP_FACTOR > 1;
 
 /** How many rungs a co-op battle's warbands muster from the difficulty's (`warbandBudget`): `HOLD_OUT_ENEMY_STEPS` against a stout team, else none. */
-export const warbandSteps = (mission: string | undefined, rulesVersion: number | undefined): number => stoutTeam(mission, rulesVersion) ? HOLD_OUT_ENEMY_STEPS : 0;
+export const warbandSteps = (mission: string | undefined, rulesVersion: number | undefined): number => mission === "holdOut" ? ruleValuesOf({ rulesVersion }).HOLD_OUT_ENEMY_STEPS : 0;
 
 /** Whether Hold Out's team wears armour against its enemy: the stout team (`stoutTeam`), against the Realm's warbands alone. */
-export const armouredTeam = (mission: string | undefined, rulesVersion: number | undefined, enemy: FactionId | undefined): boolean => stoutTeam(mission, rulesVersion) && enemy === "realm";
+export const armouredTeam = (mission: string | undefined, rulesVersion: number | undefined, enemy: FactionId | undefined): boolean => mission === "holdOut" && ruleValuesOf({ rulesVersion }).ARMOUR > 0 && enemy !== undefined && ruleValuesOf({ rulesVersion }).ARMOURED_ENEMIES.includes(enemy);
 
 /**
  * The armour one of the team's characters wears where the team is armoured
  * (`ARMOUR`), or 0: none for a warband's, and none for a Miner, which is tough
  * enough without it (§33.3).
  */
-export function armourOf(state: Pick<BattleState, "armoured">, fighter: Pick<Fighter, "owner" | "character">): number {
-    return state.armoured && !isWarband(fighter.owner) && factionOf(fighter.character) !== "miners" ? ARMOUR : 0;
+export function armourOf(state: Pick<BattleState, "armoured" | "rulesVersion">, fighter: Pick<Fighter, "owner" | "character">): number {
+    const { ARMOUR } = ruleValuesOf(state);
+    return state.armoured && !isWarband(fighter.owner) && !ruleValuesOf(state).ARMOUR_EXEMPT_FACTIONS.includes(factionOf(fighter.character, state)) ? ARMOUR : 0;
 }
 
 /**
@@ -457,39 +456,31 @@ export function armourOf(state: Pick<BattleState, "armoured">, fighter: Pick<Fig
  * team's own friendly fire don't. Nothing, for a blow that does nothing. The
  * one place armour is taken off, for the rules, the planner and the board.
  */
-export function damageTo(state: Pick<BattleState, "armoured" | "balanced">, by: Pick<Fighter, "owner" | "character" | "option">, target: Pick<Fighter, "owner" | "character">, blow = weaponOf(state, by).damage): number {
+export function damageTo(state: Pick<BattleState, "armoured" | "balanced" | "rulesVersion">, by: Pick<Fighter, "owner" | "character" | "option">, target: Pick<Fighter, "owner" | "character">, blow = weaponOf(state, by).damage): number {
     const armour = isWarband(by.owner) ? armourOf(state, target) : 0;
     return armour > 0 && blow > 0 ? Math.max(1, blow - armour) : blow;
 }
 
 /** What a character of Hold Out's team is mustered with: its table HP times `TEAM_HP_FACTOR`, rounded up. */
-export const teamHp = (character: CharacterId): number => Math.ceil(CHARACTERS[character].hp * TEAM_HP_FACTOR);
+export const teamHp = (character: CharacterId, context?: RulesContext): number => Math.ceil(rulesetOf(context).CHARACTERS[character].hp * ruleValuesOf(context).TEAM_HP_FACTOR);
 
 /** The HP a character is mustered with, which the muster sheet shows and `newFighter` gives: the team's bigger HP when `stout`, else its character's. */
-export const musterHp = (character: CharacterId, stout: boolean): number => stout ? teamHp(character) : CHARACTERS[character].hp;
+export const musterHp = (character: CharacterId, stout: boolean, context?: RulesContext): number => stout ? teamHp(character, context) : rulesetOf(context).CHARACTERS[character].hp;
 
 /** The limits on how often an ability can be used. */
 export type AbilityLimits = Pick<Ability, "cooldown" | "oncePerBattle" | "oncePerTurn">;
 
-/** How Heal and Raise were limited before `BALANCE_VERSION`: a battle created earlier keeps them (`abilityRules`). */
-const UNBALANCED_LIMITS: Readonly<Partial<Record<AbilityId, AbilityLimits>>> = {
-    heal: { cooldown: 2 },
-    raise: { cooldown: 0, oncePerBattle: true },
-};
-
-/**
- * How often an ability can be used in this battle: the table's, except for the
- * two a battle created before `BALANCE_VERSION` has as they were — the table
- * is the current rules, which a board and a stats sheet read.
- */
-export function abilityRules(state: Pick<BattleState, "balanced">, id: AbilityId): AbilityLimits {
-    return (!state.balanced && UNBALANCED_LIMITS[id]) || ABILITIES[id];
+/** How often this game's catalogue lets an ability be used. */
+export function abilityRules(state: Pick<BattleState, "balanced" | "rulesVersion">, id: AbilityId): AbilityLimits {
+    const { cooldown, oncePerBattle, oncePerTurn } = rulesetOf(state).ABILITIES[id];
+    return { cooldown, ...(oncePerBattle ? { oncePerBattle } : {}), ...(oncePerTurn ? { oncePerTurn } : {}) };
 }
 
 /** Movement points each AP spent on moving buys it: its character's, halved and rounded up while it's slowed (§20.1). */
-export function movementOf(fighter: Fighter): number {
+export function movementOf(fighter: Fighter, context?: RulesContext): number {
+    const { CHARACTERS } = rulesetOf(context);
     const { movement } = CHARACTERS[fighter.character];
-    return hasEffect(fighter, "slowed") ? Math.ceil(movement / 2) : movement;
+    return Math.ceil(activeEffects(fighter, context).reduce((value, [, effect]) => value * (effect.movementFactor ?? 1), movement));
 }
 
 export function fighterById(state: BattleState, id: unknown): Fighter | undefined {
@@ -502,10 +493,11 @@ export function nextTo(field: Battlefield, a: Square, b: Square): boolean {
 }
 
 /** How far apart in height, in quarters, two characters can be and still fight hand to hand (§25.2). */
-export const MELEE_RISE = 1;
+export const MELEE_RISE = currentRuleset.RULES.MELEE_RISE;
 
 /** Whether a melee weapon reaches from one square to another: next to it, and no more than a quarter above or below it. */
-export function inMeleeReach(field: Battlefield, a: Square, b: Square): boolean {
+export function inMeleeReach(field: Battlefield, a: Square, b: Square, context?: RulesContext): boolean {
+    const { MELEE_RISE } = ruleValuesOf(context);
     return nextTo(field, a, b) && Math.abs(riseOf(field, a, b)) <= MELEE_RISE;
 }
 
@@ -517,11 +509,12 @@ export function inRange(field: Battlefield, from: Square, to: Square, range: num
 /** Whether a character's weapon could hit someone on a square from where it stands: in melee reach for a melee weapon, in range and in sight for a ranged one. */
 export function weaponReaches(state: BattleState, fighter: Fighter, square: Square): boolean {
     const weapon = weaponOf(state, fighter);
-    return weapon.kind === "ranged" ? inRange(state.field, fighter.square, square, weapon.range) : inMeleeReach(state.field, fighter.square, square);
+    return weapon.kind === "ranged" ? inRange(state.field, fighter.square, square, weapon.range) : inMeleeReach(state.field, fighter.square, square, state);
 }
 
 /** What a move by one character may cross and stop on, and how far it can climb: enemies block, allies may be crossed but not stopped on. The fallen do neither. */
 export function moveRules(state: BattleState, mover: Fighter): Required<MoveRules> {
+    const { CHARACTERS } = rulesetOf(state);
     const blocked = new Set<Square>(), occupied = new Set<Square>();
     for (const other of state.fighters) {
         if (other.id === mover.id || !isStanding(other)) continue;
@@ -531,8 +524,9 @@ export function moveRules(state: BattleState, mover: Fighter): Required<MoveRule
 }
 
 /** The AP a move of this many movement points costs: whole AP, each buying the character's allowance; a sneak pays double (§13.2). */
-export function moveAp(fighter: Fighter, cost: number, sneaking = false): number {
-    return Math.ceil(cost / movementOf(fighter)) * (sneaking ? ABILITIES.sneak.ap : 1);
+export function moveAp(fighter: Fighter, cost: number, sneaking = false, context?: RulesContext): number {
+    const { ABILITIES } = rulesetOf(context);
+    return Math.ceil(cost / movementOf(fighter, context)) * (sneaking ? ABILITIES.sneak.ap : 1);
 }
 
 /**
@@ -542,11 +536,12 @@ export function moveAp(fighter: Fighter, cost: number, sneaking = false): number
  * computer's way round the overwatch (`watchedSquares`).
  */
 export function reachOf(state: BattleState, fighter: Fighter, sneaking = false, avoiding: ReadonlySet<Square> = new Set()): Reach {
+    const { ABILITIES } = rulesetOf(state);
     const allowances = sneaking ? Math.floor(fighter.ap / ABILITIES.sneak.ap) : fighter.ap;
     const rules = moveRules(state, fighter);
     const blocked = new Set(rules.blocked);
     for (const square of avoiding) if (square !== fighter.square) blocked.add(square);
-    return reachFrom(state.field, fighter.square, allowances * movementOf(fighter), { ...rules, blocked });
+    return reachFrom(state.field, fighter.square, allowances * movementOf(fighter, state), { ...rules, blocked });
 }
 
 export interface ShotOdds {
@@ -563,10 +558,58 @@ export interface ShotOdds {
     flanked: boolean;
 }
 
-/** Whether a standing ally holds a shield wall next to this character (§13.6). */
-function shielded(state: BattleState, target: Fighter): boolean {
-    return state.fighters.some(knight => hasEffect(knight, "shieldWall") && isStanding(knight) && knight.id !== target.id
-        && allied(state, knight.owner, target.owner) && nextTo(state.field, knight.square, target.square));
+/** Active effects, read from the match's catalogue rather than today's ids. */
+function activeEffects(fighter: Fighter, context?: RulesContext): [EffectId, Effect][] {
+    const effects = rulesetOf(context).EFFECTS;
+    return (Object.keys(fighter.effects) as EffectId[]).filter(id => hasEffect(fighter, id) && effects[id]).map(id => [id, effects[id]]);
+}
+
+export function reactionsBlocked(fighter: Fighter, context?: RulesContext): boolean {
+    return activeEffects(fighter, context).some(([, effect]) => effect.preventsReactions);
+}
+
+/** A turn's base AP, plus catalogue-wide, character and passive bonuses. */
+export function actionPointsOf(fighter: Pick<Fighter, "character" | "option">, context?: RulesContext): number {
+    const { RULES, CHARACTERS, ABILITIES } = rulesetOf(context);
+    const passive = abilitiesOf(fighter, context).reduce((sum, id) => sum + (ABILITIES[id].passive ? ABILITIES[id].bonusAp ?? 0 : 0), 0);
+    return Math.max(0, RULES.ACTION_POINTS + RULES.BONUS_AP + (CHARACTERS[fighter.character].bonusAp ?? 0) + passive);
+}
+
+export function bankedAp(ap: number, context?: RulesContext): number {
+    const cap = ruleValuesOf(context).BANK_CAP;
+    return Math.max(0, cap === null ? ap : Math.min(ap, cap));
+}
+
+/** Reactions don't consume an owner's own-turn attack quota. */
+export function countsAsAttack(kind: string, context?: RulesContext): boolean {
+    return kind === "attack" || rulesetOf(context).ABILITIES[kind as AbilityId]?.countsAsAttack === true;
+}
+
+/** Strongest temporary cover: a passive/active aura, or an effect such as Ward. */
+const COVER_ABILITIES = new WeakMap<object, [AbilityId, Ability][]>();
+
+export function temporaryCover(state: BattleState, target: Fighter): Cover {
+    const rank = { none: 0, half: 1, full: 2 };
+    let cover: Cover = "none";
+    const offer = (next: Cover | undefined) => { if (next && rank[next] > rank[cover]) cover = next; };
+    for (const [, effect] of activeEffects(target, state)) offer(effect.cover);
+    if (rank[cover] === 2) return cover;
+    const catalogue = rulesetOf(state);
+    let auras = COVER_ABILITIES.get(catalogue);
+    if (!auras) {
+        auras = (Object.entries(catalogue.ABILITIES) as [AbilityId, Ability][]).filter(([, ability]) => ability.cover);
+        COVER_ABILITIES.set(catalogue, auras);
+    }
+    for (const ally of state.fighters) {
+        if (!isStanding(ally) || !allied(state, ally.owner, target.owner)) continue;
+        for (const [id, ability] of auras) {
+            if (!ability.cover || (!ability.passive && !(ability.stance && hasEffect(ally, ability.stance)))) continue;
+            if (!abilitiesOf(ally, state).includes(id)) continue;
+            if (ally.id === target.id ? ability.coverAffectsSelf : nextTo(state.field, ally.square, target.square)) offer(ability.cover);
+            if (rank[cover] === 2) return cover;
+        }
+    }
+    return cover;
 }
 
 /**
@@ -592,9 +635,10 @@ export type ShotKind = "attack" | "aimedShot" | "cripplingShot" | "overwatch";
  * slow, or else whatever the weapon leaves — a Frost bolt's, on overwatch
  * too (§23.2).
  */
-export function shotEffect(shooter: Fighter, kind: ShotKind): Affliction | undefined {
+export function shotEffect(shooter: Fighter, kind: ShotKind, context?: RulesContext): Affliction | undefined {
+    const { ABILITIES } = rulesetOf(context);
     if (kind === "cripplingShot") return ABILITIES.cripplingShot.effect;
-    const weapon = kitWeapon(shooter);
+    const weapon = kitWeapon(shooter, context);
     return weapon.kind === "ranged" ? weapon.effect : undefined;
 }
 
@@ -631,8 +675,9 @@ function breakdownOf(base: number, factors: OddsFactor[]): OddsBreakdown {
 }
 
 /** What each effect on a character adds to every shot at it, one factor per effect: Marked's, Corroded's (§23.2, §31.2). */
-function effectFactors(target: Fighter): OddsFactor[] {
-    return EFFECT_IDS.flatMap((effect): OddsFactor[] => {
+function effectFactors(target: Fighter, context?: RulesContext): OddsFactor[] {
+    const { EFFECTS } = rulesetOf(context);
+    return (Object.keys(EFFECTS) as EffectId[]).flatMap((effect): OddsFactor[] => {
         const { hitBonus } = EFFECTS[effect] as Effect;
         return hitBonus !== undefined && hasEffect(target, effect) ? [{ kind: "effect", amount: hitBonus, effect }] : [];
     });
@@ -644,12 +689,13 @@ function effectFactors(target: Fighter): OddsFactor[] {
  * always when the battle predates `BALANCE_VERSION`. Cover, height and smoke
  * are a ranged shot's: whoever is next to the target is past them.
  */
-export function strikeBreakdown(state: Pick<BattleState, "balanced">, target: Fighter): OddsBreakdown {
-    return state.balanced ? breakdownOf(MELEE_ACCURACY, effectFactors(target)) : breakdownOf(ROLL_SIDES, []);
+export function strikeBreakdown(state: Pick<BattleState, "balanced" | "rulesVersion">, target: Fighter): OddsBreakdown {
+    const { MELEE_ACCURACY } = ruleValuesOf(state);
+    return ruleValuesOf(state).MELEE_ROLLS ? breakdownOf(MELEE_ACCURACY, effectFactors(target, state)) : breakdownOf(ROLL_SIDES, []);
 }
 
 /** A strike's chance to hit, 0–100 (`strikeBreakdown`). */
-export function strikeChance(state: Pick<BattleState, "balanced">, target: Fighter): number {
+export function strikeChance(state: Pick<BattleState, "balanced" | "rulesVersion">, target: Fighter): number {
     return strikeBreakdown(state, target).chance;
 }
 
@@ -662,19 +708,23 @@ interface ShotBreakdown extends OddsBreakdown {
 }
 
 function shotBreakdown(state: BattleState, attacker: Fighter, target: Fighter, weapon: Extract<Weapon, { kind: "ranged" }>, kind: ShotKind): ShotBreakdown {
+    const { FAR_SHOT_DISTANCE, COVER_PENALTY, HIGH_GROUND_RISE, HIGH_GROUND_BONUS, OVERWATCH_PENALTY, GRAZE_BAND } = ruleValuesOf(state);
+    const { ABILITIES, ITEMS } = rulesetOf(state);
     const { field } = state;
     // Measured as the range is. A hunkered target's cover is doubled already, and the two don't stack.
-    const far = !!state.balanced && distance(field, attacker.square, target.square) > FAR_SHOT_DISTANCE;
+    const far = FAR_SHOT_DISTANCE !== null && distance(field, attacker.square, target.square) > FAR_SHOT_DISTANCE;
 
     const sideCover = coverAgainst(field, target.square, attacker.square);
-    const shield = sideCover === "none" && shielded(state, target);
-    const cover = shield ? "half" : sideCover;
+    const temporary = sideCover === "full" ? "none" : temporaryCover(state, target);
+    const rank = { none: 0, half: 1, full: 2 };
+    const shield = rank[temporary] > rank[sideCover];
+    const cover = shield ? temporary : sideCover;
     const hunkered = hasEffect(target, "hunkered");
     const doubled = hunkered ? "hunkered" : far ? "far" : undefined;
     const factors: OddsFactor[] = [
         { kind: "cover", amount: -COVER_PENALTY[cover] * (doubled ? 2 : 1), cover, doubled, shield },
         { kind: "highGround", amount: riseOf(field, attacker.square, target.square) >= HIGH_GROUND_RISE ? HIGH_GROUND_BONUS : 0 },
-        ...effectFactors(target),
+        ...effectFactors(target, state),
         { kind: "smoke", amount: smokeSquares(state).has(target.square) ? -ITEMS.smokePot.hitPenalty : 0 },
         { kind: "aimedShot", amount: kind === "aimedShot" ? ABILITIES.aimedShot.hitBonus : 0 },
         { kind: "overwatch", amount: kind === "overwatch" ? -OVERWATCH_PENALTY : 0 },
@@ -703,6 +753,7 @@ export function oddsBreakdown(state: BattleState, attacker: Fighter, target: Fig
  * see the target (§13.3).
  */
 export function shotOdds(state: BattleState, attacker: Fighter, target: Fighter, kind: ShotKind = "attack"): ShotOdds | undefined {
+    const { FLANK_BONUS } = ruleValuesOf(state);
     const weapon = weaponOf(state, attacker);
     if (weapon.kind !== "ranged") return undefined;
     if (!inRange(state.field, attacker.square, target.square, weapon.range)) return undefined;
@@ -729,7 +780,7 @@ export function shotResult({ chance, grazeChance }: Pick<ShotOdds, "chance" | "g
  */
 function setsOff(state: BattleState, watcher: Fighter, square: Square, smoke: ReadonlySet<Square>): boolean {
     if (!state.field.tiles[square].terrain.standable || !weaponReaches(state, watcher, square)) return false;
-    return !shoots(watcher) || !smoke.has(square);
+    return !shoots(watcher, state) || !smoke.has(square);
 }
 
 export interface Reaction {
@@ -768,7 +819,7 @@ export function reactionsTo(state: BattleState, mover: Fighter, path: readonly S
 
 /** The enemies watching that could react to a move by one of a player's characters: standing, with a reaction's AP banked (§13.4). */
 function watchersOf(state: BattleState, player: string): Fighter[] {
-    return state.fighters.filter(watcher => isStanding(watcher) && !allied(state, watcher.owner, player) && watcher.banked >= REACTION_COST);
+    return state.fighters.filter(watcher => isStanding(watcher) && !allied(state, watcher.owner, player) && watcher.banked >= ruleValuesOf(state).REACTION_COST && !reactionsBlocked(watcher, state));
 }
 
 /**
@@ -817,7 +868,7 @@ export function squadSight(state: BattleState, player: string | null): (square: 
         let seen = known.get(square);
         if (seen === undefined) {
             // As a shot is in range: near enough, and nothing in the way.
-            seen = eyes.some(eye => inRange(state.field, eye.square, square, sightOf(eye)));
+            seen = eyes.some(eye => inRange(state.field, eye.square, square, sightOf(eye, state)));
             known.set(square, seen);
         }
         return seen;
@@ -856,6 +907,7 @@ export function viewOf(state: BattleState, player: string | null): BattleState {
     return {
         field: state.field,
         fighters: shown,
+        ...(state.rulesVersion !== undefined ? { rulesVersion: state.rulesVersion } : {}),
         fog: true,
         ...(clouds.length > 0 ? { clouds } : {}),
         ...(state.sides ? { sides: state.sides } : {}),
@@ -865,7 +917,9 @@ export function viewOf(state: BattleState, player: string | null): BattleState {
 }
 
 /** How far a character sees in fog of war, in squares (§27): its character's own sight, or `SIGHT_RANGE`. */
-export function sightOf(fighter: Pick<Fighter, "character">): number {
+export function sightOf(fighter: Pick<Fighter, "character">, context?: RulesContext): number {
+    const { SIGHT_RANGE } = ruleValuesOf(context);
+    const { CHARACTERS } = rulesetOf(context);
     return CHARACTERS[fighter.character].sight ?? SIGHT_RANGE;
 }
 
@@ -895,7 +949,7 @@ function routed(state: BattleState, mover: Fighter, sent: readonly Square[], sne
         const reach = reachOf({ ...state, fighters: state.fighters.filter(one => known.has(one.id) || allied(state, one.owner, mover.owner)) }, mover, sneaking);
         const to = reach.costs[goal] !== Infinity ? goal : nearestTo(state.field, reach, goal, moveRules(state, mover).climb);
         path = pathTo(reach, to)?.squares ?? [mover.square];
-        ap = moveAp(mover, reach.costs[to], sneaking);
+        ap = moveAp(mover, reach.costs[to], sneaking, state);
     }
     return { path, found, ap };
 }
@@ -926,13 +980,16 @@ function nearestTo(field: Battlefield, reach: Reach, goal: Square, climb: number
     return best;
 }
 
-export function knockoutPoints(character: CharacterId): number {
+export function knockoutPoints(character: CharacterId, context?: RulesContext): number {
+    const { KNOCKOUT_DIVISOR } = ruleValuesOf(context);
+    const { CHARACTERS } = rulesetOf(context);
     return CHARACTERS[character].points / KNOCKOUT_DIVISOR;
 }
 
 /** What an assist on knocking out this character scores: half the knock-out, rounded up (§13.7). */
-export function assistPoints(character: CharacterId): number {
-    return Math.ceil(knockoutPoints(character) / ASSIST_DIVISOR);
+export function assistPoints(character: CharacterId, context?: RulesContext): number {
+    const { ASSIST_DIVISOR } = ruleValuesOf(context);
+    return Math.ceil(knockoutPoints(character, context) / ASSIST_DIVISOR);
 }
 
 // ─── Checking an action ─────────────────────────────────────────────────────
@@ -941,8 +998,10 @@ const isSquare = (field: Battlefield, value: unknown): value is Square =>
     Number.isInteger(value) && (value as number) >= 0 && (value as number) < field.tiles.length;
 
 /** Why a character can't use an ability now, or undefined when it can. */
-function abilityRefusal(fighter: Fighter, ability: AbilityId): string | undefined {
-    if (!abilitiesOf(fighter).includes(ability)) return `This ${CHARACTERS[fighter.character].name} can't use ${ABILITIES[ability].name}`;
+function abilityRefusal(fighter: Fighter, ability: AbilityId, context?: RulesContext): string | undefined {
+    const { CHARACTERS, ABILITIES } = rulesetOf(context);
+    if (ABILITIES[ability]?.passive) return `${ABILITIES[ability].name} is passive`;
+    if (!ABILITIES[ability] || !abilitiesOf(fighter, context).includes(ability)) return `This ${CHARACTERS[fighter.character].name} can't use ${ABILITIES[ability]?.name ?? ability}`;
     if (fighter.spent.includes(ability)) return `${ABILITIES[ability].name} has been used this battle`;
     if (fighter.usedThisTurn?.includes(ability)) return `${ABILITIES[ability].name} has been used this turn`;
     if ((fighter.cooldowns[ability] ?? 0) > 0) return `${ABILITIES[ability].name} isn't ready yet`;
@@ -981,6 +1040,8 @@ export type Check = { ap: number } | { refused: string };
  * turn it is is the caller's to check.
  */
 export function check(battle: BattleState, player: string, action: unknown): Check {
+    const { ATTACK_AP, HUNKER_AP, REACTION_COST } = ruleValuesOf(battle);
+    const { ABILITIES, ITEMS } = rulesetOf(battle);
     // Under fog, what the player can see (§27): an enemy out of sight is
     // neither in the way nor there to be aimed at.
     const state = viewOf(battle, player);
@@ -990,10 +1051,12 @@ export function check(battle: BattleState, player: string, action: unknown): Che
     const actor = fighterById(state, id);
     if (!actor || actor.owner !== player) return refused("That isn't one of your characters");
     if (!isStanding(actor)) return refused("That character is down");
+    const limit = ruleValuesOf(state).MAX_ATTACKS_PER_TURN;
+    if (limit !== null && countsAsAttack(String(kind), state) && (actor.attacksThisTurn ?? 0) >= limit) return refused(`At most ${limit} attacks per turn`);
     const target = fighterById(state, targetId);
     const afford = (ap: number): Check => ap <= actor.ap ? { ap } : refused("Not enough AP");
     const ability = (abilityId: AbilityId, then: () => string | undefined): Check => {
-        const reason = abilityRefusal(actor, abilityId) ?? then();
+        const reason = abilityRefusal(actor, abilityId, battle) ?? then();
         return reason ? refused(reason) : afford(ABILITIES[abilityId].ap);
     };
 
@@ -1001,11 +1064,11 @@ export function check(battle: BattleState, player: string, action: unknown): Che
         case "move":
         case "sneak": {
             if (kind === "sneak") {
-                const reason = abilityRefusal(actor, "sneak");
+                const reason = abilityRefusal(actor, "sneak", battle);
                 if (reason) return refused(reason);
             }
             const cost = pathRefusal(state, actor, path);
-            return typeof cost === "string" ? refused(cost) : afford(moveAp(actor, cost, kind === "sneak"));
+            return typeof cost === "string" ? refused(cost) : afford(moveAp(actor, cost, kind === "sneak", battle));
         }
         case "attack": {
             const reason = attackRefusal(state, actor, target, "attack");
@@ -1031,14 +1094,14 @@ export function check(battle: BattleState, player: string, action: unknown): Che
         case "watch":
             // All it has left, and enough for at least one reaction — which a
             // stunned character can't make until its owner's next turn (§20.1).
-            if (hasEffect(actor, "stunned")) return refused("A stunned character can't go on watch");
+            if (reactionsBlocked(actor, state)) return refused("A stunned character can't go on watch");
             return actor.ap >= REACTION_COST ? { ap: actor.ap } : refused(`Going on watch needs at least ${REACTION_COST} AP`);
         case "cleave":
             return ability("cleave", () => {
                 if (!Array.isArray(targets) || targets.length !== 2 || targets[0] === targets[1]) return "Pick two enemies";
                 const enemies = targets.map(one => fighterById(state, one));
                 if (!enemies.every((one): one is Fighter => isEnemy(state, actor, one))) return "Pick two enemies";
-                return enemies.every(one => inMeleeReach(state.field, actor.square, one.square)) ? undefined : "Both enemies must be next to them, within a quarter of their height";
+                return enemies.every(one => inMeleeReach(state.field, actor.square, one.square, state)) ? undefined : "Both enemies must be next to them, within a quarter of their height";
             });
         case "shieldWall":
             return ability("shieldWall", () => undefined);
@@ -1064,7 +1127,7 @@ export function check(battle: BattleState, player: string, action: unknown): Che
                 return clear ? undefined : "There's no room to stand there";
             });
         case "throw": {
-            const item = itemOf(actor);
+            const item = itemOf(actor, battle);
             if (item?.range === undefined) return refused("They have nothing to throw");
             const reason = aimRefusal(state, actor, at, item.range);
             return reason ? refused(reason) : afford(item.ap);
@@ -1095,7 +1158,7 @@ function healRefusal(state: BattleState, healer: Fighter, target: Fighter | unde
     const far = draught ? undefined : aimRefusal(state, healer, target.square, range);
     if (far) return far;
     if (draught && target.id !== healer.id && !nextTo(state.field, healer.square, target.square)) return "Too far away to heal";
-    return target.hp < maxHpOf(target) || healedEffects(target).length > 0 ? undefined : "Already at full health";
+    return target.hp < maxHpOf(target, state) || healedEffects(target, state).length > 0 ? undefined : "Already at full health";
 }
 
 /** Whether a square is low cover next to one standing on `from`: what a Knight's Demolish can be aimed at (§23.2). */
@@ -1124,7 +1187,7 @@ export function afflictionsOn(fighter: Fighter): Affliction[] {
 export function purified(state: BattleState, cleric: Fighter): Fighter[] {
     return state.fighters.filter(ally => allied(state, ally.owner, cleric.owner) && isStanding(ally)
         && (ally.id === cleric.id || nextTo(state.field, cleric.square, ally.square))
-        && (ally.hp < maxHpOf(ally) || afflictionsOn(ally).length > 0));
+        && (ally.hp < maxHpOf(ally, state) || afflictionsOn(ally).length > 0));
 }
 
 // ─── Taking an action ───────────────────────────────────────────────────────
@@ -1136,18 +1199,21 @@ export function purified(state: BattleState, cleric: Fighter): Fighter[] {
  * react until its owner's next turn. Undefined for a character that's down,
  * which keeps no effects.
  */
-export function afflicted(target: Fighter, effect: Affliction, by: number): { fighter: Fighter; event: BattleEvent } | undefined {
+export function afflicted(target: Fighter, effect: Affliction, by: number, context?: RulesContext): { fighter: Fighter; event: BattleEvent } | undefined {
+    const { EFFECTS } = rulesetOf(context);
     if (!isStanding(target)) return undefined;
     const was = target.effects[effect] ?? 0;
     const fighter: Fighter = { ...target, effects: { ...target.effects, [effect]: Math.max(was, EFFECTS[effect].count) } };
     if (effect === "burning") fighter.burnedBy = by;
-    if (effect === "stunned") fighter.banked = 0;
+    if (EFFECTS[effect].damage && effect !== "burning") fighter.effectSources = { ...fighter.effectSources, [effect]: by };
+    if (EFFECTS[effect].preventsReactions) fighter.banked = 0;
     return { fighter, event: { kind: "effect", fighter: target.id, effect, change: was > 0 ? "refreshed" : "applied" } };
 }
 
 /** The effects on a character that a heal clears (§20.2). */
-export function healedEffects(fighter: Fighter): EffectId[] {
-    return EFFECT_IDS.filter(effect => "healed" in EFFECTS[effect] && hasEffect(fighter, effect));
+export function healedEffects(fighter: Fighter, context?: RulesContext): EffectId[] {
+    const { EFFECTS } = rulesetOf(context);
+    return (Object.keys(EFFECTS) as EffectId[]).filter(effect => "healed" in EFFECTS[effect] && hasEffect(fighter, effect));
 }
 
 /**
@@ -1208,17 +1274,18 @@ function resolver(state: BattleState, roll: Roll) {
         const assists = enemy ? (target.woundedBy ?? []).filter(owner => !allied(battle, owner, by.owner)) : [];
         Object.assign(target, { ap: 0, banked: 0, effects: {} });
         delete target.burnedBy;
+        delete target.effectSources;
         delete target.woundedBy;
         // Its smoke goes with it, as a downed Knight's shield wall does (§21.2).
         delete target.smoke;
         events.push({ kind: "downed", fighter: target.id, by: by.id });
         // Downing your own side's character — a fireball's, say — scores nobody anything.
-        if (enemy) events.push({ kind: "scored", player: by.owner, points: knockoutPoints(target.character), reason: "knockout" });
-        for (const player of assists) events.push({ kind: "scored", player, points: assistPoints(target.character), reason: "assist" });
+        if (enemy) events.push({ kind: "scored", player: by.owner, points: knockoutPoints(target.character, state), reason: "knockout" });
+        for (const player of assists) events.push({ kind: "scored", player, points: assistPoints(target.character, state), reason: "assist" });
     };
 
     const afflict = (by: Fighter, target: Fighter, effect: Affliction) => {
-        const result = afflicted(target, effect, by.id);
+        const result = afflicted(target, effect, by.id, state);
         if (!result) return;
         Object.assign(target, result.fighter);
         events.push(result.event);
@@ -1226,7 +1293,7 @@ function resolver(state: BattleState, roll: Roll) {
 
     /** A shot, which leaves its `shotEffect` on a hit, and only then (§20.2). */
     const shoot = (by: Fighter, target: Fighter, kind: ShotKind) => {
-        const effect = shotEffect(by, kind);
+        const effect = shotEffect(by, kind, state);
         const odds = shotOdds(battle, by, target, kind);
         if (!odds) throw new Error(`${by.id} can't shoot ${target.id}`);
         const rolled = roll();
@@ -1245,7 +1312,7 @@ function resolver(state: BattleState, roll: Roll) {
      */
     const strike = (by: Fighter, target: Fighter, reaction = false, blow = weaponOf(battle, by).damage): boolean => {
         const damage = damageTo(battle, by, target, blow);
-        if (!battle.balanced) {
+        if (!ruleValuesOf(battle).MELEE_ROLLS) {
             events.push({ kind: "struck", fighter: by.id, target: target.id, damage, reaction });
             wound(by, target, damage);
             return true;
@@ -1287,11 +1354,12 @@ function resolver(state: BattleState, roll: Roll) {
      * Cleric's Heal, a healing draught and Purify share (§20.2, §21.3, §23.2).
      */
     const mend = (by: Fighter, target: Fighter, hp: number, via?: "draught" | "purify") => {
-        const restored = Math.min(hp, maxHpOf(target) - target.hp);
+        const restored = Math.min(hp, maxHpOf(target, state) - target.hp);
         target.hp += restored;
         events.push({ kind: "healed", fighter: by.id, target: target.id, hp: restored, ...(via ? { via } : {}) });
-        for (const effect of via === "purify" ? afflictionsOn(target) : healedEffects(target)) {
+        for (const effect of via === "purify" ? afflictionsOn(target) : healedEffects(target, state)) {
             delete target.effects[effect];
+            if (target.effectSources) delete target.effectSources[effect];
             events.push({ kind: "effect", fighter: target.id, effect, change: "cleared" });
         }
         delete target.burnedBy;
@@ -1306,8 +1374,9 @@ function resolver(state: BattleState, roll: Roll) {
  * `moved` segments broken by the reactions, so a replay can play it in order.
  * The mover turns to face each step it takes, so it ends facing its last.
  */
-function walk(state: BattleState, run: ReturnType<typeof resolver>, mover: Fighter, path: Square[], sneaking: boolean) {
-    const reactions = sneaking ? [] : reactionsTo(state, mover, path);
+function walk(state: BattleState, run: ReturnType<typeof resolver>, mover: Fighter, path: Square[], sneaking: boolean, withoutReactions: boolean) {
+    const { REACTION_COST } = ruleValuesOf(state);
+    const reactions = withoutReactions ? [] : reactionsTo(state, mover, path);
     let from = 0;
     const moveTo = (step: number) => {
         if (step > from) {
@@ -1321,7 +1390,7 @@ function walk(state: BattleState, run: ReturnType<typeof resolver>, mover: Fight
         moveTo(step);
         const watcher = run.get(id);
         watcher.banked -= REACTION_COST;
-        if (shoots(watcher)) run.shoot(watcher, mover, "overwatch");
+        if (shoots(watcher, state)) run.shoot(watcher, mover, "overwatch");
         else run.strike(watcher, mover, true);
         if (!isStanding(mover)) return;
     }
@@ -1333,6 +1402,7 @@ function walk(state: BattleState, run: ReturnType<typeof resolver>, mover: Fight
  * Throws if `check` refuses it.
  */
 export function act(state: BattleState, player: string, action: Action, roll: Roll): Outcome {
+    const { ABILITIES, ITEMS, EFFECTS } = rulesetOf(state);
     const checked = check(state, player, action);
     if ("refused" in checked) throw new Error(checked.refused);
 
@@ -1342,6 +1412,7 @@ export function act(state: BattleState, player: string, action: Action, roll: Ro
     // A move's AP waits on where it goes (`routed`, §27).
     const moving = action.kind === "move" || action.kind === "sneak";
     if (!moving) actor.ap -= checked.ap;
+    if (ruleValuesOf(state).MAX_ATTACKS_PER_TURN !== null && countsAsAttack(action.kind, state)) actor.attacksThisTurn = (actor.attacksThisTurn ?? 0) + 1;
     if (Object.hasOwn(ABILITIES, action.kind)) {
         const id = action.kind as AbilityId;
         const { cooldown, oncePerBattle, oncePerTurn } = abilityRules(state, id);
@@ -1358,13 +1429,13 @@ export function act(state: BattleState, player: string, action: Action, roll: Ro
             const { path, found, ap } = routed(state, actor, action.path, sneaking);
             actor.ap -= ap ?? checked.ap;
             for (const enemy of found) events.push({ kind: "spotted", fighter: actor.id, by: enemy.id });
-            walk(state, run, actor, path, sneaking);
+            walk(state, run, actor, path, sneaking, sneaking && ABILITIES.sneak.movesWithoutReactions === true);
             break;
         }
         case "attack":
         case "aimedShot": {
             const target = get(action.target);
-            if (!shoots(actor)) run.strike(actor, target);
+            if (!shoots(actor, state)) run.strike(actor, target);
             else run.shoot(actor, target, action.kind);
             break;
         }
@@ -1411,14 +1482,14 @@ export function act(state: BattleState, player: string, action: Action, roll: Ro
             events.push({ kind: "hunkered", fighter: actor.id });
             break;
         case "watch":
-            actor.banked = checked.ap;
-            events.push({ kind: "watching", fighter: actor.id, banked: checked.ap });
+            actor.banked = bankedAp(checked.ap, state);
+            events.push({ kind: "watching", fighter: actor.id, banked: actor.banked });
             break;
         case "cleave":
             for (const id of action.targets) run.strike(actor, get(id));
             break;
         case "shieldWall":
-            actor.effects.shieldWall = EFFECTS.shieldWall.count;
+            actor.effects[ABILITIES.shieldWall.stance ?? "shieldWall"] = EFFECTS[ABILITIES.shieldWall.stance ?? "shieldWall"].count;
             events.push({ kind: "shieldWall", fighter: actor.id });
             break;
         case "fireball":
@@ -1471,11 +1542,13 @@ export function act(state: BattleState, player: string, action: Action, roll: Ro
             // Back on its feet at half HP, with nothing to spend until its
             // owner's next turn; the points for downing it stay scored (§13.5).
             const target = get(action.target);
-            target.hp = Math.ceil(maxHpOf(target) / 2);
+            target.hp = Math.ceil(maxHpOf(target, state) / 2);
+            target.ap = ABILITIES.raise.apOnRaise ?? 0;
             events.push({ kind: "raised", fighter: actor.id, target: target.id, hp: target.hp });
             break;
         }
     }
+    if (isStanding(actor)) actor.ap += ABILITIES[action.kind as AbilityId]?.bonusAp ?? 0;
     return { fighters: run.fighters, events };
 }
 
@@ -1499,27 +1572,46 @@ function countDown<Id extends string>(counts: Partial<Record<Id, number>>): Part
  * owner of whoever set it alight (§20.2), so this returns what happened as
  * an action does. It rolls nothing.
  */
+/** Apply damage and expiry at the boundary specified by each effect. */
+function tickEffects(run: ReturnType<typeof resolver>, player: string, boundary: "start" | "end") {
+    for (const fighter of run.fighters) {
+        if (fighter.owner !== player || !isStanding(fighter)) continue;
+        for (const [id, effect] of activeEffects(fighter, run.battle)) {
+            if ((effect.tick ?? "start") === boundary && effect.damage) {
+                const source = id === "burning" ? fighter.burnedBy : fighter.effectSources?.[id];
+                const by = run.fighters.find(one => one.id === source) ?? { id: source ?? fighter.id, owner: fighter.owner };
+                run.events.push({ kind: "burned", fighter: fighter.id, damage: effect.damage, ...(id === "burning" ? {} : { effect: id }) });
+                run.wound(by, fighter, effect.damage);
+            }
+            if (!isStanding(fighter)) break;
+            if ((effect.decayAt ?? effect.tick ?? "start") === boundary) {
+                const left = (fighter.effects[id] ?? 0) - 1;
+                if (left > 0) fighter.effects[id] = left;
+                else {
+                    delete fighter.effects[id];
+                    if (fighter.effectSources) delete fighter.effectSources[id];
+                }
+            }
+        }
+        if (!hasEffect(fighter, "burning")) delete fighter.burnedBy;
+    }
+}
+
 export function startTurn(state: BattleState, player: string): Outcome {
     const run = resolver(state, fixedRolls([]));
     for (const fighter of run.fighters) {
         if (fighter.owner !== player || !isStanding(fighter)) continue;
-        fighter.ap = hasEffect(fighter, "stunned") ? EFFECTS.stunned.ap : ACTION_POINTS;
+        let ap = actionPointsOf(fighter, state);
+        const effects = activeEffects(fighter, state);
+        for (const [, effect] of effects) if (effect.ap !== undefined) ap = Math.min(ap, effect.ap);
+        fighter.ap = Math.max(0, effects.reduce((value, [, effect]) => value + (effect.apModifier ?? 0), ap));
         fighter.banked = 0;
         delete fighter.smoke;
         delete fighter.usedThisTurn;
-        if (hasEffect(fighter, "burning")) {
-            const { damage } = EFFECTS.burning;
-            // A burner whose squad has left the battle (a dropped player's)
-            // scores nobody, as a fire a player set on their own doesn't.
-            const burner = run.fighters.find(one => one.id === fighter.burnedBy) ?? { id: fighter.burnedBy ?? fighter.id, owner: fighter.owner };
-            run.events.push({ kind: "burned", fighter: fighter.id, damage });
-            run.wound(burner, fighter, damage);
-        }
-        if (!isStanding(fighter)) continue;
-        fighter.cooldowns = countDown(fighter.cooldowns);
-        fighter.effects = countDown(fighter.effects);
-        if (!hasEffect(fighter, "burning")) delete fighter.burnedBy;
+        delete fighter.attacksThisTurn;
     }
+    tickEffects(run, player, "start");
+    for (const fighter of run.fighters) if (fighter.owner === player && isStanding(fighter)) fighter.cooldowns = countDown(fighter.cooldowns);
     return { fighters: run.fighters, events: run.events };
 }
 
@@ -1543,6 +1635,7 @@ export function centreHolders(state: BattleState): string[] {
  * enemy, and an ally's alone doesn't score for them (§29.1).
  */
 export function centrePoints(state: BattleState, player: string, round: number): number {
+    const { CENTRE_SCORES_FROM_ROUND, CENTRE_POINTS } = ruleValuesOf(state);
     if (round < CENTRE_SCORES_FROM_ROUND) return 0;
     const there = inCentre(state);
     return there.some(fighter => fighter.owner === player) && there.every(fighter => allied(state, fighter.owner, player)) ? CENTRE_POINTS : 0;
@@ -1557,23 +1650,26 @@ export function centrePoints(state: BattleState, player: string, round: number):
  * from 1.
  */
 export function endTurn(state: BattleState, player: string, round: number, keepStill: unknown = []): Outcome {
+    const { REACTION_COST } = ruleValuesOf(state);
     const still = Array.isArray(keepStill) ? keepStill : [];
-    const events: BattleEvent[] = [];
-    const fighters = copyOf(state.fighters).map(fighter => {
+    const run = resolver(state, fixedRolls([]));
+    tickEffects(run, player, "end");
+    const fighters = run.fighters.map(fighter => {
         if (fighter.owner !== player || !isStanding(fighter)) return fighter;
-        const watching = fighter.ap >= REACTION_COST && !still.includes(fighter.id) && !hasEffect(fighter, "stunned");
-        if (watching) events.push({ kind: "watching", fighter: fighter.id, banked: fighter.ap });
-        return { ...fighter, ap: 0, banked: watching ? fighter.ap : fighter.banked };
+        const watching = fighter.ap >= REACTION_COST && !still.includes(fighter.id) && !reactionsBlocked(fighter, state);
+        const banked = watching ? bankedAp(fighter.ap, state) : fighter.banked;
+        if (watching) run.events.push({ kind: "watching", fighter: fighter.id, banked });
+        return { ...fighter, ap: 0, banked };
     });
     const points = centrePoints({ ...state, fighters }, player, round);
-    if (points > 0) events.push({ kind: "scored", player, points, reason: "centre" });
-    return { fighters, events };
+    if (points > 0) run.events.push({ kind: "scored", player, points, reason: "centre" });
+    return { fighters, events: run.events };
 }
 
 // ─── The end of the battle (§5.1) ───────────────────────────────────────────
 
 /** How many rounds Hold Out lasts for two players once the team is stout (`BALANCE_VERSION`): the same 13 as three players have. */
-export const HOLD_OUT_PAIR_ROUNDS = BATTLE_ROUNDS[3];
+export const HOLD_OUT_PAIR_ROUNDS = currentRuleset.RULES.HOLD_OUT_PAIR_ROUNDS;
 
 /** What decides a battle's length besides its players: the co-op mission, and the rules version it was created under. */
 export interface BattleKind {
@@ -1590,8 +1686,9 @@ export interface BattleKind {
  * when its waves land, asks here with the battle's `kind`, so none can differ.
  */
 export function battleRounds(playerCount: number, { mission, rulesVersion }: BattleKind = {}): number {
-    if (playerCount === 2 && stoutTeam(mission, rulesVersion)) return HOLD_OUT_PAIR_ROUNDS;
-    const rounds = BATTLE_ROUNDS[(playerCount === 1 ? 2 : playerCount) as PlayerCount];
+    const rules = ruleValuesOf({ rulesVersion });
+    if (playerCount === 2 && mission === "holdOut") return rules.HOLD_OUT_PAIR_ROUNDS;
+    const rounds = rules.BATTLE_ROUNDS[(playerCount === 1 ? 2 : playerCount) as PlayerCount];
     if (rounds === undefined) throw new Error(`Realm Arena has no battle length for ${playerCount} players`);
     return rounds;
 }
@@ -1637,7 +1734,7 @@ export function isBattleOver(state: BattleState, players: readonly string[], rou
 
 /** The points' worth of a side still standing: the first tie-break. In a free-for-all, a player's squad (`sideOf`). */
 export function standingPoints(state: BattleState, side: string): number {
-    return squadPoints(state.fighters.filter(fighter => sideOf(state, fighter.owner) === side && isStanding(fighter)).map(fighter => fighter.character));
+    return squadPoints(state.fighters.filter(fighter => sideOf(state, fighter.owner) === side && isStanding(fighter)).map(fighter => fighter.character), state);
 }
 
 /** A side's score: its owners' added together (§29.6). In a free-for-all, a player's own. */
@@ -1688,8 +1785,8 @@ export function pickOf({ character, square, item, option }: MusterPick): MusterP
 }
 
 /** What a muster costs: its characters, and the items they carry (§21.1). */
-export function musterPoints(picks: readonly MusterPick[]): number {
-    return squadPoints(picks.map(pick => pick.character)) + itemsPoints(picks.map(pick => pick.item));
+export function musterPoints(picks: readonly MusterPick[], context?: RulesContext): number {
+    return squadPoints(picks.map(pick => pick.character), context) + itemsPoints(picks.map(pick => pick.item), context);
 }
 
 /**
@@ -1698,9 +1795,10 @@ export function musterPoints(picks: readonly MusterPick[]): number {
  * the battle snapshotted them when it was created (§23.3) — has unlocked. The
  * client never claims an option; it only sends the pick.
  */
-function optionRefusal(pick: Partial<MusterPick>, character: CharacterId, ranks: Ranks): string | undefined {
+function optionRefusal(pick: Partial<MusterPick>, character: CharacterId, ranks: Ranks, context?: RulesContext): string | undefined {
+    const { OPTIONS } = rulesetOf(context);
     if (pick.option == null) return undefined;
-    if (!isOptionId(pick.option) || OPTIONS[pick.option].character !== character) return "That isn't an option for that character";
+    if (!isOptionId(pick.option, context) || OPTIONS[pick.option].character !== character) return "That isn't an option for that character";
     return (ranks[character] ?? 0) >= OPTIONS[pick.option].rank ? undefined : "That option isn't unlocked yet";
 }
 
@@ -1711,21 +1809,21 @@ function optionRefusal(pick: Partial<MusterPick>, character: CharacterId, ranks:
  * items, and each on its own square of the seat's deployment zone. Total,
  * like `check`.
  */
-export function musterRefusal(field: Battlefield, seat: number, picks: unknown, budget: number, ranks: Ranks, faction: Faction): string | undefined {
+export function musterRefusal(field: Battlefield, seat: number, picks: unknown, budget: number, ranks: Ranks, faction: Faction, context?: RulesContext): string | undefined {
     if (!Array.isArray(picks) || picks.length === 0) return "Muster at least one character";
     const zone = new Set(Array.isArray(field.deployments[seat]) ? field.deployments[seat] : []);
     const squares = new Set<Square>();
     for (const pick of picks as Partial<MusterPick>[]) {
-        if (!isCharacterId(pick?.character)) return "That isn't a character";
+        if (!isCharacterId(pick?.character, context)) return "That isn't a character";
         if (!faction.characters.includes(pick.character)) return "That character isn't in your faction";
         // One slot, so an item is one id or nothing: never a list (§21.1).
-        if (pick.item != null && !isItemId(pick.item)) return "That isn't an item";
-        const option = optionRefusal(pick, pick.character, ranks);
+        if (pick.item != null && !isItemId(pick.item, context)) return "That isn't an item";
+        const option = optionRefusal(pick, pick.character, ranks, context);
         if (option) return option;
         if (!zone.has(pick.square as Square) || squares.has(pick.square as Square)) return "Each character needs its own square in your deployment zone";
         squares.add(pick.square as Square);
     }
-    const points = musterPoints(picks as MusterPick[]);
+    const points = musterPoints(picks as MusterPick[], context);
     return points <= budget ? undefined : `That squad costs ${points} points, and the budget is ${budget}`;
 }
 
@@ -1734,9 +1832,9 @@ export function musterRefusal(field: Battlefield, seat: number, picks: unknown, 
  * spent, carrying what it was mustered with. A `stout` one is of Hold Out's
  * team (`musterHp`) and carries its bigger `maxHp`.
  */
-export function newFighter(id: number, owner: string, character: CharacterId, square: Square, item: ItemId | null = null, option?: OptionId, stout = false): Fighter {
+export function newFighter(id: number, owner: string, character: CharacterId, square: Square, item: ItemId | null = null, option?: OptionId, stout = false, context?: RulesContext): Fighter {
     return {
-        id, owner, character, square, hp: musterHp(character, stout), ...(stout ? { maxHp: teamHp(character) } : {}),
+        id, owner, character, square, hp: musterHp(character, stout, context), ...(stout ? { maxHp: teamHp(character, context) } : {}),
         ap: 0, banked: 0, effects: {}, cooldowns: {}, spent: [], item, ...(option ? { option } : {}),
     };
 }
@@ -1753,6 +1851,7 @@ export function storedFighter(fighter: Fighter): Fighter {
         // Copied, so an undo snapshot never shares them with the live fighter.
         ...(fighter.tally ? { tally: addTally(fighter.tally, NO_TALLY) } : {}),
         ...(fighter.woundedBy ? { woundedBy: [...fighter.woundedBy] } : {}),
+        ...(fighter.effectSources ? { effectSources: { ...fighter.effectSources } } : {}),
         ...(fighter.usedThisTurn ? { usedThisTurn: [...fighter.usedThisTurn] } : {}),
     };
 }

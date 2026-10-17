@@ -1,4 +1,5 @@
 'use client'
+import type { RulesContext } from "@/games/RealmArena/rulesets";
 import React from 'react';
 import ListRow from '@/components/ui/ListRow';
 import RollReadout from '@/components/ui/RollReadout';
@@ -8,6 +9,7 @@ import { eventLines, type EventLine } from '@/games/RealmArena/ui';
 import { SpriteImage } from './RealmArenaTerrain';
 
 interface RealmArenaResultsProps {
+    context?: RulesContext;
     events: readonly BattleEvent[];
     fighters: readonly Fighter[];
     viewerId: string;
@@ -20,11 +22,11 @@ interface RealmArenaResultsProps {
  * it — its own, and each overwatch it set off — and every strike, knock-out and
  * score, in the order they happened.
  */
-export default function RealmArenaResults({ events, fighters, viewerId, nameFor }: RealmArenaResultsProps) {
+export default function RealmArenaResults({ events, fighters, viewerId, nameFor, context }: RealmArenaResultsProps) {
     // In the order it happened: each shot as its roll, and each run of
     // everything else between them as one list.
     const runs: EventLine[][] = [];
-    for (const line of eventLines(events, fighters, viewerId, nameFor)) {
+    for (const line of eventLines(events, fighters, viewerId, nameFor, context)) {
         const last = runs[runs.length - 1];
         if (line.roll === undefined && last && last[0].roll === undefined) last.push(line);
         else runs.push([line]);

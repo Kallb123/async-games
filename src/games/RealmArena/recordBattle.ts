@@ -26,7 +26,7 @@ export async function recordBattle(gameData: IRealmArenaGameData): Promise<Battl
     if (!gameData.complete) return undefined;
     return withTimeout(async () => {
         const gs = gameData.specificGameState;
-        const recorder = battleRecorder(gs.seats, battleOf(gs).sides, battleRoundsOf(gs));
+        const recorder = battleRecorder(gs.seats, battleOf(gs).sides, battleRoundsOf(gs), gs);
         const replayed = await replayTurnByTurn(gameData, (step, _turnIndex, _isFirstStepOfTurn, specificGameState) =>
             recorder.observe(step, specificGameState as IRealmArenaSpecificGameState), "battle record");
         return replayed ? recorder.result() : undefined;

@@ -9,14 +9,13 @@ import { userIdListToNamesAndMap } from "@/utils/users/clerk";
 import { RealmArenaGameType, type IGameCommand } from "@/utils/apiModels/GameLogic";
 import { battleOf, battleRoundsOf, budgetOf, enemyEvents, enemyHidden, enemyTurnsOf, nextWaveOf, toldTo, unnamed, warbandBudgetOf, type IRealmArenaOutcome, type RealmArenaBoard, type Told } from "./RealmArenaLogic";
 import { rollOffTurnOrder } from "@/utils/games/rollOff";
-import { gameCommandVersion } from "@/utils/ui/games";
-import { meta } from "./meta";
+import { CURRENT_RULESET_VERSION } from "./rulesets";
 import { randomInt } from "@/utils/games/random";
 import { userToken } from "@/utils/games/history";
 import { BATTLE_SIZE_NAMES, CHARACTERS, COOP_PLAYERS, DIFFICULTY_NAMES, FACTION_IDS, factionById, FACTIONS, fitsCoop, isFactionId, playableFactionsOf, RANDOM_ENEMY, REALM_ONLY, UNKNOWN_ENEMY, type BattleSize, type CharacterId, type Difficulty, type FactionId } from "./characters";
 import { addTally, NO_TALLY, xpOf, type MasterySnapshot, type Tally } from "./mastery";
 import { battlefieldById, COOP_MAPS, DEPLOYMENT_NAMES, mapFor, type CoopMap, type RealmArenaMapId } from "./maps";
-import { allied, ENEMY_SIDE, fighterById, fogGhost, isWarband, pickOf, squadSight, storedFighter, TEAM_SIDE, viewOf, warbandsFor, type BattleEvent, type Fighter, type FogGhost, type MusterPick, type ToldEvent } from "./rules";
+import { allied, ENEMY_SIDE, fighterById, fogGhost, isWarband, pickOf, squadSight, storedFighter, TEAM_SIDE, viewOf, warbandsFor, maxHpOf, actionPointsOf, type BattleEvent, type Fighter, type FogGhost, type MusterPick, type ToldEvent } from "./rules";
 import type { IRealmArenaGameDataResponse, IRealmArenaSpecificGameStateResponse, IRealmArenaStepOutcome, IRealmArenaStepPart, RealmArenaPartState } from "./apiModels";
 import type { Square } from "@/utils/games/battlefield/terrain";
 import { addRecords, NO_RECORD, RECORD_KEYS, type BattleRecord, type FightingRecord, type FightingRow, type WaveRecord } from "./battleRecord";
@@ -123,7 +122,7 @@ export interface IRealmArenaSpecificGameState {
      */
     factions?: FactionId[];
     /**
-     * The command version the battle was created under (`GameMeta.commandVersion`),
+     * The immutable ruleset release the battle was created under (`CURRENT_RULESET_VERSION`),
      * which decides which of the rules that have changed it plays by: from
      * `BALANCE_VERSION` on, melee rolls to hit, cover counts double at range, Heal and
      * Raise are limited differently, and Hold Out's team is tougher against
@@ -290,7 +289,7 @@ RealmArenaInvitationSchema.methods.CreateGame = async function(invite: IRealmAre
         fog: this.fog === true,
         size: battleSizeOf(this.size),
         factions: playableFactionsOf(this.factions),
-        rulesVersion: gameCommandVersion(meta),
+        rulesVersion: CURRENT_RULESET_VERSION,
         ...(coop && enemy ? { coop: { ...coop, enemy, ...(coop.enemy === RANDOM_ENEMY ? { random: true as const } : {}) } } : {}),
     });
 
@@ -359,7 +358,7 @@ export interface RealmArenaSettings {
     factions?: FactionId[];
     /** In co-op against the computer (§29): the faction drawn or picked, whether it was drawn at `random` (§29.3), the mission (§30.3), the difficulty (§30.5) and the battlefield picked for Hold Out (§30.9). */
     coop?: CoopSettings;
-    /** The command version the battle is created under: what it plays by (`IRealmArenaSpecificGameState.rulesVersion`). Absent plays by the rules from before `BALANCE_VERSION`. */
+    /** The ruleset release the battle is created under: what it plays by (`IRealmArenaSpecificGameState.rulesVersion`). Absent plays by the rules from before `BALANCE_VERSION`. */
     rulesVersion?: number;
 }
 
@@ -554,7 +553,7 @@ export function gameStateToModel(
         // Who has hurt each one is the server's, for scoring assists (§13.7):
         // the board has no use for it, and in fog it would name whose blast
         // hurt a character the viewer couldn't see being hit.
-        fighters: view.fighters.map(storedFighter).map(({ woundedBy: _woundedBy, ...fighter }) => fighter),
+        fighters: view.fighters.map(storedFighter).map(({ woundedBy: _woundedBy, effectSources: _effectSources, ...fighter }) => ({ ...fighter, maxHp: maxHpOf(fighter, gs), maxAp: actionPointsOf(fighter, gs) })),
         ghosts: fogGhostsFor(gs, viewerId, complete),
         clouds: [...view.clouds ?? []],
         blasted: [...(gs.blasted ?? [])],

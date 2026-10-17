@@ -8,8 +8,9 @@ import type { IGameCommand } from "@/utils/apiModels/gameCommand";
 import { runCommand } from "@/utils/games/commandPipeline";
 import { gameCommandVersion } from "@/utils/ui/games";
 import type { IGameDataDocument } from "@/utils/mongodb/GameData";
-import { FACTIONS, readyMadeSquad } from "./characters";
+import { readyMadeSquad } from "./characters";
 import { battlefieldById } from "./maps";
+import { CURRENT_RULESET_VERSION, rulesetOf } from "./rulesets";
 import { meta } from "./meta";
 import type { MasterySnapshot } from "./mastery";
 import { battleOf as battleOfState, budgetOf, playableFactions, RealmArenaAct, RealmArenaEndTurn, RealmArenaGameType, RealmArenaMuster } from "./RealmArenaLogic";
@@ -38,7 +39,7 @@ export function makeGame(turnOrder: string[] = PLAYERS, mastery: MasterySnapshot
         turnTimer: "unlimited",
         gameState: { turnOrder: [...turnOrder], history: [], commandHistory: [] },
         // Under the current rules unless a test says otherwise (`rulesVersion`: 6 for the old).
-        specificGameState: buildInitialRealmArenaState(turnOrder, mastery, { rulesVersion: gameCommandVersion(meta), ...settings }),
+        specificGameState: buildInitialRealmArenaState(turnOrder, mastery, { rulesVersion: CURRENT_RULESET_VERSION, ...settings }),
         complete: false,
         winner: "",
         markModified: () => {},
@@ -76,7 +77,7 @@ export const endTurnBy = (sender: string, keepStill: number[] = []) => cmd(Realm
 /** The ready-made squad for a seat, where a timed-out muster would put it. */
 export function readyMadePicks(game: RealmArenaTestGame, seat: number): MusterPick[] {
     // The battle's first faction, as a muster that names none musters from (B6).
-    const squad = readyMadeSquad(FACTIONS[playableFactions(game.specificGameState)[0]], budgetOf(game.specificGameState));
+    const squad = readyMadeSquad(rulesetOf(game.specificGameState).FACTIONS[playableFactions(game.specificGameState)[0]], budgetOf(game.specificGameState));
     return readyMadeMuster(battlefieldById(game.specificGameState.map), seat, squad);
 }
 

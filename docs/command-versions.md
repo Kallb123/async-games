@@ -104,3 +104,51 @@ than replaying it under rules it was never played by. Every caller already
 treats a timeline it can't build as a recap or chart it goes without; the
 timeline route answers 500. Absent, every version replays, back to
 `UNVERSIONED_COMMAND`.
+
+### Realm Arena catalogues
+
+Realm Arena uses `CURRENT_RULESET_VERSION` in
+`src/games/RealmArena/rulesets.ts` to stamp **new games**. It is independent of
+`meta.commandVersion`: current commands may act in an older game, but read
+that game's stored `rulesVersion`. Command versions still reject stale clients
+and describe recorded command formats.
+
+`rulesetOf(game)` selects the game's frozen character, ability, option, item,
+effect and faction definitions and `RULES` values. An unstamped game always
+selects the legacy catalogue; it never defaults to the newest release. Unknown rules versions
+throw rather than silently using different rules. Existing games need no
+backfill. No per-unit version is stored.
+
+To release changed units or abilities:
+
+1. Add a catalogue (for example `catalogues/v8.ts`) derived from the previous
+   released catalogue. Override the changed entries; leave shipped catalogues
+   untouched. Keep stable character and ability ids, including retired ones.
+2. Register and deeply freeze the new catalogue in `RULESETS`, then advance
+   `CURRENT_RULESET_VERSION`. Keep every old registry entry pointing at its
+   original catalogue. `currentRuleset` is derived from that registry.
+3. Express supported behavior changes in the new catalogue: `RULES` owns AP,
+   attack limits, reaction costs and bank caps, accuracy, cover and armour,
+   scoring and round limits. Abilities declare `passive`, `apOnRaise`,
+   `bonusAp`, `countsAsAttack`, `movesWithoutReactions` and cover/stance flags.
+   Effects declare tick/expiry boundaries, damage, AP and movement modifiers,
+   reaction blocking and temporary cover. Read these through `ruleValuesOf`
+   or `rulesetOf` with the battle context; do not compare release numbers in
+   individual rules. New mechanics still need an interpreter with defaults
+   preserving earlier catalogues. Exported rule constants are current-release
+   aliases for compatibility, not values for executing historical games. Bump
+   `meta.commandVersion` when older clients would construct or display a move
+   differently, as for any other rules change.
+4. Pass the game/battle context to catalogue helpers. Omitting context selects
+   the current catalogue for setup, profiles and admin tools; passing a game
+   without a stamp selects legacy. Preserve `rulesVersion` in filtered views,
+   snapshots and replay settings.
+5. Test old and new games under the same current commands, including muster,
+   validation, effects, previews, undo and replay. Keep narration and recap
+   names on that same catalogue; profiles retain earned mastery for retired
+   characters while marking them unavailable in new battles. `rulesets.test.ts`
+   simulates a future catalogue without shipping any balance change.
+
+New units created by muster or Hold Out reinforcement waves use the game's
+catalogue too. Responses carry the selected maximum HP so both board renderers
+can draw the right bars without looking up the current catalogue.

@@ -113,7 +113,7 @@ function BoardCamera({ board, rotation, glide, layout }: { board: Board3D | null
  * nobody walks, nothing flies, bursts, slashes or shakes the board, and the hit
  * text only appears and fades.
  */
-export default function RealmArenaBoard3D({ field, fighters, fogGhosts = [], unseen, sides, sealed, owners, waveDue = false, showCentre = true, viewerId, colourFor, nameFor, selected, onSelect, placing, aiming, acting, refocus = 0, follow, home, odds, coverAt, overlay, playback, onPlayed, unplaced, clouds }: RealmArenaBoard3DProps) {
+export default function RealmArenaBoard3D({ field, fighters, fogGhosts = [], unseen, sides, rulesVersion, sealed, owners, waveDue = false, showCentre = true, viewerId, colourFor, nameFor, selected, onSelect, placing, aiming, acting, refocus = 0, follow, home, odds, coverAt, overlay, playback, onPlayed, unplaced, clouds }: RealmArenaBoard3DProps) {
     const [board, setBoard] = useState<Board3D | null>(null);
     // Made when its box mounts and gone with it.
     const host = useCallback((element: HTMLDivElement | null) => {
@@ -247,7 +247,7 @@ export default function RealmArenaBoard3D({ field, fighters, fogGhosts = [], uns
     };
 
     // Where the view goes, and what plays waiting for it to get there, as the isometric board decides them.
-    const { area, held, onFocused, tracks } = useBoardFocus({ field, fighters, sides, selected, acting, sealed, placing, follow, home, refocus, playing: !!playback });
+    const { area, held, onFocused, tracks } = useBoardFocus({ field, fighters, sides, rulesVersion, selected, acting, sealed, placing, follow, home, refocus, playing: !!playback });
     // While an action plays, its caption floats over the foot of the frame, so the view frames the action clear of that strip.
     const focus: BoardZoomFocus | null = area && { rect: frameRect(here.frame, regionOnScreen(here.basis, area.area, top)), key: area.key, exact: area.exact, ...playback && { inset: CAPTION_INSET } };
     const onTapSquare = placing?.onTap ?? aiming?.onSquare;
@@ -272,7 +272,7 @@ export default function RealmArenaBoard3D({ field, fighters, fogGhosts = [], uns
                 <PlaybackFrames board={board} playKey={playback?.key} />
                 <TurnButtons onTurn={turn} />
                 {/* Over the foot of the frame, out of the zoom: while an action plays, what is happening in words; otherwise the targets, which want the same spot. */}
-                {playback ? <PlaybackCaption key={playback.key} playback={playback} fighters={fighters} viewerId={viewerId} nameFor={nameFor} /> : overlay}
+                {playback ? <PlaybackCaption context={{ rulesVersion }} key={playback.key} playback={playback} fighters={fighters} viewerId={viewerId} nameFor={nameFor} /> : overlay}
             </PlaybackProvider>
             <UnplacedMark unplaced={unplaced} />
         </div>

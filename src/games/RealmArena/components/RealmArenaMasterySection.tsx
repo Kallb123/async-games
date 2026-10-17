@@ -4,7 +4,7 @@ import ListRow from '@/components/ui/ListRow';
 import ListSection from '@/components/ui/ListSection';
 import { CHARACTERS, OPTIONS } from '@/games/RealmArena/characters';
 import { rankOf, type PlayerMastery } from '@/games/RealmArena/mastery';
-import { CHARACTER_IDS, CHARACTER_MARK, masteryLine, optionsFor, optionView } from '@/games/RealmArena/roster';
+import { masteryRoster, CHARACTER_MARK, masteryLine, optionsFor, optionView } from '@/games/RealmArena/roster';
 
 interface RealmArenaMasterySectionProps {
     /** The player's record with each character they've fought with; empty, or absent, for one who never has. */
@@ -30,16 +30,16 @@ export default function RealmArenaMasterySection({ mastery = {}, isLoading, isRe
             skeletonRows={0}
             hint="A character earns XP in every battle it fights in, and more for each attack, ability and item it uses."
         >
-            {fought ? CHARACTER_IDS.map(id => {
+            {fought ? masteryRoster(mastery).map(({ id, retired }) => {
                 const xp = mastery[id]?.xp ?? 0;
                 const rank = rankOf(xp);
-                const unlocked = optionsFor(id).filter(option => OPTIONS[option].rank <= rank).map(option => optionView(option).name);
+                const unlocked = retired ? [] : optionsFor(id).filter(option => OPTIONS[option].rank <= rank).map(option => optionView(option).name);
                 return (
                     <ListRow
                         key={id}
                         icon={CHARACTER_MARK[id]}
                         title={CHARACTERS[id].name}
-                        sub={[masteryLine(xp), ...unlocked].join(' · ')}
+                        sub={[...(retired ? ["Retired · unavailable in new battles"] : []), masteryLine(xp), ...unlocked].join(' · ')}
                         muted={!mastery[id]}
                         action={<span className="ag-tag ag-tag--quiet">{rank > 0 ? `Rank ${rank}` : 'Unranked'}</span>}
                     />

@@ -1,3 +1,4 @@
+import { rulesetOf, type RulesContext } from "@/games/RealmArena/rulesets";
 import type { IGameData } from "@/utils/mongodb/GameData";
 import type { uuidString } from "@/utils/apiModels/GameDataApi";
 import { commandVersion, type ICommandOutcome, type IGameCommand, type IGameType } from "@/utils/apiModels/gameCommand";
@@ -7,11 +8,12 @@ import { recordedRolls } from "@/utils/games/recordedRolls";
 import { isDropped, nextActivePlayer, registerPlayerDropoutAdapter } from "@/utils/games/playerDropout";
 import { v4 as uuidv4, NIL as NIL_UUID } from 'uuid';
 import type { IRealmArenaCoop, IRealmArenaGameData, IRealmArenaSpecificGameState } from "@/games/RealmArena/RealmArenaModels";
-import { ABILITIES, CHARACTERS, DIFFICULTY_NAMES, EFFECTS, enemyNameOf, factionById, FACTIONS, ITEMS, musterBudget, readyMadeSquad, REALM_ONLY, warbandBudget, type Budget, type CharacterId, type FactionId } from "@/games/RealmArena/characters";
+import { DIFFICULTY_NAMES, enemyNameOf, factionById, musterBudget, readyMadeSquad, REALM_ONLY, warbandBudget, type Budget, type CharacterId, type FactionId } from "@/games/RealmArena/characters";
 import { battlefieldById, battlefieldOf } from "@/games/RealmArena/maps";
 import { addTally, NO_TALLY, type Tally } from "@/games/RealmArena/mastery";
 import {
     ACTION_POINTS,
+    actionPointsOf,
     act,
     allied,
     areaAround,
@@ -126,7 +128,7 @@ export function warbandBudgetOf(gs: IRealmArenaSpecificGameState): Budget {
 
 /** The squad every warband musters, and each wave refills it to (§29.7, §30.3): its faction's ready-made squad for its budget. */
 function warbandSquad(gs: IRealmArenaSpecificGameState): readonly CharacterId[] {
-    return readyMadeSquad(factionById(gs.coop?.enemy), warbandBudgetOf(gs));
+    return readyMadeSquad(factionById(gs.coop?.enemy, gs), warbandBudgetOf(gs));
 }
 
 /**
@@ -408,33 +410,33 @@ export function unnamed(events: readonly BattleEvent[], hidden: (fighter: number
  * hidden, "the enemy" (§29.3). The resolver would show a warband's token as
  * an unknown player.
  */
-export function ownerToken(owner: string, coop: IRealmArenaCoop | undefined): string {
+export function ownerToken(owner: string, coop: IRealmArenaCoop | undefined, context?: RulesContext): string {
     if (!isWarband(owner)) return userToken(owner);
-    return enemyNameOf(coop && enemyKnown(coop) ? coop.enemy : undefined);
+    return enemyNameOf(coop && enemyKnown(coop) ? coop.enemy : undefined, context);
 }
-
 
 /**
  * How the log names a character: "their Knight", "Bob's Archer" — or, in a
  * line written for a player whose side didn't see it (`seen`, §27.2), "a
  * character out of sight", as the board names one.
  */
-function whose(fighters: readonly Fighter[], id: number, actor: string, coop: IRealmArenaCoop | undefined, seen?: (id: number) => boolean): string {
+function whose(fighters: readonly Fighter[], id: number, actor: string, coop: IRealmArenaCoop | undefined, seen?: (id: number) => boolean, context?: RulesContext): string {
     if (seen && !seen(id)) return "a character out of sight";
     const fighter = fighters.find(one => one.id === id);
     if (!fighter) return "a character";
     const own = fighter.owner === actor;
     if (isWarband(fighter.owner) && !enemyKnown(coop)) return own ? "one of its characters" : "an enemy character";
-    const name = CHARACTERS[fighter.character].name;
-    return own ? `their ${name}` : `${possessive(ownerToken(fighter.owner, coop))} ${name}`;
+    const name = rulesetOf(context).CHARACTERS[fighter.character].name;
+    return own ? `their ${name}` : `${possessive(ownerToken(fighter.owner, coop, context))} ${name}`;
 }
 
 /**
  * What one event says. The acting player's own deeds start with a verb, so
  * they read straight on from the name; anyone else's start with who did it.
  */
-function clause(event: BattleEvent, fighters: readonly Fighter[], actor: string, coop: IRealmArenaCoop | undefined, seen?: (id: number) => boolean): string {
-    const name = (id: number) => whose(fighters, id, actor, coop, seen);
+function clause(event: BattleEvent, fighters: readonly Fighter[], actor: string, coop: IRealmArenaCoop | undefined, seen?: (id: number) => boolean, context?: RulesContext): string {
+    const { ABILITIES, EFFECTS, ITEMS } = rulesetOf(context);
+    const name = (id: number) => whose(fighters, id, actor, coop, seen, context);
     // Whom a blast hit, of the characters the line's reader saw (§27.2).
     const hitIn = (targets: readonly number[]) => seen ? targets.filter(seen) : targets;
     const landed = (damage: number, graze: boolean) => damage === 0 ? "a miss" : `${graze ? "a graze" : "a hit"} for ${damage}`;
@@ -491,9 +493,9 @@ function clause(event: BattleEvent, fighters: readonly Fighter[], actor: string,
         case "watching": return `put ${name(event.fighter)} on watch`;
         case "spotted": return `${name(event.fighter)} found ${name(event.by)} in its way, and went round`;
         case "effect": return `${name(event.fighter)} is ${event.change === "cleared" ? "no longer " : ""}${EFFECTS[event.effect].state}`;
-        case "burned": return `${name(event.fighter)} burned for ${event.damage}`;
+        case "burned": return event.effect ? `${name(event.fighter)} took ${event.damage} damage from ${hidden ? "an effect" : EFFECTS[event.effect].name}` : `${name(event.fighter)} burned for ${event.damage}`;
         case "scored": {
-            const who = event.player === actor ? "scored" : `${ownerToken(event.player, coop)} scored`;
+            const who = event.player === actor ? "scored" : `${ownerToken(event.player, coop, context)} scored`;
             return `${who} ${event.points} for ${SCORED_FOR[event.reason]}`;
         }
     }
@@ -522,10 +524,10 @@ function veiledClause(event: BattleEvent, name: (id: number) => string, hitIn: (
 }
 
 /** A move told once, however many times reactions broke it up. */
-function narrate(events: readonly BattleEvent[], before: readonly Fighter[], actor: string, coop: IRealmArenaCoop | undefined, seen?: (id: number) => boolean): string {
+function narrate(events: readonly BattleEvent[], before: readonly Fighter[], actor: string, coop: IRealmArenaCoop | undefined, seen?: (id: number) => boolean, context?: RulesContext): string {
     return events
         .filter((event, index) => event.kind !== "moved" || events.findIndex(one => one.kind === "moved") === index)
-        .map(event => clause(event, before, actor, coop, seen))
+        .map(event => clause(event, before, actor, coop, seen, context))
         .join("; ");
 }
 
@@ -534,8 +536,8 @@ function narrate(events: readonly BattleEvent[], before: readonly Fighter[], act
  * carries no `actorId`: nobody can react to the computer, or be pushed about
  * a reaction from it.
  */
-function lineBy(owner: string, text: string, coop: IRealmArenaCoop | undefined): IHistoryEntry {
-    return isWarband(owner) ? { text: capitalise(`${ownerToken(owner, coop)} ${text}`) } : playerHistory(owner, text);
+function lineBy(owner: string, text: string, coop: IRealmArenaCoop | undefined, context?: RulesContext): IHistoryEntry {
+    return isWarband(owner) ? { text: capitalise(`${ownerToken(owner, coop, context)} ${text}`) } : playerHistory(owner, text);
 }
 
 /**
@@ -581,7 +583,6 @@ function writeLine(
     });
     return told;
 }
-
 
 /**
  * Notes a random enemy seen (§29.3) once any of its characters is in the
@@ -857,7 +858,7 @@ function holdTheCentreEnding(data: IRealmArenaGameData, battle: BattleState, coo
     const warbands = warbandsFor(gs.seats);
     const [team, enemy] = [sideScore(battle, gs.scores, TEAM_SIDE), sideScore(battle, gs.scores, ENEMY_SIDE)];
     const won = !isWarband(standings(battle, [...gs.seats, ...warbands], gs.scores)[0]);
-    const foe = enemyNameOf(coop.enemy);
+    const foe = enemyNameOf(coop.enemy, gs);
     data.gameState.history.unshift({
         text: `The battle is over: the team ${pluralize(team, "point")} (${gs.seats.map(userId => `${userToken(userId)} ${gs.scores[userId] ?? 0}`).join(", ")}), ${foe} ${enemy}`,
     });
@@ -930,7 +931,7 @@ export function waveOf(gs: IRealmArenaSpecificGameState, owner: string, growing:
     const zone = [...preferred, ...field.deployments[gs.seats.length + warband].filter(square => !preferred.includes(square))]
         .filter(square => !occupied.has(square));
     let nextId = Math.max(-1, ...gs.fighters.map(fighter => fighter.id)) + 1;
-    return missing.slice(0, zone.length).map((pick, index) => newFighter(nextId++, owner, pick.character, zone[index], pick.item ?? null, pick.option));
+    return missing.slice(0, zone.length).map((pick, index) => newFighter(nextId++, owner, pick.character, zone[index], pick.item ?? null, pick.option, undefined, gs));
 }
 
 /**
@@ -945,7 +946,7 @@ const RALLYING_VERSION = 6;
 function rally(gs: IRealmArenaSpecificGameState): void {
     for (const fighter of gs.fighters) {
         if (isWarband(fighter.owner) || !isStanding(fighter)) continue;
-        const full = maxHpOf(fighter);
+        const full = maxHpOf(fighter, gs);
         fighter.hp = Math.min(full, fighter.hp + Math.floor(full / 2));
     }
 }
@@ -961,7 +962,7 @@ function landWave(data: IRealmArenaGameData, version: number): void {
     }
     // The scheduled wave is public even when every deployment square is
     // blocked; its line must not reveal which hidden warbands found room.
-    data.gameState.history.unshift({ text: `A fresh wave of ${enemyNameOf(enemyKnown(gs.coop) ? gs.coop.enemy : undefined)} arrives` });
+    data.gameState.history.unshift({ text: `A fresh wave of ${enemyNameOf(enemyKnown(gs.coop) ? gs.coop.enemy : undefined, gs)} arrives` });
     if (version >= RALLYING_VERSION) {
         rally(gs);
         data.gameState.history.unshift({ text: "The team rallies: everyone standing regains half their HP" });
@@ -1042,7 +1043,7 @@ export class RealmArenaMuster implements IGameCommand {
         const faction = this.faction ?? allowed[0];
         if (!allowed.includes(faction)) return INVALID;
         const ranks = gs.mastery?.[this.senderId] ?? {};
-        if (musterRefusal(field, seat, this.picks, budgetOf(gs), ranks, FACTIONS[faction]) !== undefined) return INVALID;
+        if (musterRefusal(field, seat, this.picks, budgetOf(gs), ranks, rulesetOf(gs).FACTIONS[faction], gs) !== undefined) return INVALID;
 
         // Exactly what was checked, and nothing else a request carried.
         this.picks = this.picks.map(pickOf);
@@ -1063,7 +1064,7 @@ export class RealmArenaMuster implements IGameCommand {
             // character's (`stoutTeam`); the warbands' keep theirs.
             const stout = stoutTeam(gs.coop?.mission, gs.rulesVersion);
             gs.fighters = musters.flatMap(({ owner, picks }) => picks.map(pick => ({ owner, pick })))
-                .map(({ owner, pick }, id) => newFighter(id, owner, pick.character, pick.square, pick.item ?? null, pick.option, stout && !isWarband(owner)));
+                .map(({ owner, pick }, id) => newFighter(id, owner, pick.character, pick.square, pick.item ?? null, pick.option, stout && !isWarband(owner), gs));
             gs.musters = [];
             gs.phase = "battle";
             data.gameState.history.unshift({ text: "The squads take the field, and the battle begins" });
@@ -1234,7 +1235,7 @@ function applyAction(data: IRealmArenaGameData, owner: string, sent: unknown, ro
     const blasted = blastedIn(events);
     if (blasted.length > 0) gs.blasted = [...(gs.blasted ?? []), ...blasted];
     addScores(gs, events);
-    const told = writeLine(data, events, (said, seen) => said.length === 0 ? undefined : lineBy(owner, narrate(said, before.fighters, owner, gs.coop, seen), gs.coop));
+    const told = writeLine(data, events, (said, seen) => said.length === 0 ? undefined : lineBy(owner, narrate(said, before.fighters, owner, gs.coop, seen, gs), gs.coop, gs));
     noteSighting(gs, events);
     return { action, events, before, told };
 }
@@ -1250,7 +1251,7 @@ function beginTurn(data: IRealmArenaGameData, owner: string): { events: BattleEv
     const { fighters, events } = startTurn(battle, owner);
     gs.fighters = fighters;
     addScores(gs, events);
-    const told = writeLine(data, events, (said, seen) => said.length === 0 ? undefined : { text: capitalise(narrate(said, battle.fighters, "", gs.coop, seen)) });
+    const told = writeLine(data, events, (said, seen) => said.length === 0 ? undefined : { text: capitalise(narrate(said, battle.fighters, "", gs.coop, seen, gs)) });
     noteSighting(gs);
     return { events, told };
 }
@@ -1267,7 +1268,7 @@ function applyEndTurn(data: IRealmArenaGameData, owner: string, keepStill: reado
     gs.fighters = fighters;
     addScores(gs, events);
     // Told to everyone, whatever they saw of it: that a turn ended is no secret.
-    writeLine(data, events, (said, seen) => lineBy(owner, ["ended their turn", ...said.map(event => clause(event, battle.fighters, owner, gs.coop, seen))].join("; "), gs.coop));
+    writeLine(data, events, (said, seen) => lineBy(owner, ["ended their turn", ...said.map(event => clause(event, battle.fighters, owner, gs.coop, seen, gs))].join("; "), gs.coop, gs));
     noteSighting(gs);
     return events;
 }
@@ -1491,7 +1492,7 @@ function warbandTurn(data: IRealmArenaGameData, moves: { recorded: readonly unkn
     const over = () => battleIsOver(gs);
     if (over()) return turn;
 
-    const cap = ACTION_POINTS * battleOf(gs).fighters.filter(fighter => fighter.owner === owner && isStanding(fighter)).length;
+    const cap = battleOf(gs).fighters.filter(fighter => fighter.owner === owner && isStanding(fighter)).reduce((sum, fighter) => sum + actionPointsOf(fighter, gs), 0);
     const deadline = Date.now() + WARBAND_DEADLINE_MS;
     const memo = turnMemo();
     for (let step = 0; !over(); step++) {

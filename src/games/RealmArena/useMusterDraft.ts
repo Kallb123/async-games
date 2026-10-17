@@ -1,7 +1,8 @@
+import { rulesetOf, type RulesContext } from "./rulesets";
 import { useResettingState } from "@/utils/hooks/useResettingState";
 import type { Battlefield, Square } from "@/utils/games/battlefield/terrain";
 import { pluralize } from "@/utils/ui/text";
-import { FACTIONS, readyMadeSquad, squadPoints, type FactionId, type ItemId, type OptionId } from "./characters";
+import { readyMadeSquad, squadPoints, type FactionId, type ItemId, type OptionId } from "./characters";
 import type { Ranks } from "./mastery";
 import { itemsPoints, musterRefusal, pickOf, readyMadeMuster, type MusterPick } from "./rules";
 import { handItem, handOut, itemsOf, NO_ITEMS, placeTap, squadCounts, squadOf, type ItemCounts, type Placement, type SquadCounts } from "./ui";
@@ -21,7 +22,8 @@ import { handItem, handOut, itemsOf, NO_ITEMS, placeTap, squadCounts, squadOf, t
  * player only moves the ones they want elsewhere, passes the items between
  * them, and picks an option (§23.2) a rank has unlocked.
  */
-export function useMusterDraft(field: Battlefield, seat: number, budget: number, ranks: Ranks, factions: readonly FactionId[], turnKey: string) {
+export function useMusterDraft(field: Battlefield, seat: number, budget: number, ranks: Ranks, factions: readonly FactionId[], turnKey: string, context?: RulesContext) {
+    const { FACTIONS } = rulesetOf(context);
     const [factionId, setFaction] = useResettingState<FactionId>(factions[0], turnKey);
     const faction = FACTIONS[factionId];
     // Another faction is another roster: the squad starts again from its ready-made one for the budget.
@@ -42,7 +44,7 @@ export function useMusterDraft(field: Battlefield, seat: number, budget: number,
     // characters: only a draft can buy them, and handing out would drop the rest.
     const refusal = squad.length > 0 && bought.length > squad.length
         ? `Your squad can carry ${pluralize(squad.length, "item")}, one each`
-        : musterRefusal(field, seat, picks, budget, ranks, faction);
+        : musterRefusal(field, seat, picks, budget, ranks, faction, context);
 
     // Changes what the character picked up goes into battle with.
     const outfit = (change: (picks: MusterPick[], selected: number) => MusterPick[]) => {
@@ -51,6 +53,7 @@ export function useMusterDraft(field: Battlefield, seat: number, budget: number,
     };
 
     return {
+        context,
         /** The factions the host allowed (B6), and the one the squad is mustered from. */
         factions,
         faction: factionId,
@@ -63,7 +66,7 @@ export function useMusterDraft(field: Battlefield, seat: number, budget: number,
         items,
         setItems,
         /** What's left of the budget, items included — every item bought, even one the squad has no hands for yet. */
-        pointsLeft: budget - squadPoints(squad) - itemsPoints(bought),
+        pointsLeft: budget - squadPoints(squad, context) - itemsPoints(bought, context),
         refusal,
         /** The player's own ranks, as the battle snapshotted them: what unlocks an option. */
         ranks,
