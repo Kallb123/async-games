@@ -1836,6 +1836,26 @@ a.ag-list-row, a.ag-list-row-main {
    board a little soft mid-pinch, sharp again the moment it lands. */
 .ag-board-zoom-content--moving { will-change: transform; }
 .ag-board-scroll svg { width: var(--ag-board-zoom, 100%); max-width: none; }
+/* Camera mode (BoardZoom `camera`): a board drawn by a camera, which a browser
+   can't lay out at 600% of the column. What the pane scrolls over is an empty
+   spacer, the zoomed board's shape, so the scrolling, the scroll bars and the
+   momentum are the browser's; the box the camera draws into is pinned over it
+   (`sticky`) at exactly what the pane shows — BoardZoom writes the pane's size
+   to `--ag-board-pane-w` and `--ag-board-pane-h` — and is never transformed or
+   laid out bigger. Both share the one grid cell, so the box takes no room of
+   its own. */
+.ag-board-zoom-content--camera { display: grid; width: var(--ag-board-zoom, 100%); }
+.ag-board-zoom-spacer { grid-area: 1 / 1; width: 100%; }
+.ag-board-zoom-slot {
+    grid-area: 1 / 1;
+    position: sticky;
+    top: 0;
+    left: 0;
+    align-self: start;
+    justify-self: start;
+    width: var(--ag-board-pane-w, 100%);
+    height: var(--ag-board-pane-h, auto);
+}
 .ag-board-tag {
     position: absolute;
     bottom: 12px;
@@ -2803,7 +2823,7 @@ button.ag-chat-gif { cursor: pointer; }
     font-weight: 800;
     color: var(--ag-ink-softer);
 }
-/* The row's highest count on a ResultTable. */
+/* The row's best value: the highest count on a ResultTable, the better board in the renderer lab. */
 .ag-chart-table td.ag-chart-table-best {
     font-weight: 800;
     color: var(--ag-ink);
@@ -5328,6 +5348,12 @@ html:has(.ag-pull) { overscroll-behavior-y: contain; }
    its frames repaint only itself. */
 .ag-realmarena-frame .ag-board-zoom-content { position: relative; }
 .ag-ra-fx-layer { position: absolute; top: 0; left: 0; pointer-events: none; }
+/* The 3D board (RealmArenaBoard3D, an experiment: docs/realm-arena-3d.md): one
+   canvas filling the box BoardZoom's camera mode pins to the pane
+   (`.ag-board-zoom-slot`). The pane takes the pan and the pinch; the canvas
+   only hears a tap. */
+.ag-ra-3d { position: relative; width: 100%; height: 100%; }
+.ag-ra-3d > canvas { display: block; width: 100%; height: 100%; }
 
 /* ---- The battlefield ---- */
 /* Terrain is drawn from its tile art (src/games/RealmArena/art.ts). What's
@@ -5380,7 +5406,7 @@ html:has(.ag-pull) { overscroll-behavior-y: contain; }
 
 /* A character: its art, in its owner's colour, over its shadow, and its HP
    above it. Fallen, it lies there, faded. */
-.ag-ra-shadow { fill: rgba(0, 0, 0, 0.3); pointer-events: none; }
+.ag-ra-shadow { fill: #000; pointer-events: none; } /* as strong as ui.ts's SHADOW_ALPHA, which the board sets */
 /* Only the body is tapped (`.ag-ra-figure-hit`): the art's cell is mostly
    see-through, and would catch taps meant for the square behind it. */
 .ag-ra-figure { pointer-events: none; }

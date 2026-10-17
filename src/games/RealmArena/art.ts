@@ -60,6 +60,9 @@ export const ART_SHEETS = {
 
 export type ArtSheet = keyof typeof ART_SHEETS;
 
+/** The characters' models as data, which the 3D board builds its figures from (three/characterModels.ts). Written by `npm run ra-characters`. */
+export const CHARACTER_MODELS_HREF = "/art/realmarena/characters.json";
+
 /** The width of a square's diamond on a sheet. */
 const TILE_PX = 64;
 /** Board units per pixel of a sheet. */
@@ -147,6 +150,23 @@ export const TERRAIN_ART: Readonly<Record<TerrainLetter, readonly ArtLayer[]>> =
     "s": [{ sprites: [BRICK_COLUMN], at: 0, clip: STAIR }, { sprites: [MOSSY_ROCK], at: STAIR, clip: 0 }],
     "^": [{ sprites: [BRICK_COLUMN], at: 0, clip: TOWER }, { sprites: [MOSSY_ROCK], at: TOWER, clip: 0 }],
     "_": [{ sprites: SCORCHED, at: 0 }],
+};
+
+/**
+ * What the 3D board skins a raised block with, cut from the same sheets as
+ * `TERRAIN_ART`: a plain face of brick for its sides — the brick column, three
+ * heights of it — and the top it is capped with: paved with the same brick
+ * (the column's own top is a hollow tower mouth) or, for the tower's stair and
+ * top, the grassed rock they are floored with. Trees are
+ * built from primitives, and open and scorched ground are the ground's.
+ */
+export const BLOCK_SKIN: Readonly<Partial<Record<TerrainLetter, { side: Sprite; top?: Sprite }>>> = {
+    ",": { side: BRICK_COLUMN },
+    "o": { side: BRICK_COLUMN },
+    "#": { side: BRICK_COLUMN },
+    "P": { side: BRICK_COLUMN },
+    "s": { side: BRICK_COLUMN, top: MOSSY_ROCK },
+    "^": { side: BRICK_COLUMN, top: MOSSY_ROCK },
 };
 
 const LAYERS = Object.values(TERRAIN_ART).flat();

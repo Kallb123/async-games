@@ -17,6 +17,7 @@ import type { RealmArenaSettings } from "../../src/games/RealmArena/RealmArenaMo
 import { battleRoundsOf } from "../../src/games/RealmArena/RealmArenaLogic";
 import { ACTION_POINTS, isStanding, isWarband, viewOf, waveArrives } from "../../src/games/RealmArena/rules";
 import { actBy, battleOf, endTurnBy, makeGame, musterAll, play } from "../../src/games/RealmArena/testFixtures";
+import { percentile as sortedPercentile } from "../../src/utils/performance";
 
 export type Mission = "holdOut" | "holdTheCentre";
 export type CoopMapChoice = "sackedFort" | "gate";
@@ -219,11 +220,9 @@ export interface ScenarioStats {
 
 const mean = (values: readonly number[]) => values.length === 0 ? 0 : values.reduce((sum, value) => sum + value, 0) / values.length;
 
-/** The value `p` of the way through `values` (0 to 1), nearest rank. */
+/** The value `p` of the way through `values` (0 to 1), nearest rank, as the app takes every percentile (src/utils/performance.ts). */
 export function percentile(values: readonly number[], p: number): number {
-    if (values.length === 0) return 0;
-    const sorted = [...values].sort((a, b) => a - b);
-    return sorted[Math.min(sorted.length - 1, Math.max(0, Math.ceil(p * sorted.length) - 1))];
+    return sortedPercentile([...values].sort((a, b) => a - b), p);
 }
 
 /** The 95% Wilson score interval for `wins` of `n`: honest at 0%, 100% and small samples, where ±2σ isn't. */

@@ -96,8 +96,16 @@ out. A second copy is the signal to extract the first one.
   middle of the frame — Realm Arena following a long walk — calls
   `useBoardCentre()` a frame at a time from its own playback clock, rather than
   feeding `BoardZoom` a new focus each frame; a player taking hold of the board
-  stops it until the next focus. (The track editor is the one exception, and says why
-  in its own file: it owns every pointer press on its canvas.)
+  stops it until the next focus. A board drawn by a camera rather than laid
+  out by the browser — Realm Arena's 3D board, a WebGL canvas that can't be
+  made 600% of the column wide — passes `camera`, and has all of the above:
+  `BoardZoom` scrolls an empty spacer of the zoomed size, pins the child to the
+  pane, and tells it what part of the viewBox is in the pane through
+  `useBoardView(listener)` — a callback a frame at a time, never React state —
+  while `focus`, `pivot` and `useBoardCentre` stay in the viewBox's units
+  ([`docs/realm-arena-3d.md`](./docs/realm-arena-3d.md) §2). Such a board takes
+  no drag, pinch or wheel of its own. (The track editor is the one exception,
+  and says why in its own file: it owns every pointer press on its canvas.)
   Names printed on a board's art go through `MapLabelLayer`, never a bare
   `MapLabel` per node: it lays every name out in one pass so none of them lands
   on another name, on a node, on a marker beside a node, or off the map — tell
@@ -169,7 +177,7 @@ out. A second copy is the signal to extract the first one.
   "who's playing" invite picker used by every game-setup screen),
   `usePlayback` — the one frame loop for whatever a board plays: a board mounts
   `PlaybackProvider` round what it draws, and everything that moves reads the
-  time with `usePlaybackFrame`, setting its own SVG attributes through a ref
+  time with `usePlaybackFrame`, setting its own SVG attributes (or a WebGL scene) through a ref
   with no React render a frame, rather than running a clock of its own
   ([`docs/isometric-animations.md`](./docs/isometric-animations.md) §4),
   `dataCache` — the tab's in-memory cache of what a screen fetched for the
@@ -245,7 +253,10 @@ ground and its battle visuals — keeps the SVG as its master and renders the se
 `npm run ra-marks`. Realm Arena's characters are modelled in code too, in
 `art-masters/realmarena/characters`, and `npm run ra-characters` renders each
 one facing all eight isometric directions, standing and fallen, into the sprite
-sheet the board draws its figures from and a team-colour layer it tints per seat (see [`art-masters/README.md`](./art-masters/README.md)).
+sheet the board draws its figures from and a team-colour layer it tints per seat,
+plus the models as data for the 3D board (see
+[`art-masters/README.md`](./art-masters/README.md)). `art-masters` is never
+deployed, so nothing under `src/` may import from it.
 
 ## Design system conventions
 
@@ -299,6 +310,15 @@ sheet the board draws its figures from and a team-colour layer it tints per seat
   presentation": the React Compiler rules it enforces (`react-hooks/refs` and
   friends) catch real mistakes that the type checker and the build both let
   through.
+- **Measure a change to how Realm Arena's battlefield is drawn.** Run
+  `npm run ra-bench -- --against main` before calling it faster (or no
+  slower), and put its summary in the PR. It draws the real board over a
+  frozen Hold Out battle on a throttled phone in headless Chromium and needs
+  no build, sign-in or database
+  ([`docs/realm-arena-rendering.md`](./docs/realm-arena-rendering.md) §2).
+  `--renderers svg,three` measures the 3D experiment beside the isometric
+  board ([`docs/realm-arena-3d.md`](./docs/realm-arena-3d.md)); in a
+  container without a GPU, read its CPU numbers, not its GPU ones.
 - **Review with the crew before committing** (see below). At minimum, run
   `caveman` over any UI, component, hook or game change.
 

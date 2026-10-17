@@ -2116,8 +2116,10 @@ place — moving — what a player can be held to knowing.
   out of sight (65%): a hit for 3" — that they were hit, and the odds, not
   who fired. That a turn ended is everyone's, so an End turn's line is told to
   all, less the characters going on watch that the viewer can't see. The
-  scoreboard shows how many of another squad the viewer can see, not how
-  many stand.
+  scoreboard shows how many of an enemy squad the viewer can see, not how
+  many stand. The viewer's own squad and allies share vision (§29.6), so their
+  full standing counts are known; the opened co-op team pill also shows each
+  allied squad's remaining and total HP, including the viewer's own.
 - **Not hidden: the scores.** The scoreboard is everyone's, so a point scored
   out of sight is told as the log's "scored 3 for the knock-out", though not
   who was knocked out or by whom. Points hint at a fallen character's cost.
@@ -2936,7 +2938,11 @@ sure it is.
   faction (`nameFor`, `colourFor`); the muster names the enemy the players
   will face, or "an unknown enemy" for a random one not yet seen (§29.3); the
   scoreboard shows the team's total
-  against the enemy's, with each player's share under it.
+  against the enemy's, with each player's share under it. Opening the team
+  pill shows each player's standing count and remaining/total squad HP,
+  including the viewer's own, with each fighter's mustered maximum contributing
+  to the total even when fallen. During muster it shows muster status instead,
+  and a player who left keeps the “left the battle” message.
 - **The enemy's turn plays out** on the board as any other turn does (§26),
   and the recap gives it a row per action. `recap.ts` builds a player's
   action row from a `RealmArenaAct`'s line and events; that builder comes out
@@ -2965,8 +2971,9 @@ sure it is.
   is handed every owner in the map's deployment order, warbands
   (`warbandsFor`) after the players.
 - The scoreboard is two pills: the team's total, each player's share under
-  it and each one's squad or muster when it's opened, and the enemy's, with
-  how many of it stand or are in sight. The centre names the side that holds
+  it and each one's standing count and remaining/total squad HP when it's
+  opened (or muster status while mustering), and the enemy's, with how many
+  of it stand or are in sight. The centre names the side that holds
   it. During the muster a line names whom the team will face, or says the
   enemy was drawn at random and is still unknown.
 - A finished co-op battle's subtitle and banner are the team's, in
@@ -3273,6 +3280,23 @@ neither the keep, where the team is likeliest to be. A wave arriving out of
 sight of everyone still finds the team. The walk is a search from the team's
 squares made once a plan, rather than the keep's search made once a
 battlefield (§29.7, *What PR 3 settled*), and the time-budget test holds it.
+
+*Since revised, after the playtest found warbands that never came:*
+
+- **It searches, rather than waiting in the keep.** In fog, a warband that
+  neither sees nor remembers anyone hunts the squares of the keep and of the
+  team's deployment zones that its side can't see, and once it has all of
+  those in sight, every square it can't. Before, it walked to the keep and
+  stood there for the rest of the battle while the team held an edge out of
+  its sight, every wave piling in beside the last.
+- **Its own characters are worth a quarter to it** (`HOLD_OUT_OWN_WORTH`):
+  their strength, their Exposure, the overwatch on a move and what the team
+  scores by downing one. Each wave brings back every character it lost and
+  the score doesn't decide the battle, while the team's losses are for good.
+  Weighed in full, a Skitterling never stepped up to a Knight that hits harder
+  than it does, and a warband ringed the team two squares out and stopped.
+- **The keep doesn't score for it.** It decides nothing in Hold Out, and its
+  five points drew a warband away from the team.
 
 **Engine.**
 
@@ -3822,6 +3846,43 @@ one without; `rules.test.ts`, `coop.test.ts`, `stats.test.ts`, `undo.test.ts`
 and `hiddenHands.test.ts` follow them.
 
 ---
+
+### 30.14 Teams take turns in blocks
+
+An option on the co-op setup screen (*Teams take turns in blocks*, off by
+default) changes the order of play, and nothing else.
+
+- **Alternating (the default).** A warband takes its turn straight after each
+  player's: Human 1, Warband 1, Human 2, Warband 2.
+- **Blocks.** Every player takes their own turn, in seat order, then every
+  warband still standing takes its own, in order: Human 1, Human 2, Warband 1,
+  Warband 2. Turns stay individual either way; the humans are not merged into
+  one. The round ends, and a Hold Out wave lands, after the warbands' block,
+  as it does after the last warband in the alternating order.
+- **Stored as `coop.teamBlocks: true`**, on the invitation (`coopInviteOf`
+  accepts a boolean, and false is not kept; anything else refuses the co-op
+  setting) and on the battle, so a replay rebuilds it (`settingsOf`). It is
+  dropped when the team is a single player, where the two orders are the same
+  (`buildInitialRealmArenaState`), and solo and free-for-all never carry it,
+  having no `coop` or no second player. The setup screen shows it for co-op
+  with a team, not for solo.
+- **No rules version.** Absent is the alternating order every battle had, so
+  a battle in progress and every recorded one play as they did
+  (docs/command-versions.md): the flag is read at the hand-off, never branched
+  on by command version.
+- **How it plays.** `handOff` runs the block when the turn would pass from the
+  last standing seat back round the table (`warbandBlock`, one `warbandTurn`
+  for each warband standing, ahead of the round count and the wave), then works
+  out the next seat again, since a warband may have wiped a squad out. The
+  End turn's recap holds the first warband's turn as `enemy` and the others
+  as `thenEnemy`; the actions of the others are recorded in
+  `recordedMoreEnemyActions`, one list a turn, beside `recordedEnemyActions`.
+  An End turn that is not the last of the round plays no warband at all. The
+  turn timer, undo and the stalled-turn sweep see only End turns and are
+  unchanged.
+- **Known limit.** If the last player to go is burned out at the start of
+  their own turn, the block follows that, and the log and the command's events
+  hold the burning ahead of the block rather than in the order it happened.
 
 ## 31. The Swarm: a second faction (B6)
 

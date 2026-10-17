@@ -4,7 +4,8 @@ import { usePathname } from "next/navigation";
 import { FcmTokenComp } from "@/components/FirebaseForeground";
 import { uuidString } from "@/utils/apiModels/GameDataApi";
 import type { IRealmArenaGameDataResponse, IRealmArenaSpecificGameStateResponse, IRealmArenaStepOutcome, RealmArenaPartState } from "@/games/RealmArena/apiModels";
-import RealmArenaBoard, { type AimFollow, type Playback } from "@/games/RealmArena/components/RealmArenaBoard";
+import type { AimFollow, Playback } from "@/games/RealmArena/components/RealmArenaBoard";
+import RealmArenaPlayBoard from "@/games/RealmArena/components/RealmArenaPlayBoard";
 import RealmArenaFighterCard from "@/games/RealmArena/components/RealmArenaFighterCard";
 import RealmArenaMusterSheet from "@/games/RealmArena/components/RealmArenaMusterSheet";
 import RealmArenaResults from "@/games/RealmArena/components/RealmArenaResults";
@@ -19,7 +20,7 @@ import { enemyNameOf, RA_SOLO_PARAM, REALM_ONLY } from "@/games/RealmArena/chara
 import { rematchFlag } from "@/utils/ui/rematch";
 import { reachAfter, useTurnDraft } from "@/games/RealmArena/useTurnDraft";
 import { battlefieldOf } from "@/games/RealmArena/maps";
-import { ACTION_POINTS, armouredTeam, battleFrom, centreHolders, ENEMY_SIDE, isStanding, isWarband, sideScore, stoutTeam, TEAM_SIDE, warbandsFor, type Action, type BattleEvent, type Fighter } from "@/games/RealmArena/rules";
+import { ACTION_POINTS, allied, armouredTeam, battleFrom, centreHolders, ENEMY_SIDE, isStanding, isWarband, sideScore, squadHp, stoutTeam, TEAM_SIDE, warbandsFor, type Action, type BattleEvent, type Fighter } from "@/games/RealmArena/rules";
 import { actionFollow, battleCues, centreInSight, endOf, coopColourOf, ENEMY_COLOUR, fighterName, friendlySquares, isFollowedPart, isUnplaced, partFollow, partLabel, reviewParts, STEP_BEAT_MS, STEP_MIN_MS, TEAM_COLOUR, TEAM_NAME, unseenSquares, waveLineOf, withPartState } from "@/games/RealmArena/ui";
 import type { IRealmArenaOutcome } from "@/games/RealmArena/RealmArenaLogic";
 import type { ICommandResponse } from "@/app/api/game/command/route";
@@ -464,15 +465,23 @@ export default function GameRealmArena({ params }: { params: Promise<{ gameid: u
     };
     const dropped = gameData?.gameState?.droppedPlayers ?? [];
     // How many of a squad stand — or, in fog of war, all the viewer knows of
-    // anyone else's: how many of it they can see (§27).
+    // an enemy's: how many of it they can see (§27).
     const standingLine = (squad: Fighter[], hidden: boolean): string => hidden
         ? `${squad.filter(isStanding).length} in sight`
         : `${squad.filter(isStanding).length}/${squad.length} standing`;
     // What the strip says under a player: how their muster or their squad stands.
     // A dropped player's squad has left the battlefield; their score stands (§17.4 B2).
-    const squadSub = (userId: string): string => mustering ? musterSub(userId)
-        : dropped.includes(userId) ? 'left the battle'
-        : standingLine(fighters.filter(fighter => fighter.owner === userId), fogged && userId !== myUserId);
+    const squadSub = (userId: string, detailed = false): string => {
+        if (mustering) return musterSub(userId);
+        if (dropped.includes(userId)) return 'left the battle';
+        const squad = fighters.filter(fighter => fighter.owner === userId);
+        const ally = allied(battle, userId, myUserId);
+        const standing = standingLine(squad, fogged && !ally);
+        // Allies share vision, so their whole squad and its HP are known too.
+        if (!detailed || !ally) return standing;
+        const hp = squadHp(squad);
+        return `${standing} · ${hp.remaining}/${hp.total} HP`;
+    };
     const seatOrder = scoreboardSeatOrder(gameData, myUserId);
     const scores = gs?.scores ?? {};
     const enemyStanding = standingLine(fighters.filter(fighter => isWarband(fighter.owner)), fogged);
@@ -488,7 +497,7 @@ export default function GameRealmArena({ params }: { params: Promise<{ gameid: u
             name: capitalise(TEAM_NAME),
             color: TEAM_COLOUR,
             sub: seatOrder.map(userId => `${playerName(userId)} ${scores[userId] ?? 0}`).join(' · '),
-            detail: seatOrder.map(userId => <div key={userId}>{playerName(userId)} · {scores[userId] ?? 0} · {squadSub(userId)}</div>),
+            detail: seatOrder.map(userId => <div key={userId}>{playerName(userId)} · {scores[userId] ?? 0} · {squadSub(userId, true)}</div>),
             score: sideScore(battle, scores, TEAM_SIDE),
             isMe: true,
         },
@@ -603,7 +612,7 @@ export default function GameRealmArena({ params }: { params: Promise<{ gameid: u
             {gs && (
                 <>
                     <div className="ag-board-area" ref={boardRef}>
-                        <RealmArenaBoard
+                        <RealmArenaPlayBoard
                             field={field}
                             fighters={fighters}
                             fogGhosts={gs.ghosts}

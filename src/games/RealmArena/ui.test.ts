@@ -7,8 +7,11 @@ import { at, fieldOf, hillOf } from "@/utils/games/battlefield/testFixtures";
 import { ACTION_POINTS, isWarband, newFighter, reachOf, warbandOwner, type BattleEvent, type Fighter, type ToldEvent } from "./rules";
 import { ABILITIES, kitOf, type CharacterId } from "./characters";
 import { EFFECT_ART, ITEM_ART, type Missile } from "./art";
-import { abilityWait, actionFollow, oddsLines, aimFocus, coopColourOf, ALLY_COLOUR, ENEMY_COLOUR, TEAM_COLOUR, actionSquares, apPips, friendlySquares, spreadWide, areaRect, battleCues, canAct, effectsOn, eventLines, facingOf, fighterName, fighterStatus, focusOn, handItem, handOut, hpFraction, itemsOf, NO_ITEMS, numberedName, placeTap, reachFocus, reachShading, squadCounts, squadOf, whoseName, FLIGHT_PACE, CLIMB_LEG, DIAGONAL_LEG, flightMs, legWeight, HIT_TEXT_MS, PLAYBACK_MS, WALK_STEP_MS, moveFrame, isUnplaced, type BattleCue, type Placement, waveLineOf, reviewParts, withPartState, partLabel, HP_CHIP_MS, HP_TWEEN_MS, stepped, toldAt, toldOf, type TextCue, IMPACT_MS, KNOCK, LUNGE, SHAKE, SHAKE_MS, WALK_BOB, WALK_HOP, shakeAt, shakesOf, shoveAt, shovesOf, endOf, captionAt, legLengthOn, walkEase, walkerAt, walkerGroundAt, walkCameraAt, walkLift, walkSquares, flightAt, hitTextAt, POP_MS, burstAt, slashAt, progressOf, fadeOutAt, fadeInAt, FLIGHT_ARC, type FxPoints, type CaptionCue, type FallCue, type FlightCue, type SlashCue, type WalkCue } from "./ui";
+import { abilityWait, ringOf, shieldPath, shadedSquares, SHIELD_WIDTH, actionFollow, boardFocus, oddsLines, aimFocus, coopColourOf, ALLY_COLOUR, ENEMY_COLOUR, TEAM_COLOUR, actionSquares, apPips, friendlySquares, spreadWide, areaRect, battleCues, canAct, effectsOn, eventLines, facingOf, fighterName, fighterStatus, focusOn, handItem, handOut, hpFraction, itemsOf, NO_ITEMS, numberedName, placeTap, reachFocus, reachShading, squadCounts, squadOf, whoseName, FLIGHT_PACE, CLIMB_LEG, DIAGONAL_LEG, flightMs, legWeight, HIT_TEXT_MS, PLAYBACK_MS, WALK_STEP_MS, moveFrame, isUnplaced, type BattleCue, type Placement, waveLineOf, reviewParts, withPartState, partLabel, HP_CHIP_MS, HP_TWEEN_MS, stepped, toldAt, toldOf, type TextCue, IMPACT_MS, KNOCK, LUNGE, SHAKE, SHAKE_MS, WALK_BOB, WALK_HOP, shakeAt, shakesOf, shoveAt, shovesOf, endOf, captionAt, legLengthOn, walkEase, walkerAt, walkerGroundAt, walkCameraAt, walkLift, walkSquares, flightAt, hitTextAt, POP_MS, burstAt, slashAt, progressOf, fadeOutAt, fadeInAt, FLIGHT_ARC, type FxPoints, type CaptionCue, type FallCue, type FlightCue, type SlashCue, type WalkCue, BOARD_ZOOM, boardZoomFor } from "./ui";
 import type { OddsBreakdown } from "./rules";
+import { REALM_ARENA_MAPS } from "./maps";
+import { azimuthOf, boardFrame, cameraBasis, topOf } from "./three/iso3d";
+import { zoomLevels } from "@/utils/ui/boardZoom";
 import type { IRealmArenaStepOutcome, RealmArenaPartState } from "./apiModels";
 
 /** Squares as "col,row", sorted, to read a test's expectations by. */
@@ -301,6 +304,35 @@ describe("aimFocus", () => {
     it("frames closer than focusOn does", () => {
         const caster = squareAt(RUINED_FORT, 10, 20)!, target = squareAt(RUINED_FORT, 11, 20)!;
         expect(aimFocus(RUINED_FORT, caster, target).width).toBeLessThan(focusOn(RUINED_FORT, caster, target).width);
+    });
+});
+
+describe("boardFocus", () => {
+    const a = squareAt(RUINED_FORT, 10, 20)!, b = squareAt(RUINED_FORT, 14, 18)!;
+    const knight = { ...newFighter(0, "alice", "knight", a), ap: 3 };
+    const reach = { x: 1, y: 2, width: 3, height: 4 };
+    const home = { squares: [b], key: "home" };
+
+    it("follows an aim, then a step's squares, ahead of anything picked or selected", () => {
+        const all = { pickedUp: { square: b }, selected: knight, reach, home };
+        expect(boardFocus(RUINED_FORT, { ...all, follow: { aim: { caster: a, target: b }, key: "k" } }))
+            .toEqual({ area: aimFocus(RUINED_FORT, a, b), key: "follow:k", exact: true });
+        expect(boardFocus(RUINED_FORT, { ...all, follow: { squares: [a, b], key: "k", exact: true } }))
+            .toEqual({ area: focusOn(RUINED_FORT, a, b), key: "follow:k", exact: true });
+        expect(boardFocus(RUINED_FORT, { ...all, follow: { squares: [a, b], key: "k", close: true } })?.area).toEqual(aimFocus(RUINED_FORT, a, b));
+    });
+
+    it("frames a character picked up ahead of the selected one, and the selected one's reach ahead of its square", () => {
+        expect(boardFocus(RUINED_FORT, { follow: { squares: [], key: "none" }, pickedUp: { square: b }, selected: knight, reach, refocus: 2 }))
+            .toEqual({ area: focusOn(RUINED_FORT, b), key: `pick:${b}:2` });
+        expect(boardFocus(RUINED_FORT, { selected: knight, reach, home })).toEqual({ area: reach, key: `${knight.id}:${a}:0`, exact: true });
+        expect(boardFocus(RUINED_FORT, { selected: knight, home })?.area).toEqual(focusOn(RUINED_FORT, a));
+    });
+
+    it("falls back on the viewer's own side, then on nowhere", () => {
+        expect(boardFocus(RUINED_FORT, { home })).toEqual({ area: focusOn(RUINED_FORT, b), key: "home", exact: true });
+        expect(boardFocus(RUINED_FORT, { home: { squares: [], key: "home" } })).toBeNull();
+        expect(boardFocus(RUINED_FORT, {})).toBeNull();
     });
 });
 
@@ -2103,5 +2135,114 @@ describe("oddsLines", () => {
     it("names a shield wall's cover and a hunkered target's doubling", () => {
         const [, cover] = oddsLines({ base: 80, factors: [{ kind: "cover", amount: -40, cover: "half", doubled: "hunkered", shield: true }], raw: 40, chance: 40 }, "Bow accuracy");
         expect(cover).toEqual({ label: "Shield wall (counts as half cover)", note: "doubled: hunkered down", amount: -40 });
+    });
+});
+
+describe("ringOf", () => {
+    it("picks the ring a figure wears in the order the isometric board does", () => {
+        const aiming = { aimed: [2], flagged: [2, 3], candidates: [2, 3, 4] };
+        expect(ringOf(1, 1, aiming)).toBe("selected");
+        expect(ringOf(2, 1, aiming)).toBe("aimed");
+        expect(ringOf(3, 1, aiming)).toBe("flagged");
+        expect(ringOf(4, 1, aiming)).toBe("candidate");
+        expect(ringOf(5, 1, aiming)).toBeUndefined();
+        expect(ringOf(5, undefined, null)).toBeUndefined();
+    });
+});
+
+describe("shieldPath", () => {
+    /** Every x the path visits: the arguments of M and H, and the x of each pair of a Q. */
+    const xsOf = (path: string): number[] => [...path.matchAll(/([MHVQ])([^MHVQZ]*)/g)].flatMap(([, command, args]) => {
+        const numbers = args.trim().split(/\s+/).map(Number);
+        return command === "H" ? numbers : command === "V" ? [] : numbers.filter((_, i) => i % 2 === 0);
+    });
+
+    it("closes the outline", () => {
+        expect(shieldPath().endsWith("Z")).toBe(true);
+        expect(shieldPath(true).endsWith("Z")).toBe(true);
+    });
+
+    it("spans the shield's width, and its left half just from its left edge to its middle", () => {
+        const half = SHIELD_WIDTH / 2;
+        expect([Math.min(...xsOf(shieldPath())), Math.max(...xsOf(shieldPath()))]).toEqual([-half, half]);
+        expect([Math.min(...xsOf(shieldPath(true))), Math.max(...xsOf(shieldPath(true)))]).toEqual([-half, 0]);
+    });
+});
+
+describe("shadedSquares", () => {
+    const none = { smoke: new Set<number>() };
+
+    it("shades nothing when nothing is hidden or lined up", () => {
+        expect(shadedSquares(none)).toEqual([]);
+        expect(shadedSquares({ ...none, unseen: new Set(), placing: { zone: [1], selected: null } })).toEqual([]);
+    });
+
+    it("lists the fog, then the smoke, under the reach, the range, the blast and the squares to place on", () => {
+        const shades = shadedSquares({
+            unseen: new Set([1]),
+            smoke: new Set([2]),
+            aiming: { reach: new Map([[3, 2]]), range: new Set([4]), area: [5], blasts: [6, 5] },
+            placing: { zone: [7, 8, 9], selected: 0 },
+            sealed: [{ square: 8 }],
+        });
+        expect(shades.map(shade => shade.kind)).toEqual(["fog", "smoke", "reach", "range", "blast", "place"]);
+        const squaresOf = (kind: string) => [...Array(12).keys()].filter(square => shades.find(shade => shade.kind === kind)!.has(square));
+        expect(squaresOf("fog")).toEqual([1]);
+        expect(squaresOf("smoke")).toEqual([2]);
+        expect(squaresOf("reach")).toEqual([3]);
+        expect(squaresOf("range")).toEqual([4]);
+        // The blast is the area and the cover it would blast away.
+        expect(squaresOf("blast")).toEqual([5, 6]);
+        // Somewhere to put the character picked up: the zone, less where the sealed squad stands.
+        expect(squaresOf("place")).toEqual([7, 9]);
+    });
+
+    it("deepens a reach by what each square costs", () => {
+        const reach = shadedSquares({ ...none, aiming: { reach: new Map([[3, 2], [4, 1]]), range: null, area: null, blasts: null } })[0];
+        expect([reach.ap!(3), reach.ap!(4)]).toEqual([2, 1]);
+    });
+
+    it("lays no place shading while nobody is picked up", () => {
+        expect(shadedSquares({ ...none, placing: { zone: [1, 2], selected: null } })).toEqual([]);
+    });
+});
+
+describe("boardZoomFor", () => {
+    /** The 3D board's frame width for a map `size` squares a side, as it lays out at every quarter turn. */
+    const frameOf = (grid: { width: number; height: number }, top = 0) => boardFrame(cameraBasis(azimuthOf(0)), grid, top).size.width;
+    /** How many pixels across a square comes to at the deepest step, per pixel of column. */
+    const squareAtDeepest = (grid: { width: number; height: number }) => boardZoomFor(frameOf(grid)).maxWidth / frameOf(grid);
+
+    it("leaves every map there is today on BOARD_ZOOM's middle step and two thirds deeper at the deepest", () => {
+        for (const field of Object.values(REALM_ARENA_MAPS)) {
+            expect(boardZoomFor(frameOf(field, topOf(field)))).toEqual({ zoomWidth: BOARD_ZOOM.zoomWidth, maxWidth: Math.round(BOARD_ZOOM.maxWidth * 5 / 3) });
+        }
+    });
+
+    it("zooms a bigger map deeper, to the squares the widest map today gets", () => {
+        const widest = Math.max(...Object.values(REALM_ARENA_MAPS).map(field => frameOf(field)));
+        const big = { width: 128, height: 128 };
+        expect(boardZoomFor(frameOf(big)).maxWidth).toBeGreaterThan(BOARD_ZOOM.maxWidth * 2);
+        const deep = 5 / 3;
+        // Whole percents, so a hair under at most.
+        expect(squareAtDeepest(big)).toBeCloseTo(BOARD_ZOOM.maxWidth * deep / widest, 2);
+        // The middle step keeps its size as well, so a framed reach fits the same way.
+        expect(boardZoomFor(frameOf(big)).zoomWidth / frameOf(big)).toBeCloseTo(BOARD_ZOOM.zoomWidth / widest, 2);
+        expect(boardZoomFor(frameOf({ width: 92, height: 92 })).maxWidth).toBeGreaterThan(BOARD_ZOOM.maxWidth);
+    });
+
+    it("grows with the map and keeps the steps in order", () => {
+        let last = 0;
+        for (const size of [48, 64, 80, 92, 128, 256]) {
+            const { zoomWidth, maxWidth } = boardZoomFor(frameOf({ width: size, height: size }));
+            expect(zoomWidth).toBeLessThan(maxWidth);
+            expect(maxWidth).toBeGreaterThanOrEqual(last);
+            expect(zoomLevels(zoomWidth, maxWidth)).toEqual([100, zoomWidth, maxWidth]);
+            last = maxWidth;
+        }
+    });
+
+    it("falls back to the smallest map's steps for a frame it can't measure", () => {
+        for (const width of [0, -1, NaN, Infinity]) expect(boardZoomFor(width)).toEqual(boardZoomFor(1));
     });
 });

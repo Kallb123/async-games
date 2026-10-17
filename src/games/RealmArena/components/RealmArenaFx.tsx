@@ -2,49 +2,11 @@
 import React, { useLayoutEffect, useRef } from 'react';
 import { ISO_HALF_HEIGHT, ISO_HALF_WIDTH, type Point } from '@/utils/ui/isometric';
 import type { Square } from '@/utils/games/battlefield/terrain';
-import { BURST_ART, EFFECT_ART, MISSILE_ART, SLASH_ART, type Missile } from '@/games/RealmArena/art';
-import { burstAt, flightAt, hitTextAt, slashAt, type BattleCue, type BurstCue, type FlightCue, type FxPoints, type SlashCue, type TextCue } from '@/games/RealmArena/ui';
+import { BURST_ART, EFFECT_ART, MISSILE_ART, SLASH_ART } from '@/games/RealmArena/art';
+import { burstAt, flightAt, FLIGHT, HIT_LABEL_DROP, HIT_LANE_RISE, HIT_MARK_GAP, HIT_MARK_SIZE, HIT_VALUE_RISE, hitTextAt, SLASH_SIZE, slashAt, TUMBLE, type BattleCue, type BurstCue, type FlightCue, type FxPoints, type SlashCue, type TextCue } from '@/games/RealmArena/ui';
 import { SpriteUse } from './RealmArenaTerrain';
 import { scaleAbout, setAttributes, translation, usePlaybackRef } from '@/utils/hooks/usePlayback';
 import { usePrefersReducedMotion } from '@/utils/hooks/usePrefersReducedMotion';
-
-/** The hit text, in board units: the number's middle above the point it's given, the label under it, and a mark beside the number. */
-const VALUE_RISE = 4;
-const LABEL_DROP = 3.6;
-const MARK_SIZE = 3.4;
-/**
- * The room between the end of the big text and the mark beside it, in board
- * units: clear of the text's outline (half its 1.3 stroke) with a little air.
- * The mark goes after the text as it is drawn (`HitText` measures it), so a
- * word — "Hunker down" — is cleared as surely as a number.
- */
-const MARK_GAP = 1.2;
-/**
- * How much higher each lane of hit text stands (`TextCue.lane`): clear of the
- * number and the label under it on the lane below, with room for that one to
- * rise as it fades.
- */
-const LANE_RISE = 9;
-/** A strike's slash, across the figure it lands on. */
-const SLASH_SIZE = 14;
-
-/**
- * How each missile is drawn (§26.1), in board units: how big it is. A flask, a
- * pot or a stick of dynamite tumbles end over end; anything else points the way it goes. (How high
- * its arc rises is `FLIGHT_ARC`, in `ui.ts`, with the rest of where it is.)
- */
-const FLIGHT: Readonly<Record<Missile, { size: number; tumbles?: true }>> = {
-    arrow: { size: 12 },
-    bolt: { size: 10 },
-    fireball: { size: 14 },
-    fireFlask: { size: 7, tumbles: true },
-    thunderFlask: { size: 7, tumbles: true },
-    smokePot: { size: 7, tumbles: true },
-    acid: { size: 10 },
-    dynamite: { size: 9, tumbles: true },
-};
-/** How fast a flask or a pot turns over, in degrees a millisecond. */
-const TUMBLE = 0.9;
 
 interface RealmArenaFxProps {
     /** The board's id, which its art is defined under. */
@@ -56,8 +18,8 @@ interface RealmArenaFxProps {
 
 function HitText({ id, cue, over, still }: { id: string; cue: TextCue; over: Point; still: boolean }) {
     const { x } = over;
-    const y = over.y - (cue.lane ?? 0) * LANE_RISE;
-    const middle = y - VALUE_RISE;
+    const y = over.y - (cue.lane ?? 0) * HIT_LANE_RISE;
+    const middle = y - HIT_VALUE_RISE;
     const rising = usePlaybackRef<SVGGElement>((group, ms) => {
         const frame = hitTextAt(cue, ms, still);
         setAttributes(group, { opacity: frame.opacity, transform: translation({ x: 0, y: frame.rise }) });
@@ -71,16 +33,16 @@ function HitText({ id, cue, over, still }: { id: string; cue: TextCue; over: Poi
     const mark = useRef<SVGGElement>(null);
     useLayoutEffect(() => {
         if (!value.current || !mark.current) return;
-        setAttributes(mark.current, { transform: translation({ x: value.current.getComputedTextLength() / 2 + MARK_GAP + MARK_SIZE / 2, y: 0 }) });
+        setAttributes(mark.current, { transform: translation({ x: value.current.getComputedTextLength() / 2 + HIT_MARK_GAP + HIT_MARK_SIZE / 2, y: 0 }) });
     }, [cue.value, cue.mark]);
     return (
         <g ref={rising} className={`ag-ra-hit ag-ra-hit--${cue.tone}`}>
             <g ref={popping}>
                 <text ref={value} className="ag-ra-hit-value" x={x} y={middle}>{cue.value}</text>
-                {cue.label && <text className="ag-ra-hit-label" x={x} y={middle + LABEL_DROP}>{cue.label}</text>}
+                {cue.label && <text className="ag-ra-hit-label" x={x} y={middle + HIT_LABEL_DROP}>{cue.label}</text>}
                 {cue.mark && (
                     <g ref={mark}>
-                        <SpriteUse className="ag-ra-figure-mark" id={id} sprite={EFFECT_ART[cue.mark]} x={x} y={middle} size={MARK_SIZE} />
+                        <SpriteUse className="ag-ra-figure-mark" id={id} sprite={EFFECT_ART[cue.mark]} x={x} y={middle} size={HIT_MARK_SIZE} />
                     </g>
                 )}
             </g>

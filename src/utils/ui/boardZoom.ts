@@ -4,8 +4,24 @@
  * Everything else in that component is DOM and gestures.
  */
 
+import type { Rect } from '@/utils/ui/mapLabels';
+
 /** The width the board is drawn at when it's fitted to the column, as a percentage. */
 export const FIT_WIDTH = 100;
+
+/** How much breathing room a focused region keeps from the edge of the pane. */
+export const FOCUS_MARGIN_PX = 28;
+
+/** How long an unprompted focus takes to glide the board over to what it's showing. */
+export const GLIDE_MS = 380;
+
+/**
+ * How far through a glide, of the time it takes, a focus is told it has landed.
+ * A board holding what it plays until the view gets there starts it as the
+ * glide eases in to land, so the action doesn't wait out the slowest quarter of
+ * a glide that has all but arrived.
+ */
+export const GLIDE_LEAD = 0.75;
 
 /**
  * The widths the zoom pill steps through, in order: fitted, the board's own
@@ -130,11 +146,48 @@ export function easeInOut(t: number): number {
     return t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
 }
 
+/** A zoom `t` of the way from `from` to `to`, moving geometrically: each step grows it by the same factor. */
+export function zoomBetween(from: number, to: number, t: number): number {
+    return from * Math.pow(to / from, t);
+}
+
 /** A board as drawn in its pane: its zoom, how far the pane is scrolled into it, and its size at that zoom, in pixels. */
 export interface ZoomView {
     zoom: number;
     scroll: { x: number; y: number };
     content: { x: number; y: number };
+}
+
+/**
+ * The board as it's drawn `scale` times its laid-out size (`laid`, in pixels),
+ * `offset` into the pane: what a pinch, a glide or a follow is drawing between
+ * frames. The scroll that would leave the board where it's drawn is the offset
+ * turned round, and its size is the laid-out size scaled.
+ */
+export function drawnView(laid: { x: number; y: number }, offset: { x: number; y: number }, scale: number): Pick<ZoomView, 'scroll' | 'content'> {
+    return {
+        scroll: { x: -offset.x, y: -offset.y },
+        content: { x: laid.x * scale, y: laid.y * scale },
+    };
+}
+
+/**
+ * The part of the board a pane shows, in the board's own `viewBox` units: where
+ * it is scrolled to and how big it is on screen, as fractions of the board.
+ * What a board drawn by a camera is told, rather than being laid out at the
+ * zoomed size and scrolled (`BoardZoom`'s camera mode). A board no bigger than
+ * its pane along an axis shows all of it, so the region never runs past the
+ * viewBox.
+ */
+export function viewRegion({ scroll, content }: Pick<ZoomView, 'scroll' | 'content'>, pane: { x: number; y: number }, viewBox: Size): Rect {
+    const axis = (at: number, size: number, room: number, view: number) => {
+        const whole = size || 1;
+        const shown = Math.min(1, room / whole);
+        return { start: Math.min(1 - shown, Math.max(0, at / whole)) * view, length: shown * view };
+    };
+    const across = axis(scroll.x, content.x, pane.x, viewBox.width);
+    const down = axis(scroll.y, content.y, pane.y, viewBox.height);
+    return { x: across.start, y: down.start, width: across.length, height: down.length };
 }
 
 /**
@@ -148,7 +201,7 @@ export interface ZoomView {
  * begins) and `t` = 1 exactly `to`.
  */
 export function glideFrame(from: ZoomView, to: ZoomView, pane: { x: number; y: number }, t: number): { zoom: number; offset: { x: number; y: number } } {
-    const zoom = from.zoom * Math.pow(to.zoom / from.zoom, t);
+    const zoom = zoomBetween(from.zoom, to.zoom, t);
     const axis = (key: 'x' | 'y') => {
         const start = (from.scroll[key] + pane[key] / 2) / (from.content[key] || 1);
         const end = (to.scroll[key] + pane[key] / 2) / (to.content[key] || 1);

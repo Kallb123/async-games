@@ -92,6 +92,7 @@ function NewGameRealmArenaForm() {
   const { userList, setItem, players } = usePlayerList(readRematchPlayers(searchParams));
   const [turnTimer, setTurnTimer] = useState(() => readRematchTurnTimer(searchParams, "1d"));
   const [fog, setFog] = useState(true);
+  const [teamBlocks, setTeamBlocks] = useState(false);
   // A rematch of a solo battle comes back to Solo rather than to an empty invite list.
   const [mode, setMode] = useState<Mode>(() => readRematchFlag(searchParams, RA_SOLO_PARAM) ? 'solo' : 'freeForAll');
   const [enemy, setEnemy] = useState<Enemy>(FACTION_IDS[0]);
@@ -127,6 +128,8 @@ function NewGameRealmArenaForm() {
         enemy,
         ...(mission === 'holdOut' ? { mission, ...(map ? { map } : {}) } : {}),
         ...(difficulty !== 'normal' ? { difficulty } : {}),
+        // A team of one has nothing to take turns in blocks of, so solo never sends it.
+        ...(teamBlocks && !solo ? { teamBlocks: true as const } : {}),
       } } : {}),
       ...(solo ? { solo } : {}),
     };
@@ -203,6 +206,16 @@ function NewGameRealmArenaForm() {
           onToggle={() => setFog(v => !v)}
           ariaLabel="Toggle fog of war"
         />
+        {/* Solo is one player against one warband: the order is the same either way. */}
+        {coop && !solo && (
+          <OptionToggleRow
+            title="Teams take turns in blocks"
+            description="Every player takes their own turn, then every warband takes theirs, instead of a warband after each player"
+            on={teamBlocks}
+            onToggle={() => setTeamBlocks(v => !v)}
+            ariaLabel="Toggle teams taking turns in blocks"
+          />
+        )}
       </OptionSection>
       <FcmTokenComp />
     </GameSetupLayout>
