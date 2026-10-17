@@ -3,7 +3,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { readJsonBody } from '@/utils/api/requestBody';
 import { GAME_GUIDES } from '@/utils/ui/gameGuides';
 import { GAME_TUTORIALS } from '@/utils/ui/gameTutorials';
-import { SeenListKey, getSeen, withSeen } from '@/utils/users/gameGuideProgress';
+import { SeenListKey, getSeen } from '@/utils/users/gameGuideProgress';
 
 /** Whether `game` is a real, registered slug in `allowlist` — `Object.hasOwn`
  *  rather than `in`, so a client can't pass an `Object.prototype` name
@@ -16,9 +16,8 @@ function isAllowed(game: string, allowlist: Record<string, unknown>): boolean {
 /** The two first-runs this route tracks, and what each is validated against
  *  and stored under. `kind` arrives from the client as a bare string, so it
  *  is matched against these two literals and used only to pick one of these
- *  two fixed entries — never to index `privateMetadata` directly, which this
- *  route reads back whole to merge and would otherwise let a signed-in caller
- *  write an arbitrary key into their own metadata via `kind`. */
+ *  two fixed entries — never to index `privateMetadata` directly or let a
+ *  signed-in caller write an arbitrary metadata key via `kind`. */
 const SEEN_LISTS: Record<'guide' | 'tutorial', { allowlist: Record<string, unknown>; key: SeenListKey }> = {
     guide: { allowlist: GAME_GUIDES, key: 'seenGameGuides' },
     tutorial: { allowlist: GAME_TUTORIALS, key: 'seenGameTutorials' },
@@ -33,12 +32,12 @@ const SEEN_LISTS: Record<'guide' | 'tutorial', { allowlist: Record<string, unkno
 export async function GET() {
     const { userId } = await auth();
     if (!userId) {
-        return NextResponse.json({}, { status: 400, statusText: 'Not signed in' });
+        return NextResponse.json({}, { status: 401, statusText: 'Not signed in' });
     }
 
     const user = await currentUser();
     if (!user) {
-        return NextResponse.json({}, { status: 400, statusText: 'Not signed in' });
+        return NextResponse.json({}, { status: 401, statusText: 'Not signed in' });
     }
 
     return NextResponse.json({
@@ -50,7 +49,7 @@ export async function GET() {
 export async function POST(request: NextRequest) {
     const { userId } = await auth();
     if (!userId) {
-        return NextResponse.json({}, { status: 400, statusText: 'Not signed in' });
+        return NextResponse.json({}, { status: 401, statusText: 'Not signed in' });
     }
 
     const body = await readJsonBody<{ game: string; kind?: string }>(request);
@@ -60,22 +59,15 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({}, { status: 400, statusText: 'Missing game' });
     }
 
-    // Re-read right before the write, the same reason registerDevice/
-    // removeDevices do (src/utils/firebase/deviceTokens.ts): the whole
-    // metadata object is written back as one blob, and a "seen" write for
-    // the *other* list — another tab dismissing the guide while this one
-    // dismisses the tutorial, say — landing in between would otherwise be
-    // erased by this write rather than merged with it.
+    // Clerk deep-merges nested objects on the server. Set only this flag,
+    // never a read/modify/write of an array or the full metadata: concurrent
+    // dismissals (including other tabs and games) must all survive.
     const client = await clerkClient();
-    const currentUserData = await client.users.getUser(userId);
-
-    const seen = withSeen(currentUserData, list.key, body.game);
-    await client.users.updateUserMetadata(userId, {
+    const user = await client.users.updateUserMetadata(userId, {
         privateMetadata: {
-            ...currentUserData.privateMetadata,
-            [list.key]: seen,
-        }
+            gameIntroProgress: { [list.key]: { [body.game]: true } },
+        },
     });
 
-    return NextResponse.json({ seen });
+    return NextResponse.json({ seen: getSeen(user, list.key) });
 }

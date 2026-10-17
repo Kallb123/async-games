@@ -82,6 +82,11 @@ export const WHATS_NEW: WhatsNewGroup[] = [
         icon: "✨",
         items: [
             {
+                title: "Realm Arena's scoreboard shows your allies' full squad and HP",
+                detail: "Allies share vision, so their squads no longer say ‘in sight’ in fog of war. In co-op, tap the scoreboard to see how much HP each allied squad has left out of its full total, including your own.",
+                game: "realmarena",
+            },
+            {
                 title: "Realm Arena: take turns in blocks against the computer",
                 detail: "A co-op battle can now have all of you take your turns one after another and then every warband take theirs, instead of a warband after each of you. It's a switch on the setup screen, off by default, so battles already under way play as before.",
                 game: "realmarena",
@@ -123,17 +128,17 @@ export const WHATS_NEW: WhatsNewGroup[] = [
                 title: "Open a game from home in a new tab",
                 detail: "Your turn cards and finished games on the home page are proper links now: press and hold, or middle-click, to open one in a new tab. And a game's screen starts loading as soon as its card is on screen, before you tap it.",
             },
-            {
-                title: "World Domination and Fires Out: a few seconds to take a move back",
-                detail: "World Domination: put armies in the wrong territory, cashed in cards you meant to hold, or moved too many into a conquest? Tap Undo and put it right — battles are dice, so those stay. And when you fortify or skip fortifying, your turn now waits ten seconds before it passes, so you can still change your mind. Fires Out's End turn now does the same: tap it straight after a move you regret and it waits ten seconds, with Undo and Pass now beside the countdown, before the fire advances.",
-                game: "worlddomination",
-            },
         ],
     },
     {
         label: "Bug fixes",
         icon: "🔧",
         items: [
+            {
+                title: "Completed tutorials stay dismissed",
+                detail: "Realm Arena and the other games now remember when you finish or skip their tutorial even if saving your progress fails. You can still take the tour again from the game menu.",
+                game: "realmarena",
+            },
             {
                 title: "Realm Arena's Hold Out warbands come for you",
                 detail: "The computer's warbands in Hold Out could hang back two squares from your characters and never step in, or — in fog of war — march to the keep and wait there all battle while you held an edge it couldn't see, each wave piling in beside the last. They now close in and attack, trading their own fighters freely since every wave replaces them, and when they've lost track of you they go looking where your squads deployed instead of standing about.",
@@ -174,11 +179,6 @@ export const WHATS_NEW: WhatsNewGroup[] = [
             {
                 title: "Boards zoom onto the action from where you were looking",
                 detail: "When a board brings something into view by itself — your car and the spaces a roll lets it reach in Race Cars, or the fighter you select in Realm Arena — it used to snap to the new zoom first, often out at the corner of the map, and then slide across to the spot. It now zooms and pans in one smooth move, starting from exactly the part of the board you were already looking at.",
-            },
-            {
-                title: "Settlements & Cities results cover the whole game",
-                detail: "A game that was already under way when turns began pausing for Undo could finish with its victory points and resources charts stopping two rounds in, and no resources table at all. Those games now chart every round, and a player who dropped out keeps the lines and the column they left with instead of falling to nothing. The results page of a game you played in also has a Regenerate results link at the bottom, to work them out again from the game's moves while they're still kept.",
-                game: "settlementsandcities",
             },
         ],
     },

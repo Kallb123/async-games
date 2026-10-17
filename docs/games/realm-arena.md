@@ -2145,8 +2145,10 @@ place — moving — what a player can be held to knowing.
   out of sight (65%): a hit for 3" — that they were hit, and the odds, not
   who fired. That a turn ended is everyone's, so an End turn's line is told to
   all, less the characters going on watch that the viewer can't see. The
-  scoreboard shows how many of another squad the viewer can see, not how
-  many stand.
+  scoreboard shows how many of an enemy squad the viewer can see, not how
+  many stand. The viewer's own squad and allies share vision (§29.6), so their
+  full standing counts are known; the opened co-op team pill also shows each
+  allied squad's remaining and total HP, including the viewer's own.
 - **Not hidden: the scores.** The scoreboard is everyone's, so a point scored
   out of sight is told as the log's "scored 3 for the knock-out", though not
   who was knocked out or by whom. Points hint at a fallen character's cost.
@@ -2966,7 +2968,11 @@ sure it is.
   faction (`nameFor`, `colourFor`); the muster names the enemy the players
   will face, or "an unknown enemy" for a random one not yet seen (§29.3); the
   scoreboard shows the team's total
-  against the enemy's, with each player's share under it.
+  against the enemy's, with each player's share under it. Opening the team
+  pill shows each player's standing count and remaining/total squad HP,
+  including the viewer's own, with each fighter's mustered maximum contributing
+  to the total even when fallen. During muster it shows muster status instead,
+  and a player who left keeps the “left the battle” message.
 - **The enemy's turn plays out** on the board as any other turn does (§26),
   and the recap gives it a row per action. `recap.ts` builds a player's
   action row from a `RealmArenaAct`'s line and events; that builder comes out
@@ -2995,8 +3001,9 @@ sure it is.
   is handed every owner in the map's deployment order, warbands
   (`warbandsFor`) after the players.
 - The scoreboard is two pills: the team's total, each player's share under
-  it and each one's squad or muster when it's opened, and the enemy's, with
-  how many of it stand or are in sight. The centre names the side that holds
+  it and each one's standing count and remaining/total squad HP when it's
+  opened (or muster status while mustering), and the enemy's, with how many
+  of it stand or are in sight. The centre names the side that holds
   it. During the muster a line names whom the team will face, or says the
   enemy was drawn at random and is still unknown.
 - A finished co-op battle's subtitle and banner are the team's, in
