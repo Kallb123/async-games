@@ -56,8 +56,8 @@ export default function RealmArenaFighterCard({ fighter, battle, label, children
                                     key={id}
                                     icon={ABILITY_MARK}
                                     title={ability.name}
-                                    sub={`${ability.ap} AP · ${ability.description}`}
-                                    action={<span className="ag-tag ag-tag--quiet">{abilityWait(fighter, id) ?? 'Ready'}</span>}
+                                    sub={`${ability.passive ? "Passive" : `${ability.ap} AP`} · ${ability.description}`}
+                                    action={<span className="ag-tag ag-tag--quiet">{ability.passive ? 'Passive' : abilityWait(fighter, id) ?? 'Ready'}</span>}
                                 />
                             );
                         })}

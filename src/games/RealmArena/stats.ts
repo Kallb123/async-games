@@ -1,4 +1,4 @@
-import { rulesetOf, type RulesContext } from "./rulesets";
+import { ruleValuesOf, rulesetOf, type RulesContext } from "./rulesets";
 // Realm Arena's characters and items as stat sheets (docs/games/realm-arena.md
 // §13.6, §21.2, §23.2): the numbers the muster's info card and the admin
 // balance screen print, every one read from characters.ts and the rules'
@@ -12,7 +12,7 @@ import { FULL_HEIGHT } from "@/utils/games/battlefield/terrain";
 import { pluralize } from "@/utils/ui/text";
 import { kitOf, ITEM_IDS, STRIKING_ABILITIES, type Ability, type AbilityId, type Affliction, type CharacterId, type Item, type ItemId, type OptionId, type Weapon } from "./characters";
 import { CHARACTER_IDS, optionsFor } from "./roster";
-import { ACTION_POINTS, ARMOUR, ATTACK_AP, isBalanced, FLANK_BONUS, GRAZE_BAND, FAR_SHOT_DISTANCE, MELEE_ACCURACY, ROLL_SIDES, sightOf, TEAM_HP_FACTOR } from "./rules";
+import { ROLL_SIDES, sightOf } from "./rules";
 
 /** One thing a character can do, or an item it can use, as a row of the stats table. */
 export interface ActionStats {
@@ -123,13 +123,13 @@ function extrasOf(context: RulesContext | undefined, thing: Pick<Ability, "hp" |
 /** A weapon's reach and odds: "Next to" and the melee 80% for a melee one, its range and accuracy for a ranged one. */
 function weaponReach(weapon: Weapon, hitBonus = 0, context?: RulesContext): Pick<ActionStats, "range" | "hit"> {
     return weapon.kind === "melee"
-        ? { range: NEXT_TO, hit: `${context && !isBalanced(context.rulesVersion) ? 100 : MELEE_ACCURACY}%` }
+        ? { range: NEXT_TO, hit: `${ruleValuesOf(context).MELEE_ACCURACY}%` }
         : { range: `${weapon.range}`, hit: `${Math.min(ROLL_SIDES, weapon.accuracy + hitBonus)}%` };
 }
 
 function weaponStats(weapon: Weapon, kind: string, key: string, context?: RulesContext): ActionStats {
     const extras = weapon.kind === "ranged" ? extrasOf(context, weapon, true, undefined) : [];
-    return { key, name: weapon.name, kind, ap: `${ATTACK_AP}`, damage: `${weapon.damage}`, ...weaponReach(weapon, 0, context), cooldown: NONE, extras };
+    return { key, name: weapon.name, kind, ap: `${ruleValuesOf(context).ATTACK_AP}`, damage: `${weapon.damage}`, ...weaponReach(weapon, 0, context), cooldown: NONE, extras };
 }
 
 function abilityStats(id: AbilityId, weapon: Weapon, kind: string, key: string = id, context?: RulesContext): ActionStats {
@@ -147,10 +147,10 @@ function abilityStats(id: AbilityId, weapon: Weapon, kind: string, key: string =
     const hit = strikes || STRIKING_ABILITIES.has(id) ? weaponReach(weapon, ability.hitBonus, context).hit
         : ability.damage !== undefined || ability.effect ? ALWAYS : NONE;
     return {
-        key, name: ability.name, kind, ap: `${ability.ap}`,
+        key, name: ability.name, kind, ap: ability.passive ? NONE : `${ability.ap}`,
         damage: `${ability.damage ?? (strikes ? weapon.damage : NONE)}`,
         range, hit,
-        cooldown: ability.oncePerBattle ? ONCE : ability.oncePerTurn ? PER_TURN : ability.cooldown > 0 ? `${ability.cooldown}` : NONE,
+        cooldown: ability.passive ? "Passive" : ability.oncePerBattle ? ONCE : ability.oncePerTurn ? PER_TURN : ability.cooldown > 0 ? `${ability.cooldown}` : NONE,
         extras: extrasOf(context, ability, strikes && weapon.kind === "ranged", note,
             reach === "move" ? `${ability.ap} AP for each AP a move would cost` : undefined),
         description: ability.description,
@@ -231,12 +231,17 @@ export const ALL_UNITS: readonly UnitRef[] = [
 
 /** The fine print under a stats table: what the hit chances leave out, and what every shot shares. */
 export function statsFootnote(context?: RulesContext): string {
-    const balanced = context === undefined || isBalanced(context.rulesVersion);
-    return `Each character has ${ACTION_POINTS} AP a turn. Hit chances are before cover, height, marks and smoke. `
+    const { ACTION_POINTS, BONUS_AP, ARMOUR, ARMOUR_EXEMPT_FACTIONS, ARMOURED_ENEMIES, FLANK_BONUS, GRAZE_BAND, FAR_SHOT_DISTANCE, MELEE_ACCURACY, TEAM_HP_FACTOR, MAX_ATTACKS_PER_TURN, BANK_CAP } = ruleValuesOf(context);
+    const { MELEE_ROLLS } = ruleValuesOf(context);
+    const { FACTIONS } = rulesetOf(context);
+    return `Each character has ${ACTION_POINTS + BONUS_AP} AP a turn before character and ability bonuses. Hit chances are before cover, height, marks and smoke. `
         + `A shot that misses by ${GRAZE_BAND}% or less grazes for half damage, and one at a target with no cover does ${FLANK_BONUS} more. `
-        + (balanced ? `A shot from further than ${FAR_SHOT_DISTANCE} squares counts the target's cover double (hunkering down doubles it too, but never twice over). A strike next to the target hits ${MELEE_ACCURACY}% of the time, with no graze. `
-            + `In Hold Out, the team's characters have ${Math.round((TEAM_HP_FACTOR - 1) * 100)}% more HP than the table says, and against ${rulesetOf(context).FACTIONS.realm.enemyName} every hit on them does ${ARMOUR} less (never under 1), except on a Miner. `
-            : "A strike next to the target always hits. ")
+        + (FAR_SHOT_DISTANCE === null ? "" : `A shot from further than ${FAR_SHOT_DISTANCE} squares counts the target's cover double (hunkering down doubles it too, but never twice over). `)
+        + (MELEE_ROLLS ? `A strike next to the target hits ${MELEE_ACCURACY}% of the time, with no graze. ` : "A strike next to the target always hits. ")
+        + (TEAM_HP_FACTOR === 1 ? "" : `In Hold Out, the team's characters have ${Math.round((TEAM_HP_FACTOR - 1) * 100)}% more HP than the table says. `)
+        + (ARMOUR === 0 ? "" : `In Hold Out against ${ARMOURED_ENEMIES.map(id => FACTIONS[id]!.enemyName).join(" or ")}, every hit on the team does ${ARMOUR} less (never under 1)${ARMOUR_EXEMPT_FACTIONS.length ? `, except for ${ARMOUR_EXEMPT_FACTIONS.map(id => FACTIONS[id]!.name).join(" and ")}` : ""}. `)
+        + (MAX_ATTACKS_PER_TURN === null ? "" : `At most ${MAX_ATTACKS_PER_TURN} attacks a turn. `)
+        + (BANK_CAP === null ? "" : `Bank at most ${BANK_CAP} AP for reactions. `)
         + "Range is in squares. CD is the cooldown: used on one of the character's turns, it can be used again that many of its turns later. Once means once a battle, and 1/turn once a turn.";
 }
 

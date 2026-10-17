@@ -1,13 +1,27 @@
 // Released catalogue through rules version 7. Never edit shipped definitions.
 // New releases derive a new catalogue from this one; see ../rulesets.ts.
-import { FULL_HEIGHT } from "@/utils/games/battlefield/terrain";
+import type { RealmArenaRuleValues } from "../ruleValues";
+import { HALF_HEIGHT, FULL_HEIGHT } from "@/utils/games/battlefield/terrain";
 import type { Ability, AbilityId, Character, CharacterId, CharacterOption, Effect, EffectId, Faction, FactionId, Item, ItemId, OptionId } from "../characters";
 const THROW_RANGE = 6;
 
+const RULES: RealmArenaRuleValues = {
+    ACTION_POINTS: 4, BONUS_AP: 0, ATTACK_AP: 2, HUNKER_AP: 1, REACTION_COST: 2,
+    MAX_ATTACKS_PER_TURN: null, BANK_CAP: null,
+    MELEE_ROLLS: true, MELEE_ACCURACY: 80, MELEE_RISE: 1,
+    FAR_SHOT_DISTANCE: 10, OVERWATCH_PENALTY: 15,
+    HIGH_GROUND_BONUS: 10, HIGH_GROUND_RISE: HALF_HEIGHT,
+    COVER_PENALTY: { none: 0, half: 20, full: 40 }, GRAZE_BAND: 10, FLANK_BONUS: 1,
+    TEAM_HP_FACTOR: 1.5, ARMOUR: 1, ARMOUR_EXEMPT_FACTIONS: ["miners"], ARMOURED_ENEMIES: ["realm"],
+    HOLD_OUT_ENEMY_STEPS: -1, HOLD_OUT_PAIR_ROUNDS: 13,
+    CENTRE_POINTS: 5, CENTRE_SCORES_FROM_ROUND: 3, KNOCKOUT_DIVISOR: 5, ASSIST_DIVISOR: 2,
+    SIGHT_RANGE: 20, BATTLE_ROUNDS: { 2: 15, 3: 13, 4: 12 },
+};
+
 const EFFECTS = {
     burning: { name: "Burning", state: "burning", count: 2, damage: 1, healed: true },
-    stunned: { name: "Stunned", state: "stunned", count: 1, ap: 2, healed: true },
-    slowed: { name: "Slowed", state: "slowed", count: 2, healed: true },
+    stunned: { name: "Stunned", state: "stunned", count: 1, ap: 2, preventsReactions: true, healed: true },
+    slowed: { name: "Slowed", state: "slowed", count: 2, movementFactor: 0.5, healed: true },
     marked: { name: "Marked", state: "marked", count: 2, hitBonus: 15 },
     // The Swarm's acid, eating through armour (§31.2): easier to hit, and a heal washes it off.
     corroded: { name: "Corroded", state: "corroded", count: 2, hitBonus: 10, healed: true },
@@ -16,22 +30,22 @@ const EFFECTS = {
 } as const satisfies Partial<Record<EffectId, Effect>>;
 
 const ABILITIES = {
-    cleave: { name: "Cleave", ap: 2, cooldown: 3, description: "Strike two enemies next to them" },
-    shieldWall: { name: "Shield wall", ap: 2, cooldown: 3, description: "Allies next to them count as in half cover until its next turn" },
-    aimedShot: { name: "Aimed shot", ap: 3, cooldown: 2, hitBonus: 20, description: "A shot at +20% to hit" },
-    sneak: { name: "Sneak", ap: 2, cooldown: 0, description: "Move without setting off overwatch or guard" },
-    fireball: { name: "Fireball", ap: 3, cooldown: 3, range: 12, damage: 3, effect: "burning", blasts: "area", description: "Hits every character in a 3×3 area, friend or foe, sets them burning, and blasts away the low cover there" },
+    cleave: { countsAsAttack: true, name: "Cleave", ap: 2, cooldown: 3, description: "Strike two enemies next to them" },
+    shieldWall: { name: "Shield wall", ap: 2, cooldown: 3, cover: "half", stance: "shieldWall", description: "Allies next to them count as in half cover until its next turn" },
+    aimedShot: { countsAsAttack: true, name: "Aimed shot", ap: 3, cooldown: 2, hitBonus: 20, description: "A shot at +20% to hit" },
+    sneak: { name: "Sneak", ap: 2, cooldown: 0, movesWithoutReactions: true, description: "Move without setting off overwatch or guard" },
+    fireball: { countsAsAttack: true, name: "Fireball", ap: 3, cooldown: 3, range: 12, damage: 3, effect: "burning", blasts: "area", description: "Hits every character in a 3×3 area, friend or foe, sets them burning, and blasts away the low cover there" },
     heal: { name: "Heal", ap: 2, cooldown: 0, oncePerTurn: true, range: 12, hp: 4, description: "Restore 4 HP to itself or an ally it can see within 12 squares, and clear burning, slowed, stunned and corroded. Once a turn" },
-    raise: { name: "Raise", ap: 3, cooldown: 4, description: "Bring a downed ally next to them back at half HP" },
-    shieldBash: { name: "Shield bash", ap: 2, cooldown: 3, damage: 2, effect: "stunned", description: "Strike one enemy next to them for 2, and stun it" },
-    demolish: { name: "Demolish", ap: 2, cooldown: 2, damage: 2, blasts: "target", description: "Blast away one square of low cover next to them, and strike everyone else beside it for 2, friend or foe" },
-    cripplingShot: { name: "Crippling shot", ap: 3, cooldown: 2, effect: "slowed", description: "A shot that slows on a hit" },
+    raise: { name: "Raise", ap: 3, cooldown: 4, apOnRaise: 0, description: "Bring a downed ally next to them back at half HP" },
+    shieldBash: { countsAsAttack: true, name: "Shield bash", ap: 2, cooldown: 3, damage: 2, effect: "stunned", description: "Strike one enemy next to them for 2, and stun it" },
+    demolish: { countsAsAttack: true, name: "Demolish", ap: 2, cooldown: 2, damage: 2, blasts: "target", description: "Blast away one square of low cover next to them, and strike everyone else beside it for 2, friend or foe" },
+    cripplingShot: { countsAsAttack: true, name: "Crippling shot", ap: 3, cooldown: 2, effect: "slowed", description: "A shot that slows on a hit" },
     huntersMark: { name: "Hunter's mark", ap: 1, cooldown: 2, range: 12, effect: "marked", description: "Mark an enemy it can see within 12 squares: +15% to hit it, for every attacker" },
     purify: { name: "Purify", ap: 2, cooldown: 3, hp: 2, description: "Clear burning, stunned, slowed, marked and corroded from itself and each ally next to it, and give each 2 HP" },
-    rend: { name: "Rend", ap: 3, cooldown: 3, damage: 6, description: "Tear into one enemy next to them for 6" },
+    rend: { countsAsAttack: true, name: "Rend", ap: 3, cooldown: 3, damage: 6, description: "Tear into one enemy next to them for 6" },
     regrowth: { name: "Regrowth", ap: 2, cooldown: 2, range: 8, hp: 3, description: "Restore 3 HP to itself or an ally it can see within 8 squares, and clear burning, slowed, stunned and corroded" },
-    burst: { name: "Burst", ap: 1, cooldown: 0, oncePerBattle: true, damage: 3, effect: "corroded", description: "Burst, splashing acid on everyone next to it for 3, friend or foe, and corroding them. The Bloater is downed" },
-    dynamite: { name: "Dynamite", ap: 3, cooldown: 3, range: 8, damage: 4, blasts: "area", description: "Thrown at a 3×3 area within 8 squares: 4 damage to every character in it, friend or foe, and it blasts away the low cover there" },
+    burst: { countsAsAttack: true, name: "Burst", ap: 1, cooldown: 0, oncePerBattle: true, damage: 3, effect: "corroded", description: "Burst, splashing acid on everyone next to it for 3, friend or foe, and corroding them. The Bloater is downed" },
+    dynamite: { countsAsAttack: true, name: "Dynamite", ap: 3, cooldown: 3, range: 8, damage: 4, blasts: "area", description: "Thrown at a 3×3 area within 8 squares: 4 damage to every character in it, friend or foe, and it blasts away the low cover there" },
 } as const satisfies Partial<Record<AbilityId, Ability>>;
 
 const CHARACTERS = {
@@ -174,4 +188,4 @@ const FACTIONS = {
     },
 } satisfies Partial<Record<FactionId, Faction>>;
 
-export const catalogueV7 = { CHARACTERS, ABILITIES, OPTIONS, ITEMS, EFFECTS, FACTIONS };
+export const catalogueV7 = { RULES, CHARACTERS, ABILITIES, OPTIONS, ITEMS, EFFECTS, FACTIONS };

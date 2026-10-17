@@ -1,5 +1,5 @@
 'use client'
-import { rulesetOf } from "@/games/RealmArena/rulesets";
+import { ruleValuesOf, rulesetOf } from "@/games/RealmArena/rulesets";
 import React, { useState } from 'react';
 import ActionButton from '@/components/ui/ActionButton';
 import BuildRow from '@/components/ui/BuildRow';
@@ -10,7 +10,7 @@ import PendingTag from '@/components/ui/PendingTag';
 import Stat from '@/components/ui/Stat';
 import { EFFECTS, type AbilityId, type Affliction } from '@/games/RealmArena/characters';
 import { ITEM_ART } from '@/games/RealmArena/art';
-import { ATTACK_AP, HUNKER_AP, REACTION_COST, abilitiesOf, allied, check, damageTo, fighterById, hasEffect, healedEffects, isStanding, itemOf, maxHpOf, shotEffect, shotOdds, smokeSquares, strikeChance, weaponOf, type Action, type BattleState, type Fighter, type OddsBreakdown } from '@/games/RealmArena/rules';
+import { ATTACK_AP, HUNKER_AP, REACTION_COST, bankedAp, abilitiesOf, allied, check, damageTo, fighterById, hasEffect, healedEffects, isStanding, itemOf, maxHpOf, shotEffect, shotOdds, smokeSquares, strikeChance, weaponOf, type Action, type BattleState, type Fighter, type OddsBreakdown } from '@/games/RealmArena/rules';
 import { abilityWait, AREA_BLAST, oddsLines, whoseName } from '@/games/RealmArena/ui';
 import { rangeSquares, shotOf, targetsOf, type TargetKind } from '@/games/RealmArena/tactics';
 import { ABILITY_MARK, CHARACTER_MARK, weaponLine, weaponMark } from '@/games/RealmArena/roster';
@@ -118,7 +118,7 @@ interface RealmArenaAimProps extends RealmArenaTurnSheetProps {
  */
 export function RealmArenaAim({ draft, battle, player, nameFor, pendingTarget, onFocus }: RealmArenaAimProps) {
     const busy = pendingTarget !== null;
-    const name = (id: number) => whoseName(battle.fighters, id, player, nameFor);
+    const name = (id: number) => whoseName(battle.fighters, id, player, nameFor, battle);
     return (
         <>
             <LinedUp draft={draft} battle={battle} name={name} pending={pendingTarget === LINED_UP} disabled={busy} />
@@ -135,6 +135,7 @@ export function RealmArenaAim({ draft, battle, player, nameFor, pendingTarget, o
  */
 export default function RealmArenaTurnSheet({ draft, battle, player, pendingTarget }: RealmArenaTurnSheetProps) {
     const { CHARACTERS, ABILITIES } = rulesetOf(battle);
+    const { ATTACK_AP, HUNKER_AP, REACTION_COST } = ruleValuesOf(battle);
     const { fighter, aim } = draft;
     const character = CHARACTERS[fighter.character];
     const weapon = weaponOf(battle, fighter);
@@ -179,7 +180,7 @@ export default function RealmArenaTurnSheet({ draft, battle, player, pendingTarg
             {row('move', '👣', 'Move', `1 AP per ${character.movement} squares`, needs(1), 'Move')}
             {row('attack', weaponMark(fighter.character, fighter.option), weapon.name, `${ATTACK_AP} AP · ${weaponLine(weapon, battle)}`,
                 needs(ATTACK_AP) ?? reachable('attack'), 'Attack')}
-            {abilitiesOf(fighter, battle).map(id => {
+            {abilitiesOf(fighter, battle).filter(id => !ABILITIES[id].passive).map(id => {
                 const ability = ABILITIES[id];
                 const { icon, tag } = ABILITY_ROW[id];
                 const per = id === 'sneak' ? ` per ${character.movement} squares` : '';
@@ -191,7 +192,7 @@ export default function RealmArenaTurnSheet({ draft, battle, player, pendingTarg
                 `${item.ap} AP · ${item.description}`, needs(item.ap) ?? (thrown ? undefined : reachable('draught')), thrown ? 'Throw' : 'Aim')}
             {row('hunker', '⛨', 'Hunker down', `${HUNKER_AP} AP · doubles its cover against shots until your next turn, and ends its turn`, needs(HUNKER_AP), 'Hunker')}
             {row('watch', '👁', weapon.kind === 'ranged' ? 'Go on overwatch' : 'Go on guard',
-                `All ${fighter.ap} AP left · ${pluralize(Math.floor(fighter.ap / REACTION_COST), 'reaction')} before your next turn`,
+                `All ${fighter.ap} AP left · ${pluralize(Math.floor(bankedAp(fighter.ap, battle) / REACTION_COST), 'reaction')} before your next turn`,
                 needs(REACTION_COST), 'Watch')}
         </div>
     );
@@ -209,6 +210,7 @@ interface TargetListProps {
 const signedPercent = (amount: number) => `${amount < 0 ? '−' : '+'}${Math.abs(amount)}%`;
 
 interface OddsInfoProps {
+    battle: BattleState;
     /** Who it's about, as the sheet names them. */
     target: string;
     /** What the attacker starts from: "Bow accuracy", "Melee accuracy". */
@@ -222,8 +224,8 @@ interface OddsInfoProps {
  * from and each thing that moved it (`oddsLines`), then where it came to. The
  * numbers are the ones `targetOptions` already worked out, not a second sum.
  */
-function OddsInfo({ target, baseLabel, odds, onClose }: OddsInfoProps) {
-    const lines = oddsLines(odds, baseLabel);
+function OddsInfo({ target, baseLabel, odds, onClose, battle }: OddsInfoProps) {
+    const lines = oddsLines(odds, baseLabel, battle);
     const doubled = lines.some(line => line.note);
     return (
         <InfoModal title={`Hitting ${target}`} onClose={onClose} closeLabel="Close">
@@ -261,6 +263,7 @@ function TargetList({ draft, battle, name, disabled, onFocus }: TargetListProps)
         <div className="ag-build-list">
             {asked?.odds && (
                 <OddsInfo
+                    battle={battle}
                     target={capitalise(name(asked.target.id))}
                     baseLabel={asked.odds.grazeChance !== undefined ? `${weapon.name} accuracy` : 'Melee accuracy'}
                     odds={asked.odds}

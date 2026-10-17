@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import type { Battlefield, Square } from "@/utils/games/battlefield/terrain";
-import { ACTION_POINTS, isStanding, type BattleState, type Fighter } from "./rules";
+import { actionPointsOf, isStanding, type BattleState, type Fighter } from "./rules";
 import { boardFocus, reachFocus, type BoardFocusArea, type BoardFollow } from "./ui";
 
 interface BoardFocusSource {
@@ -37,7 +37,7 @@ export function useBoardFocus({ field, fighters, sides, rulesVersion, selected, 
     tracks: boolean;
 } {
     const reach = useMemo(
-        () => selected && isStanding(selected) ? reachFocus({ field, fighters: [...fighters], sides, rulesVersion }, selected, acting === selected.owner ? selected.ap : ACTION_POINTS) : null,
+        () => selected && isStanding(selected) ? reachFocus({ field, fighters: [...fighters], sides, rulesVersion }, selected, acting === selected.owner ? selected.ap : actionPointsOf(selected, { rulesVersion })) : null,
         [field, fighters, sides, rulesVersion, selected, acting],
     );
     // A character picked up to place is brought close enough to tap a square beside it.

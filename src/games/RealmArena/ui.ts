@@ -2,18 +2,18 @@
 // per-game presentation helpers live in games/<Game>/ui.ts). Readings of the
 // state the response already ships, never a rule: those are rules.ts's.
 
-import type { RulesContext } from "./rulesets";
+import { ruleValuesOf, rulesetOf, type RulesContext } from "./rulesets";
 import type { Rect } from "@/utils/ui/mapLabels";
 import { isoCentre, ISO_HALF_HEIGHT, ISO_HALF_WIDTH, type IsoView, type Point } from "@/utils/ui/isometric";
 import type { IRealmArenaStepOutcome, IRealmArenaStepPart, RealmArenaPartState } from "./apiModels";
 import { andList, capitalise, pluralize, possessive } from "@/utils/ui/text";
 import type { Reach } from "@/utils/games/battlefield/pathfinding";
 import { coordsOf, FACING_COUNT, facingTowards, riseOf, squareAt, TERRAIN, type Battlefield, type Facing, type Square, type Terrain, type TerrainLetter } from "@/utils/games/battlefield/terrain";
-import { ABILITIES, CHARACTERS, EFFECT_IDS, EFFECTS, ITEM_IDS, ITEMS, type AbilityId, type CharacterId, type EffectId, type Item, type ItemId } from "./characters";
+import { EFFECT_IDS, EFFECTS, ITEM_IDS, ITEMS, type AbilityId, type CharacterId, type EffectId, type Item, type ItemId } from "./characters";
 import { CHARACTER_IDS } from "./roster";
 import { battlefieldOf } from "./maps";
 import { EFFECT_ART, ITEM_ART, type BurstKind, type Missile, type Sprite, type ThrownItem } from "./art";
-import { ACTION_POINTS, CENTRE, FAR_SHOT_DISTANCE, SCORED_FOR, squadSight, hasEffect, isStanding, isWarband, maxHpOf, moveAp, pickOf, reachOf, shoots, type BattleState, type Fighter, type MusterPick, type OddsBreakdown, type OddsFactor, type ShotResult, type ToldEvent } from "./rules";
+import { actionPointsOf, CENTRE, SCORED_FOR, squadSight, hasEffect, isStanding, isWarband, maxHpOf, moveAp, pickOf, reachOf, shoots, type BattleState, type Fighter, type MusterPick, type OddsBreakdown, type OddsFactor, type ShotResult, type ToldEvent } from "./rules";
 
 const LETTER_OF = new Map<Terrain, TerrainLetter>(
     (Object.entries(TERRAIN) as [TerrainLetter, Terrain][]).map(([letter, terrain]) => [terrain, letter]),
@@ -555,7 +555,7 @@ export function canAct(fighter: Fighter): boolean {
 
 /** A character's AP as pips, one of `ACTION_POINTS` each, lit while unspent: the board and the units strip draw the same row. */
 export function apPips(fighter: Fighter): boolean[] {
-    return Array.from({ length: ACTION_POINTS }, (_, i) => i < fighter.ap);
+    return Array.from({ length: Math.max(fighter.maxAp ?? actionPointsOf(fighter), fighter.ap) }, (_, i) => i < fighter.ap);
 }
 
 /**
@@ -584,18 +584,19 @@ export interface OddsLine {
 }
 
 /** How a factor reads in the player's language. */
-function oddsLineOf(factor: OddsFactor): OddsLine {
+function oddsLineOf(factor: OddsFactor, context?: RulesContext): OddsLine {
+    const { EFFECTS, ABILITIES, RULES } = rulesetOf(context);
     const { amount } = factor;
     switch (factor.kind) {
         case "cover": {
             const doubled = factor.doubled === "hunkered" ? "doubled: hunkered down"
-                : factor.doubled === "far" ? `doubled: far shot, over ${FAR_SHOT_DISTANCE} squares` : undefined;
-            return { label: factor.shield ? "Shield wall (counts as half cover)" : `${capitalise(factor.cover)} cover`, note: doubled, amount };
+                : factor.doubled === "far" ? `doubled: far shot, over ${RULES.FAR_SHOT_DISTANCE} squares` : undefined;
+            return { label: factor.shield ? (factor.cover === "half" ? `${ABILITIES.shieldWall.name} (counts as half cover)` : `Temporary ${factor.cover} cover`) : `${capitalise(factor.cover)} cover`, note: doubled, amount };
         }
         case "highGround": return { label: "High ground", amount };
         case "effect": return { label: `Target is ${EFFECTS[factor.effect].state}`, amount };
         case "smoke": return { label: "Target in smoke", amount };
-        case "aimedShot": return { label: "Aimed shot", amount };
+        case "aimedShot": return { label: ABILITIES.aimedShot.name, amount };
         case "overwatch": return { label: "Overwatch", amount };
     }
 }
@@ -606,8 +607,8 @@ function oddsLineOf(factor: OddsFactor): OddsLine {
  * moved it, in the order `oddsBreakdown` applied them, plus a line for the
  * 0–100 hold when `raw` ran past it. The sum is rules.ts's; this only words it.
  */
-export function oddsLines(odds: OddsBreakdown, baseLabel: string): OddsLine[] {
-    const lines = [{ label: baseLabel, amount: odds.base }, ...odds.factors.map(oddsLineOf)];
+export function oddsLines(odds: OddsBreakdown, baseLabel: string, context?: RulesContext): OddsLine[] {
+    const lines = [{ label: baseLabel, amount: odds.base }, ...odds.factors.map(factor => oddsLineOf(factor, context))];
     return odds.raw === odds.chance ? lines : [...lines, { label: "Held between 0% and 100%", amount: odds.chance - odds.raw }];
 }
 
@@ -733,17 +734,17 @@ export function centreInSight(state: BattleState, player: string): boolean {
 }
 
 /** A character's name, numbered where its owner has more than one of it: "Man-at-arms 2". */
-export function fighterName(fighters: readonly Fighter[], fighter: Fighter): string {
+export function fighterName(fighters: readonly Fighter[], fighter: Fighter, context?: RulesContext): string {
     // The enemy's warbands go by one name (§29.6), so they're numbered as one.
     const squad = fighters.filter(one => one.owner === fighter.owner || (isWarband(one.owner) && isWarband(fighter.owner)));
     const index = squad.findIndex(one => one.id === fighter.id);
-    return index < 0 ? CHARACTERS[fighter.character].name : numberedName(squad, index);
+    return index < 0 ? rulesetOf(context).CHARACTERS[fighter.character].name : numberedName(squad, index, context);
 }
 
 /** The name of one of a squad — fought with, or still being placed — numbered where it has more than one of it. */
-export function numberedName(squad: readonly { character: CharacterId }[], index: number): string {
+export function numberedName(squad: readonly { character: CharacterId }[], index: number, context?: RulesContext): string {
     const { character } = squad[index];
-    const name = CHARACTERS[character].name;
+    const name = rulesetOf(context).CHARACTERS[character].name;
     if (squad.filter(one => one.character === character).length === 1) return name;
     return `${name} ${squad.slice(0, index).filter(one => one.character === character).length + 1}`;
 }
@@ -753,10 +754,10 @@ export function numberedName(squad: readonly { character: CharacterId }[], index
  * Archer" — or, for one the viewer has no word of, in fog of war (§27) or
  * gone with a dropped player's squad, "a character out of sight".
  */
-export function whoseName(fighters: readonly Fighter[], id: number, viewerId: string, nameFor: (userId: string) => string): string {
+export function whoseName(fighters: readonly Fighter[], id: number, viewerId: string, nameFor: (userId: string) => string, context?: RulesContext): string {
     const fighter = fighters.find(one => one.id === id);
     if (!fighter) return "a character out of sight";
-    const name = fighterName(fighters, fighter);
+    const name = fighterName(fighters, fighter, context);
     return fighter.owner === viewerId ? `your ${name}` : `${possessive(nameFor(fighter.owner))} ${name}`;
 }
 
@@ -811,8 +812,9 @@ const rollOf = (event: ToldEvent): { roll?: number } => "roll" in event && typeo
  * character out of sight" (`whoseName`). Takes a review's events, which come
  * without a shot's roll, as well as an action's own.
  */
-export function eventLines(events: readonly ToldEvent[], fighters: readonly Fighter[], viewerId: string, nameFor: (userId: string) => string): EventLine[] {
-    const name = (id: number) => whoseName(fighters, id, viewerId, nameFor);
+export function eventLines(events: readonly ToldEvent[], fighters: readonly Fighter[], viewerId: string, nameFor: (userId: string) => string, context?: RulesContext): EventLine[] {
+    const { ABILITIES, EFFECTS, ITEMS } = rulesetOf(context);
+    const name = (id: number) => whoseName(fighters, id, viewerId, nameFor, context);
     const Name = (id: number) => capitalise(name(id));
     /** Whose a thing is, led by the owner's name: "Alice's Mage's". */
     const Owner = (id: number) => possessive(Name(id));
@@ -910,7 +912,7 @@ export function eventLines(events: readonly ToldEvent[], fighters: readonly Figh
             case "effect":
                 return [{ mark: EFFECT_ART[event.effect], title: `${Name(event.fighter)} is ${event.change === "cleared" ? "no longer " : ""}${EFFECTS[event.effect].state}` }];
             case "burned":
-                return [{ mark: EFFECT_ART.burning, title: `${Name(event.fighter)} burned for ${event.damage}` }];
+                return [{ mark: EFFECT_ART[event.effect ?? "burning"], title: event.effect ? `${Name(event.fighter)} took ${event.damage} damage from ${EFFECTS[event.effect].name}` : `${Name(event.fighter)} burned for ${event.damage}` }];
             case "scored":
                 return [{ icon: "★", title: `${event.player === viewerId ? "You" : nameFor(event.player)} scored ${event.points}`, sub: capitalise(SCORED_FOR[event.reason]) }];
         }
@@ -1307,6 +1309,7 @@ function largestFit(floor: number, ceiling: number, fits: (ms: number) => boolea
 
 /** Each thing an action did, timed at `pace`, before its text is laned or any of it is shortened to fit. */
 function timeline(field: Battlefield, events: readonly ToldEvent[], before: readonly Fighter[], after: readonly Fighter[], options: BattleCueOptions, pace: Pace): BattleCue[] {
+    const { EFFECTS, ITEMS } = rulesetOf(options);
     const { still = false } = options;
     const as = new Map(before.map(fighter => [fighter.id, fighter]));
     const afterAs = new Map(after.map(fighter => [fighter.id, fighter]));
@@ -1417,7 +1420,7 @@ function timeline(field: Battlefield, events: readonly ToldEvent[], before: read
                 break;
             }
             case "burned":
-                text(event.fighter, beat(), minus(event.damage), "hit", { mark: "burning", hpChange: -event.damage });
+                text(event.fighter, beat(), minus(event.damage), "hit", { mark: event.effect ?? "burning", hpChange: -event.damage });
                 break;
             case "hunkered":
             case "shieldWall":

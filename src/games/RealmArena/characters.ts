@@ -9,6 +9,7 @@
 // Pure data, with no server-only imports, so the muster screen and the board
 // read the same table the commands do.
 
+import type { Cover } from "@/utils/games/battlefield/terrain";
 import { currentRuleset, rulesetOf, type RulesContext } from "./rulesets";
 
 // These aliases are for setup, profiles and tools without a game. Gameplay
@@ -38,6 +39,14 @@ export type AbilityId =
 export type EffectId = "burning" | "stunned" | "slowed" | "marked" | "corroded" | "hunkered" | "shieldWall";
 
 export interface Effect {
+    /** Damage ticks and expiry happen at this turn boundary; old effects use start. */
+    tick?: "start" | "end";
+    decayAt?: "start" | "end";
+    movementFactor?: number;
+    apModifier?: number;
+    preventsReactions?: boolean;
+    /** Cover on the affected fighter (e.g. Ward), lasting as long as the effect. */
+    cover?: Cover;
     name: string;
     /** How it reads on a character: "Bob's Knight is burning". */
     state: string;
@@ -83,6 +92,15 @@ export type Weapon =
     | { name: string; kind: "ranged"; damage: number; accuracy: number; range: number; effect?: Affliction };
 
 export interface Ability {
+    passive?: boolean;
+    apOnRaise?: number;
+    bonusAp?: number;
+    movesWithoutReactions?: boolean;
+    countsAsAttack?: boolean;
+    /** A passive aura, or cover while its stance is active. */
+    cover?: Cover;
+    coverAffectsSelf?: boolean;
+    stance?: EffectId;
     name: string;
     /** AP to use it. Sneak's is per movement allowance, as a move's 1 AP is (§13.2). */
     ap: number;
@@ -125,6 +143,8 @@ export interface Ability {
 export const STRIKING_ABILITIES: ReadonlySet<string> = new Set<AbilityId>(["cleave", "shieldBash", "rend"]);
 
 export interface Character {
+    /** Extra AP at the start of its turns. */
+    bonusAp?: number;
     name: string;
     /** The name for several: "Men-at-arms", which no "s" makes of "Man-at-arms". */
     plural: string;
@@ -274,7 +294,7 @@ const DIFFICULTY_RUNGS: Readonly<Record<Difficulty, number>> = { easy: -1, norma
  * waves refill to, once the team is tougher (`BALANCE_VERSION`): one step
  * smaller than the difficulty alone puts them.
  */
-export const HOLD_OUT_ENEMY_STEPS = -1;
+export const HOLD_OUT_ENEMY_STEPS = currentRuleset.RULES.HOLD_OUT_ENEMY_STEPS;
 
 /** The budget `steps` rungs of `BUDGETS` from this one, stopping at the ladder's bottom and top. */
 const rung = (budget: Budget, steps: number): Budget => BUDGETS[Math.min(BUDGETS.length - 1, Math.max(0, BUDGETS.indexOf(budget) + steps))];
@@ -386,8 +406,8 @@ export const UNKNOWN_ENEMY = "the enemy";
  * Renegades" — once the team knows it, and "the enemy" while it doesn't. The
  * log, the board and the result all name it through this.
  */
-export function enemyNameOf(enemy: FactionId | undefined): string {
-    return enemy === undefined ? UNKNOWN_ENEMY : factionById(enemy).enemyName;
+export function enemyNameOf(enemy: FactionId | undefined, context?: RulesContext): string {
+    return enemy === undefined ? UNKNOWN_ENEMY : factionById(enemy, context).enemyName;
 }
 
 /** What the host picks to fight an enemy drawn at random as the battle is created, rather than a faction (§29.3). */

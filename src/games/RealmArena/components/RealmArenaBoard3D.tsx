@@ -272,7 +272,7 @@ export default function RealmArenaBoard3D({ field, fighters, fogGhosts = [], uns
                 <PlaybackFrames board={board} playKey={playback?.key} />
                 <TurnButtons onTurn={turn} />
                 {/* Over the foot of the frame, out of the zoom: while an action plays, what is happening in words; otherwise the targets, which want the same spot. */}
-                {playback ? <PlaybackCaption key={playback.key} playback={playback} fighters={fighters} viewerId={viewerId} nameFor={nameFor} /> : overlay}
+                {playback ? <PlaybackCaption context={{ rulesVersion }} key={playback.key} playback={playback} fighters={fighters} viewerId={viewerId} nameFor={nameFor} /> : overlay}
             </PlaybackProvider>
             <UnplacedMark unplaced={unplaced} />
         </div>

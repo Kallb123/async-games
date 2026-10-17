@@ -1189,7 +1189,7 @@ export default function RealmArenaBoard({ field, fighters, fogGhosts = [], unsee
                 {/* Over the foot of the frame, out of the zoom: while an action plays,
                     what is happening in words; otherwise the targets, which want the
                     same spot while a character is selected. */}
-                {playback ? <PlaybackCaption key={playback.key} playback={playback} fighters={fighters} viewerId={viewerId} nameFor={nameFor} /> : overlay}
+                {playback ? <PlaybackCaption context={{ rulesVersion }} key={playback.key} playback={playback} fighters={fighters} viewerId={viewerId} nameFor={nameFor} /> : overlay}
             </PlaybackProvider>
             <UnplacedMark unplaced={unplaced} />
         </div>

@@ -130,7 +130,7 @@ function MusterStep({ draft, budget, colour, onPick, onMuster, pending, stout = 
                             key={index}
                             mark={CHARACTER_MARK[pick.character]}
                             colour={colour}
-                            name={numberedName(picks, index)}
+                            name={numberedName(picks, index, draft.context)}
                             sub={pick.option ? optionView(pick.option, draft.context).name : `${musterHp(pick.character, stout, draft.context)} HP`}
                             selected={index === selected}
                             onClick={() => onPick(index)}

@@ -114,8 +114,8 @@ that game's stored `rulesVersion`. Command versions still reject stale clients
 and describe recorded command formats.
 
 `rulesetOf(game)` selects the game's frozen character, ability, option, item,
-effect and faction definitions. An unstamped game always selects the legacy
-catalogue; it never defaults to the newest release. Unknown rules versions
+effect and faction definitions and `RULES` values. An unstamped game always
+selects the legacy catalogue; it never defaults to the newest release. Unknown rules versions
 throw rather than silently using different rules. Existing games need no
 backfill. No per-unit version is stored.
 
@@ -127,9 +127,16 @@ To release changed units or abilities:
 2. Register and deeply freeze the new catalogue in `RULESETS`, then advance
    `CURRENT_RULESET_VERSION`. Keep every old registry entry pointing at its
    original catalogue. `currentRuleset` is derived from that registry.
-3. For changes to ability **behavior** in code, branch on the game's
-   `rulesVersion` and retain the older implementation. A data catalogue cannot
-   preserve behavior if its execution code is overwritten. Bump
+3. Express supported behavior changes in the new catalogue: `RULES` owns AP,
+   attack limits, reaction costs and bank caps, accuracy, cover and armour,
+   scoring and round limits. Abilities declare `passive`, `apOnRaise`,
+   `bonusAp`, `countsAsAttack`, `movesWithoutReactions` and cover/stance flags.
+   Effects declare tick/expiry boundaries, damage, AP and movement modifiers,
+   reaction blocking and temporary cover. Read these through `ruleValuesOf`
+   or `rulesetOf` with the battle context; do not compare release numbers in
+   individual rules. New mechanics still need an interpreter with defaults
+   preserving earlier catalogues. Exported rule constants are current-release
+   aliases for compatibility, not values for executing historical games. Bump
    `meta.commandVersion` when older clients would construct or display a move
    differently, as for any other rules change.
 4. Pass the game/battle context to catalogue helpers. Omitting context selects
@@ -137,8 +144,10 @@ To release changed units or abilities:
    without a stamp selects legacy. Preserve `rulesVersion` in filtered views,
    snapshots and replay settings.
 5. Test old and new games under the same current commands, including muster,
-   validation, effects, previews, undo and replay. `rulesets.test.ts` simulates
-   a future catalogue without shipping any balance change.
+   validation, effects, previews, undo and replay. Keep narration and recap
+   names on that same catalogue; profiles retain earned mastery for retired
+   characters while marking them unavailable in new battles. `rulesets.test.ts`
+   simulates a future catalogue without shipping any balance change.
 
 New units created by muster or Hold Out reinforcement waves use the game's
 catalogue too. Responses carry the selected maximum HP so both board renderers

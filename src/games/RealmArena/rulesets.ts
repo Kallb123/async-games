@@ -1,3 +1,4 @@
+import type { RealmArenaRuleValues } from "./ruleValues";
 import { catalogueV7 } from "./catalogues/v7";
 import type { Ability, AbilityId, Character, CharacterId, CharacterOption, Effect, EffectId, Faction, FactionId, Item, ItemId, OptionId, Weapon } from "./characters";
 
@@ -8,6 +9,7 @@ export const CURRENT_RULESET_VERSION = 7;
 // later catalogues to change their values without copying the whole table.
 type Table<T, Shape> = { readonly [Id in keyof T]: Readonly<Shape & { [Key in Exclude<keyof T[Id], "oncePerTurn" | "oncePerBattle">]: Key extends keyof Shape ? NonNullable<Shape[Key]> : never }> };
 export interface RealmArenaRuleset {
+    readonly RULES: Readonly<RealmArenaRuleValues>;
     readonly CHARACTERS: Readonly<Partial<Record<CharacterId, Character>>> & Readonly<Record<keyof typeof catalogueV7.CHARACTERS, Character>>;
     readonly ABILITIES: Readonly<Partial<Record<AbilityId, Ability>>> & Table<typeof catalogueV7.ABILITIES, Ability>;
     readonly OPTIONS: Readonly<Partial<Record<OptionId, CharacterOption>>> & typeof catalogueV7.OPTIONS;
@@ -31,6 +33,8 @@ const rulesetV7: RealmArenaRuleset = freeze(catalogueV7);
 // These are complete definitions, including the old descriptions and limits.
 const legacyRuleset: RealmArenaRuleset = freeze({
     ...catalogueV7,
+    RULES: { ...catalogueV7.RULES, MELEE_ROLLS: false, MELEE_ACCURACY: 100, FAR_SHOT_DISTANCE: null,
+        TEAM_HP_FACTOR: 1, ARMOUR: 0, HOLD_OUT_ENEMY_STEPS: 0, HOLD_OUT_PAIR_ROUNDS: 15 },
     CHARACTERS: {
         ...catalogueV7.CHARACTERS,
         mage: { ...catalogueV7.CHARACTERS.mage, weapon: { name: "Bolt", kind: "ranged", damage: 3, accuracy: 70, range: 10 } as Weapon },
@@ -38,7 +42,7 @@ const legacyRuleset: RealmArenaRuleset = freeze({
     ABILITIES: {
         ...catalogueV7.ABILITIES,
         heal: { name: "Heal", ap: 2, cooldown: 2, range: 12, hp: 4, description: "Restore 4 HP to itself or an ally it can see within 12 squares, and clear burning, slowed, stunned and corroded" },
-        raise: { name: "Raise", ap: 3, cooldown: 0, oncePerBattle: true, description: "Bring a downed ally next to them back at half HP. Once a battle" },
+        raise: { name: "Raise", ap: 3, cooldown: 0, apOnRaise: 0, oncePerBattle: true, description: "Bring a downed ally next to them back at half HP. Once a battle" },
     },
 });
 
@@ -62,3 +66,6 @@ export type RulesContext = { rulesVersion?: number; balanced?: boolean };
 export function rulesetOf(context?: RulesContext): RealmArenaRuleset {
     return context === undefined ? currentRuleset : rulesetFor(context.rulesVersion ?? (context.balanced ? 7 : undefined));
 }
+
+/** Read rule values for a game; omitted context is reserved for non-game tools. */
+export const ruleValuesOf = (context?: RulesContext): Readonly<RealmArenaRuleValues> => rulesetOf(context).RULES;

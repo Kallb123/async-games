@@ -14,7 +14,7 @@ import { rulesetOf, type RulesContext } from "@/games/RealmArena/rulesets";
 import type { Square } from "@/utils/games/battlefield/terrain";
 import { ABILITIES, STRIKING_ABILITIES, type Ability, type AbilityId } from "./characters";
 import {
-    ACTION_POINTS, check, coverNextTo, fighterById, inRange, itemOf, nextTo, oddsBreakdown, reactionsTo, damageTo, shoots, shotOdds, strikeChance, weaponReaches,
+    actionPointsOf, check, coverNextTo, fighterById, inRange, itemOf, nextTo, oddsBreakdown, reactionsTo, damageTo, shoots, shotOdds, strikeChance, weaponReaches,
     type Action, type BattleState, type Fighter, type ShotKind, type ShotOdds,
 } from "./rules";
 
@@ -157,7 +157,7 @@ export interface AttackOption {
  * what's in reach is a matter of where it stands, not what it has left.
  */
 export function attackOptions(state: BattleState, fighter: Fighter, square: Square = fighter.square): AttackOption[] {
-    const { battle, moved } = standingAt(state, { ...fighter, ap: ACTION_POINTS }, square);
+    const { battle, moved } = standingAt(state, { ...fighter, ap: actionPointsOf(fighter, state) }, square);
     return targetsOf(battle, fighter.owner, moved, "attack").flatMap(id => {
         const target = fighterById(battle, id);
         return target ? [{ target, chance: hitChance(battle, moved, target) }] : [];

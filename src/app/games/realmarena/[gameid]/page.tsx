@@ -20,7 +20,7 @@ import { enemyNameOf, RA_SOLO_PARAM, REALM_ONLY } from "@/games/RealmArena/chara
 import { rematchFlag } from "@/utils/ui/rematch";
 import { reachAfter, useTurnDraft } from "@/games/RealmArena/useTurnDraft";
 import { battlefieldOf } from "@/games/RealmArena/maps";
-import { ACTION_POINTS, armouredTeam, battleFrom, centreHolders, ENEMY_SIDE, isStanding, isWarband, sideScore, stoutTeam, TEAM_SIDE, warbandsFor, type Action, type BattleEvent, type Fighter } from "@/games/RealmArena/rules";
+import { armouredTeam, battleFrom, centreHolders, ENEMY_SIDE, isStanding, isWarband, sideScore, stoutTeam, TEAM_SIDE, warbandsFor, type Action, type BattleEvent, type Fighter } from "@/games/RealmArena/rules";
 import { actionFollow, battleCues, centreInSight, endOf, coopColourOf, ENEMY_COLOUR, fighterName, friendlySquares, isFollowedPart, isUnplaced, partFollow, partLabel, reviewParts, STEP_BEAT_MS, STEP_MIN_MS, TEAM_COLOUR, TEAM_NAME, unseenSquares, waveLineOf, withPartState } from "@/games/RealmArena/ui";
 import type { IRealmArenaOutcome } from "@/games/RealmArena/RealmArenaLogic";
 import type { ICommandResponse } from "@/app/api/game/command/route";
@@ -364,7 +364,7 @@ export default function GameRealmArena({ params }: { params: Promise<{ gameid: u
         // so it's asked about — even where it would go on watch.
         const unspent = fighters.filter(fighter => fighter.owner === myUserId && isStanding(fighter) && fighter.ap > 0);
         if (unspent.length > 0) {
-            const left = unspent.map(fighter => `${capitalise(fighterName(fighters, fighter))} (${fighter.ap} AP)`).join(', ');
+            const left = unspent.map(fighter => `${capitalise(fighterName(fighters, fighter, battle))} (${fighter.ap} AP)`).join(', ');
             if (!window.confirm(`Still to spend: ${left}. End your turn anyway?`)) return;
         }
         const command = new RealmArenaEndTurn();
@@ -646,7 +646,7 @@ export default function GameRealmArena({ params }: { params: Promise<{ gameid: u
                             home={{ squares: friendly, key: `home:${nav.mode}` }}
                             odds={reach?.options}
                             coverAt={reach?.previewing ? turn?.after?.square : null}
-                            overlay={reach && <RealmArenaTargets reach={reach} fighters={fighters} viewerId={myUserId} nameFor={playerName} />}
+                            overlay={reach && <RealmArenaTargets context={battle} reach={reach} fighters={fighters} viewerId={myUserId} nameFor={playerName} />}
                             playback={playback}
                             onPlayed={played}
                             unplaced={unplaced}
@@ -670,12 +670,12 @@ export default function GameRealmArena({ params }: { params: Promise<{ gameid: u
                             />
                             {turn
                                 ? <RealmArenaAim draft={turn} battle={battle} player={myUserId} nameFor={playerName} pendingTarget={pendingTarget} onFocus={focusTarget} />
-                                : <p className="ag-hint">Tap one of your units below, or on the board, to act with it. Each has its own {ACTION_POINTS} AP.</p>}
+                                : <p className="ag-hint">Tap one of your units below, or on the board, to act with it. Each has its own AP to spend.</p>}
                         </div>
                     )}
 
                     {selected && (
-                        <RealmArenaFighterCard fighter={selected} battle={battle} label={`${fighterName(fighters, selected)} · ${playerName(selected.owner)}`}>
+                        <RealmArenaFighterCard fighter={selected} battle={battle} label={`${fighterName(fighters, selected, battle)} · ${playerName(selected.owner)}`}>
                             {turn && <RealmArenaTurnSheet draft={turn} battle={battle} player={myUserId} pendingTarget={pendingTarget} />}
                         </RealmArenaFighterCard>
                     )}
@@ -724,7 +724,7 @@ export default function GameRealmArena({ params }: { params: Promise<{ gameid: u
                     )}
 
                     {battleTurn && lastEvents.length > 0 && (
-                        <RealmArenaResults events={lastEvents} fighters={fighters} viewerId={myUserId} nameFor={playerName} />
+                        <RealmArenaResults context={battle} events={lastEvents} fighters={fighters} viewerId={myUserId} nameFor={playerName} />
                     )}
 
                     {battleTurn && (

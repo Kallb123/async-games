@@ -7,9 +7,8 @@
 // the battle are ui.ts's.
 
 import { CHARACTERS, type AbilityId, type CharacterId, type FactionId, type OptionId, type Weapon } from "./characters";
-import { rulesetOf, type RulesContext } from "./rulesets";
-import { nextRankXp, rankOf } from "./mastery";
-import { isBalanced, MELEE_ACCURACY } from "./rules";
+import { ruleValuesOf, rulesetOf, type RulesContext } from "./rulesets";
+import { nextRankXp, rankOf, type PlayerMastery } from "./mastery";
 
 /**
  * The placeholder figure each character stands as until PR 9's marked figures
@@ -46,7 +45,7 @@ export function factionRosterLine(id: FactionId, context?: RulesContext): string
 
 /** A weapon in one line: "80% · range 20 · 3 damage", and what it leaves on a hit: "· slowed on a hit". */
 export function weaponLine(weapon: Weapon, context?: RulesContext): string {
-    if (weapon.kind === "melee") return `Melee · ${context && !isBalanced(context.rulesVersion) ? 100 : MELEE_ACCURACY}% · ${weapon.damage} damage`;
+    if (weapon.kind === "melee") return `Melee · ${ruleValuesOf(context).MELEE_ACCURACY}% · ${weapon.damage} damage`;
     const { EFFECTS } = rulesetOf(context);
     const leaves = weapon.effect ? ` · ${EFFECTS[weapon.effect].name.toLowerCase()} on a hit` : "";
     return `${weapon.accuracy}% · range ${weapon.range} · ${weapon.damage} damage${leaves}`;
@@ -113,4 +112,13 @@ export function optionView(id: OptionId, context?: RulesContext): KitView {
 export function masteryLine(xp: number): string {
     const next = nextRankXp(xp);
     return next === undefined ? `${xp} XP · the highest rank` : `${xp} XP · ${next - xp} more for rank ${rankOf(xp) + 1}`;
+}
+
+/** Active roster plus earned records for retired characters; retired unlocks aren't offered. */
+export function masteryRoster(mastery: PlayerMastery, context?: RulesContext): { id: CharacterId; retired: boolean }[] {
+    const { CHARACTERS, FACTIONS } = rulesetOf(context);
+    const active = new Set(Object.values(FACTIONS).flatMap(faction => faction?.characters ?? []));
+    return (Object.keys(CHARACTERS) as CharacterId[])
+        .filter(id => active.has(id) || (mastery[id]?.xp ?? 0) > 0)
+        .map(id => ({ id, retired: !active.has(id) }));
 }

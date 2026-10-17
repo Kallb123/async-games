@@ -293,7 +293,7 @@ export function useTurnDraft(battle: BattleState, player: string, fighter: Fight
         path: path ?? null,
         /** Where the character would stand, and with what AP, once a lined-up move is made. */
         after: afterMove(fighter, path, verdict),
-        reactions: path && aim === "move" ? reactionPreviews(battle, fighter, path) : [],
+        reactions: path && (aim === "move" || (aim === "sneak" && !rulesetOf(battle).ABILITIES.sneak.movesWithoutReactions)) ? reactionPreviews(battle, fighter, path) : [],
         /** Every square a lined-up fireball, throw or Demolish lands on. */
         area,
         /** What the action lined up would do to the HP of each character it touches: less on a hit, more for a heal. */

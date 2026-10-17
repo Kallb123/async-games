@@ -3828,11 +3828,12 @@ without the stamp, or with a lower one, plays by the old rules to the end:
 melee always hits and rolls nothing, two players' Hold Out of 15 rounds, cover counted once at any range, the Mage's Bolt
 at 70% and range 10, Heal on a two-turn cooldown, Raise once per battle, and no
 `maxHp`, armour or smaller warbands.
-`battleFrom` reads the stamp into `BattleState.balanced`, which the rules,
-the planner and the board all read. The stamp also selects an immutable
-catalogue through `rulesetOf`, including the old Mage Bolt and healing limits
-and descriptions. New games use `CURRENT_RULESET_VERSION`, independently of
-the command protocol version; old games, including those without a stamp,
+`battleFrom` preserves the stamp in `BattleState.rulesVersion`. It selects an
+immutable catalogue through `rulesetOf`, including the old Mage Bolt, healing
+limits and descriptions, and the `RULES` values read by `ruleValuesOf`. The
+`balanced` flag remains a compatibility alias; execution reads catalogue
+data. New games use `CURRENT_RULESET_VERSION`, independently of the command
+protocol version; old games, including those without a stamp,
 keep their catalogue for muster, timeout squads, reinforcements, execution,
 previews and replay. See `docs/command-versions.md`, “Realm Arena catalogues”,
 for the release procedure.
