@@ -4194,8 +4194,8 @@ These come up for several abilities at once, so they're settled once, here.
   Poisoned does what Burning does, and that's fine: the two may part ways
   later. A character can be burning and poisoned at once, and a knock-out by
   poison scores for whoever poisoned it, as burning's does. *Proposed:* a bonus
-  to damage adds to the blow before a graze halves it and before armour takes
-  off; neither Blessed nor Focused adds to a tick of Burning or Poisoned.
+  to damage adds to every blow, a graze's included, before armour takes off;
+  neither Blessed nor Focused adds to a tick of Burning or Poisoned.
 
 ### 34.3 Aiming the new abilities
 
