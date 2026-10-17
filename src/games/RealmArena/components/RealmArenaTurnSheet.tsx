@@ -375,7 +375,7 @@ function Detail({ draft, battle, name, ap, target }: DetailProps) {
     }
     if (aim === 'cleave') {
         const chances = draft.targets.map(id => { const hit = fighterById(battle, id); return hit ? `${strikeChance(battle, hit)}%` : ''; });
-        const damages = draft.targets.map(id => { const hit = fighterById(battle, id); return hit ? damageTo(battle, fighter, hit) : 0; });
+        const damages = draft.targets.map(id => { const hit = fighterById(battle, id); return hit ? damageTo(battle, fighter, hit, undefined, 'ability') : 0; });
         const each = new Set(damages).size === 1 ? `${damages[0]} each` : andList(damages.map(String));
         return hint(`Strikes ${andList(draft.targets.map(name))} for ${each}, at ${andList(chances)} to hit.`);
     }
@@ -395,8 +395,8 @@ function Detail({ draft, battle, name, ap, target }: DetailProps) {
 
     const health = `${Name(target.id)} · ${target.hp}/${max} HP`;
     const lands = strikeChance(battle, target);
-    if (aim === 'shieldBash') return hint(`${health} · ${lands}% to hit, for ${damageTo(battle, fighter, target, ABILITIES.shieldBash.damage)}, and a hit stuns them.`);
-    if (aim === 'rend') return hint(`${health} · ${lands}% to hit, for ${damageTo(battle, fighter, target, ABILITIES.rend.damage)}.`);
+    if (aim === 'shieldBash') return hint(`${health} · ${lands}% to hit, for ${damageTo(battle, fighter, target, ABILITIES.shieldBash.damage, 'ability')}, and a hit stuns them.`);
+    if (aim === 'rend') return hint(`${health} · ${lands}% to hit, for ${damageTo(battle, fighter, target, ABILITIES.rend.damage, 'ability')}.`);
     const shot = shotOf(aim);
     const odds = shot && shotOdds(battle, fighter, target, shot);
     if (!shot || !odds) return hint(`${health} · ${lands}% to hit, for ${damageTo(battle, fighter, target)}.`);

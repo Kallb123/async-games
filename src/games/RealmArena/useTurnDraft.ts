@@ -105,7 +105,7 @@ export function hpPreview(battle: BattleState, fighter: Fighter, { aim, targets 
     if (area && isAtSquare(aim)) {
         const damage = landsOf(fighter, aim, battle)?.damage ?? 0;
         const caught = damage > 0 ? battle.fighters.filter(one => isStanding(one) && area.includes(one.square)) : [];
-        return new Map(caught.map(one => [one.id, -damageTo(battle, fighter, one, damage)]));
+        return new Map(caught.map(one => [one.id, -damageTo(battle, fighter, one, damage, aim === "throw" ? "item" : "ability")]));
     }
     const heals = healingHp(aim, battle);
     if (heals !== undefined) return new Map(targets.map(id => [id, heals]));
@@ -115,7 +115,7 @@ export function hpPreview(battle: BattleState, fighter: Fighter, { aim, targets 
         const { ABILITIES } = rulesetOf(battle);
         const target = fighterById(battle, id);
         if (!target) return [];
-        if (aim === "shieldBash" || aim === "rend") return [[id, -damageTo(battle, fighter, target, ABILITIES[aim].damage)]];
+        if (aim === "shieldBash" || aim === "rend") return [[id, -damageTo(battle, fighter, target, ABILITIES[aim].damage, "ability")]];
         const shot = shotOf(aim);
         return [[id, -((shot && shotOdds(battle, fighter, target, shot)?.damage) ?? damageTo(battle, fighter, target))]];
     }));

@@ -392,7 +392,7 @@ export function fixedRolls(rolls: readonly number[]): Roll {
 
 export const isStanding = (fighter: Fighter): boolean => fighter.hp > 0;
 
-export const hasEffect = (fighter: Fighter, effect: EffectId): boolean => (fighter.effects[effect] ?? 0) > 0;
+export const hasEffect = (fighter: Pick<Fighter, "effects">, effect: EffectId): boolean => (fighter.effects[effect] ?? 0) > 0;
 
 /** The item a character carries, if any (§21.1). */
 export const itemOf = (fighter: Pick<Fighter, "item">, context?: RulesContext): Item | undefined => fighter.item ? rulesetOf(context).ITEMS[fighter.item] : undefined;
@@ -443,22 +443,34 @@ export const armouredTeam = (mission: string | undefined, rulesVersion: number |
  * (`ARMOUR`), or 0: none for a warband's, and none for a Miner, which is tough
  * enough without it (§33.3).
  */
-export function armourOf(state: Pick<BattleState, "armoured" | "rulesVersion">, fighter: Pick<Fighter, "owner" | "character">): number {
+function teamArmour(state: Pick<BattleState, "armoured" | "rulesVersion">, fighter: Pick<Fighter, "owner" | "character">): number {
     const { ARMOUR } = ruleValuesOf(state);
     return state.armoured && !isWarband(fighter.owner) && !ruleValuesOf(state).ARMOUR_EXEMPT_FACTIONS.includes(factionOf(fighter.character, state)) ? ARMOUR : 0;
 }
 
+/** What a character wears: the team's armour against the warbands, and what its effects add against any blow (`Effect.armour`). */
+export function armourOf(state: Pick<BattleState, "armoured" | "rulesVersion">, fighter: Pick<Fighter, "owner" | "character"> & Partial<Pick<Fighter, "effects">>): number {
+    return teamArmour(state, fighter) + effectTotal(fighter, "armour", state);
+}
+
+/** What dealt a blow: an ability's own hits earn `Effect.abilityDamageBonus` as well as `damageBonus`. */
+export type BlowSource = "weapon" | "ability" | "item";
+
 /**
  * What a blow from `by` does to `target`: its own `blow` — by default its
- * weapon's damage — less the armour `target` wears (`armourOf`), never under
- * 1, where a warband's blow lands on one of the team's. Every hit, ability and
+ * weapon's damage — plus what `by`'s effects add (`Effect.damageBonus`, and
+ * `abilityDamageBonus` for an ability's blow), less the armour `target`
+ * wears, never under 1: its effects' against any blow, and the team's where a
+ * warband's blow lands on one of the team's. Every hit, ability and
  * splash of the enemy's counts; burning, which isn't dealt by a blow, and the
  * team's own friendly fire don't. Nothing, for a blow that does nothing. The
  * one place armour is taken off, for the rules, the planner and the board.
  */
-export function damageTo(state: Pick<BattleState, "armoured" | "balanced" | "rulesVersion">, by: Pick<Fighter, "owner" | "character" | "option">, target: Pick<Fighter, "owner" | "character">, blow = weaponOf(state, by).damage): number {
-    const armour = isWarband(by.owner) ? armourOf(state, target) : 0;
-    return armour > 0 && blow > 0 ? Math.max(1, blow - armour) : blow;
+export function damageTo(state: Pick<BattleState, "armoured" | "balanced" | "rulesVersion">, by: Pick<Fighter, "owner" | "character" | "option"> & Partial<Pick<Fighter, "effects">>, target: Pick<Fighter, "owner" | "character"> & Partial<Pick<Fighter, "effects">>, blow = weaponOf(state, by).damage, via: BlowSource = "weapon"): number {
+    if (blow <= 0) return blow;
+    const dealt = blow + effectTotal(by, "damageBonus", state) + (via === "ability" ? effectTotal(by, "abilityDamageBonus", state) : 0);
+    const armour = (isWarband(by.owner) ? teamArmour(state, target) : 0) + effectTotal(target, "armour", state);
+    return armour > 0 ? Math.max(1, dealt - armour) : dealt;
 }
 
 /** What a character of Hold Out's team is mustered with: its table HP times `TEAM_HP_FACTOR`, rounded up. */
@@ -559,9 +571,25 @@ export interface ShotOdds {
 }
 
 /** Active effects, read from the match's catalogue rather than today's ids. */
-function activeEffects(fighter: Fighter, context?: RulesContext): [EffectId, Effect][] {
+function activeEffects(fighter: Pick<Fighter, "effects">, context?: RulesContext): [EffectId, Effect][] {
     const effects = rulesetOf(context).EFFECTS;
     return (Object.keys(fighter.effects) as EffectId[]).filter(id => hasEffect(fighter, id) && effects[id]).map(id => [id, effects[id]]);
+}
+
+type EffectBonus = "armour" | "damageBonus" | "abilityDamageBonus";
+/** Per catalogue, whether any of its effects carries each bonus: most never do, and `damageTo` is on the planner's hot path. */
+const EFFECT_BONUSES = new WeakMap<object, ReadonlySet<EffectBonus>>();
+
+/** One numeric field of a character's active effects added up: Braced's armour, Blessed's damage. */
+function effectTotal(fighter: Partial<Pick<Fighter, "effects">>, field: EffectBonus, context?: RulesContext): number {
+    if (!fighter.effects) return 0;
+    const { EFFECTS } = rulesetOf(context);
+    let carried = EFFECT_BONUSES.get(EFFECTS);
+    if (!carried) {
+        carried = new Set((["armour", "damageBonus", "abilityDamageBonus"] as const).filter(bonus => Object.values(EFFECTS).some(effect => effect?.[bonus])));
+        EFFECT_BONUSES.set(EFFECTS, carried);
+    }
+    return carried.has(field) ? activeEffects({ effects: fighter.effects }, context).reduce((sum, [, effect]) => sum + (effect[field] ?? 0), 0) : 0;
 }
 
 export function reactionsBlocked(fighter: Fighter, context?: RulesContext): boolean {
@@ -586,7 +614,7 @@ export function countsAsAttack(kind: string, context?: RulesContext): boolean {
 }
 
 /** Strongest temporary cover: a passive/active aura, or an effect such as Ward. */
-const COVER_ABILITIES = new WeakMap<object, [AbilityId, Ability][]>();
+const COVER_ABILITIES = new WeakMap<object, { auras: [AbilityId, Ability][]; reachesEnemies: boolean }>();
 
 export function temporaryCover(state: BattleState, target: Fighter): Cover {
     const rank = { none: 0, half: 1, full: 2 };
@@ -595,17 +623,22 @@ export function temporaryCover(state: BattleState, target: Fighter): Cover {
     for (const [, effect] of activeEffects(target, state)) offer(effect.cover);
     if (rank[cover] === 2) return cover;
     const catalogue = rulesetOf(state);
-    let auras = COVER_ABILITIES.get(catalogue);
-    if (!auras) {
-        auras = (Object.entries(catalogue.ABILITIES) as [AbilityId, Ability][]).filter(([, ability]) => ability.cover);
-        COVER_ABILITIES.set(catalogue, auras);
+    let known = COVER_ABILITIES.get(catalogue);
+    if (!known) {
+        const auras = (Object.entries(catalogue.ABILITIES) as [AbilityId, Ability][]).filter(([, ability]) => ability.cover);
+        known = { auras, reachesEnemies: auras.some(([, ability]) => ability.coverFor === "everyone") };
+        COVER_ABILITIES.set(catalogue, known);
     }
-    for (const ally of state.fighters) {
-        if (!isStanding(ally) || !allied(state, ally.owner, target.owner)) continue;
+    const { auras, reachesEnemies } = known;
+    for (const giver of state.fighters) {
+        if (!isStanding(giver)) continue;
+        const friendly = allied(state, giver.owner, target.owner);
+        if (!friendly && !reachesEnemies) continue;
         for (const [id, ability] of auras) {
-            if (!ability.cover || (!ability.passive && !(ability.stance && hasEffect(ally, ability.stance)))) continue;
-            if (!abilitiesOf(ally, state).includes(id)) continue;
-            if (ally.id === target.id ? ability.coverAffectsSelf : nextTo(state.field, ally.square, target.square)) offer(ability.cover);
+            if (!ability.cover || (!friendly && ability.coverFor !== "everyone")) continue;
+            if (!ability.passive && !(ability.stance && hasEffect(giver, ability.stance))) continue;
+            if (!abilitiesOf(giver, state).includes(id)) continue;
+            if (giver.id === target.id ? ability.coverAffectsSelf : nextTo(state.field, giver.square, target.square)) offer(ability.cover);
             if (rank[cover] === 2) return cover;
         }
     }
@@ -1310,8 +1343,8 @@ function resolver(state: BattleState, roll: Roll) {
      * `strikeChance` — a hit or a miss, with no graze — and before it, it
      * always hit and rolled nothing. Says whether it landed.
      */
-    const strike = (by: Fighter, target: Fighter, reaction = false, blow = weaponOf(battle, by).damage): boolean => {
-        const damage = damageTo(battle, by, target, blow);
+    const strike = (by: Fighter, target: Fighter, reaction = false, blow = weaponOf(battle, by).damage, via: BlowSource = "weapon"): boolean => {
+        const damage = damageTo(battle, by, target, blow, via);
         if (!ruleValuesOf(battle).MELEE_ROLLS) {
             events.push({ kind: "struck", fighter: by.id, target: target.id, damage, reaction });
             wound(by, target, damage);
@@ -1331,11 +1364,11 @@ function resolver(state: BattleState, roll: Roll) {
      * `told` makes of who it hit, then its damage, then its effect on
      * whoever it didn't down (§13.6, §20.2).
      */
-    const land = (by: Fighter, squares: readonly Square[], damage: number, effect: Affliction | undefined, told: (targets: number[]) => BattleEvent) => {
+    const land = (by: Fighter, squares: readonly Square[], damage: number, effect: Affliction | undefined, told: (targets: number[]) => BattleEvent, via: BlowSource = "ability") => {
         const area = new Set(squares);
         const hit = fighters.filter(one => isStanding(one) && area.has(one.square));
         events.push(told(hit.map(one => one.id)));
-        if (damage > 0) for (const target of hit) wound(by, target, damageTo(battle, by, target, damage));
+        if (damage > 0) for (const target of hit) wound(by, target, damageTo(battle, by, target, damage, via));
         if (effect) for (const target of hit) afflict(by, target, effect);
     };
 
@@ -1442,11 +1475,11 @@ export function act(state: BattleState, player: string, action: Action, roll: Ro
         case "shieldBash":
             // For the ability's damage, not the sword's, and stunned if it stays up (§23.2).
             // A miss stuns nobody, as a shot leaves its effect only on a hit.
-            if (run.strike(actor, get(action.target), false, ABILITIES.shieldBash.damage)) run.afflict(actor, get(action.target), ABILITIES.shieldBash.effect);
+            if (run.strike(actor, get(action.target), false, ABILITIES.shieldBash.damage, "ability")) run.afflict(actor, get(action.target), ABILITIES.shieldBash.effect);
             break;
         case "rend":
             // For the ability's damage, not the talons' (§31.2).
-            run.strike(actor, get(action.target), false, ABILITIES.rend.damage);
+            run.strike(actor, get(action.target), false, ABILITIES.rend.damage, "ability");
             break;
         case "burst": {
             // Everyone next to it, friend or foe, hit and corroded; then the
@@ -1486,7 +1519,7 @@ export function act(state: BattleState, player: string, action: Action, roll: Ro
             events.push({ kind: "watching", fighter: actor.id, banked: actor.banked });
             break;
         case "cleave":
-            for (const id of action.targets) run.strike(actor, get(id));
+            for (const id of action.targets) run.strike(actor, get(id), false, undefined, "ability");
             break;
         case "shieldWall":
             actor.effects[ABILITIES.shieldWall.stance ?? "shieldWall"] = EFFECTS[ABILITIES.shieldWall.stance ?? "shieldWall"].count;
@@ -1534,7 +1567,7 @@ export function act(state: BattleState, player: string, action: Action, roll: Ro
             // Friend or foe, the thrower too if it's that close, as a fireball.
             const damage = item.damage ?? 0;
             run.land(actor, item.area ? areaAround(state.field, action.at) : [action.at], damage, item.effect,
-                targets => ({ kind: "thrown", fighter: actor.id, item: id, at: action.at, targets, damage }));
+                targets => ({ kind: "thrown", fighter: actor.id, item: id, at: action.at, targets, damage }), "item");
             run.blast(actor, blastedBy(state.field, item, action.at));
             break;
         }

@@ -130,9 +130,11 @@ To release changed units or abilities:
 3. Express supported behavior changes in the new catalogue: `RULES` owns AP,
    attack limits, reaction costs and bank caps, accuracy, cover and armour,
    scoring and round limits. Abilities declare `passive`, `apOnRaise`,
-   `bonusAp`, `countsAsAttack`, `movesWithoutReactions` and cover/stance flags.
+   `bonusAp`, `countsAsAttack`, `movesWithoutReactions` and cover/stance flags,
+   including `coverFor` for an aura that also covers enemies.
    Effects declare tick/expiry boundaries, damage, AP and movement modifiers,
-   reaction blocking and temporary cover. Read these through `ruleValuesOf`
+   reaction blocking, temporary cover, armour, and bonuses to every blow
+   (`damageBonus`) or to ability blows alone (`abilityDamageBonus`). Read these through `ruleValuesOf`
    or `rulesetOf` with the battle context; do not compare release numbers in
    individual rules. New mechanics still need an interpreter with defaults
    preserving earlier catalogues. Exported rule constants are current-release
@@ -142,7 +144,9 @@ To release changed units or abilities:
 4. Pass the game/battle context to catalogue helpers. Omitting context selects
    the current catalogue for setup, profiles and admin tools; passing a game
    without a stamp selects legacy. Preserve `rulesVersion` in filtered views,
-   snapshots and replay settings.
+   snapshots and replay settings: it is the only thing that selects a
+   catalogue, so a state that keeps `balanced` but drops `rulesVersion` plays
+   by the legacy rules.
 5. Test old and new games under the same current commands, including muster,
    validation, effects, previews, undo and replay. Keep narration and recap
    names on that same catalogue; profiles retain earned mastery for retired

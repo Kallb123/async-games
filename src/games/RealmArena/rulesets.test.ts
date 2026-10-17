@@ -8,7 +8,7 @@ import { masteryRoster, weaponLine } from "./roster";
 import { eventLines } from "./ui";
 import { realmArenaRecapAdapter } from "./recap";
 import type { ITurnSnapshot } from "@/utils/games/replay";
-import { abilitiesOf, actionPointsOf, afflicted, bankedAp, endTurn, startTurn, temporaryCover, weaponOf, act, battleFrom, check, fixedRolls, movementOf, newFighter, viewOf, type BattleState } from "./rules";
+import { abilitiesOf, actionPointsOf, afflicted, armourOf, bankedAp, damageTo, endTurn, startTurn, temporaryCover, weaponOf, act, battleFrom, check, fixedRolls, movementOf, newFighter, viewOf, type BattleState } from "./rules";
 import { currentRuleset, rulesetFor, type RealmArenaRuleset, type RulesContext } from "./rulesets";
 import { rangeKindOf } from "./tactics";
 import { hpPreview } from "./useTurnDraft";
@@ -41,12 +41,14 @@ vi.mock("./rulesets", async importOriginal => {
         CHARACTERS: { ...future.CHARACTERS, knight: { ...future.CHARACTERS.knight, name: "Sentinel", plural: "Sentinels", bonusAp: 1 } },
         FACTIONS: { ...future.FACTIONS, realm: { ...future.FACTIONS.realm, characters: future.FACTIONS.realm.characters.filter(id => id !== "scout") } },
         ABILITIES: { ...future.ABILITIES,
-            shieldWall: { ...future.ABILITIES.shieldWall, passive: true, bonusAp: 1 },
+            shieldWall: { ...future.ABILITIES.shieldWall, passive: true, bonusAp: 1, coverFor: "everyone" },
             raise: { ...future.ABILITIES.raise, apOnRaise: 2 },
             sneak: { ...future.ABILITIES.sneak, movesWithoutReactions: false },
             huntersMark: { ...future.ABILITIES.huntersMark, name: "Beacon" },
         },
-        EFFECTS: { ...future.EFFECTS, corroded: { ...future.EFFECTS.corroded, name: "Ward", state: "warded", cover: "full", tick: "end", damage: 2, apModifier: -1 } },
+        EFFECTS: { ...future.EFFECTS, corroded: { ...future.EFFECTS.corroded, name: "Ward", state: "warded", cover: "full", tick: "end", damage: 2, apModifier: -1 },
+            slowed: { ...future.EFFECTS.slowed, armour: 2 },
+            marked: { ...future.EFFECTS.marked, damageBonus: 1, abilityDamageBonus: 2 } },
     };
     const resolve = (version: number | undefined) => version === 9 ? behavior : version === 8 ? future : real.rulesetFor(version);
     return {
@@ -54,8 +56,8 @@ vi.mock("./rulesets", async importOriginal => {
         CURRENT_RULESET_VERSION: 8,
         currentRuleset: behavior,
         rulesetFor: resolve,
-        ruleValuesOf: (context?: RulesContext) => (context === undefined ? behavior : resolve(context.rulesVersion ?? (context.balanced ? 7 : undefined))).RULES,
-        rulesetOf: (context?: RulesContext) => context === undefined ? behavior : resolve(context.rulesVersion ?? (context.balanced ? 7 : undefined)),
+        ruleValuesOf: (context?: RulesContext) => (context === undefined ? behavior : resolve(context.rulesVersion)).RULES,
+        rulesetOf: (context?: RulesContext) => context === undefined ? behavior : resolve(context.rulesVersion),
     };
 });
 
@@ -226,6 +228,30 @@ describe("catalogue-driven behavior", () => {
         expect(temporaryCover({ ...state, fighters: [state.fighters[0], warded] }, warded)).toBe("full");
         const old = battle(7, state.fighters);
         expect(temporaryCover(old, old.fighters[1])).toBe("none");
+    });
+
+    it("lets an aura's cover reach enemies only where its definition says so", () => {
+        const knight = { ...ready(0, "a", "knight", 0, 9), effects: { shieldWall: 1 } };
+        for (const version of [7, 9]) {
+            const state = battle(version, [knight, ready(1, "a", "archer", 1, version), ready(2, "b", "archer", 12, version)]);
+            expect(temporaryCover(state, state.fighters[1])).toBe("half");
+            expect(temporaryCover(state, state.fighters[2])).toBe(version === 9 ? "half" : "none");
+        }
+    });
+
+    it("adds effect armour and damage bonuses to every blow, an ability's bonus to its own alone", () => {
+        for (const version of [7, 9]) {
+            const blessed = { ...ready(0, "a", "knight", 0, version), effects: { marked: 2 } };
+            const braced = { ...ready(1, "b", "knight", 1, version), hp: 100, effects: { slowed: 2 } };
+            const state = battle(version, [blessed, braced]);
+            expect(armourOf(state, braced)).toBe(version === 9 ? 2 : 0);
+            expect(damageTo(state, blessed, braced)).toBe(version === 9 ? 3 : 4);
+            expect(damageTo(state, blessed, braced, 4, "ability")).toBe(version === 9 ? 5 : 4);
+            expect(damageTo(state, blessed, braced, 1)).toBe(1);
+            expect(damageTo(state, blessed, braced, 0)).toBe(0);
+            const struck = act(state, "a", { kind: "attack", fighter: 0, target: 1 }, fixedRolls([1])).events.find(event => event.kind === "struck");
+            expect(struck).toMatchObject({ damage: version === 9 ? 3 : 4 });
+        }
     });
 
     it("ticks and expires an effect at its configured boundary, preserving legacy ticks", () => {

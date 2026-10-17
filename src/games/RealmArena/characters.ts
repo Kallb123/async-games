@@ -47,6 +47,12 @@ export interface Effect {
     preventsReactions?: boolean;
     /** Cover on the affected fighter (e.g. Ward), lasting as long as the effect. */
     cover?: Cover;
+    /** Taken off every blow it takes, with any other armour, never leaving less than 1 (Braced, §34.2). */
+    armour?: number;
+    /** Added to every blow it deals: weapon, ability or item (Blessed, §34.2). */
+    damageBonus?: number;
+    /** Added to every blow of its abilities alone (Focused, §34.2). */
+    abilityDamageBonus?: number;
     name: string;
     /** How it reads on a character: "Bob's Knight is burning". */
     state: string;
@@ -99,6 +105,8 @@ export interface Ability {
     countsAsAttack?: boolean;
     /** A passive aura, or cover while its stance is active. */
     cover?: Cover;
+    /** Whom an aura's cover reaches beside its holder: its allies (the default, a shield wall), or every character, enemies too (Bulwark, §34.5). */
+    coverFor?: "allies" | "everyone";
     coverAffectsSelf?: boolean;
     stance?: EffectId;
     name: string;

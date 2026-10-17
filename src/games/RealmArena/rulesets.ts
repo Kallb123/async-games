@@ -60,11 +60,16 @@ export function rulesetFor(rulesVersion: number | undefined): RealmArenaRuleset 
     return RULESETS[version];
 }
 
-export type RulesContext = { rulesVersion?: number; balanced?: boolean };
+/**
+ * A game, or anything built from one, carrying the version it was created
+ * under. Only `rulesVersion` selects a catalogue: a missing one is legacy,
+ * never guessed from a derived flag such as `BattleState.balanced`.
+ */
+export type RulesContext = { rulesVersion?: number };
 
 /** For helpers that also serve setup/profile tools, no game means the current catalogue. */
 export function rulesetOf(context?: RulesContext): RealmArenaRuleset {
-    return context === undefined ? currentRuleset : rulesetFor(context.rulesVersion ?? (context.balanced ? 7 : undefined));
+    return context === undefined ? currentRuleset : rulesetFor(context.rulesVersion);
 }
 
 /** Read rule values for a game; omitted context is reserved for non-game tools. */
