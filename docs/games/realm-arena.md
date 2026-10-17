@@ -4180,7 +4180,7 @@ These come up for several abilities at once, so they're settled once, here.
   nothing an ability moves is a move. With Sneak gone, these are the Realm's
   answers to a squad dug in on overwatch (§13.4). A character an ability moves
   ends on a square a character could stand on, with nobody else on it.
-- **Four new effects**, kept in `EFFECTS` and counted as every effect is
+- **Five new effects**, kept in `EFFECTS` and counted as every effect is
   (§20.1). None stacks with itself (§20.2); different effects stack.
 
   | Effect | What it does | Count | Comes from |
@@ -4189,6 +4189,7 @@ These come up for several abilities at once, so they're settled once, here.
   | **Braced** | +1 armour against every blow, until its owner's next turn. Stacks with Hold Out's armour (§30.13) | 1 | Taunt |
   | **Blessed** | +1 damage on every hit it lands, until the end of its owner's next turn | 2 | Blessing |
   | **Focused** | +1 damage on every hit of the Mage's abilities, until the end of its owner's next turn | 2 | Focus |
+  | **Warded** | Full cover against every shot, from any side, until the start of its owner's turn after next | 2 | Ward |
 
   Poisoned does what Burning does, and that's fine: the two may part ways
   later. A character can be burning and poisoned at once, and a knock-out by
@@ -4217,8 +4218,9 @@ and the planner lists one action per target rather than one per combination.
 | Bouncing Arrow | An enemy, as a shot | The bounce, drawn by the server |
 | Splitting Arrow | Two enemies, as a Cleave is (`at: "enemies"`, count 2) | — |
 | Shoot + Dodge | An enemy, as a shot, **then** a square | — |
-| Ice Ball, Ward | A square | The 3×3; the cover |
+| Ice Ball | A square | The 3×3 |
 | Beckon | An ally | Where the pull stops |
+| Ward | An ally | — |
 | Slash and Dash, Taunt, Focus, Blessing | Itself | Who is braced or blessed |
 
 The two additions:
@@ -4233,7 +4235,7 @@ The two additions:
 2. **`useful`, on a square aim.** The planner lists only squares where the
    ability does something, as it already lists a fireball only where someone
    is in its 3×3: a leap that lands beside an enemy, an Ice Ball with someone
-   in its 3×3, a ward beside one of its own side. The board still offers every
+   in its 3×3. The board still offers every
    legal square; only the planner trims.
 
 No ability needs aiming code of its own, and the test that fails for a kind of
@@ -4357,12 +4359,14 @@ Keeps Heal.
   every ally within *3* squares of the Cleric, the Cleric included. Counted on
   each blessed character's own turns, so an ally of another player's, whose
   turns come at other times, still gets one turn of it.
-- **Ward** (*name proposed*; *2* AP, cooldown *4*): one square becomes full
-  cover. *Proposed:* an empty square of open ground in sight within *6*
-  squares becomes high cover — blocking sight and movement, as high cover does
-  — until the start of the Cleric's owner's turn after next. It can't be
-  blasted, since only low cover can be (§22). Everyone sees it, as everyone
-  sees the ground.
+- **Ward** (*name proposed*; *2* AP, cooldown *4*): an ally is **Warded**
+  (§34.2): full cover against every shot, from any side, until the start of
+  its owner's turn after next. It's an effect on the character, not a change
+  to the ground, so it moves with them and nothing on the map has to be
+  stored or redrawn. *Proposed:* an ally in sight
+  within *6* squares, or the Cleric itself. Like any cover it does nothing
+  against a strike or an area: a fireball still lands. Everyone sees it, as
+  every effect is seen (§20.2).
 
 ### 34.9 Balance, mastery and the other factions
 
@@ -4405,7 +4409,7 @@ Each proposal above, to accept or change:
 10. **The Mage**: Ice Ball a 3×3 and Thunder one target; Focus on every hit of
     an ability, friends' included (§34.7)?
 11. **The Cleric**: the names Beckon, Blessing and Ward, and their values; a
-    ward that lasts until the turn after next (§34.8)?
+    ward that covers one ally until its turn after next (§34.8)?
 12. **Ready-made squads**: an Archer for each Scout (§34.1)?
 13. **Mastery**: Demolish replaces Shove (§34.9)?
 
