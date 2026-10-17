@@ -20,8 +20,8 @@ import { enemyNameOf, RA_SOLO_PARAM, REALM_ONLY } from "@/games/RealmArena/chara
 import { rematchFlag } from "@/utils/ui/rematch";
 import { reachAfter, useTurnDraft } from "@/games/RealmArena/useTurnDraft";
 import { battlefieldOf } from "@/games/RealmArena/maps";
-import { ACTION_POINTS, allied, armouredTeam, battleFrom, centreHolders, ENEMY_SIDE, isStanding, isWarband, sideScore, stoutTeam, TEAM_SIDE, warbandsFor, type Action, type BattleEvent, type Fighter } from "@/games/RealmArena/rules";
-import { actionFollow, battleCues, centreInSight, endOf, coopColourOf, ENEMY_COLOUR, fighterName, friendlySquares, isFollowedPart, isUnplaced, partFollow, partLabel, reviewParts, STEP_BEAT_MS, STEP_MIN_MS, squadHp, TEAM_COLOUR, TEAM_NAME, unseenSquares, waveLineOf, withPartState } from "@/games/RealmArena/ui";
+import { ACTION_POINTS, allied, armouredTeam, battleFrom, centreHolders, ENEMY_SIDE, isStanding, isWarband, sideScore, squadHp, stoutTeam, TEAM_SIDE, warbandsFor, type Action, type BattleEvent, type Fighter } from "@/games/RealmArena/rules";
+import { actionFollow, battleCues, centreInSight, endOf, coopColourOf, ENEMY_COLOUR, fighterName, friendlySquares, isFollowedPart, isUnplaced, partFollow, partLabel, reviewParts, STEP_BEAT_MS, STEP_MIN_MS, TEAM_COLOUR, TEAM_NAME, unseenSquares, waveLineOf, withPartState } from "@/games/RealmArena/ui";
 import type { IRealmArenaOutcome } from "@/games/RealmArena/RealmArenaLogic";
 import type { ICommandResponse } from "@/app/api/game/command/route";
 import TurnNavControls from "@/components/games/TurnNavControls";

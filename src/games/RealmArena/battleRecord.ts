@@ -18,8 +18,7 @@ import type { IReplayStep } from "@/utils/games/replay";
 import { CHARACTERS, type CharacterId } from "./characters";
 import type { IRealmArenaSpecificGameState } from "./RealmArenaModels";
 import { CHARACTER_IDS } from "./roster";
-import { squadHp } from "./ui";
-import { allied, battleRounds, ENEMY_SIDE, isStanding, isWarband, knockoutPoints, sideOf, TEAM_SIDE, waveArrives, type BattleEvent, type BattleState, type Fighter } from "./rules";
+import { allied, battleRounds, ENEMY_SIDE, isStanding, isWarband, knockoutPoints, sideOf, squadHp, TEAM_SIDE, waveArrives, type BattleEvent, type BattleState, type Fighter } from "./rules";
 
 /** What one player's characters of one kind did in a battle, pooled as their mastery is (§23.1). */
 export interface FightingRecord {

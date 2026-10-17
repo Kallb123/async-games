@@ -48,16 +48,6 @@ export function waveLineOf(nextWave: { round: number; arriving?: number; upTo?: 
     return nextWave.arriving === undefined ? when : `${when} · ${nextWave.upTo ? 'up to ' : ''}${nextWave.arriving} coming`;
 }
 
-/** A squad's remaining and full HP, including fallen fighters and each fighter's mustered maximum. Shared by the live scoreboard and battle record. */
-export function squadHp(fighters: readonly Fighter[]): { remaining: number; total: number } {
-    let remaining = 0, total = 0;
-    for (const fighter of fighters) {
-        remaining += fighter.hp;
-        total += maxHpOf(fighter);
-    }
-    return { remaining, total };
-}
-
 /** The letter a square's terrain is drawn with on the map: what the board styles it by. */
 export function terrainLetter(field: Battlefield, square: Square): TerrainLetter {
     return LETTER_OF.get(field.tiles[square].terrain) ?? ".";
