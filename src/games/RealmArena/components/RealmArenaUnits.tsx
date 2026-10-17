@@ -2,7 +2,7 @@
 import React from 'react';
 import Section from '@/components/ui/Section';
 import { CHARACTERS } from '@/games/RealmArena/characters';
-import { ACTION_POINTS, isStanding, maxHpOf, type BattleState, type Fighter } from '@/games/RealmArena/rules';
+import { actionPointsOf, isStanding, maxHpOf, type BattleState, type Fighter } from '@/games/RealmArena/rules';
 import RealmArenaCrosshair from './RealmArenaCrosshair';
 import { RealmArenaStatusList } from './RealmArenaEffects';
 import { apPips, canAct, effectsOn, fighterName, hpFraction, watchStatus } from '@/games/RealmArena/ui';
@@ -55,7 +55,7 @@ export default function RealmArenaUnits({ battle, player, colourFor, acting, sho
                             key={fighter.id}
                             mark={standing ? CHARACTER_MARK[fighter.character] : '✕'}
                             colour={standing ? colourFor(fighter.owner) : undefined}
-                            name={fighterName(fighters, fighter)}
+                            name={fighterName(fighters, fighter, battle)}
                             sub={`${fighter.hp}/${maxHpOf(fighter)} HP`}
                             selected={fighter.id === selectedId}
                             dim={done || !standing}
@@ -122,7 +122,7 @@ function UnitStatus({ fighter, acting, done }: { fighter: Fighter; acting: boole
     if (done) return <span>✓ Done</span>;
     if (!acting) return <span>{watchStatus(fighter) ?? 'Waiting'}</span>;
     return (
-        <span className="ag-ra-unit-ap" aria-label={`${fighter.ap} of ${ACTION_POINTS} AP left`}>
+        <span className="ag-ra-unit-ap" aria-label={`${fighter.ap} of ${fighter.maxAp ?? actionPointsOf(fighter)} AP left`}>
             <span className="ag-ra-unit-pips" aria-hidden="true">
                 {apPips(fighter).map((on, i) => (
                     <span key={i} className={`ag-ra-unit-pip${on ? ' ag-ra-unit-pip--on' : ''}`} />

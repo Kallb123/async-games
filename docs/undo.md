@@ -1536,8 +1536,10 @@ action's kind but what the action set off.
   `RealmArenaEndTurn`. `CheckEndTurn` empties the stack on every hand-off, so
   both are covered. The dropout adapter (free-for-all, B2) empties it too,
   because a snapshot taken before a player left would put their squad back.
-  Depth `ACTION_POINTS` (four): one character's whole turn of one-AP moves. A
-  turn spread over the squad can hold more than that, which only costs reach.
+  Depth `undoDepthOf(gs)`: one character's whole turn of one-AP moves, for
+  the character with the most AP the battle's own catalogue can give it —
+  four today, more under a catalogue with bonus AP (Slash and Dash). A turn
+  spread over the squad can hold more than that, which only costs reach.
 - **The cloner.** `cloneRealmArenaState` lives in `RealmArenaLogic.ts`, the
   only file that needs it — replay rebuilds the opening state from the seat
   order, as Dice Cities' did (§16).

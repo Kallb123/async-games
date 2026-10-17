@@ -9,7 +9,7 @@ import { undoableCommandsIn } from "@/utils/testing/undoableCommands";
 import { CHARACTERS, REALM } from "./characters";
 import { battlefieldById } from "./maps";
 import { RealmArenaGameDataModel, type RealmArenaSettings } from "./RealmArenaModels";
-import { cloneRealmArenaState, RealmArenaUndo, UNDO_STACK_DEPTH } from "./RealmArenaLogic";
+import { cloneRealmArenaState, RealmArenaUndo, undoDepthOf } from "./RealmArenaLogic";
 import type { IRealmArenaGameDataResponse } from "./apiModels";
 import { check, moveAp, reachOf, reactionsTo, readyMadeMuster, type Action, type Fighter } from "./rules";
 import { actBy, battleOf, blastSpot, cmd, endTurnBy, makeGame, muster, oneStep, play, PLAYERS, type RealmArenaTestGame, responseFor } from "./testFixtures";
@@ -105,15 +105,17 @@ describe("Realm Arena — undoing an action", () => {
         expect((await play(game, undoBy("a"))).outcome.validMove).toBe(false);
     });
 
-    it(`reaches back ${UNDO_STACK_DEPTH} actions at most`, async () => {
+    it("reaches back a character's whole turn of actions at most: 4 under today's catalogue", async () => {
         const game = await battle();
+        const depth = undoDepthOf(game.specificGameState);
+        expect(depth).toBe(4);
         const fighters = own(game, "a");
-        for (let i = 0; i <= UNDO_STACK_DEPTH; i++) {
+        for (let i = 0; i <= depth; i++) {
             const fighter = byId(game, fighters[i % fighters.length].id);
             expect((await play(game, actBy("a", oneStep(game, fighter)))).outcome.validMove).toBe(true);
         }
-        expect(game.specificGameState.undoStack).toHaveLength(UNDO_STACK_DEPTH);
-        for (let i = 0; i < UNDO_STACK_DEPTH; i++) expect((await play(game, undoBy("a"))).outcome.validMove).toBe(true);
+        expect(game.specificGameState.undoStack).toHaveLength(depth);
+        for (let i = 0; i < depth; i++) expect((await play(game, undoBy("a"))).outcome.validMove).toBe(true);
         expect((await play(game, undoBy("a"))).outcome.validMove).toBe(false);
     });
 

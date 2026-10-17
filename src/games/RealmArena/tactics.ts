@@ -1,3 +1,4 @@
+import { rulesetOf, type RulesContext } from "@/games/RealmArena/rulesets";
 // Realm Arena's tactics (docs/games/realm-arena.md §29.3, §29.7): the
 // questions a player asks before an action — who it could be aimed at, where
 // it could land, the odds of a shot from a square it hasn't moved to yet, the
@@ -11,9 +12,9 @@
 // would refuse. Pure and browser-safe, like rules.ts.
 
 import type { Square } from "@/utils/games/battlefield/terrain";
-import { ABILITIES, STRIKING_ABILITIES } from "./characters";
+import { ABILITIES, STRIKING_ABILITIES, type Ability, type AbilityId } from "./characters";
 import {
-    ACTION_POINTS, check, coverNextTo, fighterById, inRange, itemOf, nextTo, oddsBreakdown, reactionsTo, damageTo, shoots, shotOdds, strikeChance, weaponReaches,
+    actionPointsOf, check, coverNextTo, fighterById, inRange, itemOf, nextTo, oddsBreakdown, reactionsTo, damageTo, shoots, shotOdds, strikeChance, weaponReaches,
     type Action, type BattleState, type Fighter, type ShotKind, type ShotOdds,
 } from "./rules";
 
@@ -100,7 +101,9 @@ export function targetKindOf(kind: ActionKind): TargetKind | undefined {
 }
 
 /** What a kind of action's range is read from, for where it could land: undefined for a move or one that goes at once. */
-export function rangeKindOf(kind: ActionKind): RangeKind | undefined {
+export function rangeKindOf(kind: ActionKind, context?: RulesContext): RangeKind | undefined {
+    const ability = rulesetOf(context).ABILITIES[kind as AbilityId] as Ability | undefined;
+    if (ability?.range !== undefined) return ability.range;
     const aim = ACTION_AIMS[kind];
     return "range" in aim ? aim.range : undefined;
 }
@@ -115,7 +118,7 @@ export function rangeKindOf(kind: ActionKind): RangeKind | undefined {
  */
 export function rangeSquares(state: BattleState, fighter: Fighter, kind: RangeKind): ReadonlySet<Square> {
     const { field } = state;
-    const range = kind === "item" ? itemOf(fighter)?.range : kind;
+    const range = kind === "item" ? itemOf(fighter, state)?.range : kind;
     if (range === undefined) return new Set();
     const reaches = (square: Square): boolean => {
         if (square === fighter.square) return false;
@@ -154,7 +157,7 @@ export interface AttackOption {
  * what's in reach is a matter of where it stands, not what it has left.
  */
 export function attackOptions(state: BattleState, fighter: Fighter, square: Square = fighter.square): AttackOption[] {
-    const { battle, moved } = standingAt(state, { ...fighter, ap: ACTION_POINTS }, square);
+    const { battle, moved } = standingAt(state, { ...fighter, ap: actionPointsOf(fighter, state) }, square);
     return targetsOf(battle, fighter.owner, moved, "attack").flatMap(id => {
         const target = fighterById(battle, id);
         return target ? [{ target, chance: hitChance(battle, moved, target) }] : [];
@@ -191,7 +194,7 @@ export function reactionPreviews(state: BattleState, mover: Fighter, path: reado
     return reactionsTo(state, mover, path).flatMap(({ watcher: id, step }): ReactionPreview[] => {
         const watcher = fighterById(state, id);
         if (!watcher) return [];
-        if (!shoots(watcher)) return [{ watcher, kind: "guard", chance: strikeChance(state, mover), damage: damageTo(state, watcher, mover) }];
+        if (!shoots(watcher, state)) return [{ watcher, kind: "guard", chance: strikeChance(state, mover), damage: damageTo(state, watcher, mover) }];
         const { battle: there, moved } = standingAt(state, mover, path[step]);
         const odds = shotOdds(there, watcher, moved, "overwatch");
         return [{ watcher, kind: "overwatch", odds, chance: odds?.chance ?? 0, damage: odds?.damage ?? damageTo(state, watcher, moved) }];

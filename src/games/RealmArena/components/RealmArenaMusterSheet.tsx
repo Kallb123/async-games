@@ -1,4 +1,5 @@
 'use client'
+import { rulesetOf, type RulesContext } from "@/games/RealmArena/rulesets";
 import React, { useState } from 'react';
 import ActionButton from '@/components/ui/ActionButton';
 import AmountSteppers from '@/components/ui/AmountSteppers';
@@ -6,7 +7,7 @@ import BuildRow from '@/components/ui/BuildRow';
 import OptionChoiceSection from '@/components/ui/OptionChoiceSection';
 import Section from '@/components/ui/Section';
 import { ITEM_ART } from '@/games/RealmArena/art';
-import { CHARACTERS, FACTIONS, ITEM_IDS, ITEMS, OPTIONS, type ItemId, type OptionId } from '@/games/RealmArena/characters';
+import { type ItemId, type OptionId } from '@/games/RealmArena/characters';
 import type { Ranks } from '@/games/RealmArena/mastery';
 import { musterHp, type MusterPick } from '@/games/RealmArena/rules';
 import { CHARACTER_MARK, factionRosterLine, optionsFor, optionView, starterView } from '@/games/RealmArena/roster';
@@ -61,6 +62,8 @@ export default function RealmArenaMusterSheet(props: RealmArenaMusterSheetProps)
 
 /** Whichever step of the muster the player is on: picking the squad, or placing it. */
 function MusterStep({ draft, budget, colour, onPick, onMuster, pending, stout = false }: RealmArenaMusterSheetProps) {
+    const { CHARACTERS, ITEMS, FACTIONS } = rulesetOf(draft.context);
+    const itemIds = Object.keys(ITEMS) as ItemId[];
     const { factions, faction, setFaction, roster, counts, setCounts, items, setItems, pointsLeft, refusal, placement, ranks } = draft;
     const [info, setInfo] = useState<UnitRef>();
     // Over budget, the box already says why the muster can't go.
@@ -70,14 +73,14 @@ function MusterStep({ draft, budget, colour, onPick, onMuster, pending, stout = 
         const squadSize = squadOf(counts).length;
         return (
             <>
-                {info && <RealmArenaUnitInfo unit={info} onClose={() => setInfo(undefined)} />}
+                {info && <RealmArenaUnitInfo context={draft.context} unit={info} onClose={() => setInfo(undefined)} />}
                 {/* Nothing to choose with one faction allowed: the squad is bought from it. */}
                 {factions.length > 1 && (
                     <OptionChoiceSection
                         label="Your faction"
                         value={faction}
                         onChange={setFaction}
-                        choices={factions.map(id => ({ id, label: FACTIONS[id].name, description: factionRosterLine(id) }))}
+                        choices={factions.map(id => ({ id, label: FACTIONS[id].name, description: factionRosterLine(id, draft.context) }))}
                     />
                 )}
                 <Section label="Muster your squad">
@@ -97,7 +100,7 @@ function MusterStep({ draft, budget, colour, onPick, onMuster, pending, stout = 
                 </Section>
                 <Section label="Consumables, given to units on the next step">
                     <AmountSteppers
-                        kinds={ITEM_IDS}
+                        kinds={itemIds}
                         icon={id => <SpriteImage sprite={ITEM_ART[id]} boxed />}
                         title={id => ITEMS[id].name}
                         sub={id => `${ITEMS[id].points} points · ${ITEMS[id].ap} AP · ${ITEMS[id].description}`}
@@ -127,8 +130,8 @@ function MusterStep({ draft, budget, colour, onPick, onMuster, pending, stout = 
                             key={index}
                             mark={CHARACTER_MARK[pick.character]}
                             colour={colour}
-                            name={numberedName(picks, index)}
-                            sub={pick.option ? optionView(pick.option).name : `${musterHp(pick.character, stout)} HP`}
+                            name={numberedName(picks, index, draft.context)}
+                            sub={pick.option ? optionView(pick.option, draft.context).name : `${musterHp(pick.character, stout, draft.context)} HP`}
                             selected={index === selected}
                             onClick={() => onPick(index)}
                         >
@@ -143,8 +146,8 @@ function MusterStep({ draft, budget, colour, onPick, onMuster, pending, stout = 
                 </p>
                 {picked && (
                     <>
-                        <OptionPicker pick={picked} ranks={ranks} onChoose={draft.choose} />
-                        <ItemPicker pick={picked} picks={picks} onCarry={draft.carry} />
+                        <OptionPicker context={draft.context} pick={picked} ranks={ranks} onChoose={draft.choose} />
+                        <ItemPicker context={draft.context} pick={picked} picks={picks} onCarry={draft.carry} />
                     </>
                 )}
             </Section>
@@ -198,6 +201,7 @@ function PointsBox({ pointsLeft, budget }: PointsBoxProps) {
 }
 
 interface OptionPickerProps {
+    context?: RulesContext;
     /** The character picked up. */
     pick: MusterPick;
     ranks: Ranks;
@@ -213,9 +217,10 @@ interface OptionPickerProps {
  * unlocked is greyed, with the rank that does. An option costs what it
  * replaces, so the points never decide it.
  */
-function OptionPicker({ pick, ranks, onChoose }: OptionPickerProps) {
+function OptionPicker({ pick, ranks, onChoose, context }: OptionPickerProps) {
     const { character } = pick;
-    const options = optionsFor(character);
+    const { OPTIONS, CHARACTERS } = rulesetOf(context);
+    const options = optionsFor(character, context);
     if (options.length === 0) return null;
     const rank = ranks[character] ?? 0;
     const { name } = CHARACTERS[character];
@@ -230,7 +235,7 @@ function OptionPicker({ pick, ranks, onChoose }: OptionPickerProps) {
             </p>
             <div className="ag-build-list">
                 {parts.map(part => {
-                    const starter = starterView(character, part);
+                    const starter = starterView(character, part, context);
                     const kept = !pick.option || OPTIONS[pick.option].replaces !== part;
                     return (
                         <React.Fragment key={part}>
@@ -243,7 +248,7 @@ function OptionPicker({ pick, ranks, onChoose }: OptionPickerProps) {
                                 onClick={() => { if (!kept) onChoose(null); }}
                             />
                             {options.filter(id => OPTIONS[id].replaces === part).map(id => {
-                                const { icon, name: optionName, line } = optionView(id);
+                                const { icon, name: optionName, line } = optionView(id, context);
                                 const chosen = pick.option === id;
                                 const locked = OPTIONS[id].rank > rank;
                                 return (
@@ -269,6 +274,7 @@ function OptionPicker({ pick, ranks, onChoose }: OptionPickerProps) {
 }
 
 interface ItemPickerProps {
+    context?: RulesContext;
     /** The character picked up. */
     pick: MusterPick;
     /** The whole squad as placed, every item bought carried by one of them. */
@@ -283,9 +289,10 @@ interface ItemPickerProps {
  * one, in exchange. Nothing is bought or left behind here: the points were
  * spent choosing the squad, and changing the squad is where to change them.
  */
-function ItemPicker({ pick, picks, onCarry }: ItemPickerProps) {
+function ItemPicker({ pick, picks, onCarry, context }: ItemPickerProps) {
+    const { CHARACTERS, ITEMS } = rulesetOf(context);
     const { name } = CHARACTERS[pick.character];
-    const carried = ITEM_IDS.filter(id => picks.some(one => one.item === id));
+    const carried = (Object.keys(ITEMS) as ItemId[]).filter(id => picks.some(one => one.item === id));
     if (carried.length === 0) {
         return <p className="ag-hint ag-hint--tight">Your squad has no items to carry. Change squad to buy some.</p>;
     }

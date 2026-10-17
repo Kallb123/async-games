@@ -18,8 +18,9 @@ import { IRaceCarsGameData } from "@/games/RaceCars/RaceCarsModels";
 import { conservativeTurn } from "@/games/RaceCars/rules";
 import { budgetOf, playableFactions, RealmArenaEndTurn, RealmArenaMuster } from "@/games/RealmArena/RealmArenaLogic";
 import { IRealmArenaGameData } from "@/games/RealmArena/RealmArenaModels";
-import { FACTIONS, readyMadeSquad } from "@/games/RealmArena/characters";
+import { readyMadeSquad } from "@/games/RealmArena/characters";
 import { battlefieldById } from "@/games/RealmArena/maps";
+import { rulesetOf } from "@/games/RealmArena/rulesets";
 import { readyMadeMuster } from "@/games/RealmArena/rules";
 import { SACBuildRoad, SACEndTurn, SACMoveRobber, SACPlaceRoadSetup, SACPlaceSettlementSetup, SACRollDice } from "@/games/SettlementsAndCities/SettlementsAndCitiesLogic";
 import { ISettlementsAndCitiesGameData } from "@/games/SettlementsAndCities/SettlementsAndCitiesModels";
@@ -307,7 +308,7 @@ registerTurnTimeoutAdapter({
         // The first of the factions the host allowed (B6), as an old muster's was the Realm.
         muster.faction = playableFactions(gs)[0];
         try {
-            muster.picks = readyMadeMuster(battlefieldById(gs.map), seat, readyMadeSquad(FACTIONS[muster.faction], budgetOf(gs)));
+            muster.picks = readyMadeMuster(battlefieldById(gs.map), seat, readyMadeSquad(rulesetOf(gs).FACTIONS[muster.faction], budgetOf(gs)));
         } catch {
             // Only a party or a map with no room for the squad, which can't be played:
             // declined, so the missed turn still counts towards abandoning it.

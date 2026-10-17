@@ -13,9 +13,10 @@
 // Pure: it reads a step's command, its outcome and the state after it, and
 // imports nothing server-only.
 
+import { rulesetOf, type RulesContext } from "./rulesets";
 import type { GameResultEvent } from "@/utils/apiModels/GameDataApi";
 import type { IReplayStep } from "@/utils/games/replay";
-import { CHARACTERS, type CharacterId } from "./characters";
+import { type CharacterId } from "./characters";
 import type { IRealmArenaSpecificGameState } from "./RealmArenaModels";
 import { CHARACTER_IDS } from "./roster";
 import { allied, battleRounds, ENEMY_SIDE, isStanding, isWarband, knockoutPoints, sideOf, squadHp, TEAM_SIDE, waveArrives, type BattleEvent, type BattleState, type Fighter } from "./rules";
@@ -124,7 +125,8 @@ const copyOf = (records: ReadonlyMap<string, FightingRecord>) => new Map([...rec
  * records as they stood before each action the game's own undo stack still
  * holds, and puts them back when one is taken back.
  */
-export function battleRecorder(seats: readonly string[], sides?: BattleState["sides"], rounds = battleRounds(seats.length)) {
+export function battleRecorder(seats: readonly string[], sides?: BattleState["sides"], rounds = battleRounds(seats.length), context?: RulesContext) {
+    const { CHARACTERS } = rulesetOf(context);
     const lastRound = rounds - 1;
     const sided = { sides };
     /** The record's columns, and the one an owner's deeds go in. */
@@ -133,7 +135,7 @@ export function battleRecorder(seats: readonly string[], sides?: BattleState["si
     /** Everyone who has been on the battlefield, kept after a dropped player's squad has left it. */
     const known = new Map<number, Pick<Fighter, "owner" | "character">>();
     /** Each one's HP, and who set it burning, after the last step. */
-    let last = new Map<number, Pick<Fighter, "hp" | "burnedBy">>();
+    let last = new Map<number, Pick<Fighter, "hp" | "burnedBy" | "effectSources">>();
     let records = new Map<string, FightingRecord>();
     let undoable: Map<string, FightingRecord>[] = [];
     const centrePoints = new Map(columns.map(column => [column, 0]));
@@ -164,6 +166,7 @@ export function battleRecorder(seats: readonly string[], sides?: BattleState["si
         // lit and burn in one step. An effect is told straight after the
         // attack that put it on.
         const burnedBy = new Map([...last].map(([id, fighter]) => [id, fighter.burnedBy]));
+        const effectSources = new Map([...last].map(([id, fighter]) => [id, { ...fighter.effectSources }]));
         let attacker: number | undefined;
         const wound = (by: number | undefined, target: number, damage: number) => {
             const taken = Math.min(damage, hp.get(target) ?? 0);
@@ -178,9 +181,14 @@ export function battleRecorder(seats: readonly string[], sides?: BattleState["si
         for (const event of events) {
             if (event.kind === "shot" || event.kind === "struck" || event.kind === "fireball" || event.kind === "dynamite" || event.kind === "thrown" || event.kind === "demolished" || event.kind === "burst") attacker = event.fighter;
             switch (event.kind) {
-                case "effect":
+                case "effect": {
+                    const sources = effectSources.get(event.fighter) ?? {};
+                    if (event.change === "cleared") delete sources[event.effect];
+                    else sources[event.effect] = attacker;
+                    effectSources.set(event.fighter, sources);
                     if (event.effect === "burning") burnedBy.set(event.fighter, event.change === "cleared" ? undefined : attacker);
                     break;
+                }
                 case "shot": {
                     const shooter = recordOf(event.fighter);
                     if (shooter) {
@@ -206,7 +214,7 @@ export function battleRecorder(seats: readonly string[], sides?: BattleState["si
                     break;
                 case "burned":
                     // Credited to whoever set it alight, as its knock-out is (§20.2).
-                    wound(burnedBy.get(event.fighter), event.fighter, event.damage);
+                    wound(event.effect ? effectSources.get(event.fighter)?.[event.effect] : burnedBy.get(event.fighter), event.fighter, event.damage);
                     break;
                 case "healed": {
                     const healer = recordOf(event.fighter);
@@ -231,7 +239,7 @@ export function battleRecorder(seats: readonly string[], sides?: BattleState["si
                     if (by && !ally) {
                         const downer = recordOf(event.by)!;
                         downer.knockouts += 1;
-                        downer.knockoutPoints += knockoutPoints(fallen.character);
+                        downer.knockoutPoints += knockoutPoints(fallen.character, context);
                         const wave = waves.at(-1);
                         if (wave && isWarband(fallen.owner)) wave.downed.set(by.owner, (wave.downed.get(by.owner) ?? 0) + 1);
                     }
@@ -282,7 +290,7 @@ export function battleRecorder(seats: readonly string[], sides?: BattleState["si
                 // Starts its row, so a character that did nothing still has one.
                 recordOf(fighter.id);
             }
-            last = new Map(fighters.map(fighter => [fighter.id, { hp: fighter.hp, burnedBy: fighter.burnedBy }]));
+            last = new Map(fighters.map(fighter => [fighter.id, { hp: fighter.hp, burnedBy: fighter.burnedBy, effectSources: fighter.effectSources }]));
 
             // A step counts towards the round it began in: an End turn that
             // closes a round, and any burning as the next one begins, are
@@ -304,7 +312,7 @@ export function battleRecorder(seats: readonly string[], sides?: BattleState["si
             const left = (column: string) => !fighters.some(ours(column)) && [...known.values()].some(ours(column));
             const before = squadHpPerRound[index] ?? squadHpPerRound[index - 1];
             squadHpPerRound[index] = new Map(columns.map(column => [column, left(column) ? before?.get(column) ?? 0
-                : squadHp(fighters.filter(ours(column))).remaining]));
+                : squadHp(fighters.filter(ours(column)), context).remaining]));
             if (holdOut) {
                 const standing = (enemy: boolean) => fighters.filter(fighter => isStanding(fighter) && isWarband(fighter.owner) === enemy).length;
                 standingPerRound[index] = new Map([[TEAM_SIDE, standing(false)], [ENEMY_SIDE, standing(true)]]);
