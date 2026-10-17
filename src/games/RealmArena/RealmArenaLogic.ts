@@ -1,3 +1,4 @@
+import { rulesetOf } from "@/games/RealmArena/rulesets";
 import type { IGameData } from "@/utils/mongodb/GameData";
 import type { uuidString } from "@/utils/apiModels/GameDataApi";
 import { commandVersion, type ICommandOutcome, type IGameCommand, type IGameType } from "@/utils/apiModels/gameCommand";
@@ -7,7 +8,7 @@ import { recordedRolls } from "@/utils/games/recordedRolls";
 import { isDropped, nextActivePlayer, registerPlayerDropoutAdapter } from "@/utils/games/playerDropout";
 import { v4 as uuidv4, NIL as NIL_UUID } from 'uuid';
 import type { IRealmArenaCoop, IRealmArenaGameData, IRealmArenaSpecificGameState } from "@/games/RealmArena/RealmArenaModels";
-import { ABILITIES, CHARACTERS, DIFFICULTY_NAMES, EFFECTS, enemyNameOf, factionById, FACTIONS, ITEMS, musterBudget, readyMadeSquad, REALM_ONLY, warbandBudget, type Budget, type CharacterId, type FactionId } from "@/games/RealmArena/characters";
+import { ABILITIES, CHARACTERS, DIFFICULTY_NAMES, EFFECTS, enemyNameOf, factionById, ITEMS, musterBudget, readyMadeSquad, REALM_ONLY, warbandBudget, type Budget, type CharacterId, type FactionId } from "@/games/RealmArena/characters";
 import { battlefieldById, battlefieldOf } from "@/games/RealmArena/maps";
 import { addTally, NO_TALLY, type Tally } from "@/games/RealmArena/mastery";
 import {
@@ -126,7 +127,7 @@ export function warbandBudgetOf(gs: IRealmArenaSpecificGameState): Budget {
 
 /** The squad every warband musters, and each wave refills it to (§29.7, §30.3): its faction's ready-made squad for its budget. */
 function warbandSquad(gs: IRealmArenaSpecificGameState): readonly CharacterId[] {
-    return readyMadeSquad(factionById(gs.coop?.enemy), warbandBudgetOf(gs));
+    return readyMadeSquad(factionById(gs.coop?.enemy, gs), warbandBudgetOf(gs));
 }
 
 /**
@@ -413,7 +414,6 @@ export function ownerToken(owner: string, coop: IRealmArenaCoop | undefined): st
     return enemyNameOf(coop && enemyKnown(coop) ? coop.enemy : undefined);
 }
 
-
 /**
  * How the log names a character: "their Knight", "Bob's Archer" — or, in a
  * line written for a player whose side didn't see it (`seen`, §27.2), "a
@@ -581,7 +581,6 @@ function writeLine(
     });
     return told;
 }
-
 
 /**
  * Notes a random enemy seen (§29.3) once any of its characters is in the
@@ -930,7 +929,7 @@ export function waveOf(gs: IRealmArenaSpecificGameState, owner: string, growing:
     const zone = [...preferred, ...field.deployments[gs.seats.length + warband].filter(square => !preferred.includes(square))]
         .filter(square => !occupied.has(square));
     let nextId = Math.max(-1, ...gs.fighters.map(fighter => fighter.id)) + 1;
-    return missing.slice(0, zone.length).map((pick, index) => newFighter(nextId++, owner, pick.character, zone[index], pick.item ?? null, pick.option));
+    return missing.slice(0, zone.length).map((pick, index) => newFighter(nextId++, owner, pick.character, zone[index], pick.item ?? null, pick.option, undefined, gs));
 }
 
 /**
@@ -945,7 +944,7 @@ const RALLYING_VERSION = 6;
 function rally(gs: IRealmArenaSpecificGameState): void {
     for (const fighter of gs.fighters) {
         if (isWarband(fighter.owner) || !isStanding(fighter)) continue;
-        const full = maxHpOf(fighter);
+        const full = maxHpOf(fighter, gs);
         fighter.hp = Math.min(full, fighter.hp + Math.floor(full / 2));
     }
 }
@@ -1042,7 +1041,7 @@ export class RealmArenaMuster implements IGameCommand {
         const faction = this.faction ?? allowed[0];
         if (!allowed.includes(faction)) return INVALID;
         const ranks = gs.mastery?.[this.senderId] ?? {};
-        if (musterRefusal(field, seat, this.picks, budgetOf(gs), ranks, FACTIONS[faction]) !== undefined) return INVALID;
+        if (musterRefusal(field, seat, this.picks, budgetOf(gs), ranks, rulesetOf(gs).FACTIONS[faction], gs) !== undefined) return INVALID;
 
         // Exactly what was checked, and nothing else a request carried.
         this.picks = this.picks.map(pickOf);
@@ -1063,7 +1062,7 @@ export class RealmArenaMuster implements IGameCommand {
             // character's (`stoutTeam`); the warbands' keep theirs.
             const stout = stoutTeam(gs.coop?.mission, gs.rulesVersion);
             gs.fighters = musters.flatMap(({ owner, picks }) => picks.map(pick => ({ owner, pick })))
-                .map(({ owner, pick }, id) => newFighter(id, owner, pick.character, pick.square, pick.item ?? null, pick.option, stout && !isWarband(owner)));
+                .map(({ owner, pick }, id) => newFighter(id, owner, pick.character, pick.square, pick.item ?? null, pick.option, stout && !isWarband(owner), gs));
             gs.musters = [];
             gs.phase = "battle";
             data.gameState.history.unshift({ text: "The squads take the field, and the battle begins" });

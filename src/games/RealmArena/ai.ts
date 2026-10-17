@@ -1,3 +1,4 @@
+import { rulesetOf } from "@/games/RealmArena/rulesets";
 // Realm Arena's computer player (docs/games/realm-arena.md §29.7): how a
 // warband chooses what to do next in co-op, one action at a time.
 //
@@ -32,13 +33,13 @@
 
 import { costsFrom, DEFAULT_CLIMB, reachFrom, pathTo, type Reach } from "@/utils/games/battlefield/pathfinding";
 import { battlefieldWith, coordsOf, type Battlefield, type Square } from "@/utils/games/battlefield/terrain";
-import { ABILITIES, CHARACTERS, type AbilityId } from "./characters";
+import { type AbilityId } from "./characters";
 import {
     abilitiesOf, act, allied, areaAround, ATTACK_AP, blastedIn, CENTRE, CENTRE_SCORES_FROM_ROUND, centrePoints, check, fighterById, hasEffect, isStanding, landedSmoke,
     damageTo, maxHpOf, moveAp, movementOf, reachOf, ROLL_SIDES, shotOdds, squadSight, strikeChance, watchedSquares, weaponOf, weaponReaches,
     type Action, type BattleEvent, type BattleState, type Fighter, type FogGhost, type ShotOdds,
 } from "./rules";
-import { ACTION_AIMS, rangeSquares, reactionPreviews, rollsToHit, shotOf, targetKindOf, targetsOf, type ActionKind } from "./tactics";
+import { ACTION_AIMS, rangeKindOf, rangeSquares, reactionPreviews, rollsToHit, shotOf, targetKindOf, targetsOf, type ActionKind } from "./tactics";
 
 /**
  * What each term of a battle's score is worth (§29.7): the same for every
@@ -179,6 +180,7 @@ function planFor(view: BattleState, owner: string, round: number, memo: TurnMemo
     const centre = new Set(objective);
     const huntKey = `${fieldId(memo, field)}:${[...hunted].sort((a, b) => a - b).join()}`;
     const toCentre = (fighter: Fighter): number => {
+        const { CHARACTERS } = rulesetOf(view);
         if (centre.size === 0 || centre.has(fighter.square)) return 0;
         const climb = CHARACTERS[fighter.character].climb ?? DEFAULT_CLIMB;
         const cost = (hunted.length > 0 ? huntWalk(memo, field, hunted, huntKey, climb) : centreWalk(field, climb))[fighter.square];
@@ -270,7 +272,8 @@ function middleOf(field: Battlefield, area: readonly Square[]): Square | undefin
 function optionsFor(plan: Plan, fighter: Fighter): Action[] {
     const { state, owner } = plan;
     return (Object.keys(ACTION_AIMS) as ActionKind[]).flatMap((kind): Action[] => {
-        if (Object.hasOwn(ABILITIES, kind) && !abilitiesOf(fighter).includes(kind as AbilityId)) return [];
+        const { ABILITIES } = rulesetOf(plan.state);
+        if (Object.hasOwn(ABILITIES, kind) && !abilitiesOf(fighter, plan.state).includes(kind as AbilityId)) return [];
         const aim = ACTION_AIMS[kind];
         const target = targetKindOf(kind);
         switch (aim.at) {
@@ -287,7 +290,7 @@ function optionsFor(plan: Plan, fighter: Fighter): Action[] {
             case "square": {
                 // Somewhere it would land on someone: a blast on empty ground does nothing a stop doesn't.
                 const someone = new Set(state.fighters.filter(isStanding).map(one => one.square));
-                const squares = [...rangeSquares(state, fighter, aim.range)].filter(at => areaAround(state.field, at).some(square => someone.has(square)));
+                const squares = [...rangeSquares(state, fighter, rangeKindOf(kind, state) ?? aim.range)].filter(at => areaAround(state.field, at).some(square => someone.has(square)));
                 return allowed(plan, squares.map(at => ({ kind, fighter: fighter.id, at }) as Action));
             }
         }
@@ -333,7 +336,7 @@ function movesFor(plan: Plan, fighter: Fighter, kind: "move" | "sneak"): Action[
         // a square: its terms read the others' squares, and nobody else's
         // reads where it stands — its own shield wall shelters its allies,
         // never itself or an enemy.
-        const moved = { ...fighter, square, ap: fighter.ap - moveAp(fighter, cost, sneaking) };
+        const moved = { ...fighter, square, ap: fighter.ap - moveAp(fighter, cost, sneaking, plan.state) };
         let harm = known.get(square);
         if (!harm) known.set(square, harm = harmAt(state, moved, enemies));
         ranked.push({ square, value: standingTerms(plan, state, moved, enemies, harm) });
@@ -380,8 +383,8 @@ function judge(plan: Plan, action: Action): number {
     const mover = fighterById(state, action.fighter);
     if (!mover) return value;
     for (const reaction of reactionPreviews(state, mover, action.path)) {
-        if (reaction.kind === "overwatch" && reaction.odds) value -= WEIGHTS.strength * plan.ownWorth * worthOf(mover, expectedDamage(reaction.odds, mover.hp));
-        if (reaction.kind === "guard" && state.balanced) value -= WEIGHTS.strength * plan.ownWorth * worthOf(mover, reaction.chance * Math.min(reaction.damage, mover.hp) / ROLL_SIDES);
+        if (reaction.kind === "overwatch" && reaction.odds) value -= WEIGHTS.strength * plan.ownWorth * worthOf(mover, expectedDamage(reaction.odds, mover.hp), plan.state);
+        if (reaction.kind === "guard" && state.balanced) value -= WEIGHTS.strength * plan.ownWorth * worthOf(mover, reaction.chance * Math.min(reaction.damage, mover.hp) / ROLL_SIDES, plan.state);
     }
     return value;
 }
@@ -438,7 +441,7 @@ function score(plan: Plan, battle: BattleState, events: readonly BattleEvent[]):
     const enemies = enemiesOf(battle, owner);
     for (const fighter of battle.fighters) {
         if (!isStanding(fighter)) continue;
-        total += side(fighter.owner) * worthOf(fighter, fighter.hp) * WEIGHTS.strength * (side(fighter.owner) > 0 ? ownWorth : 1);
+        total += side(fighter.owner) * worthOf(fighter, fighter.hp, plan.state) * WEIGHTS.strength * (side(fighter.owner) > 0 ? ownWorth : 1);
         if (fighter.owner === owner) total += standingTerms(plan, battle, fighter, enemies);
     }
     return total;
@@ -459,7 +462,7 @@ function standingTerms(plan: Plan, battle: BattleState, fighter: Fighter, enemie
     const urgency = Math.min(1, plan.round / CENTRE_SCORES_FROM_ROUND);
     return -WEIGHTS.exposure * plan.ownWorth * exposure
         + WEIGHTS.threat * armed * threat
-        - WEIGHTS.objective * urgency * plan.toCentre(fighter) / movementOf(fighter);
+        - WEIGHTS.objective * urgency * plan.toCentre(fighter) / movementOf(fighter, plan.state);
 }
 
 /** A character's Exposure and Threat where it stands (`standingTerms`). */
@@ -511,10 +514,10 @@ function enemiesOf(battle: BattleState, player: string): Fighter[] {
  */
 function expectedHarm(battle: BattleState, attacker: Fighter, target: Fighter): number {
     const weapon = weaponOf(battle, attacker);
-    if (weapon.kind === "melee") return weaponReaches(battle, attacker, target.square) ? worthOf(target, strikeChance(battle, target) * Math.min(damageTo(battle, attacker, target), target.hp) / ROLL_SIDES) : 0;
+    if (weapon.kind === "melee") return weaponReaches(battle, attacker, target.square) ? worthOf(target, strikeChance(battle, target) * Math.min(damageTo(battle, attacker, target), target.hp) / ROLL_SIDES, battle) : 0;
     const odds = shotOdds(battle, attacker, target);
     if (!odds) return 0;
-    return worthOf(target, expectedDamage(odds, target.hp));
+    return worthOf(target, expectedDamage(odds, target.hp), battle);
 }
 
 /** The damage a shot could be expected to do a character with `hp` left, by its odds: never more than it has. */
@@ -523,6 +526,7 @@ function expectedDamage({ chance, grazeChance, damage, grazeDamage }: ShotOdds, 
 }
 
 /** What `hp` of a character is worth, in points: its cost, a share for each HP. */
-function worthOf(fighter: Fighter, hp: number): number {
-    return CHARACTERS[fighter.character].points * hp / maxHpOf(fighter);
+function worthOf(fighter: Fighter, hp: number, context: BattleState): number {
+    const { CHARACTERS } = rulesetOf(context);
+    return CHARACTERS[fighter.character].points * hp / maxHpOf(fighter, context);
 }

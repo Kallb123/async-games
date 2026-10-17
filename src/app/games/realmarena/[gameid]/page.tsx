@@ -137,7 +137,7 @@ export default function GameRealmArena({ params }: { params: Promise<{ gameid: u
     const stepFighters = nav.displayedState?.fighters;
     const stepMap = nav.displayedState?.map ?? '';
     const parts = useMemo(
-        () => !nav.isLive && previous ? reviewParts(stepMap, stepOutcome, previous.specificGameState, stepFighters, { still }) : [],
+        () => !nav.isLive && previous ? reviewParts(stepMap, stepOutcome, previous.specificGameState, stepFighters, { still, rulesVersion: previous.specificGameState.rulesVersion }) : [],
         [nav.isLive, previous, stepMap, stepOutcome, stepFighters, still],
     );
     const stepNow = `${nav.mode}:${nav.viewIndex}`;
@@ -252,7 +252,7 @@ export default function GameRealmArena({ params }: { params: Promise<{ gameid: u
     // The live turn, not the one a review shows, so stepping back through the
     // match and returning leaves anything lined up as it was.
     const turnKey = `${gameData?.currentTurn ?? ''}:${gameData?.specificGameState?.phase ?? ''}`;
-    const draft = useMusterDraft(field, mySeat, gs?.budget ?? 0, gs?.mastery?.[myUserId] ?? {}, gs?.factions ?? REALM_ONLY, turnKey);
+    const draft = useMusterDraft(field, mySeat, gs?.budget ?? 0, gs?.mastery?.[myUserId] ?? {}, gs?.factions ?? REALM_ONLY, turnKey, gs);
     const musterTurn = mustering && isMyTurn && !gs?.myMuster;
     const placement = musterTurn ? draft.placement : null;
     // A box in the placing list picks that one up and brings the view to it, even when it already was.
@@ -305,7 +305,7 @@ export default function GameRealmArena({ params }: { params: Promise<{ gameid: u
             // board the part before it left. A part with nothing to play is
             // dropped; the next one's `before` already chains from its board.
             const friendlyAfter = (state: readonly Fighter[]) => friendlySquares(state, myUserId, coop);
-            const entries = reviewParts(map, step, { fighters, blasted: gs?.blasted ?? [] }, after, { still })
+            const entries = reviewParts(map, step, { fighters, blasted: gs?.blasted ?? [] }, after, { still, rulesVersion: gs?.rulesVersion })
                 .filter(part => part.cues.length > 0)
                 .map((part, i) => {
                     const partKey = `${key}:${i}`;
@@ -318,7 +318,7 @@ export default function GameRealmArena({ params }: { params: Promise<{ gameid: u
                 });
             return setOwn(entries.length > 0 ? { playbacks: entries, index: 0, rested: false } : null);
         }
-        const cues = battleCues(field, events, fighters, after, { still });
+        const cues = battleCues(field, events, fighters, after, { still, rulesVersion: gs?.rulesVersion });
         if (cues.length === 0) return setOwn(null);
         const to = picked ?? actionFollow(field, events, fighters, after, `play:${key}`, still);
         setOwn({ playbacks: [{ playback: { key, cues, events, field, before: fighters }, follow: to }], index: 0, rested: false });
@@ -611,6 +611,7 @@ export default function GameRealmArena({ params }: { params: Promise<{ gameid: u
                             unseen={unseen}
                             clouds={clouds}
                             sides={battle.sides}
+                            rulesVersion={battle.rulesVersion}
                             sealed={placement?.picks ?? gs.myMuster}
                             owners={coop ? [...seats, ...warbandsFor(seats)] : seats}
                             waveDue={waveDue}
@@ -727,7 +728,7 @@ export default function GameRealmArena({ params }: { params: Promise<{ gameid: u
                     )}
 
                     {battleTurn && (
-                        <RealmArenaWatchSwitches fighters={fighters} player={myUserId} keepStill={keepStill} onKeepStill={setKeepStill} disabled={pendingTarget !== null} />
+                        <RealmArenaWatchSwitches context={battle} fighters={fighters} player={myUserId} keepStill={keepStill} onKeepStill={setKeepStill} disabled={pendingTarget !== null} />
                     )}
 
                     <TurnNavControls nav={nav as unknown as ReturnType<typeof useTurnNavigation>} canPlan={false} canPlay userIdList={userIdList} stepDetail={stepDetail} />

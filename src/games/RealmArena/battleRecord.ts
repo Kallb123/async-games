@@ -13,9 +13,10 @@
 // Pure: it reads a step's command, its outcome and the state after it, and
 // imports nothing server-only.
 
+import { rulesetOf, type RulesContext } from "./rulesets";
 import type { GameResultEvent } from "@/utils/apiModels/GameDataApi";
 import type { IReplayStep } from "@/utils/games/replay";
-import { CHARACTERS, type CharacterId } from "./characters";
+import { type CharacterId } from "./characters";
 import type { IRealmArenaSpecificGameState } from "./RealmArenaModels";
 import { CHARACTER_IDS } from "./roster";
 import { allied, battleRounds, ENEMY_SIDE, isStanding, isWarband, knockoutPoints, sideOf, TEAM_SIDE, waveArrives, type BattleEvent, type BattleState, type Fighter } from "./rules";
@@ -124,7 +125,8 @@ const copyOf = (records: ReadonlyMap<string, FightingRecord>) => new Map([...rec
  * records as they stood before each action the game's own undo stack still
  * holds, and puts them back when one is taken back.
  */
-export function battleRecorder(seats: readonly string[], sides?: BattleState["sides"], rounds = battleRounds(seats.length)) {
+export function battleRecorder(seats: readonly string[], sides?: BattleState["sides"], rounds = battleRounds(seats.length), context?: RulesContext) {
+    const { CHARACTERS } = rulesetOf(context);
     const lastRound = rounds - 1;
     const sided = { sides };
     /** The record's columns, and the one an owner's deeds go in. */
@@ -231,7 +233,7 @@ export function battleRecorder(seats: readonly string[], sides?: BattleState["si
                     if (by && !ally) {
                         const downer = recordOf(event.by)!;
                         downer.knockouts += 1;
-                        downer.knockoutPoints += knockoutPoints(fallen.character);
+                        downer.knockoutPoints += knockoutPoints(fallen.character, context);
                         const wave = waves.at(-1);
                         if (wave && isWarband(fallen.owner)) wave.downed.set(by.owner, (wave.downed.get(by.owner) ?? 0) + 1);
                     }

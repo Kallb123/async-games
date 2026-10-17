@@ -3829,10 +3829,13 @@ melee always hits and rolls nothing, two players' Hold Out of 15 rounds, cover c
 at 70% and range 10, Heal on a two-turn cooldown, Raise once per battle, and no
 `maxHp`, armour or smaller warbands.
 `battleFrom` reads the stamp into `BattleState.balanced`, which the rules,
-the planner and the board all read; the abilities' old limits are
-`UNBALANCED_LIMITS` in `rules.ts`, as `abilityRules` reads them, since the
-`ABILITIES` table is the current rules. What a stale battle's turn sheet *says*
-(the table's descriptions) is the current wording.
+the planner and the board all read. The stamp also selects an immutable
+catalogue through `rulesetOf`, including the old Mage Bolt and healing limits
+and descriptions. New games use `CURRENT_RULESET_VERSION`, independently of
+the command protocol version; old games, including those without a stamp,
+keep their catalogue for muster, timeout squads, reinforcements, execution,
+previews and replay. See `docs/command-versions.md`, “Realm Arena catalogues”,
+for the release procedure.
 
 **Tests.** `balance.test.ts` pins each rule against a battle with the rules and
 one without; `rules.test.ts`, `coop.test.ts`, `stats.test.ts`, `undo.test.ts`

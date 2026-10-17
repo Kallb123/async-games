@@ -1,8 +1,9 @@
+import { rulesetOf, type RulesContext } from "@/games/RealmArena/rulesets";
 import { useMemo } from "react";
 import { useResettingState } from "@/utils/hooks/useResettingState";
 import { pathTo, type Reach } from "@/utils/games/battlefield/pathfinding";
 import type { Square } from "@/utils/games/battlefield/terrain";
-import { ABILITIES, ITEMS, type Ability, type Item } from "./characters";
+import { type Ability, type Item } from "./characters";
 import { allied, blastedBy, check, demolishArea, fighterById, areaAround, isStanding, itemOf, oddsBreakdown, reachOf, damageTo, shotOdds, type Action, type BattleState, type Check, type Fighter, type OddsBreakdown } from "./rules";
 import { ACTION_AIMS, attackOptions, rangeKindOf, rangeSquares, reactionPreviews, rollsToHit, shotOf, targetKindOf, targetsOf, type AttackOption } from "./tactics";
 import { reachShading } from "./ui";
@@ -66,14 +67,11 @@ export const isAtSquare = (aim: Aim): aim is AtSquare => ACTION_AIMS[aim].at ===
  */
 function landing(state: BattleState, fighter: Fighter, aim: AtSquare, at: Square): Square[] {
     if (aim === "demolish") return demolishArea(state.field, fighter.square, at);
-    return aim === "throw" ? (itemOf(fighter)?.area ? areaAround(state.field, at) : [at]) : BLASTER[aim].blasts === "area" ? areaAround(state.field, at) : [at];
+    return aim === "throw" ? (itemOf(fighter, state)?.area ? areaAround(state.field, at) : [at]) : rulesetOf(state).ABILITIES[aim].blasts === "area" ? areaAround(state.field, at) : [at];
 }
 
-/** What blasts away low cover where it's aimed (§22): the ability, or the item thrown. */
-const BLASTER: Readonly<Record<Exclude<AtSquare, "throw">, Ability>> = { fireball: ABILITIES.fireball, dynamite: ABILITIES.dynamite, demolish: ABILITIES.demolish };
-
 /** What lands where a fireball, dynamite, a throw or a Demolish is aimed: the ability, or the item thrown. */
-export const landsOf = (fighter: Fighter, aim: AtSquare): Ability | Item | undefined => aim === "throw" ? itemOf(fighter) : BLASTER[aim];
+export const landsOf = (fighter: Fighter, aim: AtSquare, context?: RulesContext): Ability | Item | undefined => aim === "throw" ? itemOf(fighter, context) : rulesetOf(context).ABILITIES[aim];
 
 /** The action a draft has lined up, once it has everything the action needs. */
 function actionOf(fighter: Fighter, { aim, square, targets }: Draft, path: Square[] | undefined): Action | null {
@@ -90,7 +88,11 @@ function actionOf(fighter: Fighter, { aim, square, targets }: Draft, path: Squar
 }
 
 /** The aims that heal the one they're lined up on, and by how much (before it's capped at full). */
-export const HEAL_HP: Partial<Record<Aim, number>> = { heal: ABILITIES.heal.hp, regrowth: ABILITIES.regrowth.hp, draught: ITEMS.healingDraught.hp };
+export function healingHp(aim: Aim, context?: RulesContext): number | undefined {
+    const { ABILITIES, ITEMS } = rulesetOf(context);
+    return aim === "draught" ? ITEMS.healingDraught.hp
+        : aim === "heal" || aim === "regrowth" ? ABILITIES[aim].hp : undefined;
+}
 
 /**
  * What a lined-up action would do to the HP of each character it touches, by
@@ -101,15 +103,16 @@ export const HEAL_HP: Partial<Record<Aim, number>> = { heal: ABILITIES.heal.hp, 
  */
 export function hpPreview(battle: BattleState, fighter: Fighter, { aim, targets }: Draft, area: readonly Square[] | null): ReadonlyMap<number, number> {
     if (area && isAtSquare(aim)) {
-        const damage = landsOf(fighter, aim)?.damage ?? 0;
+        const damage = landsOf(fighter, aim, battle)?.damage ?? 0;
         const caught = damage > 0 ? battle.fighters.filter(one => isStanding(one) && area.includes(one.square)) : [];
         return new Map(caught.map(one => [one.id, -damageTo(battle, fighter, one, damage)]));
     }
-    const heals = HEAL_HP[aim];
+    const heals = healingHp(aim, battle);
     if (heals !== undefined) return new Map(targets.map(id => [id, heals]));
     // The aims that strike or shoot the characters they're lined up on.
     if (!rollsToHit(aim)) return new Map();
     return new Map(targets.flatMap((id): [number, number][] => {
+        const { ABILITIES } = rulesetOf(battle);
         const target = fighterById(battle, id);
         if (!target) return [];
         if (aim === "shieldBash" || aim === "rend") return [[id, -damageTo(battle, fighter, target, ABILITIES[aim].damage)]];
@@ -237,18 +240,18 @@ export function useTurnDraft(battle: BattleState, player: string, fighter: Fight
     const key = fighter ? `${turnKey}:${fighter.id}:${fighter.square}:${fighter.ap}:${fighter.hp}` : turnKey;
     const [draft, setDraft] = useResettingState<Draft>(MOVE, key);
     // The pieces the searches read, sides among them, so a teammate is passed through as the server's `check` would (§29.6).
-    const { field, fighters, sides } = battle;
+    const { field, fighters, sides, rulesVersion } = battle;
     const aim = draft.aim;
     // The reach is a search over every square of the map, so it's worked out
     // once per character and aim rather than on every render.
     const reach = useMemo(
-        () => fighter && isMoving(aim) ? reachOf({ field, fighters, sides }, fighter, aim === "sneak") : null,
-        [field, fighters, sides, fighter, aim],
+        () => fighter && isMoving(aim) ? reachOf({ field, fighters, sides, rulesVersion }, fighter, aim === "sneak") : null,
+        [field, fighters, sides, rulesVersion, fighter, aim],
     );
-    const shading = useMemo(() => fighter && reach ? reachShading(fighter, reach, aim === "sneak") : null, [fighter, reach, aim]);
+    const shading = useMemo(() => fighter && reach ? reachShading(fighter, reach, aim === "sneak", battle) : null, [fighter, reach, aim, battle]);
     // Aimed at anything else, the shading is where it could land instead: its range.
-    const rangeKind = rangeKindOf(aim);
-    const range = useMemo(() => fighter && rangeKind ? rangeSquares({ field, fighters, sides }, fighter, rangeKind) : null, [field, fighters, sides, fighter, rangeKind]);
+    const rangeKind = rangeKindOf(aim, battle);
+    const range = useMemo(() => fighter && rangeKind ? rangeSquares({ field, fighters, sides, rulesVersion }, fighter, rangeKind) : null, [field, fighters, sides, rulesVersion, fighter, rangeKind]);
     if (!fighter) return null;
 
     const path = reach && draft.square !== null ? pathTo(reach, draft.square)?.squares : undefined;
@@ -296,7 +299,7 @@ export function useTurnDraft(battle: BattleState, player: string, fighter: Fight
         /** What the action lined up would do to the HP of each character it touches: less on a hit, more for a heal. */
         hpChange: hpPreview(battle, fighter, draft, area),
         /** The low cover a lined-up fireball, fire flask or Demolish would blast away (§22). */
-        blasts: isAtSquare(aim) && draft.square !== null ? blastedBy(battle.field, landsOf(fighter, aim), draft.square) : null,
+        blasts: isAtSquare(aim) && draft.square !== null ? blastedBy(battle.field, landsOf(fighter, aim, battle), draft.square) : null,
         action,
         verdict,
         send,

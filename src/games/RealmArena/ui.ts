@@ -2,6 +2,7 @@
 // per-game presentation helpers live in games/<Game>/ui.ts). Readings of the
 // state the response already ships, never a rule: those are rules.ts's.
 
+import type { RulesContext } from "./rulesets";
 import type { Rect } from "@/utils/ui/mapLabels";
 import { isoCentre, ISO_HALF_HEIGHT, ISO_HALF_WIDTH, type IsoView, type Point } from "@/utils/ui/isometric";
 import type { IRealmArenaStepOutcome, IRealmArenaStepPart, RealmArenaPartState } from "./apiModels";
@@ -702,10 +703,10 @@ export function placeTap({ picks, selected }: Placement, square: Square, zone: r
  * The tap-to-move shading (§13.2): every square a character could stop on,
  * and the AP it would cost to get there. Where it stands isn't shaded.
  */
-export function reachShading(fighter: Fighter, reach: Reach, sneaking: boolean): ReadonlyMap<Square, number> {
+export function reachShading(fighter: Fighter, reach: Reach, sneaking: boolean, context?: RulesContext): ReadonlyMap<Square, number> {
     const shading = new Map<Square, number>();
     reach.costs.forEach((cost, square) => {
-        if (square !== reach.from && cost !== Infinity) shading.set(square, moveAp(fighter, cost, sneaking));
+        if (square !== reach.from && cost !== Infinity) shading.set(square, moveAp(fighter, cost, sneaking, context));
     });
     return shading;
 }
@@ -1267,7 +1268,7 @@ function scaled(cue: BattleCue, scale: number): BattleCue {
 }
 
 /** How `battleCues` builds a timeline. */
-export interface BattleCueOptions {
+export interface BattleCueOptions extends RulesContext {
     /**
      * For a player who has asked for less motion: the board draws no walker
      * and no flight, so none of them takes any time. A walk is still told, but
@@ -1426,7 +1427,7 @@ function timeline(field: Battlefield, events: readonly ToldEvent[], before: read
                 // Every character a turn ends on watch is told at once, so they say so together.
                 const fighter = as.get(event.fighter);
                 const when = events[index - 1]?.kind === "watching" && landed !== null ? landed : beat();
-                if (fighter) say(event.fighter, when, shoots(fighter) ? OVERWATCH_WORD : ON_GUARD_WORD);
+                if (fighter) say(event.fighter, when, shoots(fighter, options) ? OVERWATCH_WORD : ON_GUARD_WORD);
                 break;
             }
             case "fireball":
