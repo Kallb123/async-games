@@ -1,5 +1,5 @@
 'use client'
-import { useCallback, useEffect } from 'react';
+import { useCallback, useEffect, useMemo, useRef } from 'react';
 import { hasTutorial } from '@/utils/ui/gameTutorials';
 import { fetchWithSessionRetry, REQUEST_TIMEOUT_MS } from './fetchWithSessionRetry';
 import { useIsAuthorised, useSessionRefresh } from './useAuthGuard';
@@ -25,7 +25,8 @@ export interface GameIntro {
     close: () => void;
 }
 
-type IntroKind = 'guide' | 'tutorial';
+const INTRO_KINDS = ['guide', 'tutorial'] as const;
+type IntroKind = typeof INTRO_KINDS[number];
 interface SeenLists {
     seen: string[];
     seenTutorials: string[];
@@ -68,10 +69,29 @@ export function useGameIntro(gameUrl: string): GameIntro {
     const [mode, setMode] = useResettingState<IntroKind | 'closed' | null>(null, `${userId}:${gameUrl}`);
     // undefined = waiting; null = failed. Progress belongs only to this user.
     const [seen, setSeen] = useResettingState<SeenLists | null | undefined>(undefined, userId ?? '');
-    const guideKey = `game-intro:guide:${userId}:${gameUrl}`;
-    const tutorialKey = `game-intro:tutorial:${userId}:${gameUrl}`;
+    const guideKey = userId ? `game-intro:guide:${userId}:${gameUrl}` : null;
+    const tutorialKey = userId ? `game-intro:tutorial:${userId}:${gameUrl}` : null;
     const [storedGuide, storeGuide] = useStoredValue(guideKey);
     const [storedTutorial, storeTutorial] = useStoredValue(tutorialKey);
+
+    const progress = useMemo(() => ({
+        guide: { key: guideKey, field: 'seen' as const, store: storeGuide },
+        tutorial: { key: tutorialKey, field: 'seenTutorials' as const, store: storeTutorial },
+    }), [guideKey, tutorialKey, storeGuide, storeTutorial]);
+    // Keep the promise even after it settles: replaying in this visit never
+    // retries a save, including after a failed read/write. A remount retries
+    // pending browser dismissals through reconciliation instead.
+    const saves = useRef(new Map<string, Promise<void>>());
+    const saveOnce = useCallback((kind: IntroKind): Promise<void> => {
+        const { key } = progress[kind];
+        if (!key || !isAuthorised) return Promise.resolve();
+        let pending = saves.current.get(key);
+        if (!pending) {
+            pending = saveProgress(gameUrl, kind);
+            saves.current.set(key, pending);
+        }
+        return pending;
+    }, [progress, isAuthorised, gameUrl]);
 
     useEffect(() => {
         if (!userId || !isAuthorised) return;
@@ -81,20 +101,26 @@ export function useGameIntro(gameUrl: string): GameIntro {
                 const response = await fetchWithSessionRetry('/api/gameguides', () => cancelled, refreshSession);
                 if (!response?.ok) throw new Error('Failed to load game intro progress');
                 const data = await response.json();
-                if (!Array.isArray(data?.seen) || !Array.isArray(data?.seenTutorials)) {
+                if (!data || typeof data !== 'object' || Array.isArray(data)) {
                     throw new Error('Invalid game intro progress');
                 }
                 if (cancelled) return;
-                setSeen(data);
-                for (const entry of [
-                    { kind: 'guide' as const, key: guideKey, list: data.seen, store: storeGuide },
-                    { kind: 'tutorial' as const, key: tutorialKey, list: data.seenTutorials, store: storeTutorial },
-                ]) {
+                // Older/cached responses may contain only one list. Normalize
+                // each field independently, preserving the history that arrived.
+                const lists: SeenLists = { seen: [], seenTutorials: [] };
+                for (const kind of INTRO_KINDS) {
+                    const { field } = progress[kind];
+                    lists[field] = Array.isArray(data[field])
+                        ? data[field].filter((entry: unknown): entry is string => typeof entry === 'string') : [];
+                }
+                setSeen(lists);
+                for (const kind of INTRO_KINDS) {
                     if (cancelled) return;
-                    if (entry.list.includes(gameUrl)) entry.store('1');
+                    const entry = progress[kind];
+                    if (lists[entry.field].includes(gameUrl)) entry.store('1');
                     // Read at response time: a manual tour can be dismissed
                     // while this GET is still out. Never undo that dismissal.
-                    else if (readStoredValue(entry.key) === '1') await saveProgress(gameUrl, entry.kind);
+                    else if (readStoredValue(entry.key) === '1') await saveOnce(kind);
                 }
             } catch (error) {
                 if (!cancelled) {
@@ -105,7 +131,7 @@ export function useGameIntro(gameUrl: string): GameIntro {
         }
         void load();
         return () => { cancelled = true; };
-    }, [userId, isAuthorised, gameUrl, refreshSession, guideKey, tutorialKey, storeGuide, storeTutorial, setSeen]);
+    }, [userId, isAuthorised, gameUrl, refreshSession, progress, saveOnce, setSeen]);
 
     const loaded = !!userId && isAuthorised && seen !== undefined;
     const gameHasTutorial = hasTutorial(gameUrl);
@@ -117,15 +143,14 @@ export function useGameIntro(gameUrl: string): GameIntro {
     const startTutorial = useCallback(() => setMode('tutorial'), [setMode]);
     const openGuide = useCallback(() => setMode('guide'), [setMode]);
     const close = useCallback(() => {
-        if (tutorialOpen) {
-            storeTutorial('1');
-            if (isAuthorised && !seen?.seenTutorials.includes(gameUrl)) void saveProgress(gameUrl, 'tutorial');
-        } else if (guideOpen) {
-            storeGuide('1');
-            if (isAuthorised && !seen?.seen.includes(gameUrl)) void saveProgress(gameUrl, 'guide');
+        const kind = tutorialOpen ? 'tutorial' : guideOpen ? 'guide' : null;
+        if (kind) {
+            const entry = progress[kind];
+            entry.store('1');
+            if (!seen?.[entry.field].includes(gameUrl)) void saveOnce(kind);
         }
         setMode('closed');
-    }, [tutorialOpen, guideOpen, storeTutorial, storeGuide, seen, gameUrl, setMode, isAuthorised]);
+    }, [tutorialOpen, guideOpen, progress, seen, gameUrl, setMode, saveOnce]);
 
     return { tutorialOpen, guideOpen, loaded, startTutorial, openGuide, close };
 }

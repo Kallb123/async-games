@@ -355,9 +355,8 @@ rather than be copied:
   writes to the list `kind` names, defaulting to `'guide'`. `kind` arrives from
   the client, so it is matched against the two literals and used to pick a named
   key — never to index `privateMetadata` directly or let a caller write
-  arbitrary metadata keys. Its allowlist check becomes "in `GAME_GUIDES` or in `GAME_TUTORIALS`", by kind —
-  that check is
-  what makes the registry line mandatory, the same way `gameRegistry.test.ts`
+  arbitrary metadata keys. Its allowlist check becomes "in `GAME_GUIDES` or
+  in `GAME_TUTORIALS`", by kind — that check is what makes the registry line mandatory, the same way `gameRegistry.test.ts`
   guards the engine's.
 - **Account progress is merged per game.** New saves patch only
   `privateMetadata.gameIntroProgress[seenGameGuides | seenGameTutorials][slug] = true`
@@ -382,7 +381,11 @@ const intro = useGameIntro('dicecities');
   `guideOpen` is true when they open it from ⋮, or — for a game with no
   tutorial — on their first match, exactly as today. Never both: the tutorial
   wins. Closing marks only the welcome that was on screen; replaying an
-  already-seen welcome does not write its account progress again.
+  already-seen welcome does not write its account progress again. One shared
+  per-kind table connects response fields, account-scoped storage and saves.
+  Closing and reconciliation share one save promise per account/game/kind
+  during the visit, so replays do not duplicate pending, successful or failed
+  attempts. Failed attempts are retried on a later visit instead.
 
   Dismissals are also remembered through `useStoredValue`, scoped to the
   account, game and welcome kind. A failed account save or stale read cannot
@@ -392,8 +395,13 @@ const intro = useGameIntro('dicecities');
   so expired sessions can be renewed and retried. Menu choices use the known
   account identity immediately and survive session confirmation. A dismissal
   before confirmation is remembered locally and saved once requests are safe.
-  Failed or malformed reads never count as empty progress: they suppress auto-show for that visit, settle
-  `loaded` so role welcomes can proceed, and leave manual replay available.
+  Until an account exists, storage keys are null; `useStoredValue` disables
+  both reads and writes for that key, including its session fallback.
+  Failed requests or malformed response bodies suppress auto-show for that
+  visit, settle `loaded` so role welcomes can proceed, and leave manual replay
+  available. A successful object response normalizes each list separately:
+  missing or malformed fields default to `[]`, preserving any valid list that
+  arrived in an older or cached response.
 
 **A player who already saw the guide still gets the tutorial once**, because
 the lists are separate. That is the intent: the tutorial is new and better, and

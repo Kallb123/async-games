@@ -3,10 +3,10 @@ import { act, createElement } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-const auth = { userId: '', authorised: true };
+const auth = { userId: '' as string | null, authorised: true };
 const refreshSession = vi.fn(async () => {});
 vi.mock('./useAuthGuard', () => ({
-    useIsAuthorised: () => ({ user: { id: auth.userId }, isAuthorised: auth.authorised }),
+    useIsAuthorised: () => ({ user: auth.userId ? { id: auth.userId } : null, isAuthorised: auth.authorised }),
     useSessionRefresh: () => refreshSession,
 }));
 
@@ -149,12 +149,97 @@ describe('remembering game intros', () => {
         expect(posts()).toHaveLength(1);
     });
 
-    it.each([{}, null, { seen: [], seenTutorials: 'invalid' }])('does not auto-open from malformed progress: %j', async body => {
+    it.each([null, [], 'invalid'])('does not auto-open from malformed progress: %j', async body => {
         getBody = body;
         const screen = mount();
         await screen.render();
         expect(screen.current.loaded).toBe(true);
         expect(screen.current.tutorialOpen).toBe(false);
+    });
+
+    it.each([
+        { game: 'realmarena', body: { seenTutorials: ['realmarena'] }, open: false },
+        { game: 'outbreak', body: { seen: ['outbreak'] }, open: false },
+        { game: 'realmarena', body: { seen: ['realmarena'] }, open: true },
+        { game: 'outbreak', body: { seenTutorials: [] }, open: true },
+        { game: 'realmarena', body: {}, open: true },
+        { game: 'realmarena', body: { seen: 'invalid', seenTutorials: ['realmarena'] }, open: false },
+        { game: 'outbreak', body: { seen: ['outbreak'], seenTutorials: null }, open: false },
+        { game: 'realmarena', body: { seen: ['realmarena'], seenTutorials: 'invalid' }, open: true },
+    ])('keeps valid progress fields and defaults only missing/malformed fields: $game $body', async ({ game, body, open }) => {
+        getBody = body;
+        const screen = mount(game);
+        await screen.render();
+        expect(screen.current.loaded).toBe(true);
+        expect(screen.current.tutorialOpen || screen.current.guideOpen).toBe(open);
+    });
+
+    it.each([
+        ['guide', 200, 200], ['tutorial', 200, 200],
+        ['guide', 500, 200], ['tutorial', 500, 200],
+        ['guide', 200, 503], ['tutorial', 200, 503],
+        ['guide', 500, 503], ['tutorial', 500, 503],
+    ] as const)('saves %s once per visit across replays (GET %s, POST %s)', async (kind, readStatus, saveStatus) => {
+        const game = kind === 'guide' ? 'outbreak' : 'realmarena';
+        getStatus = readStatus;
+        postStatus = saveStatus;
+        const screen = mount(game);
+        await screen.render();
+        for (let replay = 0; replay < 3; replay++) {
+            await act(async () => kind === 'guide' ? screen.current.openGuide() : screen.current.startTutorial());
+            await act(async () => screen.current.close());
+        }
+        expect(posts()).toHaveLength(1);
+        expect(fetchMock.mock.calls.filter(([, options]) => options?.method !== 'POST')).toHaveLength(1);
+        expect(window.localStorage.getItem(`game-intro:${kind}:${auth.userId}:${game}`)).toBe('1');
+    });
+
+    it.each(['guide', 'tutorial'] as const)('does not duplicate a pending %s save or resend it after success', async kind => {
+        const screen = mount(kind === 'guide' ? 'outbreak' : 'realmarena');
+        await screen.render();
+        let finishSave!: (response: Response) => void;
+        fetchMock.mockImplementationOnce(() => new Promise<Response>(resolve => { finishSave = resolve; }));
+        await act(async () => screen.current.close());
+        await act(async () => kind === 'guide' ? screen.current.openGuide() : screen.current.startTutorial());
+        await act(async () => screen.current.close());
+        expect(posts()).toHaveLength(1);
+        await act(async () => finishSave(new Response('{}')));
+        await act(async () => kind === 'guide' ? screen.current.openGuide() : screen.current.startTutorial());
+        await act(async () => screen.current.close());
+        expect(posts()).toHaveLength(1);
+    });
+
+    it('keeps save attempts separate for each account', async () => {
+        const screen = mount();
+        await screen.render();
+        await act(async () => screen.current.close());
+        auth.userId = `other_${account}`;
+        await screen.render();
+        await act(async () => screen.current.close());
+        expect(posts()).toHaveLength(2);
+    });
+
+    it('never accesses anonymous storage or saves before an account exists', async () => {
+        auth.userId = null;
+        auth.authorised = false;
+        const read = vi.spyOn(Storage.prototype, 'getItem');
+        const write = vi.spyOn(Storage.prototype, 'setItem');
+        const screen = mount();
+        await screen.render();
+        await act(async () => screen.current.openGuide());
+        await act(async () => screen.current.close());
+        await act(async () => screen.current.startTutorial());
+        await act(async () => screen.current.close());
+        expect(screen.current.tutorialOpen).toBe(false);
+        expect(screen.current.guideOpen).toBe(false);
+        expect(read).not.toHaveBeenCalled();
+        expect(write).not.toHaveBeenCalled();
+        expect(fetchMock).not.toHaveBeenCalled();
+        auth.userId = `known_${account}`;
+        auth.authorised = true;
+        await screen.render();
+        expect(screen.current.tutorialOpen).toBe(true);
+        expect(read.mock.calls.every(([key]) => key.includes(auth.userId!))).toBe(true);
     });
 
     it('waits for auth readiness and keeps dismissals separate for each account and game', async () => {
@@ -249,6 +334,7 @@ describe('remembering game intros', () => {
         await act(async () => resolve(new Response(JSON.stringify(server))));
         expect(screen.current.loaded).toBe(true);
         expect(screen.current.tutorialOpen).toBe(false);
+        expect(posts()).toHaveLength(1);
     });
 
     it('ignores an old account response after the signed-in player changes', async () => {
