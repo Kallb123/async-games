@@ -425,6 +425,16 @@ export const abilitiesOf = (fighter: Pick<Fighter, "character" | "option">, cont
  */
 export const maxHpOf = (fighter: Pick<Fighter, "character" | "maxHp">, context?: RulesContext): number => fighter.maxHp ?? rulesetOf(context).CHARACTERS[fighter.character].hp;
 
+/** A squad's remaining and full HP, including fallen fighters and each fighter's mustered maximum. Shared by the live scoreboard and battle record. */
+export function squadHp(fighters: readonly Fighter[], context?: RulesContext): { remaining: number; total: number } {
+    let remaining = 0, total = 0;
+    for (const fighter of fighters) {
+        remaining += fighter.hp;
+        total += maxHpOf(fighter, context);
+    }
+    return { remaining, total };
+}
+
 /**
  * Whether a battle's team is the tougher one `BALANCE_VERSION` gives Hold Out
  * (`teamHp`, and warbands a rung smaller): the mission, created under the

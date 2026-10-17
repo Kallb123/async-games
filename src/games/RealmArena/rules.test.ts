@@ -5,7 +5,7 @@ import { ABILITIES, CHARACTERS, ITEMS, kitOf, musterBudget, OPTIONS, REALM, THRO
 import { RUINED_FORT } from "./maps/ruinedFort";
 import {
     abilitiesOf, ACTION_POINTS, act, MELEE_ACCURACY, afflicted, areaAround, blastedBy, blastedIn, centreHolders, centrePoints, check, endTurn, fixedRolls, isBattleOver, moveAp, movementOf, musterPoints, musterRefusal,
-    newFighter, oddsBreakdown, pickOf, purified, reachOf, reactionsTo, readyMadeMuster, shotOdds, shotResult, smokeSquares, standings, strikeChance, startTurn, storedFighter, watchedSquares, weaponOf,
+    newFighter, oddsBreakdown, pickOf, purified, reachOf, reactionsTo, readyMadeMuster, shotOdds, shotResult, smokeSquares, squadHp, standings, strikeChance, startTurn, storedFighter, watchedSquares, weaponOf,
     type Action, type BattleState, type Fighter, type MusterPick,
 } from "./rules";
 
@@ -28,6 +28,12 @@ function run(state: BattleState, player: string, action: Action, rolls: number[]
     const byId = (id: number) => outcome.fighters.find(one => one.id === id)!;
     return { ...outcome, byId };
 }
+
+describe("squadHp", () => {
+    it("counts a fallen fighter's mustered maximum towards the total", () => {
+        expect(squadHp([fighter(0, "a", "knight", 0, { hp: 0, maxHp: 24 })])).toEqual({ remaining: 0, total: 24 });
+    });
+});
 
 describe("hitting (§13.3)", () => {
     it("hits an 80% shot on 1–80, grazes on 81–90 and misses on 91–100", () => {
