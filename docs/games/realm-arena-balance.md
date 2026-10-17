@@ -311,6 +311,51 @@ comparison the end of this file describes before anyone leans on it.
 - Every one of these is a rule, so it takes a command version, as growing
   waves (5) and the rally (6) did.
 
+## Planner experiments
+
+The levers above change the rules. These change the computer's planner
+(§29.7) and nothing else, measured with `--team-planner main` (§30.12): the
+team plays `main`'s planner and the warbands the experiment's, so the same
+seeds differ only in how the warbands play. A warband that plays better shows
+as the team winning less and falling sooner. **540 battles a run**: Solo, 2
+and 3 players against each faction, Hold Out on the Sacked Fort, Normal, 60
+battles a cell on seeds 1–60, compared seed by seed. Written at revision 1.56,
+command version 7.
+
+### Counting the team per head (not kept)
+
+The open puzzle (§29.11): a warband shoots a fresh enemy in the open (80% to
+wound) over a wounded one behind a wall (70% to down), because the score
+weighs a team character by the HP it has left, though it fights at full
+strength until it's down. So, in Hold Out, half a team character's worth
+counted by its standing at all and half by its HP:
+`0.5 × points + 0.5 × points × hp / maxHp`. It solved the puzzle.
+
+| Warbands' planner | Hold Out, team wins | Team's last round, against `main`'s warbands |
+|---|---:|---:|
+| `main` | 7 of 540 | — |
+| Half per head, half by HP | **123** of 540 | **+1.08 ± 0.19** rounds |
+| HP, plus half per head on top: `0.5 × points + points × hp / maxHp` | 6 of 540 | −0.02 ± 0.14 rounds |
+
+The half-and-half warbands were much *weaker*: every cell's team won more
+or as often, most by a wide margin (Solo against the Miners 4 → 35 of 60, 2
+players against the Miners 1 → 29). The same scoring in Hold the Centre, on
+the gate forts, was weaker too: the team won 344 of 540 against it, 258
+against `main`'s.
+
+**Why.** The planner sees one action ahead. Weighed by HP, damage that
+downs nobody still scores, and it is what sets up the knock-outs of the next
+turns. Counted half per head, it scores half as much, so warbands attack less
+and move more. The bonus on top of HP leaves that damage's worth alone and
+only adds to a knock-out. It solves the puzzle too, and changes nothing
+measurable: the planner finishing a wounded enemy over wounding a fresh one
+is rare enough in a real battle not to show.
+
+**What it says.** A puzzle says what the planner gets wrong, not what's
+worth fixing: run the harness before keeping a change to the score. And
+anything that lowers what damage short of a knock-out is worth needs a way
+to see the knock-outs it sets up, which a one-action planner doesn't have.
+
 ## How each lever was built
 
 For re-running: each was an environment switch in a scratch worktree.

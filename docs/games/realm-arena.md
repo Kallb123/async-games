@@ -3006,7 +3006,10 @@ sure it is.
   an ordinary test beside it holding its premise; it moves up among the
   puzzles above the day the planner solves it. It takes a 70% knock-out over wounding a fresh enemy, in
   either mission: the score weighs a hurt enemy as a fraction of one, though
-  it fights at full strength until it's down. It steps out of a crossfire:
+  it fights at full strength until it's down — counting it partly by its
+  standing at all solves the puzzle and made the warbands weaker in whole
+  battles ([`realm-arena-balance.md`](./realm-arena-balance.md), *Planner
+  experiments*). It steps out of a crossfire:
   Exposure counts the worst single shot, so one flanker and four look the
   same. It steps out of a Knight's reach: Exposure reads each enemy from
   where it stands, not where it could walk to.
@@ -4183,4 +4186,4 @@ Realm, its sibling in the same world.
 | 1.53 | The rebalance (§30.13, command version 7): melee hits 80% of the time, cover counts double against a shot from further than 10 squares, the Mage Bolt is 80% to a range of 12, in Hold Out against the Realm the team takes 1 less from every hit, two players' Hold Out lasts 13 rounds instead of 15, a Cleric's Heal is once a turn instead of on a cooldown and its Raise is on a four-turn cooldown instead of once a battle, and in Hold Out the team has 50% more HP against warbands a step smaller. A battle keeps the rules it was created under. |
 | 1.54 | A Cleric's Heal and a Broodmother's Regrowth can be aimed at the healer itself, as a healing draught can (§13.6, §31.2). Only what a move may be aimed at grows, so no command version. |
 | 1.55 | The Miners, a third faction (§33, B6): five dwarves — the Miner, the Stonewarden, the Prospector, the Sapper and the Runepriest — each tougher and a little dearer than the Realm character it stands in for, hitting as hard; and Dynamite, the Sapper's blast of 4 over a 3×3, which leaves no effect. |
-| 1.56 | Benchmarking the planner. Open puzzles (§29.11): three it fails today, kept as `it.fails` — taking a likely knock-out over wounding a fresh enemy, stepping out of a crossfire, and stepping out of a Knight's reach. And the balance harness's `--team-planner <ref>` (§30.12), which has the team play an older planner against the checkout's warbands, so a change to the planner is measured as the warbands' alone. Tests, tooling and this document only. |
+| 1.56 | Benchmarking the planner. Open puzzles (§29.11): three it fails today, kept as `it.fails` — taking a likely knock-out over wounding a fresh enemy, stepping out of a crossfire, and stepping out of a Knight's reach. And the balance harness's `--team-planner <ref>` (§30.12), which has the team play an older planner against the checkout's warbands, so a change to the planner is measured as the warbands' alone; its first experiment, counting the team per head, is in `realm-arena-balance.md` and wasn't kept. Tests, tooling and documents only. |

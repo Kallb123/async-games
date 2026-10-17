@@ -68,16 +68,6 @@ const WEIGHTS = {
  */
 const HOLD_OUT_OWN_WORTH = 0.25;
 
-/**
- * How much of a team character's worth the warband counts by its standing at
- * all in Hold Out (§30.3), the rest by the HP it has left. A wounded character
- * fights as hard as a fresh one until it's down, a Cleric heals what isn't,
- * and the team wins while anyone stands, so a knock-out is what counts:
- * weighed by HP alone, a warband shot the fresh enemy in the open over the
- * wounded one it would likely down, and spread its hits.
- */
-const HOLD_OUT_HEAD_SHARE = 0.5;
-
 /** How much of its Threat a character with no attack left this turn still counts: where it stands, it covers the ground. */
 const SPENT_THREAT = 0.25;
 
@@ -136,8 +126,6 @@ interface Plan {
     memo: TurnMemo;
     /** What its own characters' worth counts for: in full, or in Hold Out `HOLD_OUT_OWN_WORTH` of it. */
     ownWorth: number;
-    /** How much of an enemy's worth counts by its standing, the rest by its HP: none, or in Hold Out `HOLD_OUT_HEAD_SHARE`. */
-    headShare: number;
     /** Whether the centre scores for it: not in Hold Out, which the team, not the keep, decides (§30.3). */
     centreCounts: boolean;
     /** How far a character stands from the centre, in movement points. */
@@ -200,7 +188,7 @@ function planFor(view: BattleState, owner: string, round: number, memo: TurnMemo
     const holdOut = hunt !== undefined;
     return {
         state, owner, round, memo, toCentre, watched: () => watched ??= watchedSquares(state, owner),
-        ownWorth: holdOut ? HOLD_OUT_OWN_WORTH : 1, headShare: holdOut ? HOLD_OUT_HEAD_SHARE : 0, centreCounts: !holdOut,
+        ownWorth: holdOut ? HOLD_OUT_OWN_WORTH : 1, centreCounts: !holdOut,
     };
 }
 
@@ -431,12 +419,11 @@ function rollsFor(state: BattleState, action: Action): { roll: number; weight: n
 /**
  * A battle as the warband sees it (§29.7): its side's points less the team's,
  * from the knock-outs in `events` and the centre each will score at the end of
- * its turn; the points' worth standing on each side — an enemy's partly by
- * its standing at all, in Hold Out; and, for each of the warband's own
- * characters, the terms where it stands changes.
+ * its turn; the points' worth standing on each side; and, for each of the
+ * warband's own characters, the terms where it stands changes.
  */
 function score(plan: Plan, battle: BattleState, events: readonly BattleEvent[]): number {
-    const { owner, round, ownWorth, headShare } = plan;
+    const { owner, round, ownWorth } = plan;
     const side = (player: string) => allied(battle, player, owner) ? 1 : -1;
     let total = 0;
     for (const event of events) {
@@ -451,9 +438,7 @@ function score(plan: Plan, battle: BattleState, events: readonly BattleEvent[]):
     const enemies = enemiesOf(battle, owner);
     for (const fighter of battle.fighters) {
         if (!isStanding(fighter)) continue;
-        const worth = side(fighter.owner) > 0 ? ownWorth * worthOf(fighter, fighter.hp)
-            : headShare * CHARACTERS[fighter.character].points + (1 - headShare) * worthOf(fighter, fighter.hp);
-        total += side(fighter.owner) * worth * WEIGHTS.strength;
+        total += side(fighter.owner) * worthOf(fighter, fighter.hp) * WEIGHTS.strength * (side(fighter.owner) > 0 ? ownWorth : 1);
         if (fighter.owner === owner) total += standingTerms(plan, battle, fighter, enemies);
     }
     return total;

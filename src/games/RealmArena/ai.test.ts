@@ -46,27 +46,6 @@ const endOf = (action: Action | undefined, from: Square): Square => action && "p
 
 const OPEN = fieldOf(Array(9).fill(".".repeat(16)));
 
-/**
- * An enemy Archer cut to 2 HP behind a low wall, and a fresh one in the open.
- * Hit or graze, the shot at the wounded one downs it, 70% of the time; the
- * fresh one takes two hits to down and shoots back at full strength until then.
- */
-const KNOCK_OUT = (() => {
-    const field = fieldOf([
-        "................",
-        "................",
-        "...........o....",
-        "................",
-        "................",
-        "................",
-        "................",
-    ]);
-    const archer = ready(0, AI, "archer", at(field, 0, 3), { ap: ATTACK_AP });
-    const wounded = ready(1, "a", "archer", at(field, 12, 2), { hp: 2 });
-    const fresh = ready(2, "b", "archer", at(field, 12, 5));
-    return { state: battle(field, [archer, wounded, fresh]), archer, wounded, fresh };
-})();
-
 describe("nextAction's puzzles (§29.11)", () => {
     it("shoots the flanked enemy rather than the one in cover", () => {
         // A low wall in column 4 covers whoever crouches behind it from the west.
@@ -187,14 +166,6 @@ describe("nextAction's puzzles (§29.11)", () => {
 });
 
 describe("nextAction in Hold Out (§30.3)", () => {
-    it("takes the likely knock-out over wounding a fresh enemy", () => {
-        // A team character counts partly by its standing at all: the 70% shot
-        // that downs the wounded Archer beats the 80% one that only wounds the
-        // fresh one, which would shoot back as hard as ever.
-        const { state, archer, wounded } = KNOCK_OUT;
-        expect(planned(state, 4, [])).toMatchObject({ fighter: archer.id, target: wounded.id });
-    });
-
     it("closes in on a Knight it outnumbers rather than ringing it just out of reach", () => {
         // Each Skitterling alone would lose the trade with the Knight, but its
         // losses come back with the next wave and the Knight's never do.
@@ -235,13 +206,29 @@ describe("nextAction's open puzzles (§29.11)", () => {
         return reach.costs.some((cost, from) => cost < Infinity && inMeleeReach(state.field, from, square));
     };
 
-    describe("takes the likely knock-out over wounding a fresh enemy, in Hold the Centre", () => {
-        // Solved in Hold Out, where a team character counts partly by its
-        // standing at all; in Hold the Centre a hurt enemy still counts as a
-        // fraction of one, so the fresh one's 80% at 4 flanked damage outscores
-        // the wounded one: about 11.3 points' worth to 7.5, grazes and the
-        // knock-out's points counted.
-        const { state, archer, wounded, fresh } = KNOCK_OUT;
+    describe("takes the likely knock-out over wounding a fresh enemy", () => {
+        // An enemy Archer cut to 2 HP behind a low wall, and a fresh one in
+        // the open. Hit or graze, the shot at the wounded one downs it, 70% of
+        // the time; the fresh one takes two hits to down and shoots back at
+        // full strength until then. The score weighs HP alone, and a hurt
+        // enemy as a fraction of one, so the fresh one's 80% at 4 flanked
+        // damage outscores it: about 11.3 points' worth to 7.5, grazes and
+        // the knock-out's points counted. Counting a team character partly by
+        // its standing at all solves it, and made the warbands weaker in whole
+        // battles (docs/games/realm-arena-balance.md, *Planner experiments*).
+        const field = fieldOf([
+            "................",
+            "................",
+            "...........o....",
+            "................",
+            "................",
+            "................",
+            "................",
+        ]);
+        const archer = ready(0, AI, "archer", at(field, 0, 3), { ap: ATTACK_AP });
+        const wounded = ready(1, "a", "archer", at(field, 12, 2), { hp: 2 });
+        const fresh = ready(2, "b", "archer", at(field, 12, 5));
+        const state = battle(field, [archer, wounded, fresh]);
 
         it("(its premise)", () => {
             const atWounded = shotOdds(state, archer, wounded)!;
@@ -250,8 +237,11 @@ describe("nextAction's open puzzles (§29.11)", () => {
             expect(atWounded.chance + atWounded.grazeChance).toBe(70);
             expect(atFresh.damage).toBeLessThan(fresh.hp);
         });
-        it.fails("shoots the wounded one", () => {
+        it.fails("in Hold the Centre", () => {
             expect(planned(state)).toMatchObject({ fighter: archer.id, target: wounded.id });
+        });
+        it.fails("in Hold Out, where the team's losses are for good", () => {
+            expect(planned(state, 4, [])).toMatchObject({ fighter: archer.id, target: wounded.id });
         });
     });
 
