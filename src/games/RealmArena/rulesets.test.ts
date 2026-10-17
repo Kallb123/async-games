@@ -14,7 +14,7 @@ import { rangeKindOf } from "./tactics";
 import { hpPreview } from "./useTurnDraft";
 import { characterStats } from "./stats";
 import { gameStateToModel, RealmArenaInvitationModel, settingsOf, type IRealmArenaGameData } from "./RealmArenaModels";
-import { RealmArenaUndo, type IRealmArenaOutcome } from "./RealmArenaLogic";
+import { RealmArenaUndo, undoDepthOf, type IRealmArenaOutcome } from "./RealmArenaLogic";
 import { cmd, makeGame, muster, oneStep, play, readyMadePicks, actBy } from "./testFixtures";
 
 vi.mock("./masteryRecord", () => ({ masterySnapshotOf: vi.fn(async () => ({})) }));
@@ -45,6 +45,7 @@ vi.mock("./rulesets", async importOriginal => {
             raise: { ...future.ABILITIES.raise, apOnRaise: 2 },
             sneak: { ...future.ABILITIES.sneak, movesWithoutReactions: false },
             huntersMark: { ...future.ABILITIES.huntersMark, name: "Beacon" },
+            purify: { ...future.ABILITIES.purify, bonusAp: 3 },
         },
         EFFECTS: { ...future.EFFECTS, corroded: { ...future.EFFECTS.corroded, name: "Ward", state: "warded", cover: "full", tick: "end", damage: 2, apModifier: -1 },
             slowed: { ...future.EFFECTS.slowed, armour: 2 },
@@ -210,6 +211,13 @@ describe("catalogue-driven behavior", () => {
             expect(endTurn(state, "a", 1).fighters[0].banked).toBe(version === 9 ? 2 : 20);
             expect(bankedAp(7, state)).toBe(version === 9 ? 2 : 7);
         }
+    });
+
+    it("keeps undo deep enough for the most AP one character can have under the battle's catalogue", () => {
+        // Today's 4; and the future's Cleric mustered with Purify: 6 AP, 1 for
+        // everyone, and the 3 its Purify adds when used — past the Knight's 9.
+        expect([undefined, 7].map(rulesVersion => undoDepthOf({ rulesVersion }))).toEqual([4, 4]);
+        expect(undoDepthOf({ rulesVersion: 9 })).toBe(10);
     });
 
     it("grants AP on Raise only where that ability definition says to", () => {

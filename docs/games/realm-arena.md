@@ -3868,8 +3868,8 @@ at 70% and range 10, Heal on a two-turn cooldown, Raise once per battle, and no
 `battleFrom` preserves the stamp in `BattleState.rulesVersion`. It selects an
 immutable catalogue through `rulesetOf`, including the old Mage Bolt, healing
 limits and descriptions, and the `RULES` values read by `ruleValuesOf`. The
-`balanced` flag remains a compatibility alias; execution reads catalogue
-data. New games use `CURRENT_RULESET_VERSION`, independently of the command
+stamp is the only thing that does: there is no `balanced` flag on a battle to
+read instead, and a state that loses its stamp plays the legacy rules. New games use `CURRENT_RULESET_VERSION`, independently of the command
 protocol version; old games, including those without a stamp,
 keep their catalogue for muster, timeout squads, reinforcements, execution,
 previews and replay. See `docs/command-versions.md`, “Realm Arena catalogues”,

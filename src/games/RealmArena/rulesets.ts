@@ -62,8 +62,8 @@ export function rulesetFor(rulesVersion: number | undefined): RealmArenaRuleset 
 
 /**
  * A game, or anything built from one, carrying the version it was created
- * under. Only `rulesVersion` selects a catalogue: a missing one is legacy,
- * never guessed from a derived flag such as `BattleState.balanced`.
+ * under. Only `rulesVersion` selects a catalogue, and a missing one is legacy:
+ * nothing else on a battle says which rules it plays by.
  */
 export type RulesContext = { rulesVersion?: number };
 

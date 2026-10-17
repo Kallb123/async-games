@@ -8,11 +8,11 @@ import { recordedRolls } from "@/utils/games/recordedRolls";
 import { isDropped, nextActivePlayer, registerPlayerDropoutAdapter } from "@/utils/games/playerDropout";
 import { v4 as uuidv4, NIL as NIL_UUID } from 'uuid';
 import type { IRealmArenaCoop, IRealmArenaGameData, IRealmArenaSpecificGameState } from "@/games/RealmArena/RealmArenaModels";
-import { DIFFICULTY_NAMES, enemyNameOf, factionById, musterBudget, readyMadeSquad, REALM_ONLY, warbandBudget, type Budget, type CharacterId, type FactionId } from "@/games/RealmArena/characters";
+import { DIFFICULTY_NAMES, enemyNameOf, factionById, musterBudget, readyMadeSquad, REALM_ONLY, warbandBudget, type Budget, type CharacterId, type FactionId, type OptionId } from "@/games/RealmArena/characters";
 import { battlefieldById, battlefieldOf } from "@/games/RealmArena/maps";
 import { addTally, NO_TALLY, type Tally } from "@/games/RealmArena/mastery";
 import {
-    ACTION_POINTS,
+    abilitiesOf,
     actionPointsOf,
     act,
     allied,
@@ -258,12 +258,30 @@ const UNDOABLE_KINDS: ReadonlySet<Action["kind"]> = new Set(["move", "sneak", "h
  */
 const PEACEFUL_EVENTS: ReadonlySet<BattleEvent["kind"]> = new Set(["moved", "healed", "raised", "hunkered", "shieldWall", "watching", "effect", "marked", "blasted"]);
 
+const UNDO_DEPTHS = new WeakMap<object, number>();
+
 /**
- * How many snapshots the stack keeps: a character's whole turn of one-AP
- * moves. A turn spread over the squad can hold more undoable actions than
- * that, which only costs reach — the anchor decides what can be restored.
+ * How many snapshots the stack keeps, under the battle's own catalogue: a
+ * character's whole turn of one-AP moves, for the character with the most AP
+ * it could have — its turn's (`actionPointsOf`, every bonus included) and what
+ * its abilities add when used (`Ability.bonusAp`), with any option it could be
+ * mustered with. A turn spread over the squad can hold more undoable actions
+ * than that, which only costs reach — the anchor decides what can be restored.
  */
-export const UNDO_STACK_DEPTH = ACTION_POINTS;
+export function undoDepthOf(context: RulesContext): number {
+    const catalogue = rulesetOf(context);
+    let depth = UNDO_DEPTHS.get(catalogue);
+    if (depth === undefined) {
+        const { CHARACTERS, OPTIONS, ABILITIES } = catalogue;
+        const options = Object.keys(OPTIONS) as OptionId[];
+        const kits = (Object.keys(CHARACTERS) as CharacterId[]).flatMap(character =>
+            [undefined, ...options.filter(id => OPTIONS[id]?.character === character)].map(option => ({ character, option })));
+        const onUse = (fighter: (typeof kits)[number]) => abilitiesOf(fighter, context).reduce((sum, id) => sum + (ABILITIES[id]?.passive ? 0 : ABILITIES[id]?.bonusAp ?? 0), 0);
+        depth = Math.max(...kits.map(fighter => actionPointsOf(fighter, context) + onUse(fighter)));
+        UNDO_DEPTHS.set(catalogue, depth);
+    }
+    return depth;
+}
 
 /** Whether an action rolled nothing and hurt nobody, so taking it back hands nobody a second go at a roll. A throw or a Demolish is, when it landed on nobody. */
 function peaceful(action: Action, events: readonly BattleEvent[], rolls: readonly number[]): boolean {
@@ -340,11 +358,11 @@ export function cloneRealmArenaState(gs: IRealmArenaSpecificGameState): IRealmAr
 
 /**
  * Pushes a snapshot taken before `command`'s first mutation and moves the
- * anchor onto `command`. Capped at UNDO_STACK_DEPTH — dropping the oldest only
+ * anchor onto `command`. Capped at `undoDepthOf` — dropping the oldest only
  * ever costs reach, never correctness.
  */
 function commitUndo(gs: IRealmArenaSpecificGameState, command: IGameCommand, before: IRealmArenaSpecificGameState): void {
-    gs.undoStack = [...(gs.undoStack ?? []), { by: command.senderId, state: before }].slice(-UNDO_STACK_DEPTH);
+    gs.undoStack = [...(gs.undoStack ?? []), { by: command.senderId, state: before }].slice(-undoDepthOf(gs));
     gs.undoAnchorId = command.id;
 }
 

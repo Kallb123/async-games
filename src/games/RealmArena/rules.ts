@@ -220,12 +220,6 @@ export interface BattleState extends RulesContext {
      */
     sides?: Readonly<Record<string, string>>;
     /**
-     * Whether the battle plays by `BALANCE_VERSION`'s rules, as it was created
-     * under them (`isBalanced`). Never stored or sent: `battleFrom` builds it
-     * from the battle's `rulesVersion`.
-     */
-    balanced?: true;
-    /**
      * Whether the team's characters wear `ARMOUR` against the warbands: Hold
      * Out under `BALANCE_VERSION` against the Realm (`armouredTeam`). Never
      * stored or sent; `battleFrom` builds it from the battle's mission and
@@ -281,7 +275,6 @@ export function battleFrom(field: Battlefield, { fighters, fog, clouds, seats = 
     const sides = coop ? Object.fromEntries([...seats.map(player => [player, TEAM_SIDE]), ...warbandsFor(seats).map(warband => [warband, ENEMY_SIDE])]) : undefined;
     return {
         field, fighters, ...(rulesVersion !== undefined ? { rulesVersion } : {}), ...(fog ? { fog: true } : {}), ...(clouds && clouds.length > 0 ? { clouds } : {}), ...(sides ? { sides } : {}),
-        ...(isBalanced(rulesVersion) ? { balanced: true as const } : {}),
         ...(coop && armoured ? { armoured: true as const } : {}),
     };
 }
@@ -407,7 +400,7 @@ export const itemsPoints = (items: readonly (ItemId | null | undefined)[], conte
 const kitWeapon = (fighter: Pick<Fighter, "character" | "option">, context?: RulesContext): Weapon => kitOf(fighter.character, fighter.option, context).weapon;
 
 /** The weapon this character's selected catalogue and mastery option give it. */
-export function weaponOf(state: Pick<BattleState, "balanced" | "rulesVersion">, fighter: Pick<Fighter, "character" | "option">): Weapon {
+export function weaponOf(state: Pick<BattleState, "rulesVersion">, fighter: Pick<Fighter, "character" | "option">): Weapon {
     return kitWeapon(fighter, state);
 }
 
@@ -476,7 +469,7 @@ export type BlowSource = "weapon" | "ability" | "item";
  * team's own friendly fire don't. Nothing, for a blow that does nothing. The
  * one place armour is taken off, for the rules, the planner and the board.
  */
-export function damageTo(state: Pick<BattleState, "armoured" | "balanced" | "rulesVersion">, by: Pick<Fighter, "owner" | "character" | "option"> & Partial<Pick<Fighter, "effects">>, target: Pick<Fighter, "owner" | "character"> & Partial<Pick<Fighter, "effects">>, blow = weaponOf(state, by).damage, via: BlowSource = "weapon"): number {
+export function damageTo(state: Pick<BattleState, "armoured" | "rulesVersion">, by: Pick<Fighter, "owner" | "character" | "option"> & Partial<Pick<Fighter, "effects">>, target: Pick<Fighter, "owner" | "character"> & Partial<Pick<Fighter, "effects">>, blow = weaponOf(state, by).damage, via: BlowSource = "weapon"): number {
     if (blow <= 0) return blow;
     const dealt = blow + effectTotal(by, "damageBonus", state) + (via === "ability" ? effectTotal(by, "abilityDamageBonus", state) : 0);
     const armour = (isWarband(by.owner) ? teamArmour(state, target) : 0) + effectTotal(target, "armour", state);
@@ -493,7 +486,7 @@ export const musterHp = (character: CharacterId, stout: boolean, context?: Rules
 export type AbilityLimits = Pick<Ability, "cooldown" | "oncePerBattle" | "oncePerTurn">;
 
 /** How often this game's catalogue lets an ability be used. */
-export function abilityRules(state: Pick<BattleState, "balanced" | "rulesVersion">, id: AbilityId): AbilityLimits {
+export function abilityRules(state: Pick<BattleState, "rulesVersion">, id: AbilityId): AbilityLimits {
     const { cooldown, oncePerBattle, oncePerTurn } = rulesetOf(state).ABILITIES[id];
     return { cooldown, ...(oncePerBattle ? { oncePerBattle } : {}), ...(oncePerTurn ? { oncePerTurn } : {}) };
 }
@@ -732,13 +725,13 @@ function effectFactors(target: Fighter, context?: RulesContext): OddsFactor[] {
  * always when the battle predates `BALANCE_VERSION`. Cover, height and smoke
  * are a ranged shot's: whoever is next to the target is past them.
  */
-export function strikeBreakdown(state: Pick<BattleState, "balanced" | "rulesVersion">, target: Fighter): OddsBreakdown {
+export function strikeBreakdown(state: Pick<BattleState, "rulesVersion">, target: Fighter): OddsBreakdown {
     const { MELEE_ACCURACY } = ruleValuesOf(state);
     return ruleValuesOf(state).MELEE_ROLLS ? breakdownOf(MELEE_ACCURACY, effectFactors(target, state)) : breakdownOf(ROLL_SIDES, []);
 }
 
 /** A strike's chance to hit, 0–100 (`strikeBreakdown`). */
-export function strikeChance(state: Pick<BattleState, "balanced" | "rulesVersion">, target: Fighter): number {
+export function strikeChance(state: Pick<BattleState, "rulesVersion">, target: Fighter): number {
     return strikeBreakdown(state, target).chance;
 }
 
@@ -954,7 +947,6 @@ export function viewOf(state: BattleState, player: string | null): BattleState {
         fog: true,
         ...(clouds.length > 0 ? { clouds } : {}),
         ...(state.sides ? { sides: state.sides } : {}),
-        ...(state.balanced ? { balanced: true as const } : {}),
         ...(state.armoured ? { armoured: true as const } : {}),
     };
 }

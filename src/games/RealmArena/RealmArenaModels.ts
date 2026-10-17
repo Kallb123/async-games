@@ -164,7 +164,7 @@ export interface IRealmArenaSpecificGameState {
     /**
      * Snapshots of the whole state, newest last, pushed by a `RealmArenaAct`
      * that rolled nothing and hurt nobody (docs/undo.md). `by` is whose action
-     * it was. Never sent. Capped at UNDO_STACK_DEPTH, and emptied on every
+     * it was. Never sent. Capped at `undoDepthOf`, and emptied on every
      * hand-off. Absent on a game that predates it.
      */
     undoStack: { by: string, state: IRealmArenaSpecificGameState }[];

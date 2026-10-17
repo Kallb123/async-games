@@ -145,8 +145,9 @@ To release changed units or abilities:
    the current catalogue for setup, profiles and admin tools; passing a game
    without a stamp selects legacy. Preserve `rulesVersion` in filtered views,
    snapshots and replay settings: it is the only thing that selects a
-   catalogue, so a state that keeps `balanced` but drops `rulesVersion` plays
-   by the legacy rules.
+   catalogue (there is no derived `balanced` flag to read instead), so a state
+   that drops it plays by the legacy rules. Anything sized by a turn's AP, such
+   as the undo stack (`undoDepthOf`), reads it from the catalogue too.
 5. Test old and new games under the same current commands, including muster,
    validation, effects, previews, undo and replay. Keep narration and recap
    names on that same catalogue; profiles retain earned mastery for retired
