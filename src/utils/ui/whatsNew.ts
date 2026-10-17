@@ -82,6 +82,11 @@ export const WHATS_NEW: WhatsNewGroup[] = [
         icon: "✨",
         items: [
             {
+                title: "Realm Arena's scoreboard shows your allies' full squad and HP",
+                detail: "Allies share vision, so their squads no longer say ‘in sight’ in fog of war. In co-op, tap the scoreboard to see how much HP each allied squad has left out of its full total, including your own.",
+                game: "realmarena",
+            },
+            {
                 title: "Realm Arena: take turns in blocks against the computer",
                 detail: "A co-op battle can now have all of you take your turns one after another and then every warband take theirs, instead of a warband after each of you. It's a switch on the setup screen, off by default, so battles already under way play as before.",
                 game: "realmarena",
@@ -122,11 +127,6 @@ export const WHATS_NEW: WhatsNewGroup[] = [
             {
                 title: "Open a game from home in a new tab",
                 detail: "Your turn cards and finished games on the home page are proper links now: press and hold, or middle-click, to open one in a new tab. And a game's screen starts loading as soon as its card is on screen, before you tap it.",
-            },
-            {
-                title: "World Domination and Fires Out: a few seconds to take a move back",
-                detail: "World Domination: put armies in the wrong territory, cashed in cards you meant to hold, or moved too many into a conquest? Tap Undo and put it right — battles are dice, so those stay. And when you fortify or skip fortifying, your turn now waits ten seconds before it passes, so you can still change your mind. Fires Out's End turn now does the same: tap it straight after a move you regret and it waits ten seconds, with Undo and Pass now beside the countdown, before the fire advances.",
-                game: "worlddomination",
             },
         ],
     },
