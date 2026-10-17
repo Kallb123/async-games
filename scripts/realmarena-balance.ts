@@ -7,6 +7,7 @@
 //   npm run ra-balance -- --runs 300 --players 3 --enemies swarm --difficulties easy,normal,hard
 //   npm run ra-balance -- --teams realm,miners --enemies realm,swarm,miners # each team faction against each enemy
 //   npm run ra-balance -- --missions holdOut,holdTheCentre --maps gate --fog on,off
+//   npm run ra-balance -- --team-planner main            # the team plays main's planner, the warbands this checkout's
 //   npm run ra-balance -- --shard 2/4 --out samples-2.json # one quarter of the battles, every sample kept
 //   npm run ra-balance -- --merge samples-*.json          # the report for samples already fought
 //
@@ -16,17 +17,26 @@
 // the rules differ only where the rules do — and where a warband's turn ran
 // into its two-second deadline, which a busy machine makes likelier.
 //
+// A change to the planner itself changes how both sides play. `--team-planner`
+// names a git ref whose planner (`src/games/RealmArena/ai.ts` there) plays the
+// team instead, against this checkout's warbands, so the same seeds before and
+// after a change to the planner differ only in how the warbands play: the
+// team's win rate falling is the warbands getting better. The older planner
+// plays by this checkout's rules, so it has to build against them.
+//
 // The `Realm Arena balance` workflow runs it on demand, sharded across
 // runners, and puts the report on the run's summary page.
 
-import { fork } from "node:child_process";
-import { appendFileSync, readFileSync, writeFileSync } from "node:fs";
-import { availableParallelism } from "node:os";
+import { execFileSync, fork } from "node:child_process";
+import { appendFileSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { availableParallelism, tmpdir } from "node:os";
+import { dirname, join, resolve } from "node:path";
+import { pathToFileURL } from "node:url";
 import { parseArgs } from "node:util";
 import { FACTION_IDS, type BattleSize, type Difficulty, type FactionId } from "../src/games/RealmArena/characters";
 import {
     formatReport, scenarioKey, simulateBattle, summariseAll,
-    type BalanceScenario, type BattleSample, type CoopMapChoice, type Mission,
+    type BalanceScenario, type BattleSample, type CoopMapChoice, type Mission, type Planner, type TeamPlanner,
 } from "./lib/realmArenaBalance";
 
 interface Job {
@@ -82,8 +92,45 @@ function shardOf(jobs: Job[], shard: string): Job[] {
     return jobs.filter((_, k) => k % n === i - 1);
 }
 
+/** The team's planner as a worker is told it: the copy to load, and the name the report gives it. */
+interface TeamPlannerFile {
+    file: string;
+    label: string;
+}
+
+/** Git's answer, or "" for an error: a ref it doesn't know. Never through a shell. */
+function git(...args: string[]): string {
+    try {
+        return execFileSync("git", args, { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] }).trim();
+    } catch {
+        return "";
+    }
+}
+
+/**
+ * `ref`'s planner, copied out of git into a folder of its own for the workers
+ * to load, its imports pointed back at this checkout: it plays by these rules.
+ * A branch only fetched (as CI has it) is found as `origin/<ref>`.
+ */
+function teamPlannerAt(ref: string): TeamPlannerFile & { dir: string } {
+    // Nothing git could take for an option.
+    if (!/^\w[\w./~^-]*$/.test(ref)) throw new Error(`--team-planner: "${ref}" isn't a git ref`);
+    const commit = [ref, `origin/${ref}`].map(name => git("rev-parse", "--verify", "--quiet", `${name}^{commit}`)).find(Boolean);
+    if (!commit) throw new Error(`--team-planner: git doesn't know "${ref}" here (fetch it first)`);
+    const source = git("show", `${commit}:src/games/RealmArena/ai.ts`);
+    if (!source) throw new Error(`--team-planner: "${ref}" has no src/games/RealmArena/ai.ts`);
+    const src = resolve(dirname(process.argv[1]), "../src");
+    const pointed = source
+        .replace(/from (["'])\.\/([^"']+)\1/g, (_, _quote, path: string) => `from ${JSON.stringify(join(src, "games/RealmArena", path))}`)
+        .replace(/from (["'])@\/([^"']+)\1/g, (_, _quote, path: string) => `from ${JSON.stringify(join(src, path))}`);
+    const dir = mkdtempSync(join(tmpdir(), "realmarena-planner-"));
+    const file = join(dir, "ai.ts");
+    writeFileSync(file, pointed);
+    return { dir, file, label: `${ref} @ ${commit.slice(0, 7)}` };
+}
+
 /** Fights every job across `workers` child processes, a battle at a time each, and returns every sample. */
-async function fightAll(jobs: Job[], workers: number): Promise<{ samples: BattleSample[]; failures: string[] }> {
+async function fightAll(jobs: Job[], workers: number, team?: TeamPlannerFile): Promise<{ samples: BattleSample[]; failures: string[] }> {
     const samples: BattleSample[] = [];
     const failures: string[] = [];
     const queue = [...jobs];
@@ -100,7 +147,8 @@ async function fightAll(jobs: Job[], workers: number): Promise<{ samples: Battle
 
     await Promise.all(Array.from({ length: Math.min(workers, jobs.length) }, () => new Promise<void>((resolve, reject) => {
         // The same script, run through the same loader (tsx), as a worker.
-        const child = fork(process.argv[1], ["--worker"], { execArgv: process.execArgv, stdio: ["ignore", "inherit", "inherit", "ipc"] });
+        const workerArgs = team ? ["--team-planner-file", team.file, "--team-planner-label", team.label] : [];
+        const child = fork(process.argv[1], ["--worker", ...workerArgs], { execArgv: process.execArgv, stdio: ["ignore", "inherit", "inherit", "ipc"] });
         let current: Job | undefined;
         const next = () => {
             current = queue.shift();
@@ -124,11 +172,13 @@ async function fightAll(jobs: Job[], workers: number): Promise<{ samples: Battle
     return { samples, failures };
 }
 
-/** The child's side: fight each battle it's sent and send back what it came to. */
-function serve(): void {
+/** The child's side: fight each battle it's sent and send back what it came to, the team playing `team`'s planner if given. */
+function serve(team?: TeamPlannerFile): void {
+    // Loaded once, by the first battle; one that won't load fails every battle with its reason.
+    const loaded = team && import(pathToFileURL(team.file).href).then((planner: Planner): TeamPlanner => ({ planner, label: team.label }));
     process.on("message", async (job: Job) => {
         try {
-            process.send!({ sample: await simulateBattle(job.scenario, job.seed) } satisfies Reply);
+            process.send!({ sample: await simulateBattle(job.scenario, job.seed, await loaded) } satisfies Reply);
         } catch (error) {
             process.send!({ error: error instanceof Error ? error.stack ?? error.message : String(error), job } satisfies Reply);
         }
@@ -155,9 +205,15 @@ async function main(): Promise<void> {
             out: { type: "string" },
             merge: { type: "boolean", default: false },
             heading: { type: "string", default: "Realm Arena balance" },
+            "team-planner": { type: "string" },
+            "team-planner-file": { type: "string" },
+            "team-planner-label": { type: "string" },
         },
     });
-    if (args.worker) return serve();
+    if (args.worker) {
+        const file = args["team-planner-file"];
+        return serve(file ? { file, label: args["team-planner-label"] ?? file } : undefined);
+    }
 
     let samples: BattleSample[];
     let failures: string[] = [];
@@ -168,8 +224,13 @@ async function main(): Promise<void> {
         let jobs = jobsFrom(args);
         if (args.shard) jobs = shardOf(jobs, args.shard);
         const workers = Math.max(1, Number(args.workers) || 1);
-        process.stderr.write(`Fighting ${jobs.length} battles on ${workers} workers\n`);
-        ({ samples, failures } = await fightAll(jobs, workers));
+        const team = args["team-planner"] ? teamPlannerAt(args["team-planner"]) : undefined;
+        process.stderr.write(`Fighting ${jobs.length} battles on ${workers} workers${team ? `, the team playing ${team.label}'s planner` : ""}\n`);
+        try {
+            ({ samples, failures } = await fightAll(jobs, workers, team));
+        } finally {
+            if (team) rmSync(team.dir, { recursive: true, force: true });
+        }
     }
     // Scenario by scenario, then by seed, however the workers finished: the
     // scenario's name sorts by team size, then enemy, then the rest.

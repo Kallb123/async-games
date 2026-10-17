@@ -3712,6 +3712,14 @@ falls, and round by round how many of the team are still standing.
   better. What it measures well is a change: battle *k* of a scenario rolls
   from seed *k*, so the same seeds before and after a change differ only
   where the rules do (and where a warband's turn met its two-second deadline).
+- **A change to the planner, measured alone.** The planner plays both sides,
+  so improving it improves the team as much as the warbands. `--team-planner
+  <ref>` (the workflow's *team planner*) has the team play the planner as it
+  is at a git ref — `main`, say — while the warbands play the checkout's, so
+  the same seeds before and after differ only in how the warbands play: the
+  team's win rate falling is the warbands getting better. The older planner
+  plays by the checkout's rules, so it has to build against them. The open
+  puzzles (§29.11) say what to improve; this says whether it worked.
 - **On demand in CI.** The *Realm Arena balance* workflow takes the same
   choices as inputs, splits the battles across runners, and puts the merged
   report on the run's summary page, keeping every battle's sample as an
@@ -4175,4 +4183,4 @@ Realm, its sibling in the same world.
 | 1.53 | The rebalance (§30.13, command version 7): melee hits 80% of the time, cover counts double against a shot from further than 10 squares, the Mage Bolt is 80% to a range of 12, in Hold Out against the Realm the team takes 1 less from every hit, two players' Hold Out lasts 13 rounds instead of 15, a Cleric's Heal is once a turn instead of on a cooldown and its Raise is on a four-turn cooldown instead of once a battle, and in Hold Out the team has 50% more HP against warbands a step smaller. A battle keeps the rules it was created under. |
 | 1.54 | A Cleric's Heal and a Broodmother's Regrowth can be aimed at the healer itself, as a healing draught can (§13.6, §31.2). Only what a move may be aimed at grows, so no command version. |
 | 1.55 | The Miners, a third faction (§33, B6): five dwarves — the Miner, the Stonewarden, the Prospector, the Sapper and the Runepriest — each tougher and a little dearer than the Realm character it stands in for, hitting as hard; and Dynamite, the Sapper's blast of 4 over a 3×3, which leaves no effect. |
-| 1.56 | Open puzzles (§29.11): three the planner fails today, kept as `it.fails` as the benchmark for improving its score — taking a likely knock-out over wounding a fresh enemy, stepping out of a crossfire, and stepping out of a Knight's reach. Tests and this document only. |
+| 1.56 | Benchmarking the planner. Open puzzles (§29.11): three it fails today, kept as `it.fails` — taking a likely knock-out over wounding a fresh enemy, stepping out of a crossfire, and stepping out of a Knight's reach. And the balance harness's `--team-planner <ref>` (§30.12), which has the team play an older planner against the checkout's warbands, so a change to the planner is measured as the warbands' alone. Tests, tooling and this document only. |

@@ -1,8 +1,13 @@
 import { describe, expect, it } from "vitest";
-import { formatReport, percentile, scenarioKey, settingsOf, summarise, summariseAll, wilson, type BalanceScenario, type BattleSample } from "./realmArenaBalance";
+import { nextAction } from "../../src/games/RealmArena/ai";
+import {
+    formatReport, percentile, scenarioKey, settingsOf, simulateBattle, summarise, summariseAll, wilson,
+    type BalanceScenario, type BattleSample,
+} from "./realmArenaBalance";
 
 // The arithmetic behind `npm run ra-balance`: the battles themselves are the
-// engine's, played by the planner, and coop.test.ts already fights whole ones.
+// engine's, played by the planner, and coop.test.ts already fights whole ones —
+// all but one here, which holds which planner plays which side.
 
 const SOLO: BalanceScenario = { players: 1, team: "realm", enemy: "swarm", mission: "holdOut", map: "sackedFort", difficulty: "normal", size: "normal", fog: false };
 
@@ -31,6 +36,18 @@ describe("the balance harness's scenarios", () => {
         // A team of another faction is the one faction its players may muster from.
         expect(settingsOf({ ...SOLO, team: "miners" })).toMatchObject({ factions: ["miners"] });
     });
+});
+
+describe("the balance harness's team planner", () => {
+    it("asks the team's planner for the team's turns and never the warbands', and names it", async () => {
+        // This checkout's planner under another name, noting whom it's asked for.
+        const askedFor = new Set<string>();
+        const planner = { nextAction: ((view, owner, ...rest) => (askedFor.add(owner), nextAction(view, owner, ...rest))) as typeof nextAction };
+        const battle = await simulateBattle({ ...SOLO, size: "small" }, 1, { planner, label: "main @ 4ba0a86" });
+        expect([...askedFor]).toEqual(["p1"]);
+        expect(battle.teamPlanner).toBe("main @ 4ba0a86");
+        expect(battle.scenario).toBe(`${scenarioKey({ ...SOLO, size: "small" })} · team plays main @ 4ba0a86`);
+    }, 30_000);
 });
 
 describe("the balance harness's statistics", () => {
@@ -81,5 +98,12 @@ describe("the balance harness's statistics", () => {
         expect(report).toContain("### b");
         expect(report).toContain("| Team still standing | 100% | 100% | 100% | 100% |");
         expect(report).toContain("| Team characters left | — | — | — | — |");
+        expect(report).not.toContain("the warbands play this checkout's");
+    });
+
+    it("says the warbands play this checkout's planner when the team plays another", () => {
+        const [stats] = summariseAll([sample({ scenario: "a · team plays main @ 4ba0a86", teamPlanner: "main @ 4ba0a86" })]);
+        expect(stats.teamPlanner).toBe("main @ 4ba0a86");
+        expect(formatReport([stats])).toContain("the warbands play this checkout's");
     });
 });
