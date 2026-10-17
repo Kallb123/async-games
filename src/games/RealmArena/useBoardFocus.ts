@@ -1,12 +1,13 @@
 import { useMemo, useState } from "react";
 import type { Battlefield, Square } from "@/utils/games/battlefield/terrain";
-import { ACTION_POINTS, isStanding, type BattleState, type Fighter } from "./rules";
+import { actionPointsOf, isStanding, type BattleState, type Fighter } from "./rules";
 import { boardFocus, reachFocus, type BoardFocusArea, type BoardFollow } from "./ui";
 
 interface BoardFocusSource {
     field: Battlefield;
     fighters: readonly Fighter[];
     sides?: BattleState["sides"];
+    rulesVersion?: number;
     selected?: Fighter;
     /** Whose turn it is: a character of theirs frames the reach of the AP it has left, anyone else's a full turn's. */
     acting?: string | null;
@@ -29,15 +30,15 @@ interface BoardFocusSource {
  * (`tracks`). A selected character's reach is a search over the whole map, so
  * it's only redone when the selection or the board moves.
  */
-export function useBoardFocus({ field, fighters, sides, selected, acting, sealed, placing, follow, home, refocus = 0, playing }: BoardFocusSource): {
+export function useBoardFocus({ field, fighters, sides, rulesVersion, selected, acting, sealed, placing, follow, home, refocus = 0, playing }: BoardFocusSource): {
     area: BoardFocusArea | null;
     held: boolean;
     onFocused: (key: string) => void;
     tracks: boolean;
 } {
     const reach = useMemo(
-        () => selected && isStanding(selected) ? reachFocus({ field, fighters: [...fighters], sides }, selected, acting === selected.owner ? selected.ap : ACTION_POINTS) : null,
-        [field, fighters, sides, selected, acting],
+        () => selected && isStanding(selected) ? reachFocus({ field, fighters: [...fighters], sides, rulesVersion }, selected, acting === selected.owner ? selected.ap : actionPointsOf(selected, { rulesVersion })) : null,
+        [field, fighters, sides, rulesVersion, selected, acting],
     );
     // A character picked up to place is brought close enough to tap a square beside it.
     const pickedUp = placing?.selected != null ? sealed?.[placing.selected] : undefined;

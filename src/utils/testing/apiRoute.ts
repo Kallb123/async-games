@@ -173,6 +173,22 @@ export const createdUsers: Record<string, unknown>[] = [];
  */
 export const mintedSignInTokens: { userId: string, expiresInSeconds?: number }[] = [];
 
+/** Clerk merges objects at every depth, replaces arrays and deletes null keys. */
+function mergeMetadata(current: Record<string, unknown>, patch: Record<string, unknown>): Record<string, unknown> {
+    const merged = { ...current };
+    for (const [key, value] of Object.entries(patch)) {
+        if (value === null) delete merged[key];
+        else if (typeof value === 'object' && !Array.isArray(value)) {
+            const previous = merged[key];
+            merged[key] = mergeMetadata(
+                previous && typeof previous === 'object' && !Array.isArray(previous) ? previous as Record<string, unknown> : {},
+                value as Record<string, unknown>,
+            );
+        } else merged[key] = value;
+    }
+    return merged;
+}
+
 /** The `@clerk/nextjs/server` a route sees. Pass to `vi.mock`. */
 export function clerkStub() {
     return {
@@ -199,12 +215,6 @@ export function clerkStub() {
                     // than Clerk would is wrong in the direction that hides it.
                     return { data: selected.slice(offset, offset + limit) };
                 },
-                // Merges the bag's top-level keys and treats a null value as
-                // "remove this key" — enough to catch a route clobbering
-                // `guest` or `unlocked` on its way past, which a stub that
-                // replaced the whole bag would let through. Clerk itself merges
-                // at every depth, so a route that ever writes a nested object
-                // needs more than this before its test means anything.
                 // Accounts a route created, in the order it created them, so a
                 // test can assert what it asked Clerk to make rather than only
                 // that it didn't throw. The id is positional and opaque, the
@@ -233,18 +243,10 @@ export function clerkStub() {
                     if (!user) throw new Error(`updateUserMetadata: no such user ${userId}`);
                     metadataWrites.push({ userId, ...params });
                     if (params.privateMetadata) {
-                        (user as { privateMetadata?: Record<string, unknown> }).privateMetadata = {
-                            ...user.privateMetadata,
-                            ...params.privateMetadata,
-                        };
+                        (user as { privateMetadata: Record<string, unknown> }).privateMetadata = mergeMetadata(user.privateMetadata ?? {}, params.privateMetadata);
                     }
                     if (params.publicMetadata) {
-                        const merged: Record<string, unknown> = { ...user.publicMetadata };
-                        for (const [key, value] of Object.entries(params.publicMetadata)) {
-                            if (value === null) delete merged[key];
-                            else merged[key] = value;
-                        }
-                        (user as { publicMetadata: Record<string, unknown> }).publicMetadata = merged;
+                        (user as { publicMetadata: Record<string, unknown> }).publicMetadata = mergeMetadata(user.publicMetadata ?? {}, params.publicMetadata);
                     }
                     return user;
                 }

@@ -1,10 +1,11 @@
 'use client'
+import { ruleValuesOf, type RulesContext } from "@/games/RealmArena/rulesets";
 import React from 'react';
 import ActionButton from '@/components/ui/ActionButton';
 import OptionSection from '@/components/ui/OptionSection';
 import OptionToggleRow from '@/components/ui/OptionToggleRow';
 import UndoButton from '@/components/ui/UndoButton';
-import { isStanding, REACTION_COST, shoots, type Fighter } from '@/games/RealmArena/rules';
+import { isStanding, bankedAp, shoots, type Fighter } from '@/games/RealmArena/rules';
 import { fighterName } from '@/games/RealmArena/ui';
 import { CHARACTER_MARK } from '@/games/RealmArena/roster';
 
@@ -47,6 +48,7 @@ export default function RealmArenaTurnEnd({ onEndTurn, onDeselect, canUndo, onUn
 }
 
 interface RealmArenaWatchSwitchesProps {
+    context?: RulesContext;
     fighters: readonly Fighter[];
     player: string;
     /** Ids of the player's characters to keep still rather than go on watch. */
@@ -61,7 +63,8 @@ interface RealmArenaWatchSwitchesProps {
  * enough to — on, as a timed-out turn would leave it (§17.2), or off to keep
  * it still. Nothing at all while nobody has the AP.
  */
-export function RealmArenaWatchSwitches({ fighters, player, keepStill, onKeepStill, disabled }: RealmArenaWatchSwitchesProps) {
+export function RealmArenaWatchSwitches({ fighters, player, keepStill, onKeepStill, disabled, context }: RealmArenaWatchSwitchesProps) {
+    const { REACTION_COST } = ruleValuesOf(context);
     const watchers = fighters.filter(fighter => fighter.owner === player && isStanding(fighter) && fighter.ap >= REACTION_COST);
     if (watchers.length === 0) return null;
     const footer = <p className="ag-hint">Anyone with {REACTION_COST} AP or more left goes on watch when the turn ends, unless you keep them still.</p>;
@@ -69,15 +72,15 @@ export function RealmArenaWatchSwitches({ fighters, player, keepStill, onKeepSti
         <OptionSection label="When your turn ends" footer={footer}>
             {watchers.map(fighter => {
                 const still = keepStill.includes(fighter.id);
-                const stance = shoots(fighter) ? 'overwatch' : 'guard';
+                const stance = shoots(fighter, context) ? 'overwatch' : 'guard';
                 return (
                     <OptionToggleRow
                         key={fighter.id}
-                        title={`${CHARACTER_MARK[fighter.character]} ${fighterName(fighters, fighter)}`}
-                        description={still ? `Keeps still · its ${fighter.ap} AP are lost` : `Goes on ${stance} with ${fighter.ap} AP`}
+                        title={`${CHARACTER_MARK[fighter.character]} ${fighterName(fighters, fighter, context)}`}
+                        description={still ? `Keeps still · its ${fighter.ap} AP are lost` : `Goes on ${stance} with ${bankedAp(fighter.ap, context)} AP`}
                         on={!still}
                         disabled={disabled}
-                        ariaLabel={`${fighterName(fighters, fighter)} goes on ${stance}`}
+                        ariaLabel={`${fighterName(fighters, fighter, context)} goes on ${stance}`}
                         onToggle={() => onKeepStill(still ? keepStill.filter(id => id !== fighter.id) : [...keepStill, fighter.id])}
                     />
                 );

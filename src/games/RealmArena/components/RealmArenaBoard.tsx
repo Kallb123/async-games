@@ -53,6 +53,7 @@ interface RealmArenaBoardProps {
     clouds?: readonly Square[];
     /** The battle's sides (§29.6), so a selected character's reach passes through its allies as the rules' does. */
     sides?: BattleState["sides"];
+    rulesVersion?: number;
     /** The viewer's own sealed squad, while the muster lasts: drawn where they stand, but not yet on the battlefield. */
     sealed?: readonly MusterPick[] | null;
     /**
@@ -862,7 +863,7 @@ function blasting(artId: string, view: IsoView, playback: Playback, cue: ScorchC
  * here and nowhere else — and whatever was in the middle of the frame is still
  * there after it (`BoardZoom`'s `pivot`).
  */
-export default function RealmArenaBoard({ field, fighters, fogGhosts = [], unseen, clouds, sides, sealed, owners, waveDue = false, showCentre = true, viewerId, colourFor, nameFor, selected, onSelect, placing, aiming, acting, refocus = 0, follow, home, odds, coverAt, overlay, playback, onPlayed, unplaced }: RealmArenaBoardProps) {
+export default function RealmArenaBoard({ field, fighters, fogGhosts = [], unseen, clouds, sides, rulesVersion, sealed, owners, waveDue = false, showCentre = true, viewerId, colourFor, nameFor, selected, onSelect, placing, aiming, acting, refocus = 0, follow, home, odds, coverAt, overlay, playback, onPlayed, unplaced }: RealmArenaBoardProps) {
     const [rotation, turn, turned] = useBoardRotation(viewerId);
 
     // The ground changes only when cover is blasted away, so it's laid out once a battlefield, and again each turn of the view.
@@ -910,7 +911,7 @@ export default function RealmArenaBoard({ field, fighters, fogGhosts = [], unsee
     // selected; a character selected in battle brings the near half of where it
     // could move into view, zoomed exactly to that, since a full turn's reach is
     // too wide for any step but the fit. What plays waits for the glide there (`held`).
-    const { area, held, onFocused, tracks } = useBoardFocus({ field, fighters, sides, selected, acting, sealed, placing, follow, home, refocus, playing: !!playback });
+    const { area, held, onFocused, tracks } = useBoardFocus({ field, fighters, sides, rulesVersion, selected, acting, sealed, placing, follow, home, refocus, playing: !!playback });
     let focus: BoardZoomFocus | null = area && { rect: isoBounds(view, area.area), key: area.key, exact: area.exact };
 
     // While an action plays, its caption floats over the foot of the frame
@@ -1188,7 +1189,7 @@ export default function RealmArenaBoard({ field, fighters, fogGhosts = [], unsee
                 {/* Over the foot of the frame, out of the zoom: while an action plays,
                     what is happening in words; otherwise the targets, which want the
                     same spot while a character is selected. */}
-                {playback ? <PlaybackCaption key={playback.key} playback={playback} fighters={fighters} viewerId={viewerId} nameFor={nameFor} /> : overlay}
+                {playback ? <PlaybackCaption context={{ rulesVersion }} key={playback.key} playback={playback} fighters={fighters} viewerId={viewerId} nameFor={nameFor} /> : overlay}
             </PlaybackProvider>
             <UnplacedMark unplaced={unplaced} />
         </div>

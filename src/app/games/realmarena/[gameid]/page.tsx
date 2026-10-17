@@ -20,7 +20,7 @@ import { enemyNameOf, RA_SOLO_PARAM, REALM_ONLY } from "@/games/RealmArena/chara
 import { rematchFlag } from "@/utils/ui/rematch";
 import { reachAfter, useTurnDraft } from "@/games/RealmArena/useTurnDraft";
 import { battlefieldOf } from "@/games/RealmArena/maps";
-import { ACTION_POINTS, armouredTeam, battleFrom, centreHolders, ENEMY_SIDE, isStanding, isWarband, sideScore, stoutTeam, TEAM_SIDE, warbandsFor, type Action, type BattleEvent, type Fighter } from "@/games/RealmArena/rules";
+import { allied, armouredTeam, battleFrom, centreHolders, ENEMY_SIDE, isStanding, isWarband, sideScore, squadHp, stoutTeam, TEAM_SIDE, warbandsFor, type Action, type BattleEvent, type Fighter } from "@/games/RealmArena/rules";
 import { actionFollow, battleCues, centreInSight, endOf, coopColourOf, ENEMY_COLOUR, fighterName, friendlySquares, isFollowedPart, isUnplaced, partFollow, partLabel, reviewParts, STEP_BEAT_MS, STEP_MIN_MS, TEAM_COLOUR, TEAM_NAME, unseenSquares, waveLineOf, withPartState } from "@/games/RealmArena/ui";
 import type { IRealmArenaOutcome } from "@/games/RealmArena/RealmArenaLogic";
 import type { ICommandResponse } from "@/app/api/game/command/route";
@@ -137,7 +137,7 @@ export default function GameRealmArena({ params }: { params: Promise<{ gameid: u
     const stepFighters = nav.displayedState?.fighters;
     const stepMap = nav.displayedState?.map ?? '';
     const parts = useMemo(
-        () => !nav.isLive && previous ? reviewParts(stepMap, stepOutcome, previous.specificGameState, stepFighters, { still }) : [],
+        () => !nav.isLive && previous ? reviewParts(stepMap, stepOutcome, previous.specificGameState, stepFighters, { still, rulesVersion: previous.specificGameState.rulesVersion }) : [],
         [nav.isLive, previous, stepMap, stepOutcome, stepFighters, still],
     );
     const stepNow = `${nav.mode}:${nav.viewIndex}`;
@@ -252,7 +252,7 @@ export default function GameRealmArena({ params }: { params: Promise<{ gameid: u
     // The live turn, not the one a review shows, so stepping back through the
     // match and returning leaves anything lined up as it was.
     const turnKey = `${gameData?.currentTurn ?? ''}:${gameData?.specificGameState?.phase ?? ''}`;
-    const draft = useMusterDraft(field, mySeat, gs?.budget ?? 0, gs?.mastery?.[myUserId] ?? {}, gs?.factions ?? REALM_ONLY, turnKey);
+    const draft = useMusterDraft(field, mySeat, gs?.budget ?? 0, gs?.mastery?.[myUserId] ?? {}, gs?.factions ?? REALM_ONLY, turnKey, gs);
     const musterTurn = mustering && isMyTurn && !gs?.myMuster;
     const placement = musterTurn ? draft.placement : null;
     // A box in the placing list picks that one up and brings the view to it, even when it already was.
@@ -305,7 +305,7 @@ export default function GameRealmArena({ params }: { params: Promise<{ gameid: u
             // board the part before it left. A part with nothing to play is
             // dropped; the next one's `before` already chains from its board.
             const friendlyAfter = (state: readonly Fighter[]) => friendlySquares(state, myUserId, coop);
-            const entries = reviewParts(map, step, { fighters, blasted: gs?.blasted ?? [] }, after, { still })
+            const entries = reviewParts(map, step, { fighters, blasted: gs?.blasted ?? [] }, after, { still, rulesVersion: gs?.rulesVersion })
                 .filter(part => part.cues.length > 0)
                 .map((part, i) => {
                     const partKey = `${key}:${i}`;
@@ -318,7 +318,7 @@ export default function GameRealmArena({ params }: { params: Promise<{ gameid: u
                 });
             return setOwn(entries.length > 0 ? { playbacks: entries, index: 0, rested: false } : null);
         }
-        const cues = battleCues(field, events, fighters, after, { still });
+        const cues = battleCues(field, events, fighters, after, { still, rulesVersion: gs?.rulesVersion });
         if (cues.length === 0) return setOwn(null);
         const to = picked ?? actionFollow(field, events, fighters, after, `play:${key}`, still);
         setOwn({ playbacks: [{ playback: { key, cues, events, field, before: fighters }, follow: to }], index: 0, rested: false });
@@ -364,7 +364,7 @@ export default function GameRealmArena({ params }: { params: Promise<{ gameid: u
         // so it's asked about — even where it would go on watch.
         const unspent = fighters.filter(fighter => fighter.owner === myUserId && isStanding(fighter) && fighter.ap > 0);
         if (unspent.length > 0) {
-            const left = unspent.map(fighter => `${capitalise(fighterName(fighters, fighter))} (${fighter.ap} AP)`).join(', ');
+            const left = unspent.map(fighter => `${capitalise(fighterName(fighters, fighter, battle))} (${fighter.ap} AP)`).join(', ');
             if (!window.confirm(`Still to spend: ${left}. End your turn anyway?`)) return;
         }
         const command = new RealmArenaEndTurn();
@@ -465,15 +465,23 @@ export default function GameRealmArena({ params }: { params: Promise<{ gameid: u
     };
     const dropped = gameData?.gameState?.droppedPlayers ?? [];
     // How many of a squad stand — or, in fog of war, all the viewer knows of
-    // anyone else's: how many of it they can see (§27).
+    // an enemy's: how many of it they can see (§27).
     const standingLine = (squad: Fighter[], hidden: boolean): string => hidden
         ? `${squad.filter(isStanding).length} in sight`
         : `${squad.filter(isStanding).length}/${squad.length} standing`;
     // What the strip says under a player: how their muster or their squad stands.
     // A dropped player's squad has left the battlefield; their score stands (§17.4 B2).
-    const squadSub = (userId: string): string => mustering ? musterSub(userId)
-        : dropped.includes(userId) ? 'left the battle'
-        : standingLine(fighters.filter(fighter => fighter.owner === userId), fogged && userId !== myUserId);
+    const squadSub = (userId: string, detailed = false): string => {
+        if (mustering) return musterSub(userId);
+        if (dropped.includes(userId)) return 'left the battle';
+        const squad = fighters.filter(fighter => fighter.owner === userId);
+        const ally = allied(battle, userId, myUserId);
+        const standing = standingLine(squad, fogged && !ally);
+        // Allies share vision, so their whole squad and its HP are known too.
+        if (!detailed || !ally) return standing;
+        const hp = squadHp(squad, battle);
+        return `${standing} · ${hp.remaining}/${hp.total} HP`;
+    };
     const seatOrder = scoreboardSeatOrder(gameData, myUserId);
     const scores = gs?.scores ?? {};
     const enemyStanding = standingLine(fighters.filter(fighter => isWarband(fighter.owner)), fogged);
@@ -489,7 +497,7 @@ export default function GameRealmArena({ params }: { params: Promise<{ gameid: u
             name: capitalise(TEAM_NAME),
             color: TEAM_COLOUR,
             sub: seatOrder.map(userId => `${playerName(userId)} ${scores[userId] ?? 0}`).join(' · '),
-            detail: seatOrder.map(userId => <div key={userId}>{playerName(userId)} · {scores[userId] ?? 0} · {squadSub(userId)}</div>),
+            detail: seatOrder.map(userId => <div key={userId}>{playerName(userId)} · {scores[userId] ?? 0} · {squadSub(userId, true)}</div>),
             score: sideScore(battle, scores, TEAM_SIDE),
             isMe: true,
         },
@@ -611,6 +619,7 @@ export default function GameRealmArena({ params }: { params: Promise<{ gameid: u
                             unseen={unseen}
                             clouds={clouds}
                             sides={battle.sides}
+                            rulesVersion={battle.rulesVersion}
                             sealed={placement?.picks ?? gs.myMuster}
                             owners={coop ? [...seats, ...warbandsFor(seats)] : seats}
                             waveDue={waveDue}
@@ -645,7 +654,7 @@ export default function GameRealmArena({ params }: { params: Promise<{ gameid: u
                             home={{ squares: friendly, key: `home:${nav.mode}` }}
                             odds={reach?.options}
                             coverAt={reach?.previewing ? turn?.after?.square : null}
-                            overlay={reach && <RealmArenaTargets reach={reach} fighters={fighters} viewerId={myUserId} nameFor={playerName} />}
+                            overlay={reach && <RealmArenaTargets context={battle} reach={reach} fighters={fighters} viewerId={myUserId} nameFor={playerName} />}
                             playback={playback}
                             onPlayed={played}
                             unplaced={unplaced}
@@ -669,12 +678,12 @@ export default function GameRealmArena({ params }: { params: Promise<{ gameid: u
                             />
                             {turn
                                 ? <RealmArenaAim draft={turn} battle={battle} player={myUserId} nameFor={playerName} pendingTarget={pendingTarget} onFocus={focusTarget} />
-                                : <p className="ag-hint">Tap one of your units below, or on the board, to act with it. Each has its own {ACTION_POINTS} AP.</p>}
+                                : <p className="ag-hint">Tap one of your units below, or on the board, to act with it. Each has its own AP to spend.</p>}
                         </div>
                     )}
 
                     {selected && (
-                        <RealmArenaFighterCard fighter={selected} battle={battle} label={`${fighterName(fighters, selected)} · ${playerName(selected.owner)}`}>
+                        <RealmArenaFighterCard fighter={selected} battle={battle} label={`${fighterName(fighters, selected, battle)} · ${playerName(selected.owner)}`}>
                             {turn && <RealmArenaTurnSheet draft={turn} battle={battle} player={myUserId} pendingTarget={pendingTarget} />}
                         </RealmArenaFighterCard>
                     )}
@@ -723,11 +732,11 @@ export default function GameRealmArena({ params }: { params: Promise<{ gameid: u
                     )}
 
                     {battleTurn && lastEvents.length > 0 && (
-                        <RealmArenaResults events={lastEvents} fighters={fighters} viewerId={myUserId} nameFor={playerName} />
+                        <RealmArenaResults context={battle} events={lastEvents} fighters={fighters} viewerId={myUserId} nameFor={playerName} />
                     )}
 
                     {battleTurn && (
-                        <RealmArenaWatchSwitches fighters={fighters} player={myUserId} keepStill={keepStill} onKeepStill={setKeepStill} disabled={pendingTarget !== null} />
+                        <RealmArenaWatchSwitches context={battle} fighters={fighters} player={myUserId} keepStill={keepStill} onKeepStill={setKeepStill} disabled={pendingTarget !== null} />
                     )}
 
                     <TurnNavControls nav={nav as unknown as ReturnType<typeof useTurnNavigation>} canPlan={false} canPlay userIdList={userIdList} stepDetail={stepDetail} />

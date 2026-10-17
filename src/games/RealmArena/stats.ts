@@ -1,3 +1,4 @@
+import { ruleValuesOf, rulesetOf, type RulesContext } from "./rulesets";
 // Realm Arena's characters and items as stat sheets (docs/games/realm-arena.md
 // §13.6, §21.2, §23.2): the numbers the muster's info card and the admin
 // balance screen print, every one read from characters.ts and the rules'
@@ -9,9 +10,9 @@
 import { DEFAULT_CLIMB } from "@/utils/games/battlefield/pathfinding";
 import { FULL_HEIGHT } from "@/utils/games/battlefield/terrain";
 import { pluralize } from "@/utils/ui/text";
-import { ABILITIES, CHARACTERS, EFFECTS, FACTIONS, ITEM_IDS, ITEMS, OPTIONS, STRIKING_ABILITIES, type Ability, type AbilityId, type Affliction, type CharacterId, type Item, type ItemId, type OptionId, type Weapon } from "./characters";
+import { kitOf, ITEM_IDS, STRIKING_ABILITIES, type Ability, type AbilityId, type Affliction, type CharacterId, type Item, type ItemId, type OptionId, type Weapon } from "./characters";
 import { CHARACTER_IDS, optionsFor } from "./roster";
-import { ACTION_POINTS, ARMOUR, ATTACK_AP, FLANK_BONUS, GRAZE_BAND, FAR_SHOT_DISTANCE, MELEE_ACCURACY, ROLL_SIDES, sightOf, TEAM_HP_FACTOR } from "./rules";
+import { ROLL_SIDES, sightOf } from "./rules";
 
 /** One thing a character can do, or an item it can use, as a row of the stats table. */
 export interface ActionStats {
@@ -59,7 +60,8 @@ export type UnitRef = { kind: "character"; id: CharacterId } | { kind: "item"; i
  */
 interface AbilityUse {
     reach: "weapon" | "next" | "self" | "aimed" | "move";
-    note?: string;
+    /** Read from the battle's own ability where its catalogue changes who it covers (Shield wall). */
+    note?: string | ((ability: Ability) => string);
 }
 
 /** Who something landing on the 3×3 round a square hits: a fireball, a thunder flask. A smoke pot's cloud hurts nobody, so it's only the 3×3. */
@@ -67,7 +69,7 @@ const AREA = "3×3, friend or foe";
 
 const ABILITY_USE: Readonly<Record<AbilityId, AbilityUse>> = {
     cleave: { reach: "weapon", note: "Two enemies next to it" },
-    shieldWall: { reach: "self", note: ABILITIES.shieldWall.description },
+    shieldWall: { reach: "self", note: ({ coverFor, passive }) => `${coverFor === "everyone" ? "Anyone" : "Allies"} next to it with no cover count as in half cover${passive ? "" : ", until its next turn"}` },
     aimedShot: { reach: "weapon" },
     sneak: { reach: "move" },
     fireball: { reach: "aimed", note: AREA },
@@ -93,7 +95,8 @@ const ONCE = "Once";
 const PER_TURN = "1/turn";
 
 /** What an effect does, in a line: "Burning: 1 damage a turn, 2 turns". */
-function effectLine(effect: Affliction): string {
+function effectLine(effect: Affliction, context?: RulesContext): string {
+    const { EFFECTS } = rulesetOf(context);
     const { name, count, ...rest } = EFFECTS[effect];
     const what = effect === "slowed" ? "half movement"
         : "damage" in rest ? `${rest.damage} damage a turn`
@@ -108,65 +111,69 @@ function effectLine(effect: Affliction): string {
  * it heals, the effect it leaves — "On a hit" for a shot's, which a miss
  * doesn't leave — and the cover it blasts, then `tail`.
  */
-function extrasOf(thing: Pick<Ability, "hp" | "effect" | "blasts">, onAHit: boolean, lead: string | undefined, ...tail: (string | undefined)[]): string[] {
+function extrasOf(context: RulesContext | undefined, thing: Pick<Ability, "hp" | "effect" | "blasts">, onAHit: boolean, lead: string | undefined, ...tail: (string | undefined)[]): string[] {
     return [
         lead,
         thing.hp !== undefined ? `Heals ${thing.hp} HP` : undefined,
-        thing.effect ? `${onAHit ? "On a hit: " : ""}${effectLine(thing.effect)}` : undefined,
+        thing.effect ? `${onAHit ? "On a hit: " : ""}${effectLine(thing.effect, context)}` : undefined,
         thing.blasts ? "Blasts away low cover" : undefined,
         ...tail,
     ].filter((line): line is string => line !== undefined);
 }
 
 /** A weapon's reach and odds: "Next to" and the melee 80% for a melee one, its range and accuracy for a ranged one. */
-function weaponReach(weapon: Weapon, hitBonus = 0): Pick<ActionStats, "range" | "hit"> {
+function weaponReach(weapon: Weapon, hitBonus = 0, context?: RulesContext): Pick<ActionStats, "range" | "hit"> {
     return weapon.kind === "melee"
-        ? { range: NEXT_TO, hit: `${MELEE_ACCURACY}%` }
+        ? { range: NEXT_TO, hit: `${ruleValuesOf(context).MELEE_ACCURACY}%` }
         : { range: `${weapon.range}`, hit: `${Math.min(ROLL_SIDES, weapon.accuracy + hitBonus)}%` };
 }
 
-function weaponStats(weapon: Weapon, kind: string, key: string): ActionStats {
-    const extras = weapon.kind === "ranged" ? extrasOf(weapon, true, undefined) : [];
-    return { key, name: weapon.name, kind, ap: `${ATTACK_AP}`, damage: `${weapon.damage}`, ...weaponReach(weapon), cooldown: NONE, extras };
+function weaponStats(weapon: Weapon, kind: string, key: string, context?: RulesContext): ActionStats {
+    const extras = weapon.kind === "ranged" ? extrasOf(context, weapon, true, undefined) : [];
+    return { key, name: weapon.name, kind, ap: `${ruleValuesOf(context).ATTACK_AP}`, damage: `${weapon.damage}`, ...weaponReach(weapon, 0, context), cooldown: NONE, extras };
 }
 
-function abilityStats(id: AbilityId, weapon: Weapon, kind: string, key: string = id): ActionStats {
+function abilityStats(id: AbilityId, weapon: Weapon, kind: string, key: string = id, context?: RulesContext): ActionStats {
+    const { ABILITIES } = rulesetOf(context);
     const ability: Ability = ABILITIES[id];
     const { reach, note } = ABILITY_USE[id];
     const strikes = reach === "weapon";
-    const range = strikes ? weaponReach(weapon).range
+    const range = strikes ? weaponReach(weapon, 0, context).range
         : reach === "next" ? NEXT_TO
         : reach === "aimed" ? `${ability.range}`
         : reach === "move" ? "A move"
         : "Self";
     // A strike or a shot is at the weapon's odds; anything else that lands on
     // someone — a fireball, a mark — never rolls.
-    const hit = strikes || STRIKING_ABILITIES.has(id) ? weaponReach(weapon, ability.hitBonus).hit
+    const hit = strikes || STRIKING_ABILITIES.has(id) ? weaponReach(weapon, ability.hitBonus, context).hit
         : ability.damage !== undefined || ability.effect ? ALWAYS : NONE;
     return {
-        key, name: ability.name, kind, ap: `${ability.ap}`,
+        key, name: ability.name, kind, ap: ability.passive ? NONE : `${ability.ap}`,
         damage: `${ability.damage ?? (strikes ? weapon.damage : NONE)}`,
         range, hit,
-        cooldown: ability.oncePerBattle ? ONCE : ability.oncePerTurn ? PER_TURN : ability.cooldown > 0 ? `${ability.cooldown}` : NONE,
-        extras: extrasOf(ability, strikes && weapon.kind === "ranged", note,
+        cooldown: ability.passive ? "Passive" : ability.oncePerBattle ? ONCE : ability.oncePerTurn ? PER_TURN : ability.cooldown > 0 ? `${ability.cooldown}` : NONE,
+        extras: extrasOf(context, ability, strikes && weapon.kind === "ranged", typeof note === "function" ? note(ability) : note,
             reach === "move" ? `${ability.ap} AP for each AP a move would cost` : undefined),
         description: ability.description,
     };
 }
 
-function optionStats(id: OptionId): ActionStats {
+function optionStats(id: OptionId, context?: RulesContext): ActionStats {
+    const { OPTIONS, CHARACTERS, ABILITIES } = rulesetOf(context);
     const option = OPTIONS[id];
     const { character, rank, replaces } = option;
     const replaced = replaces === "weapon" ? CHARACTERS[character].weapon.name : ABILITIES[replaces].name;
     const kind = `Rank ${rank} · in place of ${replaced}`;
     return "weapon" in option
-        ? weaponStats(option.weapon, kind, id)
-        : abilityStats(option.ability, CHARACTERS[character].weapon, kind, id);
+        ? weaponStats(option.weapon, kind, id, context)
+        : abilityStats(option.ability, CHARACTERS[character].weapon, kind, id, context);
 }
 
 /** A character's sheet: HP, movement, sight and cost, then its weapon, its abilities and its options. */
-export function characterStats(id: CharacterId): UnitStats {
+export function characterStats(id: CharacterId, context?: RulesContext): UnitStats {
+    const { CHARACTERS } = rulesetOf(context);
     const character = CHARACTERS[id];
+    const { weapon } = kitOf(id, undefined, context);
     const climb = character.climb ?? DEFAULT_CLIMB;
     return {
         name: character.name,
@@ -174,20 +181,21 @@ export function characterStats(id: CharacterId): UnitStats {
         tiles: [
             { label: "HP", value: `${character.hp}` },
             { label: "Move/AP", value: `${character.movement}` },
-            { label: "Sight", value: `${sightOf({ character: id })}` },
+            { label: "Sight", value: `${sightOf({ character: id }, context)}` },
             { label: "Points", value: `${character.points}` },
             ...(climb !== DEFAULT_CLIMB ? [{ label: "Climb", value: climb >= FULL_HEIGHT ? "Full height" : `${climb}/${FULL_HEIGHT}` }] : []),
         ],
         actions: [
-            weaponStats(character.weapon, "Weapon", "weapon"),
-            ...character.abilities.map(ability => abilityStats(ability, character.weapon, "Ability")),
+            weaponStats(weapon, "Weapon", "weapon", context),
+            ...character.abilities.map(ability => abilityStats(ability, weapon, "Ability", ability, context)),
         ],
-        options: optionsFor(id).map(optionStats),
+        options: optionsFor(id, context).map(option => optionStats(option, context)),
     };
 }
 
 /** An item's sheet: its cost and AP, then what using it does — once, and never at a roll. */
-export function itemStats(id: ItemId): UnitStats {
+export function itemStats(id: ItemId, context?: RulesContext): UnitStats {
+    const { ITEMS } = rulesetOf(context);
     const item: Item = ITEMS[id];
     const thrown = item.range !== undefined;
     return {
@@ -204,7 +212,7 @@ export function itemStats(id: ItemId): UnitStats {
             range: thrown ? `${item.range}` : NEXT_TO,
             hit: item.damage !== undefined || item.effect ? ALWAYS : NONE,
             cooldown: ONCE,
-            extras: extrasOf(item, false, item.area ? (item.damage !== undefined || item.effect ? AREA : "3×3") : thrown ? "One square" : "The carrier or an ally next to them",
+            extras: extrasOf(context, item, false, item.area ? (item.damage !== undefined || item.effect ? AREA : "3×3") : thrown ? "One square" : "The carrier or an ally next to them",
                 item.hitPenalty !== undefined ? `−${item.hitPenalty}% to hit anyone in it, and no overwatch into it, until the thrower's next turn` : undefined),
             description: item.description,
         }],
@@ -212,8 +220,8 @@ export function itemStats(id: ItemId): UnitStats {
     };
 }
 
-export function unitStats(unit: UnitRef): UnitStats {
-    return unit.kind === "character" ? characterStats(unit.id) : itemStats(unit.id);
+export function unitStats(unit: UnitRef, context?: RulesContext): UnitStats {
+    return unit.kind === "character" ? characterStats(unit.id, context) : itemStats(unit.id, context);
 }
 
 /** Every character's and every item's sheet, in the muster's order: the admin balance screen's. */
@@ -223,8 +231,19 @@ export const ALL_UNITS: readonly UnitRef[] = [
 ];
 
 /** The fine print under a stats table: what the hit chances leave out, and what every shot shares. */
-export const STATS_FOOTNOTE = `Each character has ${ACTION_POINTS} AP a turn. Hit chances are before cover, height, marks and smoke. `
-    + `A shot that misses by ${GRAZE_BAND}% or less grazes for half damage, and one at a target with no cover does ${FLANK_BONUS} more. `
-    + `A shot from further than ${FAR_SHOT_DISTANCE} squares counts the target's cover double (hunkering down doubles it too, but never twice over). A strike next to the target hits ${MELEE_ACCURACY}% of the time, with no graze. `
-    + `In Hold Out, the team's characters have ${Math.round((TEAM_HP_FACTOR - 1) * 100)}% more HP than the table says, and against ${FACTIONS.realm.enemyName} every hit on them does ${ARMOUR} less (never under 1), except on a Miner. `
-    + `Range is in squares. CD is the cooldown: used on one of the character's turns, it can be used again that many of its turns later. Once means once a battle, and 1/turn once a turn.`;
+export function statsFootnote(context?: RulesContext): string {
+    const { ACTION_POINTS, BONUS_AP, ARMOUR, ARMOUR_EXEMPT_FACTIONS, ARMOURED_ENEMIES, FLANK_BONUS, GRAZE_BAND, FAR_SHOT_DISTANCE, MELEE_ACCURACY, TEAM_HP_FACTOR, MAX_ATTACKS_PER_TURN, BANK_CAP } = ruleValuesOf(context);
+    const { MELEE_ROLLS } = ruleValuesOf(context);
+    const { FACTIONS } = rulesetOf(context);
+    return `Each character has ${ACTION_POINTS + BONUS_AP} AP a turn before character and ability bonuses. Hit chances are before cover, height, marks and smoke. `
+        + `A shot that misses by ${GRAZE_BAND}% or less grazes for half damage, and one at a target with no cover does ${FLANK_BONUS} more. `
+        + (FAR_SHOT_DISTANCE === null ? "" : `A shot from further than ${FAR_SHOT_DISTANCE} squares counts the target's cover double (hunkering down doubles it too, but never twice over). `)
+        + (MELEE_ROLLS ? `A strike next to the target hits ${MELEE_ACCURACY}% of the time, with no graze. ` : "A strike next to the target always hits. ")
+        + (TEAM_HP_FACTOR === 1 ? "" : `In Hold Out, the team's characters have ${Math.round((TEAM_HP_FACTOR - 1) * 100)}% more HP than the table says. `)
+        + (ARMOUR === 0 ? "" : `In Hold Out against ${ARMOURED_ENEMIES.map(id => FACTIONS[id]!.enemyName).join(" or ")}, every hit on the team does ${ARMOUR} less (never under 1)${ARMOUR_EXEMPT_FACTIONS.length ? `, except for ${ARMOUR_EXEMPT_FACTIONS.map(id => FACTIONS[id]!.name).join(" and ")}` : ""}. `)
+        + (MAX_ATTACKS_PER_TURN === null ? "" : `At most ${MAX_ATTACKS_PER_TURN} attacks a turn. `)
+        + (BANK_CAP === null ? "" : `Bank at most ${BANK_CAP} AP for reactions. `)
+        + "Range is in squares. CD is the cooldown: used on one of the character's turns, it can be used again that many of its turns later. Once means once a battle, and 1/turn once a turn.";
+}
+
+export const STATS_FOOTNOTE = statsFootnote();

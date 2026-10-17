@@ -1,3 +1,4 @@
+import { rulesetOf, type RulesContext } from "./rulesets";
 // Turn recap for Realm Arena — docs/games/realm-arena.md §17.3 PR 8.
 //
 // Every row is a line the match history already wrote, or says less than one:
@@ -42,7 +43,7 @@ import { andList, capitalise, numberWord, pluralize } from "@/utils/ui/text";
 import type { IRealmArenaSpecificGameStateResponse } from "./apiModels";
 import { enemyTurnsOf, unnamed, type EnemyTurn, type IRealmArenaOutcome, type RealmArenaAct, type Told } from "./RealmArenaLogic";
 import { battlefieldOf } from "./maps";
-import { CHARACTERS, enemyNameOf, UNKNOWN_ENEMY, type CharacterId, type ItemId } from "./characters";
+import { enemyNameOf, UNKNOWN_ENEMY, type CharacterId, type ItemId } from "./characters";
 import { battleFrom, centreHolders, ENEMY_SIDE, isStanding, isWarband, sideOf, sideScore, TEAM_SIDE, type BattleEvent, type Fighter } from "./rules";
 import { AREA_BLAST, centreInSight } from "./ui";
 
@@ -56,7 +57,7 @@ type RAState = IRealmArenaSpecificGameStateResponse;
  * character told by its kind — "their Archer" — has that `character`, so
  * several of a kind can be counted: "two Archers".
  */
-type Deed = { prefix: string; whom: string; character?: CharacterId; steps: { verb: string; tail: string }[] };
+type Deed = { prefix: string; whom: string; character?: CharacterId; plural?: string; steps: { verb: string; tail: string }[] };
 
 /**
  * An action's row as `toEvents` leaves it: the character that acted, what
@@ -209,7 +210,7 @@ const UNNAMED = new Map([
  * viewer's snapshot may no longer hold — an enemy that moved out of sight
  * (§27.2) — though the line still named it.
  */
-const CHARACTER_BY_NAME = new Map((Object.keys(CHARACTERS) as CharacterId[]).map(id => [`their ${CHARACTERS[id].name}`, id]));
+
 
 /**
  * The deed an action was, when it was nothing else: a move, going on watch or
@@ -218,7 +219,7 @@ const CHARACTER_BY_NAME = new Map((Object.keys(CHARACTERS) as CharacterId[]).map
  * must say it as expected (a hidden enemy's sneak is told as a move) and name
  * the character as `whose` does: by its kind, or as one of the `UNNAMED`.
  */
-function quietDeed(events: readonly BattleEvent[], clause: string, prefix: string): Deed | undefined {
+function quietDeed(events: readonly BattleEvent[], clause: string, prefix: string, context: RulesContext): Deed | undefined {
     const [first] = events;
     const words = first && QUIET_DEEDS[first.kind];
     if (!words || !events.every(event => event.kind === first.kind)) return undefined;
@@ -226,8 +227,9 @@ function quietDeed(events: readonly BattleEvent[], clause: string, prefix: strin
     if (!clause.startsWith(`${verb} `) || !clause.endsWith(words.tail)) return undefined;
     const whom = clause.slice(verb.length + 1, clause.length - words.tail.length);
     const steps = [{ verb, tail: words.tail }];
-    const character = CHARACTER_BY_NAME.get(whom);
-    if (character) return { prefix, whom, character, steps };
+    const { CHARACTERS } = rulesetOf(context);
+    const character = (Object.keys(CHARACTERS) as CharacterId[]).find(id => whom === `their ${CHARACTERS[id]!.name}`);
+    if (character) return { prefix, whom, character, plural: CHARACTERS[character].plural, steps };
     return UNNAMED.has(whom) ? { prefix, whom, steps } : undefined;
 }
 
@@ -238,7 +240,7 @@ function quietDeed(events: readonly BattleEvent[], clause: string, prefix: strin
  * what happened, the line without the name `name` it starts with, and the
  * quiet deed it was, if only that.
  */
-function actionRow(base: RowBase, name: string, title: string, events: readonly BattleEvent[], fighter: number | undefined, fighters: readonly Fighter[]): RAEvent {
+function actionRow(base: RowBase, name: string, title: string, events: readonly BattleEvent[], fighter: number | undefined, fighters: readonly Fighter[], context: RulesContext): RAEvent {
     const prefix = title.startsWith(`${name} `) ? `${name} ` : "";
     const clause = title.slice(prefix.length);
     return {
@@ -249,7 +251,7 @@ function actionRow(base: RowBase, name: string, title: string, events: readonly 
         fighter,
         battle: events,
         clause,
-        deed: quietDeed(events, clause, prefix),
+        deed: quietDeed(events, clause, prefix, context),
     };
 }
 
@@ -301,7 +303,7 @@ function enemyRows(base: RowBase, command: IGameCommand, turn: EnemyTurn, lines:
     // The enemy's name as its lines begin with it: "The enemy" while a random
     // enemy is hidden (§29.3), its faction's once it's known — and a turn can
     // see the one give way to the other.
-    const names = [UNKNOWN_ENEMY, ...next.enemy ? [enemyNameOf(next.enemy)] : []].map(capitalise);
+    const names = [UNKNOWN_ENEMY, ...next.enemy ? [enemyNameOf(next.enemy, next)] : []].map(capitalise);
     // "The Renegades moved…", and "The Renegades' Archer burned…" as well.
     const nameOf = (text: string) => names.find(name => text.startsWith(name)) ?? names[0];
     // Named as its latest line names it, which is the last to see a sighting.
@@ -323,7 +325,7 @@ function enemyRows(base: RowBase, command: IGameCommand, turn: EnemyTurn, lines:
         if (events.length === 0) continue;
         const line = lines[at++];
         if (!line) break;
-        rows.push(actionRow({ ...own, id: `${key}:${index}` }, nameOf(line.text), line.text, told(events), step.action.fighter, next.fighters));
+        rows.push(actionRow({ ...own, id: `${key}:${index}` }, nameOf(line.text), line.text, told(events), step.action.fighter, next.fighters, next));
     }
     const points = turn.ended ? centrePointsOf(turn.ended, turn.owner) : 0;
     if (points > 0) {
@@ -369,7 +371,7 @@ function toEvents(
             // The oldest of its lines: one that ended the battle has the
             // winner's line above it, and that names an actor too.
             const title = [...lines].reverse().find(entry => entry.actorId === command.senderId)?.text ?? `${name} ${command.myString()}`;
-            rows.push(actionRow(base, name, title, events, (command as Partial<RealmArenaAct>).action?.fighter, state(next).fighters));
+            rows.push(actionRow(base, name, title, events, (command as Partial<RealmArenaAct>).action?.fighter, state(next).fighters, state(next)));
             break;
         }
         case "RealmArenaEndTurn": {
@@ -485,7 +487,7 @@ function whomOf(run: readonly Deed[]): string {
     // The characters named first, then those told without a class: "their Knight and two characters out of sight".
     const groups = [...kinds.values()].sort((a, b) => Number(!a.deed.character) - Number(!b.deed.character));
     return andList(groups.map(({ deed, count }) => count === 1 ? deed.whom
-        : `${numberWord(count)} ${deed.character ? CHARACTERS[deed.character].plural : UNNAMED.get(deed.whom)}`));
+        : `${numberWord(count)} ${deed.character ? deed.plural : UNNAMED.get(deed.whom)}`));
 }
 
 /** What makes two rows one to tell together: the same actor, as named, and the same words around the characters, in the same order. */

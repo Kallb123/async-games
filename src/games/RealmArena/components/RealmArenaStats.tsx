@@ -1,9 +1,10 @@
 'use client'
+import type { RulesContext } from "@/games/RealmArena/rulesets";
 import React from 'react';
 import InfoModal from '@/components/ui/InfoModal';
 import Section from '@/components/ui/Section';
 import Stat from '@/components/ui/Stat';
-import { ALL_UNITS, STATS_FOOTNOTE, unitStats, type ActionStats, type UnitRef, type UnitStats } from '@/games/RealmArena/stats';
+import { ALL_UNITS, STATS_FOOTNOTE, statsFootnote, unitStats, type ActionStats, type UnitRef, type UnitStats } from '@/games/RealmArena/stats';
 
 /** One row of a `StatsTable`: a name with a line under it, a cell per column, and a note on a row of its own. */
 interface StatsRow {
@@ -100,17 +101,18 @@ function RealmArenaUnitStats({ stats }: { stats: UnitStats }) {
 }
 
 interface RealmArenaUnitInfoProps {
+    context?: RulesContext;
     unit: UnitRef;
     onClose: () => void;
 }
 
 /** The muster's info card for one character or item: its stats, and the fine print the numbers leave out. */
-export default function RealmArenaUnitInfo({ unit, onClose }: RealmArenaUnitInfoProps) {
-    const stats = unitStats(unit);
+export default function RealmArenaUnitInfo({ unit, onClose, context }: RealmArenaUnitInfoProps) {
+    const stats = unitStats(unit, context);
     return (
         <InfoModal title={stats.name} onClose={onClose} closeLabel="Close">
             <RealmArenaUnitStats stats={stats} />
-            <p className="ag-hint ag-hint--tight">{STATS_FOOTNOTE}</p>
+            <p className="ag-hint ag-hint--tight">{statsFootnote(context)}</p>
         </InfoModal>
     );
 }

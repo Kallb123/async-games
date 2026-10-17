@@ -1,10 +1,11 @@
 'use client'
+import { rulesetOf } from "@/games/RealmArena/rulesets";
 import React from 'react';
 import ListRow from '@/components/ui/ListRow';
 import Section from '@/components/ui/Section';
 import Stat from '@/components/ui/Stat';
 import { ITEM_ART } from '@/games/RealmArena/art';
-import { ABILITIES, CHARACTERS, ITEMS, isPassive } from '@/games/RealmArena/characters';
+
 import { abilitiesOf, armourOf, isStanding, maxHpOf, weaponOf, type BattleState, type Fighter } from '@/games/RealmArena/rules';
 import { abilityWait, effectsOn, watchStatus } from '@/games/RealmArena/ui';
 import { ABILITY_MARK, weaponLine, weaponMark } from '@/games/RealmArena/roster';
@@ -31,13 +32,14 @@ interface RealmArenaFighterCardProps {
  * it's the viewer's to act with, the turn sheet that uses them (§17.3 PR 7).
  */
 export default function RealmArenaFighterCard({ fighter, battle, label, children }: RealmArenaFighterCardProps) {
+    const { CHARACTERS, ABILITIES, ITEMS } = rulesetOf(battle);
     const character = CHARACTERS[fighter.character];
     const weapon = weaponOf(battle, fighter);
     return (
         <Section label={label}>
             <div className="ag-stack">
                 <div className="ag-stat-row">
-                    <Stat value={`${fighter.hp}/${maxHpOf(fighter)}`} label="HP" />
+                    <Stat value={`${fighter.hp}/${maxHpOf(fighter, battle)}`} label="HP" />
                     <Stat value={fighter.ap} label="AP left" />
                     <Stat value={fighter.banked} label="AP banked" />
                     {armourOf(battle, fighter) > 0 && <Stat value={armourOf(battle, fighter)} label="Armour" />}
@@ -46,17 +48,16 @@ export default function RealmArenaFighterCard({ fighter, battle, label, children
                 <RealmArenaStatusList effects={effectsOn(fighter)} />
                 {children ?? (
                     <div className="ag-list">
-                        <ListRow icon={weaponMark(fighter.character, fighter.option)} title={weapon.name} sub={weaponLine(weapon)} />
-                        {abilitiesOf(fighter).map(id => {
+                        <ListRow icon={weaponMark(fighter.character, fighter.option)} title={weapon.name} sub={weaponLine(weapon, battle)} />
+                        {abilitiesOf(fighter, battle).map(id => {
                             const ability = ABILITIES[id];
-                            const passive = isPassive(id);
                             return (
                                 <ListRow
                                     key={id}
                                     icon={ABILITY_MARK}
                                     title={ability.name}
-                                    sub={passive ? ability.description : `${ability.ap} AP · ${ability.description}`}
-                                    action={<span className="ag-tag ag-tag--quiet">{passive ? 'Passive' : abilityWait(fighter, id) ?? 'Ready'}</span>}
+                                    sub={`${ability.passive ? "Passive" : `${ability.ap} AP`} · ${ability.description}`}
+                                    action={<span className="ag-tag ag-tag--quiet">{ability.passive ? 'Passive' : abilityWait(fighter, id) ?? 'Ready'}</span>}
                                 />
                             );
                         })}

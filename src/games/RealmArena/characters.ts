@@ -3,13 +3,18 @@
 // abilities, the options mastery unlocks for them (§23.2), the items they can
 // carry (§21), the points budget, and each faction's roster and the
 // ready-made squad a timed-out muster gets (§17.2).
-// The numbers are §13's first guesses for playtesting, not balance — tuning
-// one is an edit here, and `rules.ts` reads them rather than repeating them.
+// Released definitions live in catalogues/. Select them through rulesets.ts;
+// never edit an old catalogue to tune a new release.
 //
 // Pure data, with no server-only imports, so the muster screen and the board
 // read the same table the commands do.
 
-import { FULL_HEIGHT } from "@/utils/games/battlefield/terrain";
+import type { Cover } from "@/utils/games/battlefield/terrain";
+import { currentRuleset, rulesetOf, type RulesContext } from "./rulesets";
+
+// These aliases are for setup, profiles and tools without a game. Gameplay
+// must select the game's catalogue with rulesetFor(game.rulesVersion).
+export const { CHARACTERS, ABILITIES, OPTIONS, ITEMS, EFFECTS, FACTIONS } = currentRuleset;
 
 export type CharacterId =
     | "manAtArms" | "knight" | "archer" | "scout" | "mage" | "cleric"
@@ -29,11 +34,25 @@ export type AbilityId =
 
 /**
  * Something that happens to a character for a few of its owner's turns
- * (§20.1): the five conditions, and the stance a character takes itself.
+ * (§20.1): the five conditions, and the two stances a character takes itself.
  */
-export type EffectId = "burning" | "stunned" | "slowed" | "marked" | "corroded" | "hunkered";
+export type EffectId = "burning" | "stunned" | "slowed" | "marked" | "corroded" | "hunkered" | "shieldWall";
 
 export interface Effect {
+    /** Damage ticks and expiry happen at this turn boundary; old effects use start. */
+    tick?: "start" | "end";
+    decayAt?: "start" | "end";
+    movementFactor?: number;
+    apModifier?: number;
+    preventsReactions?: boolean;
+    /** Cover on the affected fighter (e.g. Ward), lasting as long as the effect. */
+    cover?: Cover;
+    /** Taken off every blow it takes, with any other armour, never leaving less than 1 (Braced, §34.2). */
+    armour?: number;
+    /** Added to every blow it deals: weapon, ability or item (Blessed, §34.2). */
+    damageBonus?: number;
+    /** Added to every blow of its abilities alone (Focused, §34.2). */
+    abilityDamageBonus?: number;
     name: string;
     /** How it reads on a character: "Bob's Knight is burning". */
     state: string;
@@ -53,21 +72,13 @@ export interface Effect {
     healed?: true;
 }
 
-export const EFFECTS = {
-    burning: { name: "Burning", state: "burning", count: 2, damage: 1, healed: true },
-    stunned: { name: "Stunned", state: "stunned", count: 1, ap: 2, healed: true },
-    slowed: { name: "Slowed", state: "slowed", count: 2, healed: true },
-    marked: { name: "Marked", state: "marked", count: 2, hitBonus: 15 },
-    // The Swarm's acid, eating through armour (§31.2): easier to hit, and a heal washes it off.
-    corroded: { name: "Corroded", state: "corroded", count: 2, hitBonus: 10, healed: true },
-    hunkered: { name: "Hunkered down", state: "hunkered down", count: 1 },
-} as const satisfies Record<EffectId, Effect>;
+
 
 /** Every effect, in the order a character's are listed. */
 export const EFFECT_IDS = Object.keys(EFFECTS) as EffectId[];
 
 /** The effects a character takes up itself. */
-const STANCES = ["hunkered"] as const satisfies readonly EffectId[];
+const STANCES = ["hunkered", "shieldWall"] as const satisfies readonly EffectId[];
 
 /** The effects something else puts on a character, rather than stances it takes up itself. */
 export type Affliction = Exclude<EffectId, typeof STANCES[number]>;
@@ -87,6 +98,17 @@ export type Weapon =
     | { name: string; kind: "ranged"; damage: number; accuracy: number; range: number; effect?: Affliction };
 
 export interface Ability {
+    passive?: boolean;
+    apOnRaise?: number;
+    bonusAp?: number;
+    movesWithoutReactions?: boolean;
+    countsAsAttack?: boolean;
+    /** A passive aura, or cover while its stance is active. */
+    cover?: Cover;
+    /** Whom an aura's cover reaches beside its holder: its allies (the default, a shield wall), or every character, enemies too (Bulwark, §34.5). */
+    coverFor?: "allies" | "everyone";
+    coverAffectsSelf?: boolean;
+    stance?: EffectId;
     name: string;
     /** AP to use it. Sneak's is per movement allowance, as a move's 1 AP is (§13.2). */
     ap: number;
@@ -119,27 +141,7 @@ export interface Ability {
     description: string;
 }
 
-/** Whether an ability is always on rather than used: it shows on a character's card but never as an action (Shield wall). */
-export const isPassive = (id: AbilityId): id is "shieldWall" => id === "shieldWall";
 
-export const ABILITIES = {
-    cleave: { name: "Cleave", ap: 2, cooldown: 3, description: "Strike two enemies next to them" },
-    shieldWall: { name: "Shield wall", ap: 0, cooldown: 0, description: "Passive: any character next to them, friend or foe, counts as in half cover" },
-    aimedShot: { name: "Aimed shot", ap: 3, cooldown: 2, hitBonus: 20, description: "A shot at +20% to hit" },
-    sneak: { name: "Sneak", ap: 2, cooldown: 0, description: "Move without setting off overwatch or guard" },
-    fireball: { name: "Fireball", ap: 3, cooldown: 3, range: 12, damage: 3, effect: "burning", blasts: "area", description: "Hits every character in a 3×3 area, friend or foe, sets them burning, and blasts away the low cover there" },
-    heal: { name: "Heal", ap: 2, cooldown: 0, oncePerTurn: true, range: 12, hp: 4, description: "Restore 4 HP to itself or an ally it can see within 12 squares, and clear burning, slowed, stunned and corroded. Once a turn" },
-    raise: { name: "Raise", ap: 3, cooldown: 4, description: "Bring a downed ally next to them back at half HP, with 2 AP to spend if it is their owner's turn" },
-    shieldBash: { name: "Shield bash", ap: 2, cooldown: 3, damage: 2, effect: "stunned", description: "Strike one enemy next to them for 2, and stun it" },
-    demolish: { name: "Demolish", ap: 2, cooldown: 2, damage: 2, blasts: "target", description: "Blast away one square of low cover next to them, and strike everyone else beside it for 2, friend or foe" },
-    cripplingShot: { name: "Crippling shot", ap: 3, cooldown: 2, effect: "slowed", description: "A shot that slows on a hit" },
-    huntersMark: { name: "Hunter's mark", ap: 1, cooldown: 2, range: 12, effect: "marked", description: "Mark an enemy it can see within 12 squares: +15% to hit it, for every attacker" },
-    purify: { name: "Purify", ap: 2, cooldown: 3, hp: 2, description: "Clear burning, stunned, slowed, marked and corroded from itself and each ally next to it, and give each 2 HP" },
-    rend: { name: "Rend", ap: 3, cooldown: 3, damage: 6, description: "Tear into one enemy next to them for 6" },
-    regrowth: { name: "Regrowth", ap: 2, cooldown: 2, range: 8, hp: 3, description: "Restore 3 HP to itself or an ally it can see within 8 squares, and clear burning, slowed, stunned and corroded" },
-    burst: { name: "Burst", ap: 1, cooldown: 0, oncePerBattle: true, damage: 3, effect: "corroded", description: "Burst, splashing acid on everyone next to it for 3, friend or foe, and corroding them. The Bloater is downed" },
-    dynamite: { name: "Dynamite", ap: 3, cooldown: 3, range: 8, damage: 4, blasts: "area", description: "Thrown at a 3×3 area within 8 squares: 4 damage to every character in it, friend or foe, and it blasts away the low cover there" },
-} as const satisfies Record<AbilityId, Ability>;
 
 /**
  * The abilities that strike one enemy (or, a Cleave, two) with the character's
@@ -149,6 +151,8 @@ export const ABILITIES = {
 export const STRIKING_ABILITIES: ReadonlySet<string> = new Set<AbilityId>(["cleave", "shieldBash", "rend"]);
 
 export interface Character {
+    /** Extra AP at the start of its turns. */
+    bonusAp?: number;
     name: string;
     /** The name for several: "Men-at-arms", which no "s" makes of "Man-at-arms". */
     plural: string;
@@ -165,75 +169,7 @@ export interface Character {
     points: number;
 }
 
-export const CHARACTERS: Readonly<Record<CharacterId, Character>> = {
-    manAtArms: {
-        name: "Man-at-arms", plural: "Men-at-arms", role: "Cheap front line", movement: 6, hp: 8,
-        weapon: { name: "Sword", kind: "melee", damage: 4 }, abilities: ["cleave"], points: 15,
-    },
-    knight: {
-        name: "Knight", plural: "Knights", role: "Slow and very tough", movement: 4, sight: 15, hp: 12,
-        weapon: { name: "Mace", kind: "melee", damage: 4 }, abilities: ["shieldWall"], points: 25,
-    },
-    archer: {
-        name: "Archer", plural: "Archers", role: "Long range; the overwatch specialist", movement: 6, sight: 25, hp: 6,
-        weapon: { name: "Bow", kind: "ranged", damage: 3, accuracy: 80, range: 20 }, abilities: ["aimedShot"], points: 20,
-    },
-    scout: {
-        name: "Scout", plural: "Scouts", role: "Fastest and fragile; the flanker", movement: 8, climb: FULL_HEIGHT, sight: 25, hp: 6,
-        weapon: { name: "Knives", kind: "melee", damage: 3 }, abilities: ["sneak"], points: 20,
-    },
-    mage: {
-        name: "Mage", plural: "Mages", role: "Fragile; hits an area", movement: 6, hp: 5,
-        weapon: { name: "Mage Bolt", kind: "ranged", damage: 3, accuracy: 80, range: 12 }, abilities: ["fireball"], points: 30,
-    },
-    cleric: {
-        name: "Cleric", plural: "Clerics", role: "Support", movement: 6, hp: 7,
-        weapon: { name: "Staff", kind: "melee", damage: 2 }, abilities: ["heal", "raise"], points: 25,
-    },
-    // The Swarm (§31): cheaper and weaker, one for one, than the Realm's.
-    skitterling: {
-        name: "Skitterling", plural: "Skitterlings", role: "Fast and frail; strikes in numbers", movement: 8, climb: FULL_HEIGHT, hp: 4,
-        weapon: { name: "Claws", kind: "melee", damage: 2 }, abilities: [], points: 10,
-    },
-    ravager: {
-        name: "Ravager", plural: "Ravagers", role: "Bulky brawler; hits hard", movement: 5, hp: 9,
-        weapon: { name: "Scything talons", kind: "melee", damage: 4 }, abilities: ["rend"], points: 20,
-    },
-    spitter: {
-        name: "Spitter", plural: "Spitters", role: "Spits acid from its raised tail", movement: 5, hp: 5,
-        weapon: { name: "Acid spit", kind: "ranged", damage: 2, accuracy: 70, range: 12, effect: "corroded" }, abilities: [], points: 15,
-    },
-    bloater: {
-        name: "Bloater", plural: "Bloaters", role: "Slow sac of acid; bursts among the enemy", movement: 4, hp: 6,
-        weapon: { name: "Barbs", kind: "melee", damage: 1 }, abilities: ["burst"], points: 10,
-    },
-    broodmother: {
-        name: "Broodmother", plural: "Broodmothers", role: "Leads the brood; mends it", movement: 5, sight: 25, hp: 8,
-        weapon: { name: "Talons", kind: "melee", damage: 3 }, abilities: ["regrowth"], points: 20,
-    },
-    // The Miners (§33): each one tougher than the Realm's character it
-    // stands in for, hitting as hard and no harder, and dearer for its HP.
-    miner: {
-        name: "Miner", plural: "Miners", role: "Sturdy front line; digs through cover", movement: 5, hp: 11,
-        weapon: { name: "Pickaxe", kind: "melee", damage: 4 }, abilities: ["demolish"], points: 20,
-    },
-    stonewarden: {
-        name: "Stonewarden", plural: "Stonewardens", role: "Slow and very tough; holds the line", movement: 4, sight: 15, hp: 15,
-        weapon: { name: "War pick", kind: "melee", damage: 4 }, abilities: ["shieldWall"], points: 30,
-    },
-    prospector: {
-        name: "Prospector", plural: "Prospectors", role: "Crossbow; steady at range", movement: 5, sight: 25, hp: 10,
-        weapon: { name: "Crossbow", kind: "ranged", damage: 3, accuracy: 80, range: 16 }, abilities: ["aimedShot"], points: 30,
-    },
-    sapper: {
-        name: "Sapper", plural: "Sappers", role: "Lights dynamite; blasts an area", movement: 5, hp: 9,
-        weapon: { name: "Throwing picks", kind: "ranged", damage: 3, accuracy: 70, range: 8 }, abilities: ["dynamite"], points: 40,
-    },
-    runepriest: {
-        name: "Runepriest", plural: "Runepriests", role: "Support; tough enough for the front", movement: 5, hp: 10,
-        weapon: { name: "Rune hammer", kind: "melee", damage: 2 }, abilities: ["heal", "raise"], points: 30,
-    },
-};
+
 
 export type OptionId = "shieldBash" | "demolish" | "cripplingShot" | "huntersMark" | "frostBolt" | "purify";
 
@@ -254,17 +190,10 @@ export type CharacterOption = {
 } & ({ replaces: AbilityId; ability: AbilityId } | { replaces: "weapon"; weapon: Weapon });
 
 /** The rank-1 options (§23.2). The rank-2 and rank-3 ones wait on a playtest. */
-export const OPTIONS = {
-    shieldBash: { character: "manAtArms", rank: 1, replaces: "cleave", ability: "shieldBash" },
-    demolish: { character: "knight", rank: 1, replaces: "shieldWall", ability: "demolish" },
-    cripplingShot: { character: "archer", rank: 1, replaces: "aimedShot", ability: "cripplingShot" },
-    huntersMark: { character: "scout", rank: 1, replaces: "sneak", ability: "huntersMark" },
-    frostBolt: { character: "mage", rank: 1, replaces: "weapon", weapon: { name: "Frost bolt", kind: "ranged", damage: 2, accuracy: 70, range: 10, effect: "slowed" } },
-    purify: { character: "cleric", rank: 1, replaces: "raise", ability: "purify" },
-} as const satisfies Record<OptionId, CharacterOption>;
 
-export function isOptionId(value: unknown): value is OptionId {
-    return typeof value === "string" && Object.hasOwn(OPTIONS, value);
+
+export function isOptionId(value: unknown, context?: RulesContext): value is OptionId {
+    return typeof value === "string" && Object.hasOwn(rulesetOf(context).OPTIONS, value);
 }
 
 /** What a character fights with, once its option — if it was mustered with one — has swapped its part in. */
@@ -273,13 +202,21 @@ export interface Kit {
     abilities: readonly AbilityId[];
 }
 
-/** Each character's kit with no option, made once: the computer asks for a weapon many thousand times a turn. */
-const STARTER_KITS = Object.fromEntries(Object.entries(CHARACTERS).map(([id, { weapon, abilities }]) => [id, Object.freeze({ weapon, abilities })])) as Record<CharacterId, Kit>;
-
-export function kitOf(character: CharacterId, option?: OptionId): Kit {
-    const { weapon, abilities } = CHARACTERS[character];
+/** Starter kits are reused: the planner reads them thousands of times a turn. */
+const STARTER_KITS = new WeakMap<Character, Kit>();
+export function kitOf(character: CharacterId, option?: OptionId, context?: RulesContext): Kit {
+    const { CHARACTERS, OPTIONS } = rulesetOf(context);
+    const starter = CHARACTERS[character];
+    const { weapon, abilities } = starter;
     const swap: CharacterOption | undefined = option ? OPTIONS[option] : undefined;
-    if (!swap || swap.character !== character) return STARTER_KITS[character];
+    if (!swap || swap.character !== character) {
+        let kit = STARTER_KITS.get(starter);
+        if (!kit) {
+            kit = Object.freeze({ weapon, abilities });
+            STARTER_KITS.set(starter, kit);
+        }
+        return kit;
+    }
     return "weapon" in swap
         ? { weapon: swap.weapon, abilities }
         : { weapon, abilities: abilities.map(id => id === swap.replaces ? swap.ability : id) };
@@ -322,18 +259,13 @@ export interface Item {
     description: string;
 }
 
-export const ITEMS = {
-    fireFlask: { name: "Fire flask", points: 5, ap: 2, range: THROW_RANGE, damage: 2, effect: "burning", blasts: "area", description: "Thrown at one square: 2 damage to whoever is there, sets them burning, and blasts away the low cover on and next to it" },
-    thunderFlask: { name: "Thunder flask", points: 5, ap: 2, range: THROW_RANGE, area: true, effect: "stunned", description: "Thrown at a 3×3 area: stuns everyone in it, friend or foe" },
-    smokePot: { name: "Smoke pot", points: 5, ap: 1, range: THROW_RANGE, area: true, hitPenalty: 20, description: "Thrown at a 3×3 area: until the thrower's next turn, −20% to hit anyone in it, and no overwatch at anyone stepping into it" },
-    healingDraught: { name: "Healing draught", points: 5, ap: 1, hp: 3, description: "Restore 3 HP to the carrier or an ally next to them, and clear burning, slowed, stunned and corroded" },
-} as const satisfies Record<ItemId, Item>;
+
 
 /** Every item, in the order the muster offers them. */
 export const ITEM_IDS = Object.keys(ITEMS) as ItemId[];
 
-export function isItemId(value: unknown): value is ItemId {
-    return typeof value === "string" && Object.hasOwn(ITEMS, value);
+export function isItemId(value: unknown, context?: RulesContext): value is ItemId {
+    return typeof value === "string" && Object.hasOwn(rulesetOf(context).ITEMS, value);
 }
 
 export type PlayerCount = 2 | 3 | 4;
@@ -370,7 +302,7 @@ const DIFFICULTY_RUNGS: Readonly<Record<Difficulty, number>> = { easy: -1, norma
  * waves refill to, once the team is tougher (`BALANCE_VERSION`): one step
  * smaller than the difficulty alone puts them.
  */
-export const HOLD_OUT_ENEMY_STEPS = -1;
+export const HOLD_OUT_ENEMY_STEPS = currentRuleset.RULES.HOLD_OUT_ENEMY_STEPS;
 
 /** The budget `steps` rungs of `BUDGETS` from this one, stopping at the ladder's bottom and top. */
 const rung = (budget: Budget, steps: number): Budget => BUDGETS[Math.min(BUDGETS.length - 1, Math.max(0, BUDGETS.indexOf(budget) + steps))];
@@ -395,13 +327,13 @@ export function readyMadeSquad(faction: Faction, budget: number): readonly Chara
     return faction.readyMade[budget as Budget] ?? [];
 }
 
-export function isCharacterId(value: unknown): value is CharacterId {
-    return typeof value === "string" && Object.hasOwn(CHARACTERS, value);
+export function isCharacterId(value: unknown, context?: RulesContext): value is CharacterId {
+    return typeof value === "string" && Object.hasOwn(rulesetOf(context).CHARACTERS, value);
 }
 
 /** What a squad costs to muster. */
-export function squadPoints(squad: readonly CharacterId[]): number {
-    return squad.reduce((total, character) => total + CHARACTERS[character].points, 0);
+export function squadPoints(squad: readonly CharacterId[], context?: RulesContext): number {
+    return squad.reduce((total, character) => total + rulesetOf(context).CHARACTERS[character].points, 0);
 }
 
 /**
@@ -435,62 +367,11 @@ export type FactionId = "realm" | "swarm" | "miners";
  * Every faction, by the id a battle stores. An id, once used, is never
  * renamed, as a map's isn't (§19.1).
  */
-export const FACTIONS: Readonly<Record<FactionId, Faction>> = {
-    // The human kingdom both games are named for, and the first faction (§13.6).
-    // The players fight as it, so as the enemy it's a band of deserters.
-    realm: {
-        name: "The Realm",
-        characters: ["manAtArms", "knight", "archer", "scout", "mage", "cleric"],
-        readyMade: {
-            50: ["manAtArms", "manAtArms", "archer"],
-            60: ["knight", "manAtArms", "archer"],
-            70: ["manAtArms", "manAtArms", "archer", "scout"],
-            80: ["knight", "manAtArms", "archer", "scout"],
-            90: ["knight", "manAtArms", "archer", "mage"],
-            100: ["knight", "manAtArms", "manAtArms", "archer", "cleric"],
-            110: ["knight", "manAtArms", "archer", "scout", "mage"],
-            120: ["knight", "archer", "scout", "mage", "cleric"],
-        },
-        enemyName: "the Renegades",
-    },
-    // A brood of chitinous beasts out of the deep places (§31): more of them,
-    // each cheaper and weaker than the Realm's, spending its budget on bodies.
-    swarm: {
-        name: "The Swarm",
-        characters: ["skitterling", "ravager", "spitter", "bloater", "broodmother"],
-        readyMade: {
-            50: ["skitterling", "skitterling", "spitter", "spitter"],
-            60: ["ravager", "skitterling", "spitter", "spitter"],
-            70: ["ravager", "skitterling", "skitterling", "spitter", "spitter"],
-            80: ["ravager", "skitterling", "skitterling", "spitter", "spitter", "bloater"],
-            90: ["ravager", "broodmother", "skitterling", "skitterling", "spitter", "spitter"],
-            100: ["ravager", "broodmother", "skitterling", "skitterling", "spitter", "spitter", "bloater"],
-            110: ["ravager", "ravager", "broodmother", "skitterling", "skitterling", "spitter", "spitter"],
-            120: ["ravager", "ravager", "broodmother", "skitterling", "skitterling", "spitter", "spitter", "bloater"],
-        },
-        enemyName: "the Swarm",
-    },
-    // Dwarves out of the deep mines (§33): fewer of them, each tougher than
-    // the Realm's and dearer for it, with pickaxes and dynamite.
-    miners: {
-        name: "The Miners",
-        characters: ["miner", "stonewarden", "prospector", "sapper", "runepriest"],
-        readyMade: {
-            50: ["miner", "prospector"],
-            60: ["stonewarden", "prospector"],
-            70: ["miner", "miner", "prospector"],
-            80: ["stonewarden", "miner", "prospector"],
-            90: ["stonewarden", "miner", "sapper"],
-            100: ["stonewarden", "miner", "miner", "prospector"],
-            110: ["stonewarden", "miner", "prospector", "runepriest"],
-            120: ["stonewarden", "miner", "prospector", "sapper"],
-        },
-        enemyName: "the Miners",
-    },
-};
+
 
 /** The faction a character is mustered from: each is in one roster alone (§29.3). */
-export function factionOf(character: CharacterId): FactionId {
+export function factionOf(character: CharacterId, context?: RulesContext): FactionId {
+    const { FACTIONS } = rulesetOf(context);
     return FACTION_IDS.find(id => FACTIONS[id].characters.includes(character))!;
 }
 
@@ -520,8 +401,9 @@ export function playableFactionsOf(value: unknown): FactionId[] | undefined {
 }
 
 /** The faction a stored id names: the Realm for an id no release knows, as an unknown map reads as the Ruined Fort (§29.3). */
-export function factionById(id: unknown): Faction {
-    return isFactionId(id) ? FACTIONS[id] : REALM;
+export function factionById(id: unknown, context?: RulesContext): Faction {
+    const { FACTIONS } = rulesetOf(context);
+    return isFactionId(id) ? FACTIONS[id] : FACTIONS.realm;
 }
 
 /** What the team calls an enemy it hasn't seen yet: a random one, until one of its characters is (§29.3). */
@@ -532,8 +414,8 @@ export const UNKNOWN_ENEMY = "the enemy";
  * Renegades" — once the team knows it, and "the enemy" while it doesn't. The
  * log, the board and the result all name it through this.
  */
-export function enemyNameOf(enemy: FactionId | undefined): string {
-    return enemy === undefined ? UNKNOWN_ENEMY : factionById(enemy).enemyName;
+export function enemyNameOf(enemy: FactionId | undefined, context?: RulesContext): string {
+    return enemy === undefined ? UNKNOWN_ENEMY : factionById(enemy, context).enemyName;
 }
 
 /** What the host picks to fight an enemy drawn at random as the battle is created, rather than a faction (§29.3). */

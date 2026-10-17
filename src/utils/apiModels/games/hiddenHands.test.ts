@@ -732,6 +732,43 @@ describe("Realm Arena's random co-op enemy", () => {
         expect(game.gameState.history.some(({ text }) => ENEMY_NAME.test(text))).toBe(true);
     }, 60_000);
 
+    it("never says which of its characters did what out of sight: an ability names a kind of character, and so the faction", async () => {
+        // Rules version 7, the last in which a Knight raises its shield wall as an action.
+        const game = makeRealmArenaGame(["a", "b"], {}, { fog: true, coop: { enemy: "realm", random: true }, rulesVersion: 7 });
+        await realmArenaMusterAll(game);
+        // The first warband's Knight raises a shield wall where it stands, far
+        // out of the team's sight: its turn, as a replay plays it.
+        const knight = game.specificGameState.fighters.find(fighter => fighter.owner === warbandOwner(0) && fighter.character === "knight")!;
+        const ended = Object.assign(realmArenaEndTurn("a"), { recordedEnemyActions: [{ kind: "shieldWall", fighter: knight.id }] }) as RealmArenaEndTurn;
+        const { outcome } = await playRealmArena(game, ended);
+        expect(game.specificGameState.coop?.enemySeen).toBeUndefined();
+        expect((outcome as IRealmArenaOutcome).events.some(event => event.kind === "shieldWall")).toBe(true);
+
+        const lines = game.gameState.history.map(({ text }) => text);
+        expect(lines).toContain("The enemy used an ability with one of its characters");
+        // The team's own Knight is theirs to name.
+        expect(lines.filter(text => text.startsWith("The enemy")).join("\n")).not.toMatch(/shield|Knight|sneak/i);
+        expect(lines.join("\n")).not.toMatch(/shield/i);
+        for (const viewer of ["a", "b"]) {
+            const told = (new RealmArenaGameType().outcomeFor(game, outcome, viewer) as IRealmArenaOutcome).events;
+            expect(told.some(event => event.kind === "shieldWall")).toBe(false);
+        }
+        for (const viewer of VIEWERS) {
+            const step = realmArenaStepOutcome(outcome, viewer, game.specificGameState);
+            expect(step?.events.some(event => event.kind === "shieldWall") ?? false).toBe(false);
+            // Nor does a part of the End turn a review plays one action at a
+            // time (§26.2): not the ability, nor the faction on any part's board.
+            const parts = JSON.stringify(step?.parts ?? []);
+            expect(parts).not.toMatch(/shieldWall|marked|"sneaking":true/);
+            expect(step?.parts?.some(part => part.state && "enemy" in part.state) ?? false).toBe(false);
+        }
+        for (const viewer of VIEWERS) {
+            const rows = JSON.stringify(await buildAllEvents(game, RA_NAMES, viewer));
+            expect(rows).not.toMatch(/shield/i);
+            expect(rows).not.toMatch(ENEMY_NAME);
+        }
+    });
+
     it("never names the Miners by a Sapper's dynamite thrown out of sight (§33.3)", async () => {
         const game = makeRealmArenaGame(["a", "b"], {}, { fog: true, coop: { enemy: "miners", random: true } });
         await realmArenaMusterAll(game);
