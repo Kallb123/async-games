@@ -45,6 +45,7 @@ beforeEach(() => {
 
 afterEach(() => {
     for (const root of roots) act(() => root.unmount());
+    vi.useRealTimers();
     vi.restoreAllMocks();
     vi.unstubAllGlobals();
 });
@@ -171,6 +172,71 @@ describe('remembering game intros', () => {
         await screen.render();
         expect(screen.current.tutorialOpen).toBe(true);
         expect(window.localStorage.getItem(`game-intro:tutorial:${auth.userId}:realmarena`)).toBeNull();
+    });
+
+    it.each(['guide', 'tutorial'] as const)('opens the %s immediately and keeps the menu choice through session confirmation', async kind => {
+        auth.authorised = false;
+        server = { seen: ['realmarena'], seenTutorials: ['realmarena'] };
+        const screen = mount();
+        await screen.render();
+        await act(async () => kind === 'guide' ? screen.current.openGuide() : screen.current.startTutorial());
+        expect(screen.current.guideOpen).toBe(kind === 'guide');
+        expect(screen.current.tutorialOpen).toBe(kind === 'tutorial');
+        expect(fetchMock).not.toHaveBeenCalled();
+        auth.authorised = true;
+        await screen.render();
+        expect(screen.current.guideOpen).toBe(kind === 'guide');
+        expect(screen.current.tutorialOpen).toBe(kind === 'tutorial');
+    });
+
+    it('remembers a dismissal made before session confirmation and saves only after it is ready', async () => {
+        auth.authorised = false;
+        const screen = mount();
+        await screen.render();
+        await act(async () => screen.current.startTutorial());
+        await act(async () => screen.current.close());
+        expect(screen.current.tutorialOpen).toBe(false);
+        expect(fetchMock).not.toHaveBeenCalled();
+        expect(window.localStorage.getItem(`game-intro:tutorial:${auth.userId}:realmarena`)).toBe('1');
+        auth.authorised = true;
+        await screen.render();
+        expect(screen.current.tutorialOpen).toBe(false);
+        expect(posts()).toHaveLength(1);
+    });
+
+    it('renews an expired session and still auto-shows the first-match tutorial', async () => {
+        vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+        fetchMock.mockImplementationOnce(async () => new Response('{}', { status: 401 }));
+        const screen = mount();
+        await screen.render();
+        expect(screen.current.loaded).toBe(false);
+        expect(refreshSession).toHaveBeenCalledOnce();
+        await act(async () => { await vi.advanceTimersByTimeAsync(1000); });
+        expect(fetchMock).toHaveBeenCalledTimes(2);
+        expect(screen.current.loaded).toBe(true);
+        expect(screen.current.tutorialOpen).toBe(true);
+    });
+
+    it('allows a tutorial dismissal while an earlier guide save is still pending', async () => {
+        window.localStorage.setItem(`game-intro:guide:${auth.userId}:realmarena`, '1');
+        let finishGuide!: (response: Response) => void;
+        fetchMock.mockImplementation(async (_url, options) => {
+            if (options?.method === 'POST' && JSON.parse(options.body as string).kind === 'guide') {
+                return new Promise<Response>(resolve => { finishGuide = resolve; });
+            }
+            return new Response(JSON.stringify(server));
+        });
+        const screen = mount();
+        await screen.render();
+        expect(screen.current.tutorialOpen).toBe(true);
+        await act(async () => screen.current.close());
+        // Concurrent POSTs are safe: the route merges per-game flags, covered
+        // by its tests, instead of relying on this effect's ordering.
+        expect(posts()).toHaveLength(2);
+        expect(JSON.parse(posts()[1][1]!.body as string).kind).toBe('tutorial');
+        expect(screen.current.tutorialOpen).toBe(false);
+        await act(async () => finishGuide(new Response('{}')));
+        expect(screen.current.tutorialOpen).toBe(false);
     });
 
     it('does not reopen when a stale GET arrives after a manual tour was dismissed', async () => {

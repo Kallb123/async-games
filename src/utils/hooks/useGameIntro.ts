@@ -61,7 +61,9 @@ async function saveProgress(game: string, kind: IntroKind): Promise<void> {
  */
 export function useGameIntro(gameUrl: string): GameIntro {
     const { user, isAuthorised } = useIsAuthorised();
-    const userId = isAuthorised ? user?.id : undefined;
+    // Identity is known before the session token is confirmed. Menu choices
+    // belong to that account immediately; only network work waits for readiness.
+    const userId = user?.id;
     const refreshSession = useSessionRefresh();
     const [mode, setMode] = useResettingState<IntroKind | 'closed' | null>(null, `${userId}:${gameUrl}`);
     // undefined = waiting; null = failed. Progress belongs only to this user.
@@ -72,7 +74,7 @@ export function useGameIntro(gameUrl: string): GameIntro {
     const [storedTutorial, storeTutorial] = useStoredValue(tutorialKey);
 
     useEffect(() => {
-        if (!userId) return;
+        if (!userId || !isAuthorised) return;
         let cancelled = false;
         async function load() {
             try {
@@ -92,8 +94,6 @@ export function useGameIntro(gameUrl: string): GameIntro {
                     if (entry.list.includes(gameUrl)) entry.store('1');
                     // Read at response time: a manual tour can be dismissed
                     // while this GET is still out. Never undo that dismissal.
-                    // Save the lists in turn: the API merges Clerk metadata
-                    // after reading it, so parallel writes could lose a list.
                     else if (readStoredValue(entry.key) === '1') await saveProgress(gameUrl, entry.kind);
                 }
             } catch (error) {
@@ -105,12 +105,12 @@ export function useGameIntro(gameUrl: string): GameIntro {
         }
         void load();
         return () => { cancelled = true; };
-    }, [userId, gameUrl, refreshSession, guideKey, tutorialKey, storeGuide, storeTutorial, setSeen]);
+    }, [userId, isAuthorised, gameUrl, refreshSession, guideKey, tutorialKey, storeGuide, storeTutorial, setSeen]);
 
-    const loaded = !!userId && seen !== undefined;
+    const loaded = !!userId && isAuthorised && seen !== undefined;
     const gameHasTutorial = hasTutorial(gameUrl);
-    const autoShowTutorial = !!seen && gameHasTutorial && !seen.seenTutorials.includes(gameUrl) && storedTutorial !== '1';
-    const autoShowGuide = !!seen && !gameHasTutorial && !seen.seen.includes(gameUrl) && storedGuide !== '1';
+    const autoShowTutorial = isAuthorised && !!seen && gameHasTutorial && !seen.seenTutorials.includes(gameUrl) && storedTutorial !== '1';
+    const autoShowGuide = isAuthorised && !!seen && !gameHasTutorial && !seen.seen.includes(gameUrl) && storedGuide !== '1';
     const tutorialOpen = !!userId && gameHasTutorial && (mode === 'tutorial' || (mode === null && autoShowTutorial));
     const guideOpen = !!userId && !tutorialOpen && (mode === 'guide' || (mode === null && autoShowGuide));
 
@@ -119,13 +119,13 @@ export function useGameIntro(gameUrl: string): GameIntro {
     const close = useCallback(() => {
         if (tutorialOpen) {
             storeTutorial('1');
-            if (!seen?.seenTutorials.includes(gameUrl)) void saveProgress(gameUrl, 'tutorial');
+            if (isAuthorised && !seen?.seenTutorials.includes(gameUrl)) void saveProgress(gameUrl, 'tutorial');
         } else if (guideOpen) {
             storeGuide('1');
-            if (!seen?.seen.includes(gameUrl)) void saveProgress(gameUrl, 'guide');
+            if (isAuthorised && !seen?.seen.includes(gameUrl)) void saveProgress(gameUrl, 'guide');
         }
         setMode('closed');
-    }, [tutorialOpen, guideOpen, storeTutorial, storeGuide, seen, gameUrl, setMode]);
+    }, [tutorialOpen, guideOpen, storeTutorial, storeGuide, seen, gameUrl, setMode, isAuthorised]);
 
     return { tutorialOpen, guideOpen, loaded, startTutorial, openGuide, close };
 }
