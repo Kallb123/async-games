@@ -29,10 +29,11 @@ function subscribe(onChange: () => void): () => void {
 }
 
 /**
- * What this browser has stored under `storageKey` — or null if it has nothing,
+ * What this browser has stored under `storageKey` — or null if disabled or empty,
  * or we're on the server. Safe to call outside React.
  */
-export function readStoredValue(storageKey: string): string | null {
+export function readStoredValue(storageKey: string | null): string | null {
+    if (storageKey === null) return null;
     try {
         const stored = window.localStorage.getItem(storageKey);
         if (stored !== null) return stored;
@@ -44,9 +45,11 @@ export function readStoredValue(storageKey: string): string | null {
 
 /**
  * Stores `value` for this browser and tells every mounted `useStoredValue`.
+ * A null key disables writes, including this session's fallback store.
  * Safe to call outside React — `recordGuestMoved` does.
  */
-export function writeStoredValue(storageKey: string, value: string): void {
+export function writeStoredValue(storageKey: string | null, value: string): void {
+    if (storageKey === null) return;
     session.set(storageKey, value);
     try {
         window.localStorage.setItem(storageKey, value);
@@ -74,14 +77,15 @@ const getServerSnapshot = (): string | null => null;
 
 /**
  * One remembered string per browser: what is stored under `storageKey`, and a
- * setter that stores a new one and re-renders every reader.
+ * setter that stores a new one and re-renders every reader. A null key
+ * disables both reads and writes until the caller has a valid scope.
  *
  * Through hydration the value reads as null whatever is stored (see above), so
  * anything that would show on "nothing stored yet" must belong to a caller
  * that renders nothing until then — one waiting on a browser-only signal of
  * its own, or one that mounts when client-fetched data arrives.
  */
-export function useStoredValue(storageKey: string): [string | null, (value: string) => void] {
+export function useStoredValue(storageKey: string | null): [string | null, (value: string) => void] {
     const value = useSyncExternalStore(
         subscribe,
         useCallback(() => readStoredValue(storageKey), [storageKey]),
