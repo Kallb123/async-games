@@ -1,6 +1,10 @@
 'use client'
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect } from 'react';
 import { hasTutorial } from '@/utils/ui/gameTutorials';
+import { fetchWithSessionRetry, REQUEST_TIMEOUT_MS } from './fetchWithSessionRetry';
+import { useIsAuthorised, useSessionRefresh } from './useAuthGuard';
+import { useResettingState } from './useResettingState';
+import { readStoredValue, useStoredValue } from './useStoredValue';
 
 /** What `useGameIntro` hands back — the shape `GameShell`'s `intro` prop
  *  takes, so it can drive the 📖/🎓 rows and whichever popup has the floor
@@ -21,133 +25,107 @@ export interface GameIntro {
     close: () => void;
 }
 
+type IntroKind = 'guide' | 'tutorial';
+interface SeenLists {
+    seen: string[];
+    seenTutorials: string[];
+}
+
+async function saveProgress(game: string, kind: IntroKind): Promise<void> {
+    try {
+        const response = await fetch('/api/gameguides', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ game, kind }),
+            signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+            // A player may leave the board immediately after dismissing the tour.
+            keepalive: true,
+        });
+        if (!response.ok) throw new Error(`Saving ${kind} progress failed (${response.status})`);
+    } catch (error) {
+        // The browser's dismissal still holds. The next visit retries this
+        // write if the account hasn't received it yet.
+        console.error('Failed to save game intro progress', error);
+    }
+}
+
 /**
- * Drives a game's two "first visit" welcomes — its guide and, if it has one,
- * its interactive tutorial (see docs/game-tutorials.md §7) — from one fetch
- * of which games' guides and tutorials this account has already been
- * auto-shown.
+ * Shows a game's tutorial (or its guide if it has no tutorial) once per
+ * account. Dismissals are also remembered per account/game in this browser,
+ * so a failed save or stale read cannot bring a completed tour back. A later
+ * visit reconciles that dismissal with the account's progress.
  *
- * A game with a tutorial never auto-shows its guide: the tutorial is the
- * better welcome, so it takes the auto-show slot and the guide keeps only
- * its on-demand row. A game with no tutorial keeps today's behaviour
- * exactly — its guide auto-shows on the account's first match of it. Because
- * the two "seen" lists are separate, a player who already saw the guide
- * still gets the tutorial once when it ships: the tutorial is new and
- * better, and one tour is a fair thing to spend an existing player's
- * attention on.
- *
- * `open` is computed on every render rather than set from an effect — both
- * seen lists stay `null` until the fetch resolves, so neither popup flashes
- * open and then closed before we've heard back, and there is no
- * "call setState from an effect" cascade to worry about.
- *
- * `loaded` (`seenLists !== null`) is exposed so a screen with its own
- * first-visit popup — Outbreak's role welcome — can wait for it before
- * deciding whether to show *itself*, rather than flashing open and being
- * yanked shut a moment later when this intro's auto-show turns out to be
- * pending. You need to know the game (and, now, its tour) before your role
- * in it, so the game intro always goes first: hold the role welcome back for
- * as long as `!loaded || tutorialOpen || guideOpen` says this one either
- * hasn't answered yet or has the floor.
- *
- * Dismissing either popup only marks its list seen the first time —
- * reopening one from the menu afterwards is just a look, not a fresh "first
- * visit" to record. (`markSeen` below already no-ops once a game is in its
- * list, so a manual open-then-close never needs its own bookkeeping.)
+ * Neither welcome auto-opens until a successful read confirms it is unseen.
+ * Failed reads settle `loaded` so role welcomes can proceed, and both entries
+ * remain available from the game-options menu regardless of network health.
  */
 export function useGameIntro(gameUrl: string): GameIntro {
-    const [manualGuideOpen, setManualGuideOpen] = useState(false);
-    const [manualTutorialOpen, setManualTutorialOpen] = useState(false);
-    const [guideAutoDismissed, setGuideAutoDismissed] = useState(false);
-    const [tutorialAutoDismissed, setTutorialAutoDismissed] = useState(false);
-    const [seen, setSeen] = useState<string[] | null>(null);
-    const [seenTutorials, setSeenTutorials] = useState<string[] | null>(null);
+    const { user, isAuthorised } = useIsAuthorised();
+    // Identity is known before the session token is confirmed. Menu choices
+    // belong to that account immediately; only network work waits for readiness.
+    const userId = user?.id;
+    const refreshSession = useSessionRefresh();
+    const [mode, setMode] = useResettingState<IntroKind | 'closed' | null>(null, `${userId}:${gameUrl}`);
+    // undefined = waiting; null = failed. Progress belongs only to this user.
+    const [seen, setSeen] = useResettingState<SeenLists | null | undefined>(undefined, userId ?? '');
+    const guideKey = `game-intro:guide:${userId}:${gameUrl}`;
+    const tutorialKey = `game-intro:tutorial:${userId}:${gameUrl}`;
+    const [storedGuide, storeGuide] = useStoredValue(guideKey);
+    const [storedTutorial, storeTutorial] = useStoredValue(tutorialKey);
 
     useEffect(() => {
+        if (!userId || !isAuthorised) return;
         let cancelled = false;
-        fetch('/api/gameguides')
-            .then(response => response.json())
-            .then(data => {
+        async function load() {
+            try {
+                const response = await fetchWithSessionRetry('/api/gameguides', () => cancelled, refreshSession);
+                if (!response?.ok) throw new Error('Failed to load game intro progress');
+                const data = await response.json();
+                if (!Array.isArray(data?.seen) || !Array.isArray(data?.seenTutorials)) {
+                    throw new Error('Invalid game intro progress');
+                }
                 if (cancelled) return;
-                // Default a missing/malformed field to [] rather than leaving
-                // it at null: `loaded` waits on *both* fields, so a response
-                // missing just one of them (a stale cache during a rolling
-                // deploy, say) would otherwise block `loaded` — and the
-                // popups it gates — forever, with nothing to retry it.
-                setSeen(Array.isArray(data?.seen) ? data.seen : []);
-                setSeenTutorials(Array.isArray(data?.seenTutorials) ? data.seenTutorials : []);
-            })
-            .catch(error => console.error('Failed to load game guide progress', error));
+                setSeen(data);
+                for (const entry of [
+                    { kind: 'guide' as const, key: guideKey, list: data.seen, store: storeGuide },
+                    { kind: 'tutorial' as const, key: tutorialKey, list: data.seenTutorials, store: storeTutorial },
+                ]) {
+                    if (cancelled) return;
+                    if (entry.list.includes(gameUrl)) entry.store('1');
+                    // Read at response time: a manual tour can be dismissed
+                    // while this GET is still out. Never undo that dismissal.
+                    else if (readStoredValue(entry.key) === '1') await saveProgress(gameUrl, entry.kind);
+                }
+            } catch (error) {
+                if (!cancelled) {
+                    console.error('Failed to load game intro progress', error);
+                    setSeen(null);
+                }
+            }
+        }
+        void load();
         return () => { cancelled = true; };
-    }, []);
+    }, [userId, isAuthorised, gameUrl, refreshSession, guideKey, tutorialKey, storeGuide, storeTutorial, setSeen]);
 
-    const loaded = seen !== null && seenTutorials !== null;
-    const alreadySeenGuide = seen?.includes(gameUrl) ?? true;
-    const alreadySeenTutorial = seenTutorials?.includes(gameUrl) ?? true;
-
-    // It asks the registry itself rather than taking a flag, so a page can't
-    // disagree with it — see docs/game-tutorials.md §7.
+    const loaded = !!userId && isAuthorised && seen !== undefined;
     const gameHasTutorial = hasTutorial(gameUrl);
+    const autoShowTutorial = isAuthorised && !!seen && gameHasTutorial && !seen.seenTutorials.includes(gameUrl) && storedTutorial !== '1';
+    const autoShowGuide = isAuthorised && !!seen && !gameHasTutorial && !seen.seen.includes(gameUrl) && storedGuide !== '1';
+    const tutorialOpen = !!userId && gameHasTutorial && (mode === 'tutorial' || (mode === null && autoShowTutorial));
+    const guideOpen = !!userId && !tutorialOpen && (mode === 'guide' || (mode === null && autoShowGuide));
 
-    const autoShowTutorial = loaded && gameHasTutorial && !alreadySeenTutorial && !tutorialAutoDismissed;
-    const autoShowGuide = loaded && !gameHasTutorial && !alreadySeenGuide && !guideAutoDismissed;
-
-    const tutorialOpen = manualTutorialOpen || autoShowTutorial;
-    // Never both at once — `startTutorial`/`openGuide` below each dismiss the
-    // other before opening themselves, so this only has to arbitrate the one
-    // case neither of them causes: both auto-show conditions landing true on
-    // the same render (loaded flipping true is the only such moment).
-    const guideOpen = !tutorialOpen && (manualGuideOpen || autoShowGuide);
-
-    const markGuideSeen = useCallback(() => {
-        if (alreadySeenGuide) return;
-        setSeen(prev => (prev ?? []).includes(gameUrl) ? prev : [...(prev ?? []), gameUrl]);
-        fetch('/api/gameguides', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ game: gameUrl, kind: 'guide' }),
-        }).catch(error => console.error('Failed to save game guide progress', error));
-    }, [alreadySeenGuide, gameUrl]);
-
-    const markTutorialSeen = useCallback(() => {
-        if (alreadySeenTutorial) return;
-        setSeenTutorials(prev => (prev ?? []).includes(gameUrl) ? prev : [...(prev ?? []), gameUrl]);
-        fetch('/api/gameguides', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ game: gameUrl, kind: 'tutorial' }),
-        }).catch(error => console.error('Failed to save game tutorial progress', error));
-    }, [alreadySeenTutorial, gameUrl]);
-
-    // Opening one explicitly always wins over whatever's currently on screen
-    // — including an auto-shown tutorial the player hasn't dismissed yet.
-    // Without this, tapping "Game guide" while the tutorial's auto-show still
-    // has the floor would silently do nothing: `guideOpen` stays false as
-    // long as `tutorialOpen` is true, so the tap would look like a dead
-    // button. This only hides the tutorial for the rest of this visit
-    // (`tutorialAutoDismissed`, the same flag `close` sets) rather than
-    // marking it seen, so it can still auto-show on a later one.
-    const startTutorial = useCallback(() => {
-        setManualGuideOpen(false);
-        setGuideAutoDismissed(true);
-        setManualTutorialOpen(true);
-    }, []);
-    const openGuide = useCallback(() => {
-        setManualTutorialOpen(false);
-        setTutorialAutoDismissed(true);
-        setManualGuideOpen(true);
-    }, []);
+    const startTutorial = useCallback(() => setMode('tutorial'), [setMode]);
+    const openGuide = useCallback(() => setMode('guide'), [setMode]);
     const close = useCallback(() => {
         if (tutorialOpen) {
-            setManualTutorialOpen(false);
-            setTutorialAutoDismissed(true);
-            markTutorialSeen();
+            storeTutorial('1');
+            if (isAuthorised && !seen?.seenTutorials.includes(gameUrl)) void saveProgress(gameUrl, 'tutorial');
         } else if (guideOpen) {
-            setManualGuideOpen(false);
-            setGuideAutoDismissed(true);
-            markGuideSeen();
+            storeGuide('1');
+            if (isAuthorised && !seen?.seen.includes(gameUrl)) void saveProgress(gameUrl, 'guide');
         }
-    }, [tutorialOpen, guideOpen, markTutorialSeen, markGuideSeen]);
+        setMode('closed');
+    }, [tutorialOpen, guideOpen, storeTutorial, storeGuide, seen, gameUrl, setMode, isAuthorised]);
 
     return { tutorialOpen, guideOpen, loaded, startTutorial, openGuide, close };
 }

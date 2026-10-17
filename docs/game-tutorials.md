@@ -354,17 +354,18 @@ rather than be copied:
   second list: `GET` answers `{ seen, seenTutorials }`, and `POST { game, kind }`
   writes to the list `kind` names, defaulting to `'guide'`. `kind` arrives from
   the client, so it is matched against the two literals and used to pick a named
-  key — never to index `privateMetadata`, which the route reads back whole to
-  merge and would otherwise let a caller write arbitrary keys into it. Its
-  allowlist check becomes "in `GAME_GUIDES` or in `GAME_TUTORIALS`", by kind —
+  key — never to index `privateMetadata` directly or let a caller write
+  arbitrary metadata keys. Its allowlist check becomes "in `GAME_GUIDES` or in `GAME_TUTORIALS`", by kind —
   that check is
   what makes the registry line mandatory, the same way `gameRegistry.test.ts`
   guards the engine's.
-- **The metadata grows a key.** `privateMetadata.seenGameTutorials`, beside
-  `seenGameGuides`. `src/utils/users/gameGuideProgress.ts` already has the three
-  functions this needs (`getSeen`, `hasSeen`, `withSeen`); they take the key as
-  an argument instead of hard-coding it. Per-account and not per-browser, for
-  the reason it always was: the welcome shouldn't repeat on a new device.
+- **Account progress is merged per game.** New saves patch only
+  `privateMetadata.gameIntroProgress[seenGameGuides | seenGameTutorials][slug] = true`
+  through Clerk's server-side deep merge. They never replace arrays or send a
+  snapshot of sibling metadata, so overlapping saves from dismissal, retries,
+  other games and other tabs retain every flag. `getSeen` combines these flags
+  with the legacy `seenGameGuides` / `seenGameTutorials` arrays; the API still
+  returns lists, and existing progress needs no migration.
 - **The hook grows a second answer.** `useGameGuide` becomes `useGameIntro`,
   with the same single fetch and the same `loaded` flag that
   [`RoleIntroPopup`](../src/components/ui/RoleIntroPopup.tsx) waits on — which
@@ -380,8 +381,19 @@ const intro = useGameIntro('dicecities');
   hasn't seen this game's tutorial (or the player picked it from ⋮);
   `guideOpen` is true when they open it from ⋮, or — for a game with no
   tutorial — on their first match, exactly as today. Never both: the tutorial
-  wins. Closing marks only the list that was auto-shown (opening one from ⋮ is
-  a look, not a first visit — unchanged).
+  wins. Closing marks only the welcome that was on screen; replaying an
+  already-seen welcome does not write its account progress again.
+
+  Dismissals are also remembered through `useStoredValue`, scoped to the
+  account, game and welcome kind. A failed account save or stale read cannot
+  reopen a dismissed tour in that browser; on the next visit, any dismissal
+  missing from the account's lists is saved again. Reads wait for session
+  readiness and use `fetchWithSessionRetry`; signed-out API responses are 401
+  so expired sessions can be renewed and retried. Menu choices use the known
+  account identity immediately and survive session confirmation. A dismissal
+  before confirmation is remembered locally and saved once requests are safe.
+  Failed or malformed reads never count as empty progress: they suppress auto-show for that visit, settle
+  `loaded` so role welcomes can proceed, and leave manual replay available.
 
 **A player who already saw the guide still gets the tutorial once**, because
 the lists are separate. That is the intent: the tutorial is new and better, and
@@ -447,7 +459,7 @@ sandbox would have let us skip.
 | The game is complete, abandoned, or being reviewed turn-by-turn | `active: false` on the run (§5) — the tour doesn't auto-run at all. A finished board is the wrong thing to tour, and the recap/review screens have their own chrome. |
 | The state fetch hasn't landed | `loaded` gates it, as the guide's already does — nothing flashes open and shut. |
 | A step names a signal the page doesn't pass | A build error (§5). |
-| The account's seen-list write fails | Logged and swallowed, as the guide's already is. The worst case is a tour offered twice. |
+| The account's seen-list write fails | The local dismissal holds; the next successful read retries the save if the account still says unseen. |
 
 ### Previewing a control that isn't there yet
 
