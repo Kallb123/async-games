@@ -195,7 +195,6 @@ const TALLIED: Readonly<Partial<Record<Action["kind"], keyof Tally>>> = {
     blessing: "abilities",
     ward: "abilities",
     runeRaise: "abilities",
-
     shieldWall: "abilities",
     fireball: "abilities",
     dynamite: "abilities",
@@ -1240,7 +1239,6 @@ const ACTION_PHRASES: Readonly<Record<Action["kind"], string>> = {
     blessing: "used Blessing",
     ward: "used Ward",
     runeRaise: "raised a fallen ally",
-
     fireball: "threw a fireball",
     dynamite: "threw dynamite",
     heal: "healed an ally",

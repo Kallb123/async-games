@@ -41,7 +41,6 @@ const AIM_HINT: Readonly<Record<Aim, string>> = {
     beckon: 'Tap another ally in sight within 8 squares to pull it closer.',
     ward: 'Tap the Cleric or an ally in sight within 6 squares to give full cover.',
     runeRaise: 'Tap a downed ally next to them.',
-
     move: 'Tap a shaded square to move there: the darker the shade, the more AP it takes.',
     sneak: 'Tap a shaded square to sneak there. Nobody on watch reacts to a sneak.',
     attack: 'Tap an enemy to see the odds.',
@@ -74,7 +73,6 @@ const SEND_LABEL: Readonly<Record<Aim, string>> = {
     beckon: 'Beckon',
     ward: 'Ward',
     runeRaise: 'Raise',
-
     move: 'Move here',
     sneak: 'Sneak here',
     attack: 'Attack',
@@ -100,7 +98,7 @@ const SEND_LABEL: Readonly<Record<Aim, string>> = {
  */
 const ABILITY_ROW: Readonly<Record<AbilityId, { icon: string; tag: string; needs?: TargetKind | 'cover'; least?: number }>> = {
     leap: { icon: ABILITY_MARK, tag: 'Aim' },
-    iceBall: { icon: ABILITY_MARK, tag: 'Aim' },
+    iceBall: { icon: AREA_BLAST.iceBall.icon, tag: 'Aim' },
     shove: { icon: ABILITY_MARK, tag: 'Aim', needs: 'shove' },
     poisonArrow: { icon: ABILITY_MARK, tag: 'Aim', needs: 'poisonArrow' },
     bouncingArrow: { icon: ABILITY_MARK, tag: 'Aim', needs: 'bouncingArrow' },
@@ -109,7 +107,7 @@ const ABILITY_ROW: Readonly<Record<AbilityId, { icon: string; tag: string; needs
     thunder: { icon: ABILITY_MARK, tag: 'Aim', needs: 'thunder' },
     beckon: { icon: ABILITY_MARK, tag: 'Aim', needs: 'beckon' },
     ward: { icon: ABILITY_MARK, tag: 'Aim', needs: 'ward' },
-    runeRaise: { icon: ABILITY_MARK, tag: 'Aim', needs: 'runeRaise' },
+    runeRaise: { icon: '✚', tag: 'Aim', needs: 'runeRaise' },
     slashAndDash: { icon: ABILITY_MARK, tag: 'Use' },
     bulwark: { icon: ABILITY_MARK, tag: 'Use' },
     taunt: { icon: ABILITY_MARK, tag: 'Use' },

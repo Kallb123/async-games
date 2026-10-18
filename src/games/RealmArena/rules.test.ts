@@ -101,7 +101,7 @@ describe("hitting (§13.3)", () => {
             const open = fighter(2, "b", "knight", at(field, 5, 3));
             const wall = fighter(3, "b", "knight", at(field, 6, 3), { effects: { shieldWall: 1 } });
             const walled = { field, fighters: [archer, open, wall] };
-            expect(oddsBreakdown(walled, archer, open).factors).toEqual([{ kind: "cover", amount: -20, cover: "half", doubled: undefined, shield: true }]);
+            expect(oddsBreakdown(walled, archer, open).factors).toEqual([{ kind: "cover", amount: -20, cover: "half", doubled: undefined, shield: true, ability: "shieldWall" }]);
             expect(oddsBreakdown(walled, archer, open).chance).toBe(shotOdds(walled, archer, open)?.chance);
         });
 

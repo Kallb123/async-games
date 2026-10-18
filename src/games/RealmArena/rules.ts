@@ -33,7 +33,7 @@ import { canSee } from "@/utils/games/battlefield/lineOfSight";
 import { DEFAULT_CLIMB, pathCost, pathTo, reachFrom, stepCost, type MoveRules, type Reach } from "@/utils/games/battlefield/pathfinding";
 import { coordsOf, distance, facingTowards, FULL_HEIGHT, isNeighbour, riseOf, squareAt, type Area, type Battlefield, type Cover, type Facing, type Square } from "@/utils/games/battlefield/terrain";
 import {
-    AFFLICTIONS, factionOf, isCharacterId, isItemId, isOptionId, kitOf, squadPoints,
+    afflictionsOf, factionOf, isCharacterId, isItemId, isOptionId, kitOf, squadPoints,
     type Ability, type AbilityId, type Affliction, type CharacterId, type Effect, type EffectId, type Faction, type FactionId, type Item, type ItemId, type OptionId, type PlayerCount, type Weapon,
 } from "./characters";
 import { currentRuleset, ruleValuesOf, rulesetOf, type RulesContext } from "./rulesets";
@@ -720,7 +720,7 @@ export function shotEffect(shooter: Fighter, kind: ShotKind, context?: RulesCont
  * redoing the sum. The words are the UI's (`oddsLines` in ui.ts).
  */
 export type OddsFactor =
-    | { kind: "cover"; amount: number; cover: Cover; /** What doubled it, when something did. */ doubled?: "hunkered" | "far"; /** Whether temporary cover improves the terrain. */ shield: boolean; /** A named aura other than the original Shield wall. */ ability?: AbilityId }
+    | { kind: "cover"; amount: number; cover: Cover; /** What doubled it, when something did. */ doubled?: "hunkered" | "far"; /** Whether temporary cover improves the terrain. */ shield: boolean; /** The ability supplying temporary cover. */ ability?: AbilityId }
     | { kind: "highGround" | "smoke" | "aimedShot" | "overwatch"; amount: number }
     | { kind: "effect"; amount: number; effect: EffectId };
 
@@ -801,7 +801,7 @@ function shotBreakdown(state: BattleState, attacker: Fighter, target: Fighter, w
     const hunkered = hasEffect(target, "hunkered");
     const doubled = hunkered ? "hunkered" : far ? "far" : undefined;
     const factors: OddsFactor[] = [
-        { kind: "cover", amount: -COVER_PENALTY[cover] * (doubled ? 2 : 1), cover, doubled, shield, ...(shield && temporary.ability && temporary.ability !== "shieldWall" ? { ability: temporary.ability } : {}) },
+        { kind: "cover", amount: -COVER_PENALTY[cover] * (doubled ? 2 : 1), cover, doubled, shield, ...(shield && temporary.ability ? { ability: temporary.ability } : {}) },
         { kind: "highGround", amount: riseOf(field, attacker.square, target.square) >= HIGH_GROUND_RISE ? HIGH_GROUND_BONUS : 0 },
         ...effectFactors(target, state),
         { kind: "smoke", amount: smokeSquares(state).has(target.square) ? -ITEMS.smokePot.hitPenalty : 0 },
@@ -1363,8 +1363,8 @@ export function demolishArea(field: Battlefield, knight: Square, at: Square): Sq
 export const burstArea = (field: Battlefield, bloater: Square): Square[] => demolishArea(field, bloater, bloater);
 
 /** The afflictions on a character, which Purify clears: every one, Marked among them (§23.2). */
-export function afflictionsOn(fighter: Fighter): Affliction[] {
-    return AFFLICTIONS.filter(effect => hasEffect(fighter, effect));
+export function afflictionsOn(fighter: Fighter, context?: RulesContext): Affliction[] {
+    return afflictionsOf(context).filter(effect => hasEffect(fighter, effect));
 }
 
 /**
@@ -1375,7 +1375,7 @@ export function afflictionsOn(fighter: Fighter): Affliction[] {
 export function purified(state: BattleState, cleric: Fighter): Fighter[] {
     return state.fighters.filter(ally => allied(state, ally.owner, cleric.owner) && isStanding(ally)
         && (ally.id === cleric.id || nextTo(state.field, cleric.square, ally.square))
-        && (ally.hp < maxHpOf(ally, state) || afflictionsOn(ally).length > 0));
+        && (ally.hp < maxHpOf(ally, state) || afflictionsOn(ally, state).length > 0));
 }
 
 // ─── Taking an action ───────────────────────────────────────────────────────
@@ -1556,7 +1556,7 @@ function resolver(state: BattleState, roll: Roll) {
         const restored = Math.min(hp, maxHpOf(target, state) - target.hp);
         target.hp += restored;
         events.push({ kind: "healed", fighter: by.id, target: target.id, hp: restored, ...(via ? { via } : {}) });
-        for (const effect of via === "purify" ? afflictionsOn(target) : healedEffects(target, state)) {
+        for (const effect of via === "purify" ? afflictionsOn(target, state) : healedEffects(target, state)) {
             delete target.effects[effect];
             if (target.effectSources) delete target.effectSources[effect];
             events.push({ kind: "effect", fighter: target.id, effect, change: "cleared" });

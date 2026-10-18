@@ -48,10 +48,10 @@ const CHARACTERS = {
 const EFFECTS = {
     ...catalogueV8.EFFECTS,
     poisoned: { name: "Poisoned", state: "poisoned", count: 2, damage: 1, healed: true },
-    braced: { name: "Braced", state: "braced", count: 1, armour: 1 },
-    blessed: { name: "Blessed", state: "blessed", count: 2, decayAt: "end", damageBonus: 1 },
-    focused: { name: "Focused", state: "focused", count: 2, decayAt: "end", abilityDamageBonus: 1 },
-    warded: { name: "Warded", state: "warded", count: 2, cover: "full" },
+    braced: { beneficial: true, name: "Braced", state: "braced", count: 1, armour: 1 },
+    blessed: { beneficial: true, name: "Blessed", state: "blessed", count: 2, decayAt: "end", damageBonus: 1 },
+    focused: { beneficial: true, name: "Focused", state: "focused", count: 2, decayAt: "end", abilityDamageBonus: 1 },
+    warded: { beneficial: true, name: "Warded", state: "warded", count: 2, cover: "full" },
 } satisfies Partial<Record<EffectId, Effect>>;
 
 const realm: Faction = {

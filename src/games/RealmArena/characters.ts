@@ -43,6 +43,8 @@ export type EffectId = "burning" | "stunned" | "slowed" | "marked" | "corroded" 
     | "poisoned" | "braced" | "blessed" | "focused" | "warded";
 
 export interface Effect {
+    /** A positive condition, preserved by Purify. */
+    beneficial?: true;
     /** Damage ticks and expiry happen at this turn boundary; old effects use start. */
     tick?: "start" | "end";
     decayAt?: "start" | "end";
@@ -87,12 +89,12 @@ const STANCES = ["hunkered", "shieldWall"] as const satisfies readonly EffectId[
 /** The effects something else puts on a character, rather than stances it takes up itself. */
 export type Affliction = Exclude<EffectId, typeof STANCES[number]>;
 
-/** Positive conditions remain when Purify clears ailments. */
-const BUFFS = ["braced", "blessed", "focused", "warded"] as const satisfies readonly EffectId[];
-
-/** Harmful effects in `EFFECT_IDS` order: what Purify clears (§23.2). */
-export const AFFLICTIONS = EFFECT_IDS.filter((effect): effect is Affliction =>
-    !(STANCES as readonly EffectId[]).includes(effect) && !(BUFFS as readonly EffectId[]).includes(effect));
+/** Harmful effects in catalogue order: what Purify clears (§23.2). */
+export function afflictionsOf(context?: RulesContext): Affliction[] {
+    const { EFFECTS } = rulesetOf(context);
+    return (Object.keys(EFFECTS) as EffectId[]).filter((effect): effect is Affliction =>
+        !(STANCES as readonly EffectId[]).includes(effect) && !EFFECTS[effect]!.beneficial);
+}
 
 /**
  * A melee weapon needs its target next to it and rolls a flat 80% to hit

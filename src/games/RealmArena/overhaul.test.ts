@@ -3,9 +3,10 @@ import { buildTimeline } from "@/utils/games/replay";
 import { buildBattlefield } from "@/utils/games/battlefield/terrain";
 import { at } from "@/utils/games/battlefield/testFixtures";
 import { gameStateToModel } from "./RealmArenaModels";
-import { AFFLICTIONS, kitOf, squadPoints, type CharacterId } from "./characters";
+import { afflictionsOf, kitOf, squadPoints, type CharacterId } from "./characters";
 import { nextAction } from "./ai";
 import { CURRENT_RULESET_VERSION, rulesetFor } from "./rulesets";
+import * as rulesets from "./rulesets";
 import { act, canAct, bounceTargets, beckonPath, check, damageTo, dodgeReach, endTurn, fixedRolls, leapLanding, newFighter, oddsBreakdown, purified, shotOdds, shovePath, startTurn, temporaryCover, type Action, type BattleState, type Fighter } from "./rules";
 import { ACTION_AIMS, rangeSquares, targetsOf } from "./tactics";
 import { MOVE, tapFighter, tapSquare, type TapContext } from "./useTurnDraft";
@@ -423,8 +424,8 @@ describe("Purify preserves positive conditions", () => {
     it("does not consider healthy buffed allies in need of Purify", () => {
         const ally = fighter(1, "mage", 4, "a", 3, { effects: buffs });
         const state = battle(cleric, ally);
-        expect(AFFLICTIONS).toContain("poisoned");
-        for (const buff of Object.keys(buffs)) expect(AFFLICTIONS).not.toContain(buff);
+        expect(afflictionsOf(version)).toContain("poisoned");
+        for (const buff of Object.keys(buffs)) expect(afflictionsOf(version)).not.toContain(buff);
         expect(purified(state, cleric)).toEqual([]);
         expect(check(state, "a", { kind: "purify", fighter: 0 })).toHaveProperty("refused");
     });
@@ -434,6 +435,22 @@ describe("Purify preserves positive conditions", () => {
         const result = run(battle(cleric, ally), { kind: "purify", fighter: 0 });
         expect(get(result, 1)).toMatchObject({ hp: 5, effects: buffs });
         expect(get(result, 1).effects.poisoned).toBeUndefined();
+    });
+
+    it("uses the selected catalogue's beneficial flag rather than a fixed list of buff names", () => {
+        const original = rulesets.rulesetOf;
+        const catalogue = original(version);
+        const future = { ...catalogue, EFFECTS: { ...catalogue.EFFECTS, marked: { ...catalogue.EFFECTS.marked, beneficial: true as const } } };
+        const lookup = vi.spyOn(rulesets, "rulesetOf").mockImplementation(context => context?.rulesVersion === 9 ? future : original(context));
+        try {
+            for (const rulesVersion of [8, 9]) {
+                const ally = fighter(1, "mage", 4, "a", 3, { hp: 3, effects: { marked: 2 } });
+                const result = run({ ...battle(cleric, ally), rulesVersion }, { kind: "purify", fighter: 0 });
+                expect(get(result, 1).effects.marked).toBe(rulesVersion === 9 ? 2 : undefined);
+            }
+        } finally {
+            lookup.mockRestore();
+        }
     });
 });
 

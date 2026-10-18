@@ -484,7 +484,7 @@ function standingTerms(plan: Plan, battle: BattleState, fighter: Fighter, enemie
     const armed = fighter.ap >= ruleValuesOf(battle).ATTACK_AP ? 1 : SPENT_THREAT;
     const urgency = Math.min(1, plan.round / ruleValuesOf(battle).CENTRE_SCORES_FROM_ROUND);
     const bonus = Math.max(0, fighter.ap - ruleValuesOf(battle).ACTION_POINTS) * WEIGHTS.bonusAp;
-    return bonus -WEIGHTS.exposure * plan.ownWorth * exposure
+    return bonus - WEIGHTS.exposure * plan.ownWorth * exposure
         + WEIGHTS.threat * armed * threat
         - WEIGHTS.objective * urgency * plan.toCentre(fighter) / movementOf(fighter, plan.state);
 }
