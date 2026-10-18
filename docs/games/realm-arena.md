@@ -3038,6 +3038,20 @@ sure it is.
   rather than stopping in the open; it goes round an overwatch lane when a
   covered way exists; it doesn't fireball a 3×3 with its own in it when
   another target will do; it heads for the centre before it scores.
+- **Open puzzles.** The benchmark for improving the score: puzzles with one
+  right answer that the planner doesn't find yet. Each is an `it.fails`, with
+  an ordinary test beside it holding its premise; it moves up among the
+  puzzles above the day the planner solves it. It takes a 70% knock-out over wounding a fresh enemy, in
+  either mission: the score weighs a hurt enemy as a fraction of one, though
+  it fights at full strength until it's down — counting it partly by its
+  standing at all solves the puzzle and made the warbands weaker in whole
+  battles ([`realm-arena-balance.md`](./realm-arena-balance.md), *Planner
+  experiments*). It steps out of a crossfire:
+  Exposure counts the worst single shot, so one flanker and four look the
+  same. It steps out of a Knight's reach: Exposure reads each enemy from
+  where it stands, not where it could walk to. Fixing either Exposure
+  solves its puzzle and made the warbands more cautious and weaker in whole
+  battles, as the same section records.
 - **It never cheats** (PR 3). Moving an enemy it can't see anywhere else on
   the map never changes its choice.
 - **It never breaks** (PR 4a). Whole battles on every map, against every
@@ -3740,6 +3754,14 @@ falls, and round by round how many of the team are still standing.
   better. What it measures well is a change: battle *k* of a scenario rolls
   from seed *k*, so the same seeds before and after a change differ only
   where the rules do (and where a warband's turn met its two-second deadline).
+- **A change to the planner, measured alone.** The planner plays both sides,
+  so improving it improves the team as much as the warbands. `--team-planner
+  <ref>` (the workflow's *team planner*) has the team play the planner as it
+  is at a git ref — `main`, say — while the warbands play the checkout's, so
+  the same seeds before and after differ only in how the warbands play: the
+  team's win rate falling is the warbands getting better. The older planner
+  plays by the checkout's rules, so it has to build against them. The open
+  puzzles (§29.11) say what to improve; this says whether it worked.
 - **On demand in CI.** The *Realm Arena balance* workflow takes the same
   choices as inputs, splits the battles across runners, and puts the merged
   report on the run's summary page, keeping every battle's sample as an
@@ -4511,3 +4533,4 @@ Realm, its sibling in the same world.
 | 1.55 | The Miners, a third faction (§33, B6): five dwarves — the Miner, the Stonewarden, the Prospector, the Sapper and the Runepriest — each tougher and a little dearer than the Realm character it stands in for, hitting as hard; and Dynamite, the Sapper's blast of 4 over a 3×3, which leaves no effect. |
 | 1.56 | The Realm troop overhaul, designed but not built (§34): the Scout leaves the Realm; the Man-at-arms gains Leap and Slash and Dash; the Knight a passive Bulwark (half cover for anyone beside it, enemies too), Taunt (armour for its side for a turn) and Shove; the Archer four new arrows; the Mage Ice Ball, Thunder and Focus; the Cleric Beckon, Blessing and Ward, and a Raise that lets the raised act at once on its owner's turn. Values not yet agreed are proposed, and asked in §34.10. |
 | 1.57 | Rules version 8 (command version 8) builds two pieces of §34: the Knight's and Stonewarden's Shield wall is a passive, giving anyone beside them, friend or foe, half cover; and a character raised on its owner's turn has 2 AP to spend. Battles created before it keep the activated shield wall and the old Raise. |
+| 1.58 | Benchmarking the planner. Open puzzles (§29.11): three it fails today, kept as `it.fails` — taking a likely knock-out over wounding a fresh enemy, stepping out of a crossfire, and stepping out of a Knight's reach. And the balance harness's `--team-planner <ref>` (§30.12), which has the team play an older planner against the checkout's warbands, so a change to the planner is measured as the warbands' alone; its first experiments — counting the team per head, and an Exposure that adds every shot up and lets a melee enemy walk — are in `realm-arena-balance.md`, and none was kept. Tests, tooling and documents only. |

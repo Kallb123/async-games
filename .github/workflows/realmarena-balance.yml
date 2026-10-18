@@ -6,6 +6,8 @@ name: Realm Arena balance
 # after a change to the numbers, with the same seeds, and compare the two
 # summaries. The report is the run's summary page, and every battle's sample is
 # kept as an artifact for a closer look (`npm run ra-balance -- --merge …`).
+# To compare two versions of the planner itself, name the older one's ref as
+# the team's planner: the team plays it, the warbands play the branch's.
 
 on:
   workflow_dispatch:
@@ -40,6 +42,9 @@ on:
       seed:
         description: First seed; battle k of each scenario rolls from seed + k
         default: '1'
+      team_planner:
+        description: Git ref whose planner plays the team, as main (blank for the branch's on both sides)
+        default: ''
       shards:
         description: Runners to split the battles across
         default: '4'
@@ -75,6 +80,9 @@ jobs:
         shard: ${{ fromJSON(needs.plan.outputs.shards) }}
     steps:
       - uses: actions/checkout@v5
+        with:
+          # Every branch's history, so the team's planner can be read from another ref.
+          fetch-depth: ${{ inputs.team_planner != '' && '0' || '1' }}
       - uses: actions/setup-node@v5
         with:
           node-version: '24'
@@ -95,13 +103,15 @@ jobs:
           SIZES: ${{ inputs.sizes }}
           FOG: ${{ inputs.fog }}
           SEED: ${{ inputs.seed }}
+          TEAM_PLANNER: ${{ inputs.team_planner }}
           SHARD: ${{ matrix.shard }}/${{ inputs.shards }}
         # Each shard's own summary would repeat the merged one, so it's kept to the log.
         run: |
           GITHUB_STEP_SUMMARY= npm run ra-balance -- \
             --runs "$RUNS" --players "$PLAYERS" --teams "$TEAMS" --enemies "$ENEMIES" --missions "$MISSIONS" \
             --maps "$MAPS" --difficulties "$DIFFICULTIES" --sizes "$SIZES" --fog "$FOG" \
-            --seed "$SEED" --shard "$SHARD" --out "samples-${{ matrix.shard }}.json"
+            --seed "$SEED" --shard "$SHARD" --out "samples-${{ matrix.shard }}.json" \
+            ${TEAM_PLANNER:+--team-planner "$TEAM_PLANNER"}
 
       - uses: actions/upload-artifact@v4
         if: always()

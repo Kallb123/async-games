@@ -9,7 +9,9 @@
 // for the keep, with no plan beyond the action in front of it. A team of people
 // should do better, so read the numbers as a floor and as a comparison — the
 // same seeds under two versions of the rules — rather than as the odds a
-// player faces.
+// player faces. To compare two versions of the planner itself, the team can
+// play another (`TeamPlanner`, an older one) while the warbands play this
+// checkout's, so the change shows as the warbands' alone.
 
 import { nextAction, turnMemo } from "../../src/games/RealmArena/ai";
 import { DIFFICULTY_NAMES, BATTLE_SIZE_NAMES, FACTIONS, type BattleSize, type Difficulty, type FactionId } from "../../src/games/RealmArena/characters";
@@ -37,6 +39,21 @@ export interface BalanceScenario {
     fog: boolean;
 }
 
+/**
+ * What plays a side: the planner's `nextAction`, and its turn's memo where it
+ * has one (`turnMemo` came after the planner, so an older one may not).
+ */
+export interface Planner {
+    nextAction: typeof nextAction;
+    turnMemo?: typeof turnMemo;
+}
+
+/** A planner other than this checkout's for the team to play, and the name the report gives it: "main @ 4ba0a86". */
+export interface TeamPlanner {
+    planner: Planner;
+    label: string;
+}
+
 /** One side's strength at the end of a round. */
 export interface RoundCount {
     team: number;
@@ -46,7 +63,10 @@ export interface RoundCount {
 
 /** What one battle came to. */
 export interface BattleSample {
+    /** The scenario's name (`scenarioKey`), and the team's planner after it when it isn't this checkout's. */
     scenario: string;
+    /** The team's planner, when it isn't this checkout's (`TeamPlanner`). */
+    teamPlanner?: string;
     seed: number;
     won: boolean;
     /** The ending's own words: "overrun in round 6", "held out for all 13 rounds". */
@@ -126,10 +146,12 @@ const seatsFor = (players: number) => Array.from({ length: players }, (_, k) => 
  * One battle of `scenario`, fought to its end with every roll drawn from
  * `seed`: each player's turn is the planner's actions for the team until it
  * has none worth taking, as a warband's is, then End turn — which plays the
- * warband that follows it.
+ * warband that follows it. The team plays `team`'s planner if given, and this
+ * checkout's otherwise; the warbands always play this checkout's.
  */
-export async function simulateBattle(scenario: BalanceScenario, seed: number): Promise<BattleSample> {
+export async function simulateBattle(scenario: BalanceScenario, seed: number, team?: TeamPlanner): Promise<BattleSample> {
     const started = performance.now();
+    const planner: Planner = team?.planner ?? { nextAction, turnMemo };
     seedRolls(seed);
     const players = seatsFor(scenario.players);
     const game = makeGame(players, {}, settingsOf(scenario));
@@ -143,10 +165,10 @@ export async function simulateBattle(scenario: BalanceScenario, seed: number): P
         if (turn > rounds * players.length * 2 + 10) throw new Error(`${scenarioKey(scenario)}, seed ${seed}: the battle outlasted its turn limit`);
         const player = game.currentTurn;
         const roundBefore = game.specificGameState.roundsPlayed;
-        const memo = turnMemo();
+        const memo = planner.turnMemo?.();
         const cap = ACTION_POINTS * battleOf(game).fighters.filter(fighter => fighter.owner === player && isStanding(fighter)).length;
         for (let step = 0; step < cap && !game.complete; step++) {
-            const action = nextAction(viewOf(battleOf(game), player), player, game.specificGameState.roundsPlayed + 1, undefined, memo);
+            const action = planner.nextAction(viewOf(battleOf(game), player), player, game.specificGameState.roundsPlayed + 1, undefined, memo);
             if (!action) break;
             if (!(await play(game, actBy(player, action))).outcome.validMove) break;
         }
@@ -158,17 +180,18 @@ export async function simulateBattle(scenario: BalanceScenario, seed: number): P
             // Counted after the wave that lands as the next round begins, so a
             // round's enemy count includes the characters it brought.
             const fighters = battleOf(game).fighters.filter(isStanding);
-            const team = fighters.filter(fighter => !isWarband(fighter.owner));
-            byRound.push({ team: team.length, enemy: fighters.length - team.length, teamHp: team.reduce((sum, fighter) => sum + fighter.hp, 0) });
+            const teamStanding = fighters.filter(fighter => !isWarband(fighter.owner));
+            byRound.push({ team: teamStanding.length, enemy: fighters.length - teamStanding.length, teamHp: teamStanding.reduce((sum, fighter) => sum + fighter.hp, 0) });
             if (scenario.mission === "holdOut" && waveArrives(roundAfter + 1, rounds)) waves.push(roundAfter + 1);
         }
     }
 
     const fighters = battleOf(game).fighters;
     const enemy = fighters.filter(fighter => isWarband(fighter.owner));
-    const team = fighters.filter(fighter => !isWarband(fighter.owner));
+    const teamFighters = fighters.filter(fighter => !isWarband(fighter.owner));
     return {
-        scenario: scenarioKey(scenario),
+        scenario: scenarioKey(scenario) + (team ? ` · team plays ${team.label}` : ""),
+        ...(team ? { teamPlanner: team.label } : {}),
         seed,
         won: game.endReason === "teamwin",
         detail: game.endDetail ?? "",
@@ -177,7 +200,7 @@ export async function simulateBattle(scenario: BalanceScenario, seed: number): P
         byRound,
         teamFielded,
         enemyFielded: enemy.length,
-        teamDowned: team.filter(fighter => !isStanding(fighter)).length,
+        teamDowned: teamFighters.filter(fighter => !isStanding(fighter)).length,
         enemyDowned: enemy.filter(fighter => !isStanding(fighter)).length,
         waves,
         ms: Math.round(performance.now() - started),
@@ -188,6 +211,8 @@ export async function simulateBattle(scenario: BalanceScenario, seed: number): P
 
 export interface ScenarioStats {
     scenario: string;
+    /** The team's planner, when it isn't this checkout's. */
+    teamPlanner?: string;
     battles: number;
     wins: number;
     /** The share won, and its 95% Wilson interval. */
@@ -257,6 +282,7 @@ export function summarise(samples: readonly BattleSample[]): ScenarioStats {
     const enemyDowned = mean(samples.map(sample => sample.enemyDowned));
     return {
         scenario: samples[0].scenario,
+        ...(samples[0].teamPlanner ? { teamPlanner: samples[0].teamPlanner } : {}),
         battles: samples.length,
         wins,
         winRate: wins / samples.length,
@@ -300,6 +326,9 @@ export function formatReport(stats: readonly ScenarioStats[], heading = "Realm A
         `## ${heading}`,
         "",
         "The computer's planner plays the team as well as the warbands, so read these as a floor and as a comparison between runs, not as a player's odds.",
+        ...(stats.some(s => s.teamPlanner)
+            ? ["", "Where a scenario says which planner the team plays, the warbands play this checkout's: a change to the planner shows as the warbands' alone."]
+            : []),
         "",
         "| Scenario | Battles | Team wins (95% CI) | Ended in round: mean · p10 / median / p90 | Overrun, on average | Team fielded / lost | Enemy fielded / downed | Enemy downed per team loss |",
         "|---|---:|---|---|---:|---|---|---:|",

@@ -5,8 +5,8 @@ import { reachFrom } from "@/utils/games/battlefield/pathfinding";
 import { battlefieldWith, buildBattlefield, distance, type Battlefield, type Square } from "@/utils/games/battlefield/terrain";
 import { FACTIONS, type CharacterId } from "./characters";
 import {
-    ACTION_POINTS, act, areaAround, blastedIn, check, endTurn, newFighter, reactionsTo, startTurn, viewOf,
-    type Action, type BattleState, type Fighter,
+    ACTION_POINTS, act, areaAround, ATTACK_AP, blastedIn, check, endTurn, inMeleeReach, newFighter, reachOf, reactionsTo, shotOdds, startTurn, viewOf,
+    type Action, type BattleState, type Fighter, type FogGhost,
 } from "./rules";
 import { nextAction, turnMemo } from "./ai";
 
@@ -30,9 +30,12 @@ function fieldOf(rows: string[], centre?: Area, deployments: Area[] = []): Battl
 
 const battle = (field: Battlefield, fighters: Fighter[], fog = false): BattleState => ({ field, fighters, sides: SIDES, ...(fog ? { fog: true } : {}) });
 
-/** What the warband does next in `state`, from its side's view, in battle round `round`: never something `check` refuses. */
-function planned(state: BattleState, round = 1): Action | undefined {
-    const action = nextAction(viewOf(state, AI), AI, round);
+/**
+ * What the warband does next in `state`, from its side's view, in battle round
+ * `round` — hunting, as in Hold Out, given `hunt`: never something `check` refuses.
+ */
+function planned(state: BattleState, round = 1, hunt?: readonly FogGhost[]): Action | undefined {
+    const action = nextAction(viewOf(state, AI), AI, round, hunt);
     if (action) expect(check(state, AI, action)).not.toHaveProperty("refused");
     return action;
 }
@@ -168,7 +171,7 @@ describe("nextAction in Hold Out (§30.3)", () => {
         const knight = ready(0, "a", "knight", at(OPEN, 8, 4));
         const pack = [at(OPEN, 6, 4), at(OPEN, 10, 4), at(OPEN, 8, 2), at(OPEN, 8, 6)].map((square, i) => ready(i + 1, AI, "skitterling", square));
         const state = battle(OPEN, [knight, ...pack]);
-        const action = nextAction(viewOf(state, AI), AI, 4, []);
+        const action = planned(state, 4, []);
         expect(action).toMatchObject({ kind: "move" });
         expect(distance(OPEN, endOf(action, knight.square), knight.square)).toBeLessThan(2);
     });
@@ -181,10 +184,126 @@ describe("nextAction in Hold Out (§30.3)", () => {
         const hidden = ready(1, "a", "archer", at(field, 30, 2));
         const state = battle(field, [knight, hidden], true);
         expect(viewOf(state, AI).fighters).toHaveLength(1);
-        const action = nextAction(viewOf(state, AI), AI, 4, []);
+        const action = planned(state, 4, []);
         expect(action).toMatchObject({ kind: "move", fighter: knight.id });
         const walk = reachFrom(field, at(field, 30, 2)).costs;
         expect(walk[endOf(action, knight.square)]).toBeLessThan(walk[knight.square]);
+    });
+});
+
+describe("nextAction's open puzzles (§29.11)", () => {
+    // Puzzles with one right answer that the planner doesn't find yet: the
+    // benchmark for improving its score. Each `it.fails` passes while the
+    // planner gets it wrong and fails the day it gets it right — then it
+    // becomes an ordinary puzzle above. An `it.fails` passes on any error, so
+    // an ordinary test beside each holds its premise: a puzzle broken some
+    // other way can't hide in it.
+
+    /** Whether `fighter` could walk somewhere with `ap` and still strike `square`: by default, with a fresh turn's AP. */
+    const canWalkUpAndStrike = (state: BattleState, fighter: Fighter, square: Square, ap = ACTION_POINTS - ATTACK_AP): boolean => {
+        const reach = reachOf(state, { ...fighter, ap });
+        return reach.costs.some((cost, from) => cost < Infinity && inMeleeReach(state.field, from, square));
+    };
+
+    describe("takes the likely knock-out over wounding a fresh enemy", () => {
+        // An enemy Archer cut to 2 HP behind a low wall, and a fresh one in
+        // the open. Hit or graze, the shot at the wounded one downs it, 70% of
+        // the time; the fresh one takes two hits to down and shoots back at
+        // full strength until then. The score weighs HP alone, and a hurt
+        // enemy as a fraction of one, so the fresh one's 80% at 4 flanked
+        // damage outscores it: about 11.3 points' worth to 7.5, grazes and
+        // the knock-out's points counted. Counting a team character partly by
+        // its standing at all solves it, and made the warbands weaker in whole
+        // battles (docs/games/realm-arena-balance.md, *Planner experiments*).
+        const field = fieldOf([
+            "................",
+            "................",
+            "...........o....",
+            "................",
+            "................",
+            "................",
+            "................",
+        ]);
+        const archer = ready(0, AI, "archer", at(field, 0, 3), { ap: ATTACK_AP });
+        const wounded = ready(1, "a", "archer", at(field, 12, 2), { hp: 2 });
+        const fresh = ready(2, "b", "archer", at(field, 12, 5));
+        const state = battle(field, [archer, wounded, fresh]);
+
+        it("(its premise)", () => {
+            const atWounded = shotOdds(state, archer, wounded)!;
+            const atFresh = shotOdds(state, archer, fresh)!;
+            expect(atWounded.grazeDamage).toBeGreaterThanOrEqual(wounded.hp);
+            expect(atWounded.chance + atWounded.grazeChance).toBe(70);
+            expect(atFresh.damage).toBeLessThan(fresh.hp);
+        });
+        it.fails("in Hold the Centre", () => {
+            expect(planned(state)).toMatchObject({ fighter: archer.id, target: wounded.id });
+        });
+        it.fails("in Hold Out, where the team's losses are for good", () => {
+            expect(planned(state, 4, [])).toMatchObject({ fighter: archer.id, target: wounded.id });
+        });
+    });
+
+    describe("steps out of a crossfire", () => {
+        // Four enemy Archers flank a Man-at-arms that can only move: three to
+        // the east, one to the west. Behind the northern wall only the western
+        // one flanks it, behind the southern one only the eastern three, and
+        // in the open all four. Exposure counts the worst single shot (§29.7),
+        // which is a flanked one from somebody wherever it stands, so it sees
+        // nothing to gain and stays where all four can shoot it. Counting
+        // every shot, as the HP it could expect to lose to all of them, solves
+        // it, and made the warbands weaker in whole battles
+        // (docs/games/realm-arena-balance.md, *Planner experiments*).
+        const field = fieldOf([
+            "............o...........",
+            "............o...........",
+            "............o...........",
+            "........................",
+            "........................",
+            "........................",
+            "..........o.............",
+            "..........o.............",
+            "..........o.............",
+        ]);
+        const mover = ready(0, AI, "manAtArms", at(field, 11, 4), { ap: 1 });
+        const archers = [at(field, 23, 2), at(field, 23, 4), at(field, 23, 6), at(field, 0, 4)].map((square, i) => ready(i + 1, "a", "archer", square, { ap: 0 }));
+        const state = battle(field, [mover, ...archers]);
+        const flankers = (square: Square) => archers.filter(archer => coverAgainst(field, square, archer.square) === "none").length;
+
+        it("(its premise)", () => {
+            expect(flankers(mover.square)).toBe(4);
+            expect(flankers(at(field, 11, 1))).toBe(1);
+            expect(flankers(at(field, 11, 7))).toBe(3);
+            // Nobody it could reach to strike, so its Threat is nothing anywhere.
+            expect(archers.some(archer => canWalkUpAndStrike(state, mover, archer.square, mover.ap))).toBe(false);
+        });
+        it.fails("to where one Archer flanks it rather than four", () => {
+            expect(flankers(endOf(planned(state), mover.square))).toBeLessThanOrEqual(1);
+        });
+    });
+
+    describe("steps out of a Knight's reach", () => {
+        // A Scout with only a move left, two squares from an enemy Knight. Its
+        // Exposure reads the Knight from where it stands (§29.7), and a sword
+        // two squares away can't strike, so the Scout counts itself safe and
+        // stays, for the Knight to walk up to and strike next turn. Eight
+        // squares west, it would be out of the Knight's walk. Reading a melee
+        // enemy from anywhere it could walk to solves it, and made the
+        // warbands weaker in whole battles (docs/games/realm-arena-balance.md,
+        // *Planner experiments*).
+        const field = fieldOf(Array(9).fill(".".repeat(24)));
+        const scout = ready(0, AI, "scout", at(field, 12, 4), { ap: 1 });
+        const knight = ready(1, "a", "knight", at(field, 14, 4));
+        const state = battle(field, [scout, knight]);
+
+        it("(its premise)", () => {
+            expect(canWalkUpAndStrike(state, knight, scout.square)).toBe(true);
+            expect(canWalkUpAndStrike(state, knight, at(field, 4, 4))).toBe(false);
+            expect(reachOf(state, scout).costs[at(field, 4, 4)]).toBeLessThan(Infinity);
+        });
+        it.fails("to where the Knight can't walk up and strike it", () => {
+            expect(canWalkUpAndStrike(state, knight, endOf(planned(state), scout.square))).toBe(false);
+        });
     });
 });
 
