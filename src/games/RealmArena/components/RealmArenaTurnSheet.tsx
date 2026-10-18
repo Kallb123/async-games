@@ -399,8 +399,7 @@ function Detail({ draft, battle, name, ap, target }: DetailProps) {
     const hint = (text: React.ReactNode) => <p className="ag-hint">{text}</p>;
     const Name = (id: number) => capitalise(name(id));
 
-    if (aim === "shootDodge") return hint(ABILITIES.shootDodge!.description);
-    if (draft.path) return <MoveDetail draft={draft} name={name} ap={ap} />;
+    if (draft.path && aim !== "shootDodge") return <MoveDetail draft={draft} name={name} ap={ap} />;
     if (draft.area) {
         // What lands — a fireball, dynamite, the item thrown, or a Demolish — and on whom.
         const thrown = aim === 'throw' ? itemOf(fighter, battle) : undefined;
@@ -455,6 +454,7 @@ function Detail({ draft, battle, name, ap, target }: DetailProps) {
                 <Stat value={`${odds.grazeChance}%`} label="Graze" />
                 <Stat value={odds.grazeChance > 0 ? `${odds.damage} / ${odds.grazeDamage}` : odds.damage} label="Damage" />
             </div>
+            {aim === "shootDodge" && hint(ABILITIES.shootDodge!.description)}
             {hint(`${health} · ${odds.flanked ? 'flanked, +1 damage' : `${odds.cover} cover`}${hasEffect(target, 'hunkered') ? ', hunkered down' : ''}${smokeSquares(battle).has(target.square) ? ', in smoke' : ''}${odds.farCover ? ', cover doubled at range' : ''}${effect ? ` · a hit leaves them ${EFFECTS[effect]!.state}` : ''}`)}
         </>
     );

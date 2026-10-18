@@ -87,8 +87,12 @@ const STANCES = ["hunkered", "shieldWall"] as const satisfies readonly EffectId[
 /** The effects something else puts on a character, rather than stances it takes up itself. */
 export type Affliction = Exclude<EffectId, typeof STANCES[number]>;
 
-/** Every affliction, in `EFFECT_IDS` order: what Purify clears (§23.2). */
-export const AFFLICTIONS = EFFECT_IDS.filter((effect): effect is Affliction => !(STANCES as readonly EffectId[]).includes(effect));
+/** Positive conditions remain when Purify clears ailments. */
+const BUFFS = ["braced", "blessed", "focused", "warded"] as const satisfies readonly EffectId[];
+
+/** Harmful effects in `EFFECT_IDS` order: what Purify clears (§23.2). */
+export const AFFLICTIONS = EFFECT_IDS.filter((effect): effect is Affliction =>
+    !(STANCES as readonly EffectId[]).includes(effect) && !(BUFFS as readonly EffectId[]).includes(effect));
 
 /**
  * A melee weapon needs its target next to it and rolls a flat 80% to hit

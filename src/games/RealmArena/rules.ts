@@ -639,10 +639,13 @@ export function countsAsAttack(kind: string, context?: RulesContext): boolean {
 /** Strongest temporary cover: a passive/active aura, or an effect such as Ward. */
 const COVER_ABILITIES = new WeakMap<object, { auras: [AbilityId, Ability][]; reachesEnemies: boolean }>();
 
-export function temporaryCover(state: BattleState, target: Fighter): Cover {
+function temporaryProtection(state: BattleState, target: Fighter): { cover: Cover; ability?: AbilityId } {
     const rank = { none: 0, half: 1, full: 2 };
     let cover: Cover = "none";
-    const offer = (next: Cover | undefined) => { if (next && rank[next] > rank[cover]) cover = next; };
+    let abilityId: AbilityId | undefined;
+    const offer = (next: Cover | undefined, source?: AbilityId) => {
+        if (next && rank[next] > rank[cover]) { cover = next; abilityId = source; }
+    };
     const catalogue = rulesetOf(state);
     let known = COVER_ABILITIES.get(catalogue);
     if (!known) {
@@ -653,7 +656,7 @@ export function temporaryCover(state: BattleState, target: Fighter): Cover {
     const { auras, reachesEnemies } = known;
     // Most catalogues have no effect that covers: every shot's odds ask.
     if (effectsCarrying(state).has("cover")) for (const [, effect] of activeEffects(target, state)) offer(effect.cover);
-    if (rank[cover] === 2) return cover;
+    if (rank[cover] === 2) return { cover, ability: abilityId };
     for (const giver of state.fighters) {
         // Only the target and those next to it can give it cover. Every shot's
         // odds ask, so the cheap test goes first: an aura reaching enemies
@@ -666,11 +669,16 @@ export function temporaryCover(state: BattleState, target: Fighter): Cover {
             if (!ability.cover || (!friendly && ability.coverFor !== "everyone")) continue;
             if (!ability.passive && !(ability.stance && hasEffect(giver, ability.stance))) continue;
             if (!abilitiesOf(giver, state).includes(id)) continue;
-            if (self ? ability.coverAffectsSelf : canSee(state.field, giver.square, target.square)) offer(ability.cover);
-            if (rank[cover] === 2) return cover;
+            if (self ? ability.coverAffectsSelf : canSee(state.field, giver.square, target.square)) offer(ability.cover, id);
+            if (rank[cover] === 2) return { cover, ability: abilityId };
         }
     }
-    return cover;
+    return { cover, ability: abilityId };
+}
+
+/** The strongest temporary cover, from an aura or effect. */
+export function temporaryCover(state: BattleState, target: Fighter): Cover {
+    return temporaryProtection(state, target).cover;
 }
 
 /**
@@ -712,7 +720,7 @@ export function shotEffect(shooter: Fighter, kind: ShotKind, context?: RulesCont
  * redoing the sum. The words are the UI's (`oddsLines` in ui.ts).
  */
 export type OddsFactor =
-    | { kind: "cover"; amount: number; cover: Cover; /** What doubled it, when something did. */ doubled?: "hunkered" | "far"; /** Whether it's a shield wall's, standing in for none. */ shield: boolean }
+    | { kind: "cover"; amount: number; cover: Cover; /** What doubled it, when something did. */ doubled?: "hunkered" | "far"; /** Whether temporary cover improves the terrain. */ shield: boolean; /** A named aura other than the original Shield wall. */ ability?: AbilityId }
     | { kind: "highGround" | "smoke" | "aimedShot" | "overwatch"; amount: number }
     | { kind: "effect"; amount: number; effect: EffectId };
 
@@ -786,14 +794,14 @@ function shotBreakdown(state: BattleState, attacker: Fighter, target: Fighter, w
     const far = FAR_SHOT_DISTANCE !== null && distance(field, attacker.square, target.square) > FAR_SHOT_DISTANCE;
 
     const sideCover = coverAgainst(field, target.square, attacker.square);
-    const temporary = sideCover === "full" ? "none" : temporaryCover(state, target);
+    const temporary = sideCover === "full" ? { cover: "none" as const } : temporaryProtection(state, target);
     const rank = { none: 0, half: 1, full: 2 };
-    const shield = rank[temporary] > rank[sideCover];
-    const cover = shield ? temporary : sideCover;
+    const shield = rank[temporary.cover] > rank[sideCover];
+    const cover = shield ? temporary.cover : sideCover;
     const hunkered = hasEffect(target, "hunkered");
     const doubled = hunkered ? "hunkered" : far ? "far" : undefined;
     const factors: OddsFactor[] = [
-        { kind: "cover", amount: -COVER_PENALTY[cover] * (doubled ? 2 : 1), cover, doubled, shield },
+        { kind: "cover", amount: -COVER_PENALTY[cover] * (doubled ? 2 : 1), cover, doubled, shield, ...(shield && temporary.ability && temporary.ability !== "shieldWall" ? { ability: temporary.ability } : {}) },
         { kind: "highGround", amount: riseOf(field, attacker.square, target.square) >= HIGH_GROUND_RISE ? HIGH_GROUND_BONUS : 0 },
         ...effectFactors(target, state),
         { kind: "smoke", amount: smokeSquares(state).has(target.square) ? -ITEMS.smokePot.hitPenalty : 0 },
@@ -1007,8 +1015,10 @@ export function sightOf(fighter: Pick<Fighter, "character">, context?: RulesCont
  * clear only of the enemies it knows of, so its shape gives nobody else away;
  * if it crosses another it can't see, that one is found and gone round too.
  * Without fog every enemy is known, so no path `check` allowed finds one.
+ * A dodge supplies its fixed movement-point budget instead of buying reach
+ * with AP; it follows the same discovery and rerouting rule.
  */
-function routed(state: BattleState, mover: Fighter, sent: readonly Square[], sneaking: boolean): { path: Square[]; found: Fighter[]; ap?: number } {
+function routed(state: BattleState, mover: Fighter, sent: readonly Square[], sneaking: boolean, movementPoints?: number): { path: Square[]; found: Fighter[]; ap?: number } {
     const known = new Set(viewOf(state, mover.owner).fighters.map(fighter => fighter.id));
     const unknownOn = (square: Square) => state.fighters.find(other => !allied(state, other.owner, mover.owner) && isStanding(other) && other.square === square && !known.has(other.id));
     const goal = sent[sent.length - 1];
@@ -1018,7 +1028,9 @@ function routed(state: BattleState, mover: Fighter, sent: readonly Square[], sne
     for (let enemy = path.slice(1).map(unknownOn).find(Boolean); enemy; enemy = path.slice(1).map(unknownOn).find(Boolean)) {
         found.push(enemy);
         known.add(enemy.id);
-        const reach = reachOf({ ...state, fighters: state.fighters.filter(one => known.has(one.id) || allied(state, one.owner, mover.owner)) }, mover, sneaking);
+        const knownState = { ...state, fighters: state.fighters.filter(one => known.has(one.id) || allied(state, one.owner, mover.owner)) };
+        const reach = movementPoints === undefined ? reachOf(knownState, mover, sneaking)
+            : reachFrom(state.field, mover.square, movementPoints, moveRules(knownState, mover));
         const to = reach.costs[goal] !== Infinity ? goal : nearestTo(state.field, reach, goal, moveRules(state, mover).climb);
         path = pathTo(reach, to)?.squares ?? [mover.square];
         ap = moveAp(mover, reach.costs[to], sneaking, state);
@@ -1678,10 +1690,13 @@ export function act(state: BattleState, player: string, action: Action, roll: Ro
         case "splittingArrow":
             for (const id of action.targets) run.shoot(actor, get(id), action.kind);
             break;
-        case "shootDodge":
+        case "shootDodge": {
             run.shoot(actor, get(action.target), action.kind);
-            run.relocate(actor, action.path, action.kind);
+            const { path, found } = routed(run.battle, actor, action.path, false, ABILITIES.shootDodge!.dodge!);
+            for (const enemy of found) events.push({ kind: "spotted", fighter: actor.id, by: enemy.id });
+            run.relocate(actor, path, action.kind);
             break;
+        }
         case "slashAndDash":
             events.push({ kind: "ability", fighter: actor.id, ability: action.kind });
             break;

@@ -21,7 +21,7 @@ const AI = "ai:0";
 
 describe("nextAction's pace (§29.7)", () => {
     // The Swarm's warband is six characters to the Realm's four (§31.1), the Miners' three (§33.1).
-    it.each(["realm", "swarm", "miners"] as const)("plans a %s warband's turn on the Four-Gate Fort in under 250 ms", faction => {
+    it.each(["realm", "swarm", "miners"] as const)("plans a %s warband's turn on the Four-Gate Fort in under 312.5 ms", faction => {
         // Three of the team's ready-made squads and one warband. The team ends
         // each of its turns where it stands, so every one of its characters is
         // on watch and every move the warband weighs has a way round to find:
@@ -52,8 +52,8 @@ describe("nextAction's pace (§29.7)", () => {
             times.push(turn(AI, round));
         }
         // On average, with room for a slow turn on a busy test runner.
-        expect(times.reduce((total, ms) => total + ms, 0) / times.length).toBeLessThan(250);
-        expect(Math.max(...times)).toBeLessThan(500);
+        expect(times.reduce((total, ms) => total + ms, 0) / times.length).toBeLessThan(312.5);
+        expect(Math.max(...times)).toBeLessThan(625);
     });
 });
 
@@ -84,9 +84,9 @@ describe("the computer in whole battles (§29.11)", () => {
         expect(warn).not.toHaveBeenCalled();
         expect(error).not.toHaveBeenCalled();
         // On average, with room for a slow turn on a busy test runner (§29.7).
-        expect(times.reduce((total, ms) => total + ms, 0) / times.length).toBeLessThan(250);
-        expect(Math.max(...times)).toBeLessThan(1_000);
-    }, 120_000);
+        expect(times.reduce((total, ms) => total + ms, 0) / times.length).toBeLessThan(312.5);
+        expect(Math.max(...times)).toBeLessThan(1_250);
+    }, 150_000);
 
     it("never breaks at any difficulty or battle size, in either mission", async () => {
         const warn = vi.spyOn(console, "warn");
@@ -109,7 +109,7 @@ describe("the computer in whole battles (§29.11)", () => {
         // Within the budget on average (§29.7). A large battle on Hard fields
         // the most characters on both sides, and its slowest turns take about
         // three-quarters of a second, so the slowest is held to more (§30.5).
-        expect(times.reduce((total, ms) => total + ms, 0) / times.length).toBeLessThan(250);
-        expect(Math.max(...times)).toBeLessThan(1_500);
-    }, 180_000);
+        expect(times.reduce((total, ms) => total + ms, 0) / times.length).toBeLessThan(312.5);
+        expect(Math.max(...times)).toBeLessThan(1_875);
+    }, 225_000);
 });

@@ -3,15 +3,15 @@ import { buildTimeline } from "@/utils/games/replay";
 import { buildBattlefield } from "@/utils/games/battlefield/terrain";
 import { at } from "@/utils/games/battlefield/testFixtures";
 import { gameStateToModel } from "./RealmArenaModels";
-import { kitOf, squadPoints, type CharacterId } from "./characters";
+import { AFFLICTIONS, kitOf, squadPoints, type CharacterId } from "./characters";
 import { nextAction } from "./ai";
 import { CURRENT_RULESET_VERSION, rulesetFor } from "./rulesets";
-import { act, canAct, bounceTargets, beckonPath, check, damageTo, dodgeReach, endTurn, fixedRolls, leapLanding, newFighter, shotOdds, shovePath, startTurn, temporaryCover, type Action, type BattleState, type Fighter } from "./rules";
+import { act, canAct, bounceTargets, beckonPath, check, damageTo, dodgeReach, endTurn, fixedRolls, leapLanding, newFighter, oddsBreakdown, purified, shotOdds, shovePath, startTurn, temporaryCover, type Action, type BattleState, type Fighter } from "./rules";
 import { ACTION_AIMS, rangeSquares, targetsOf } from "./tactics";
 import { MOVE, tapFighter, tapSquare, type TapContext } from "./useTurnDraft";
 import { actBy, battleOf, makeGame, musterAll, play, playScriptedTurn, cmd } from "./testFixtures";
 import { RealmArenaUndo, toldTo, unnamed } from "./RealmArenaLogic";
-import { battleCues, LEAP_LIFT, shakesOf, walkFacing, walkLift, type BattleCue } from "./ui";
+import { battleCues, oddsLines, LEAP_LIFT, shakesOf, walkFacing, walkLift, type BattleCue } from "./ui";
 
 vi.mock("./masteryRecord", () => ({ masterySnapshotOf: vi.fn(async () => ({})) }));
 vi.mock("@/utils/users/clerk", () => ({ userIdListToNamesAndMap: async (ids: string[]) => ({ usernameList: ids, userIdNameMap: Object.fromEntries(ids.map(id => [id, id])) }) }));
@@ -414,4 +414,32 @@ describe("the Realm's abilities as the board plays them (§26, §34)", () => {
         const told = unnamed(after.events, id => id !== 1);
         expect(told.some(event => "via" in event && event.via !== undefined)).toBe(false);
     });
+});
+
+describe("Purify preserves positive conditions", () => {
+    const buffs = { braced: 1, blessed: 2, focused: 2, warded: 2 };
+    const cleric = fighter(0, "cleric", 3, "a", 3, { option: "purify" });
+
+    it("does not consider healthy buffed allies in need of Purify", () => {
+        const ally = fighter(1, "mage", 4, "a", 3, { effects: buffs });
+        const state = battle(cleric, ally);
+        expect(AFFLICTIONS).toContain("poisoned");
+        for (const buff of Object.keys(buffs)) expect(AFFLICTIONS).not.toContain(buff);
+        expect(purified(state, cleric)).toEqual([]);
+        expect(check(state, "a", { kind: "purify", fighter: 0 })).toHaveProperty("refused");
+    });
+
+    it.each([false, true])("heals or clears poison while preserving all buffs (poisoned: %s)", poisoned => {
+        const ally = fighter(1, "mage", 4, "a", 3, { hp: poisoned ? 5 : 3, effects: { ...buffs, ...(poisoned ? { poisoned: 2 } : {}) } });
+        const result = run(battle(cleric, ally), { kind: "purify", fighter: 0 });
+        expect(get(result, 1)).toMatchObject({ hp: 5, effects: buffs });
+        expect(get(result, 1).effects.poisoned).toBeUndefined();
+    });
+});
+
+it("names Bulwark separately from the Stonewarden's active Shield wall in the hit breakdown", () => {
+    const archer = fighter(0, "archer", 1), target = fighter(1, "archer", 6, "b");
+    const coverLine = (guard: Fighter) => oddsLines(oddsBreakdown(battle(archer, target, guard), archer, target), "Bow accuracy", version).find(line => line.amount < 0);
+    expect(coverLine(fighter(2, "knight", 7, "b"))?.label).toBe("Bulwark (counts as half cover)");
+    expect(coverLine(fighter(2, "stonewarden", 7, "b", 3, { effects: { shieldWall: 1 } }))?.label).toBe("Shield wall (counts as half cover)");
 });

@@ -588,7 +588,7 @@ function oddsLineOf(factor: OddsFactor, context?: RulesContext): OddsLine {
         case "cover": {
             const doubled = factor.doubled === "hunkered" ? "doubled: hunkered down"
                 : factor.doubled === "far" ? `doubled: far shot, over ${RULES.FAR_SHOT_DISTANCE} squares` : undefined;
-            return { label: factor.shield ? (factor.cover === "half" ? `${ABILITIES.shieldWall.name} (counts as half cover)` : `Temporary ${factor.cover} cover`) : `${capitalise(factor.cover)} cover`, note: doubled, amount };
+            return { label: factor.shield ? (factor.cover === "half" ? `${ABILITIES[factor.ability ?? "shieldWall"]!.name} (counts as half cover)` : `Temporary ${factor.cover} cover`) : `${capitalise(factor.cover)} cover`, note: doubled, amount };
         }
         case "highGround": return { label: "High ground", amount };
         case "effect": return { label: `Target is ${EFFECTS[factor.effect]!.state}`, amount };

@@ -57,6 +57,8 @@ const WEIGHTS = {
     threat: 0.5,
     /** Each AP of walking between its characters and the centre, once the centre scores. */
     objective: 1,
+    /** Value of each AP above the normal turn allowance. */
+    bonusAp: 0.1,
 };
 
 /**
@@ -458,13 +460,10 @@ function score(plan: Plan, battle: BattleState, events: readonly BattleEvent[]):
         const catalogue = rulesetOf(battle);
         const effects = activeEffects(fighter, battle).map(([id, effect]) => ({ effect, count: fighter.effects[id]! }));
         const delayed = effects.reduce((sum, { effect, count }) => sum + (effect.damage ?? 0) * count, 0);
-        // Conditions already present in old catalogues keep their old valuation.
-        if (catalogue.EFFECTS.poisoned) {
-            total -= side(fighter.owner) * worthOf(fighter, Math.min(fighter.hp, delayed), battle) * WEIGHTS.strength;
-            const focus = effects.reduce((sum, { effect }) => sum + (effect.abilityDamageBonus ?? 0), 0);
-            const readyAbility = abilitiesOf(fighter, battle).some(id => (catalogue.ABILITIES[id]?.damage ?? 0) > 0 && (fighter.cooldowns[id] ?? 0) <= 1);
-            if (readyAbility && focus) total += side(fighter.owner) * focus * WEIGHTS.threat;
-        }
+        total -= side(fighter.owner) * worthOf(fighter, Math.min(fighter.hp, delayed), battle) * WEIGHTS.strength;
+        const focus = effects.reduce((sum, { effect }) => sum + (effect.abilityDamageBonus ?? 0), 0);
+        const readyAbility = focus > 0 && abilitiesOf(fighter, battle).some(id => (catalogue.ABILITIES[id]?.damage ?? 0) > 0 && (fighter.cooldowns[id] ?? 0) <= 1);
+        if (readyAbility) total += side(fighter.owner) * focus * WEIGHTS.threat;
         total += side(fighter.owner) * worthOf(fighter, fighter.hp, plan.state) * WEIGHTS.strength * (side(fighter.owner) > 0 ? ownWorth : 1);
         if (fighter.owner === owner) total += standingTerms(plan, battle, fighter, enemies);
     }
@@ -484,7 +483,7 @@ function standingTerms(plan: Plan, battle: BattleState, fighter: Fighter, enemie
     const { exposure, threat } = harm;
     const armed = fighter.ap >= ruleValuesOf(battle).ATTACK_AP ? 1 : SPENT_THREAT;
     const urgency = Math.min(1, plan.round / ruleValuesOf(battle).CENTRE_SCORES_FROM_ROUND);
-    const bonus = ruleValuesOf(battle).BANK_CAP !== null ? Math.max(0, fighter.ap - ruleValuesOf(battle).ACTION_POINTS) * 0.1 : 0;
+    const bonus = Math.max(0, fighter.ap - ruleValuesOf(battle).ACTION_POINTS) * WEIGHTS.bonusAp;
     return bonus -WEIGHTS.exposure * plan.ownWorth * exposure
         + WEIGHTS.threat * armed * threat
         - WEIGHTS.objective * urgency * plan.toCentre(fighter) / movementOf(fighter, plan.state);
