@@ -1759,8 +1759,8 @@ export function partFollow(part: Pick<ReviewPart, "kind" | "events" | "before" |
 /** A battle's state with what one part of a step left in place of the snapshot's own (every field of it, so one the part leaves out — an enemy not yet seen — is left out). */
 export function withPartState<T extends RealmArenaPartState>(state: T, part: RealmArenaPartState | undefined): T {
     if (!part) return state;
-    const { fighters, ghosts, clouds, blasted, scores, enemy } = part;
-    return { ...state, fighters, ghosts, clouds, blasted, scores, enemy };
+    const { fighters, ghosts, clouds, blasted, scores, enemy, enemiesDefeated } = part;
+    return { ...state, fighters, ghosts, clouds, blasted, scores, enemy, enemiesDefeated };
 }
 
 /**

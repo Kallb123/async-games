@@ -32,3 +32,32 @@ it("shows Shoot + Dodge's hit, graze and damage stats alongside dodge guidance",
     expect(markup).toContain("Damage");
     expect(markup).toContain("Nobody reacts");
 });
+
+
+it("keeps passives and described effects below a selected unit's actions", async () => {
+    const { default: FighterCard } = await import("./components/RealmArenaFighterCard");
+    const field = buildBattlefield({ name: "Details", rows: [".."], deployments: [], objectives: {} });
+    const fighter = { ...newFighter(0, "a", "knight", 0), effects: { poisoned: 1 } };
+    const markup = renderToStaticMarkup(React.createElement(FighterCard, {
+        fighter, battle: { field, fighters: [fighter], rulesVersion: 9 }, label: "Knight",
+    }, React.createElement("div", null, "Selected actions")));
+    expect(markup.indexOf("Bulwark")).toBeGreaterThan(markup.indexOf("Selected actions"));
+    expect(markup.indexOf("Poisoned")).toBeGreaterThan(markup.indexOf("Selected actions"));
+    expect(markup).toContain("1 damage a turn, 1 turn");
+    expect(markup).toContain("Info about Knight");
+});
+
+it("sums allied health while only counting enemies supplied by the visible battle", async () => {
+    const { default: TeamHealth } = await import("./components/RealmArenaTeamHealth");
+    const { warbandOwner } = await import("./rules");
+    const field = buildBattlefield({ name: "Health", rows: ["...."], deployments: [], objectives: {} });
+    const fighters = [
+        { ...newFighter(0, "a", "knight", 0), hp: 4, maxHp: 12 },
+        { ...newFighter(1, "b", "knight", 1), hp: 0, maxHp: 12 },
+        { ...newFighter(2, warbandOwner(0), "knight", 2), hp: 3, maxHp: 8 },
+    ];
+    const markup = renderToStaticMarkup(React.createElement(TeamHealth, { battle: { field, fighters, fog: true } }));
+    expect(markup).toContain("Team · 4/24 HP");
+    expect(markup).toContain("Enemies in sight · 3/8 HP");
+    expect(markup).toContain('max="24" value="4"');
+});

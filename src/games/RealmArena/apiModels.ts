@@ -44,6 +44,8 @@ export interface IRealmArenaSpecificGameStateResponse {
     coop: boolean;
     /** The co-op mission; absent is Hold the Centre. */
     mission?: "holdOut";
+    /** Total fallen enemies in Hold Out, including those beyond current sight. */
+    enemiesDefeated?: number;
     /**
      * Hold Out's next wave (§30.11): the round it lands in, and how many of the
      * enemy it would bring if it landed now — or, in fog of war (`upTo`), the
@@ -106,7 +108,7 @@ export interface IRealmArenaGameDataResponse extends IGameDataResponse {
  * the same fog of war as the snapshot is (§27), so it holds only what the
  * viewer's side could see at that point.
  */
-export type RealmArenaPartState = Pick<IRealmArenaSpecificGameStateResponse, "fighters" | "ghosts" | "clouds" | "blasted" | "scores" | "enemy">;
+export type RealmArenaPartState = Pick<IRealmArenaSpecificGameStateResponse, "fighters" | "ghosts" | "clouds" | "blasted" | "scores" | "enemy" | "enemiesDefeated">;
 
 /**
  * One part of a step that held more than one side's doings (a co-op End turn

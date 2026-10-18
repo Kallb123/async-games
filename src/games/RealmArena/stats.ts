@@ -10,7 +10,7 @@ import { ruleValuesOf, rulesetOf, type RulesContext } from "./rulesets";
 import { DEFAULT_CLIMB } from "@/utils/games/battlefield/pathfinding";
 import { FULL_HEIGHT } from "@/utils/games/battlefield/terrain";
 import { pluralize } from "@/utils/ui/text";
-import { kitOf, ITEM_IDS, STRIKING_ABILITIES, type Ability, type AbilityId, type Affliction, type CharacterId, type Item, type ItemId, type OptionId, type Weapon } from "./characters";
+import { kitOf, ITEM_IDS, STRIKING_ABILITIES, type Ability, type AbilityId, type EffectId, type CharacterId, type Item, type ItemId, type OptionId, type Weapon } from "./characters";
 import { CHARACTER_IDS, optionsFor } from "./roster";
 import { ROLL_SIDES, sightOf } from "./rules";
 
@@ -111,15 +111,23 @@ const ONCE = "Once";
 const PER_TURN = "1/turn";
 
 /** What an effect does, in a line: "Burning: 1 damage a turn, 2 turns". */
-function effectLine(effect: Affliction, context?: RulesContext): string {
+export function effectLine(effect: EffectId, context?: RulesContext, remaining?: number): string {
     const { EFFECTS } = rulesetOf(context);
     const { name, count, ...rest } = EFFECTS[effect]!;
     const what = effect === "slowed" ? "half movement"
         : "damage" in rest ? `${rest.damage} damage a turn`
         : "ap" in rest ? `${rest.ap} AP next turn`
         : "hitBonus" in rest ? `+${rest.hitBonus}% to hit it`
+        : rest.movementFactor ? `${rest.movementFactor}× movement`
+        : rest.apModifier ? `${rest.apModifier} AP per turn`
+        : rest.armour ? `+${rest.armour} armour`
+        : rest.damageBonus ? `+${rest.damageBonus} damage per hit`
+        : rest.abilityDamageBonus ? `+${rest.abilityDamageBonus} ability damage per hit`
+        : rest.cover ? `${rest.cover} cover`
+        : effect === "hunkered" ? "Double cover against shots"
+        : effect === "shieldWall" ? rulesetOf(context).ABILITIES.shieldWall!.description
         : undefined;
-    return `${name}${what ? `: ${what}` : ""}, ${pluralize(count, "turn")}`;
+    return `${name}${what ? `: ${what}` : ""}, ${pluralize(remaining ?? count, "turn")}`;
 }
 
 /**

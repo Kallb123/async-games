@@ -850,11 +850,12 @@ describe("Realm Arena's random co-op enemy", () => {
         const hidden = realmArenaStateToModel(game.specificGameState, null, null);
         expect(Object.keys(hidden).sort()).toEqual([
             "battleRounds", "blasted", "budget", "canUndo", "clouds", "coop",
-            "difficulty", "fighters", "fog", "ghosts", "map", "mastery", "mission", "mustered",
+            "difficulty", "enemiesDefeated", "fighters", "fog", "ghosts", "map", "mastery", "mission", "mustered",
             "myMuster", "nextWave", "phase", "round", "rulesVersion", "scores", "size",
         ]);
         // What the host chose in the open: every viewer's, the null viewer's included.
-        expect(hidden).toMatchObject({ difficulty: "hard", size: "large" });
+        expect(hidden).toMatchObject({ difficulty: "hard", size: "large", enemiesDefeated: 0 });
+        for (const viewer of VIEWERS) expect(realmArenaStateToModel(game.specificGameState, viewer, null).enemiesDefeated).toBe(0);
         // In fog with the enemy unseen, the next wave's round and nothing of its size, which would name the faction.
         expect(hidden.nextWave).toEqual({ round: 4 });
         expect(hidden).not.toHaveProperty("enemy");
