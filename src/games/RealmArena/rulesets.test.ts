@@ -24,6 +24,7 @@ vi.mock("@/utils/users/clerk", () => ({
 
 // Simulate the next release without shipping changed balance. Both games send
 // today's command version; their stored rulesVersion must select every value.
+// The mock's 8 and 9 stand in for the shipped release 8 and an unreleased one.
 vi.mock("./rulesets", async importOriginal => {
     const real = await importOriginal<typeof import("./rulesets")>();
     const old = real.rulesetFor(7);
@@ -75,14 +76,14 @@ const stateFor = (rulesVersion: number): BattleState => battleFrom(FIELD, {
 describe("Realm Arena ruleset compatibility", () => {
     it("keeps released catalogues deeply frozen and refuses unknown versions", async () => {
         const real = await vi.importActual<typeof import("./rulesets")>("./rulesets");
-        for (const version of [undefined, 0, 1, 2, 3, 4, 5, 6, 7]) {
+        for (const version of [undefined, 0, 1, 2, 3, 4, 5, 6, 7, 8]) {
             const rules = real.rulesetFor(version);
             expect(Object.isFrozen(rules)).toBe(true);
             expect(Object.isFrozen(rules.CHARACTERS.knight.abilities)).toBe(true);
             expect(Object.isFrozen(rules.FACTIONS.realm.readyMade[100])).toBe(true);
         }
         expect(() => { real.rulesetFor(7).CHARACTERS.knight.weapon.damage = 99; }).toThrow();
-        for (const version of [-1, 1.5, NaN, 8]) expect(() => real.rulesetFor(version)).toThrow(/Unsupported/);
+        for (const version of [-1, 1.5, NaN, 9]) expect(() => real.rulesetFor(version)).toThrow(/Unsupported/);
         expect(real.rulesetFor(undefined).CHARACTERS.mage.weapon).toMatchObject({ accuracy: 70, range: 10 });
         expect(real.rulesetFor(undefined).ABILITIES.raise.oncePerBattle).toBe(true);
         expect(real.rulesetFor(7).ABILITIES.heal.oncePerTurn).toBe(true);

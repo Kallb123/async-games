@@ -306,7 +306,10 @@ deployed, so nothing under `src/` may import from it.
   (`src/utils/apiModels/`), also run `npm test` — the serializable-registry test
   guards that every game's rules module stays wired into the `GameLogic` barrel.
   CI runs all four on every push, and `lint` runs with `--max-warnings 0`, so a
-  single warning fails it. Don't skip the linter because a change "only touches
+  single warning fails it. A test that holds code to a time budget (Realm
+  Arena's planner) goes in a `*.pace.test.ts` file: `vitest.config.ts` runs
+  those alone, after every other file, so the budget isn't read against
+  whatever else the runner is busy with. Don't skip the linter because a change "only touches
   presentation": the React Compiler rules it enforces (`react-hooks/refs` and
   friends) catch real mistakes that the type checker and the build both let
   through.

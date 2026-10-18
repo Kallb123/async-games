@@ -202,8 +202,9 @@ export interface Kit {
     abilities: readonly AbilityId[];
 }
 
-/** Starter kits are reused: the planner reads them thousands of times a turn. */
+/** Kits are reused, starter and swapped alike: the planner reads them thousands of times a turn. */
 const STARTER_KITS = new WeakMap<Character, Kit>();
+const SWAPPED_KITS = new WeakMap<CharacterOption, Kit>();
 export function kitOf(character: CharacterId, option?: OptionId, context?: RulesContext): Kit {
     const { CHARACTERS, OPTIONS } = rulesetOf(context);
     const starter = CHARACTERS[character];
@@ -217,9 +218,15 @@ export function kitOf(character: CharacterId, option?: OptionId, context?: Rules
         }
         return kit;
     }
-    return "weapon" in swap
-        ? { weapon: swap.weapon, abilities }
-        : { weapon, abilities: abilities.map(id => id === swap.replaces ? swap.ability : id) };
+    // An option names its character, so it swaps into one starter only.
+    let kit = SWAPPED_KITS.get(swap);
+    if (!kit) {
+        kit = Object.freeze("weapon" in swap
+            ? { weapon: swap.weapon, abilities }
+            : { weapon, abilities: Object.freeze(abilities.map(id => id === swap.replaces ? swap.ability : id)) });
+        SWAPPED_KITS.set(swap, kit);
+    }
+    return kit;
 }
 
 export type ItemId = "fireFlask" | "thunderFlask" | "smokePot" | "healingDraught";

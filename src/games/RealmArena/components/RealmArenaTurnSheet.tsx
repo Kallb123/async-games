@@ -388,7 +388,12 @@ function Detail({ draft, battle, name, ap, target }: DetailProps) {
         const clears = cleared.length > 0 ? `is no longer ${cleared.join(' or ')}` : '';
         return hint(`${Name(target.id)} ${[heals, clears].filter(Boolean).join(', and ')}.`);
     }
-    if (aim === 'raise') return hint(`${Name(target.id)} stands again at ${Math.ceil(max / 2)} HP, and acts from your next turn.`);
+    if (aim === 'raise') {
+        // Only on its owner's own turn does a raised character have AP to spend.
+        const yours = target.owner === fighter.owner;
+        const raisedAp = yours ? ABILITIES.raise.apOnRaise ?? 0 : 0;
+        return hint(`${Name(target.id)} stands again at ${Math.ceil(max / 2)} HP, ${raisedAp > 0 ? `with ${raisedAp} AP to spend now` : `and acts from ${yours ? 'your' : 'its owner\'s'} next turn`}.`);
+    }
     if (aim === 'huntersMark') {
         return hint(`${Name(target.id)} is marked: +${EFFECTS.marked.hitBonus}% to hit them, for every attacker, until their turn after next.`);
     }

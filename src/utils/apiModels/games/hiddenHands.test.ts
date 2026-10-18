@@ -733,7 +733,8 @@ describe("Realm Arena's random co-op enemy", () => {
     }, 60_000);
 
     it("never says which of its characters did what out of sight: an ability names a kind of character, and so the faction", async () => {
-        const game = makeRealmArenaGame(["a", "b"], {}, { fog: true, coop: { enemy: "realm", random: true } });
+        // Rules version 7, the last in which a Knight raises its shield wall as an action.
+        const game = makeRealmArenaGame(["a", "b"], {}, { fog: true, coop: { enemy: "realm", random: true }, rulesVersion: 7 });
         await realmArenaMusterAll(game);
         // The first warband's Knight raises a shield wall where it stands, far
         // out of the team's sight: its turn, as a replay plays it.

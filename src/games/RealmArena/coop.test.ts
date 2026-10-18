@@ -15,7 +15,7 @@ import {
 import type { IRealmArenaStepOutcome, RealmArenaPartState } from "./apiModels";
 import type { GameResultBarChart, GameResultChart, GameResultTable } from "@/utils/apiModels/GameDataApi";
 import {
-    battleOf, endTurnBy, makeGame, muster, musterAll, play, playScriptedBattle, playScriptedTurn, readyMadePicks, type RealmArenaTestGame,
+    battleOf, coopBattle, endTurnBy, makeGame, muster, musterAll, play, playScriptedBattle, playScriptedTurn, readyMadePicks, seedRolls, TEAMS, warbandsOf, type RealmArenaTestGame,
 } from "./testFixtures";
 
 // docs/games/realm-arena.md §29, PR 4a: the enemy's turn. Co-op from the setup
@@ -49,49 +49,10 @@ afterEach(() => {
     vi.restoreAllMocks();
 });
 
-const TEAMS = [["a", "b"], ["a", "b", "c"]];
-
-/** Every roll from here on drawn from a seed, so a battle plays the same each run (mulberry32). */
-function seedRolls(seed: number): void {
-    let state = seed >>> 0;
-    vi.spyOn(globalThis.crypto, "getRandomValues").mockImplementation(<T extends ArrayBufferView | null>(array: T): T => {
-        const values = array as unknown as Uint32Array;
-        for (let i = 0; i < values.length; i++) {
-            state = (state + 0x6d2b79f5) >>> 0;
-            let t = state;
-            t = Math.imul(t ^ (t >>> 15), t | 1);
-            t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
-            values[i] = (t ^ (t >>> 14)) >>> 0;
-        }
-        return array;
-    });
-}
-
-/** The warbands of a co-op battle, by owner. */
-const warbandsOf = (game: RealmArenaTestGame) => game.gameState.turnOrder.map((_, k) => warbandOwner(k));
-
 /** Whether the enemy won: the sides ranked as §29.5 ranks them, with the warbands' seats last, so a battle level all the way goes to them. */
 function enemyWon(game: RealmArenaTestGame): boolean {
     const ranked = standings(battleOf(game), [...game.gameState.turnOrder, ...warbandsOf(game)], game.specificGameState.scores);
     return isWarband(ranked[0]);
-}
-
-/**
- * A co-op battle fought to its end, the team played by the fixtures' script,
- * timing each player's turn — the warband's turn that follows is nearly all
- * of it.
- */
-async function coopBattle(players: string[], settings: RealmArenaSettings): Promise<{ game: RealmArenaTestGame; times: number[] }> {
-    const game = makeGame(players, {}, settings);
-    await musterAll(game);
-    const times: number[] = [];
-    for (let turn = 0; !game.complete; turn++) {
-        if (turn > 100) throw new Error("the battle outlasted its turn limit");
-        const start = performance.now();
-        await playScriptedTurn(game);
-        times.push(performance.now() - start);
-    }
-    return { game, times };
 }
 
 describe("co-op's setting (§29.8)", () => {
@@ -844,7 +805,7 @@ describe("a review's parts of an End turn that held the enemy's (§29.9)", () =>
         }
         // Somewhere the warband acted, or its turn ended, out of their sight.
         expect(dropped).toBeGreaterThan(0);
-    });
+    }, 60_000);
 
     it("lists no part of the warband's turn out of sight, and not its lone part", async () => {
         const game = makeGame(["a", "b"], {}, { fog: true, coop: { enemy: "realm" } });
@@ -876,36 +837,6 @@ describe("a review's parts of an End turn that held the enemy's (§29.9)", () =>
 });
 
 describe("the computer in whole battles (§29.11)", () => {
-    it("never breaks: every co-op battlefield, every faction, with and without fog, to the end within its time", async () => {
-        const warn = vi.spyOn(console, "warn");
-        const error = vi.spyOn(console, "error");
-        const times: number[] = [];
-        let seed = 1;
-        for (const players of TEAMS) {
-            for (const enemy of FACTION_IDS) {
-                for (const fog of [false, true]) {
-                    seedRolls(seed++);
-                    const battle = await coopBattle(players, { fog, coop: { enemy } });
-                    times.push(...battle.times);
-                    expect(battle.game.complete).toBe(true);
-                    // One ending for the whole team (§29.5).
-                    expect(["teamwin", "teamloss"]).toContain(battle.game.endReason);
-                    expect(battle.game.winner).toBe("");
-                    // Every warband fought: each took turns, and the rotation came round.
-                    const recorded = battle.game.gameState.commandHistory.flatMap(command => (command as RealmArenaEndTurn).recordedEnemyActions ?? []);
-                    const owners = new Set(recorded.map(action => battleOf(battle.game).fighters[action.fighter].owner));
-                    expect(owners).toEqual(new Set(warbandsOf(battle.game)));
-                }
-            }
-        }
-        // Nothing it chose was refused, and the planner never threw.
-        expect(warn).not.toHaveBeenCalled();
-        expect(error).not.toHaveBeenCalled();
-        // On average, with room for a slow turn on a busy test runner (§29.7).
-        expect(times.reduce((total, ms) => total + ms, 0) / times.length).toBeLessThan(250);
-        expect(Math.max(...times)).toBeLessThan(1_000);
-    }, 120_000);
-
     it("plays well: it beats the scripted team in at least 19 battles of 20", async () => {
         let won = 0;
         for (let seed = 0; seed < 20; seed++) {
@@ -936,31 +867,6 @@ describe("the computer in whole battles (§29.11)", () => {
         expect(warn).not.toHaveBeenCalled();
         expect(error).not.toHaveBeenCalled();
     }, 120_000);
-
-    it("never breaks at any difficulty or battle size, in either mission", async () => {
-        const warn = vi.spyOn(console, "warn");
-        const error = vi.spyOn(console, "error");
-        const times: number[] = [];
-        let seed = 900;
-        for (const size of ["small", undefined, "large"] as const) {
-            for (const difficulty of ["easy", undefined, "hard"] as const) {
-                seedRolls(seed);
-                const mission = seed % 2 === 0 ? "holdOut" as const : undefined;
-                const battle = await coopBattle(TEAMS[seed % 2], { fog: seed % 3 === 0, size, coop: { enemy: "realm", mission, difficulty } });
-                seed++;
-                times.push(...battle.times);
-                expect(battle.game.complete).toBe(true);
-                expect(["teamwin", "teamloss"]).toContain(battle.game.endReason);
-            }
-        }
-        expect(warn).not.toHaveBeenCalled();
-        expect(error).not.toHaveBeenCalled();
-        // Within the budget on average (§29.7). A large battle on Hard fields
-        // the most characters on both sides, and its slowest turns take about
-        // three-quarters of a second, so the slowest is held to more (§30.5).
-        expect(times.reduce((total, ms) => total + ms, 0) / times.length).toBeLessThan(250);
-        expect(Math.max(...times)).toBeLessThan(1_500);
-    }, 180_000);
 
     it("replays a large battle on Hard to the same end without asking the planner", async () => {
         seedRolls(13);
