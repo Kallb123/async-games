@@ -1522,4 +1522,16 @@ describe("rules version 8: a passive shield wall, and a raise with AP to spend",
         const sides = { a: "team", b: "team" };
         expect(run({ field, fighters: [cleric, ally], sides, ...V8 }, "a", { kind: "raise", fighter: 1, target: 2 }).byId(2)).toMatchObject({ hp: 6, ap: 0 });
     });
+
+    it("leaves a battle begun under version 7 as it was: a shield wall raised for allies alone, and a raise with nothing to spend", () => {
+        const V7 = { rulesVersion: 7 };
+        const wall = (extra: Partial<Fighter>) => shotOdds({ field, fighters: [archer, target, { ...knight, ...extra }], ...V7 }, archer, target);
+        expect(wall({})).toMatchObject({ cover: "none" });
+        expect(wall({ effects: { shieldWall: 1 } })).toMatchObject({ cover: "half" });
+        expect(wall({ owner: "a", effects: { shieldWall: 1 } })).toMatchObject({ cover: "none" });
+        expect(check({ field, fighters: [{ ...knight, owner: "a" }], ...V7 }, "a", { kind: "shieldWall", fighter: 3 })).toEqual({ ap: 2 });
+        const cleric = fighter(1, "a", "cleric", at(field, 1, 1));
+        const own = fighter(2, "a", "knight", at(field, 2, 2), { hp: 0, ap: 0 });
+        expect(run({ field, fighters: [cleric, own], ...V7 }, "a", { kind: "raise", fighter: 1, target: 2 }).byId(2)).toMatchObject({ hp: 6, ap: 0 });
+    });
 });

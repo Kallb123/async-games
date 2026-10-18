@@ -53,13 +53,20 @@ const RULESETS: Readonly<Record<number, RealmArenaRuleset>> = Object.freeze({
     4: legacyRuleset, 5: legacyRuleset, 6: legacyRuleset, 7: rulesetV7, 8: rulesetV8,
 });
 
+// The last version asked for, read before the checks: the planner asks
+// millions of times a battle, nearly always for one version.
+let lastVersion: number | undefined;
+let lastRuleset: RealmArenaRuleset;
+
 export const currentRuleset = rulesetFor(CURRENT_RULESET_VERSION);
 
 /** Missing means legacy forever. Unknown versions fail instead of silently using today's rules. */
 export function rulesetFor(rulesVersion: number | undefined): RealmArenaRuleset {
     const version = rulesVersion ?? 0;
+    if (version === lastVersion) return lastRuleset;
     if (!Number.isInteger(version) || !Object.hasOwn(RULESETS, version)) throw new Error(`Unsupported Realm Arena rules version: ${version}`);
-    return RULESETS[version];
+    lastVersion = version;
+    return lastRuleset = RULESETS[version];
 }
 
 /**
