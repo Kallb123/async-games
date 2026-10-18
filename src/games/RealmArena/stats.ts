@@ -124,7 +124,7 @@ export function effectLine(effect: EffectId, context?: RulesContext, remaining?:
         : rest.damageBonus ? `+${rest.damageBonus} damage per hit`
         : rest.abilityDamageBonus ? `+${rest.abilityDamageBonus} ability damage per hit`
         : rest.cover ? `${rest.cover} cover`
-        : effect === "hunkered" ? "Double cover against shots"
+        : effect === "hunkered" ? "double cover against shots"
         : effect === "shieldWall" ? rulesetOf(context).ABILITIES.shieldWall!.description
         : undefined;
     return `${name}${what ? `: ${what}` : ""}, ${pluralize(remaining ?? count, "turn")}`;

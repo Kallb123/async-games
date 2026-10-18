@@ -5,9 +5,9 @@ export default function RealmArenaTeamHealth({ battle }: { battle: BattleState }
     return <div className="ag-stat ag-ra-team-health">
         {[false, true].map(enemy => {
             const hp = squadHp(battle.fighters.filter(fighter => isWarband(fighter.owner) === enemy), battle);
-            const label = enemy ? 'Enemies in sight' : 'Team HP';
+            const label = enemy ? 'Enemies in sight' : 'Team';
             return <div key={label} title={`${label} · ${hp.remaining}/${hp.total} HP`}>
-                <span className="ag-stat-label">{enemy ? 'Enemies Seen HP' : label}</span>
+                <span className="ag-stat-label">{label} HP</span>
                 <span className="ag-stat-label">{hp.remaining}/{hp.total}</span>
                 <meter aria-label={`${label} health`} min={0} max={hp.total || 1} value={hp.remaining} />
             </div>;
