@@ -251,7 +251,10 @@ describe("nextAction's open puzzles (§29.11)", () => {
         // one flanks it, behind the southern one only the eastern three, and
         // in the open all four. Exposure counts the worst single shot (§29.7),
         // which is a flanked one from somebody wherever it stands, so it sees
-        // nothing to gain and stays where all four can shoot it.
+        // nothing to gain and stays where all four can shoot it. Counting
+        // every shot, as the HP it could expect to lose to all of them, solves
+        // it, and made the warbands weaker in whole battles
+        // (docs/games/realm-arena-balance.md, *Planner experiments*).
         const field = fieldOf([
             "............o...........",
             "............o...........",
@@ -285,7 +288,10 @@ describe("nextAction's open puzzles (§29.11)", () => {
         // Exposure reads the Knight from where it stands (§29.7), and a sword
         // two squares away can't strike, so the Scout counts itself safe and
         // stays, for the Knight to walk up to and strike next turn. Eight
-        // squares west, it would be out of the Knight's walk.
+        // squares west, it would be out of the Knight's walk. Reading a melee
+        // enemy from anywhere it could walk to solves it, and made the
+        // warbands weaker in whole battles (docs/games/realm-arena-balance.md,
+        // *Planner experiments*).
         const field = fieldOf(Array(9).fill(".".repeat(24)));
         const scout = ready(0, AI, "scout", at(field, 12, 4), { ap: 1 });
         const knight = ready(1, "a", "knight", at(field, 14, 4));

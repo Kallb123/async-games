@@ -3049,7 +3049,9 @@ sure it is.
   experiments*). It steps out of a crossfire:
   Exposure counts the worst single shot, so one flanker and four look the
   same. It steps out of a Knight's reach: Exposure reads each enemy from
-  where it stands, not where it could walk to.
+  where it stands, not where it could walk to. Fixing either Exposure
+  solves its puzzle and made the warbands more cautious and weaker in whole
+  battles, as the same section records.
 - **It never cheats** (PR 3). Moving an enemy it can't see anywhere else on
   the map never changes its choice.
 - **It never breaks** (PR 4a). Whole battles on every map, against every
@@ -4523,4 +4525,4 @@ Realm, its sibling in the same world.
 | 1.54 | A Cleric's Heal and a Broodmother's Regrowth can be aimed at the healer itself, as a healing draught can (§13.6, §31.2). Only what a move may be aimed at grows, so no command version. |
 | 1.55 | The Miners, a third faction (§33, B6): five dwarves — the Miner, the Stonewarden, the Prospector, the Sapper and the Runepriest — each tougher and a little dearer than the Realm character it stands in for, hitting as hard; and Dynamite, the Sapper's blast of 4 over a 3×3, which leaves no effect. |
 | 1.56 | The Realm troop overhaul, designed but not built (§34): the Scout leaves the Realm; the Man-at-arms gains Leap and Slash and Dash; the Knight a passive Bulwark (half cover for anyone beside it, enemies too), Taunt (armour for its side for a turn) and Shove; the Archer four new arrows; the Mage Ice Ball, Thunder and Focus; the Cleric Beckon, Blessing and Ward, and a Raise that lets the raised act at once on its owner's turn. Values not yet agreed are proposed, and asked in §34.10. |
-| 1.57 | Benchmarking the planner. Open puzzles (§29.11): three it fails today, kept as `it.fails` — taking a likely knock-out over wounding a fresh enemy, stepping out of a crossfire, and stepping out of a Knight's reach. And the balance harness's `--team-planner <ref>` (§30.12), which has the team play an older planner against the checkout's warbands, so a change to the planner is measured as the warbands' alone; its first experiment, counting the team per head, is in `realm-arena-balance.md` and wasn't kept. Tests, tooling and documents only. |
+| 1.57 | Benchmarking the planner. Open puzzles (§29.11): three it fails today, kept as `it.fails` — taking a likely knock-out over wounding a fresh enemy, stepping out of a crossfire, and stepping out of a Knight's reach. And the balance harness's `--team-planner <ref>` (§30.12), which has the team play an older planner against the checkout's warbands, so a change to the planner is measured as the warbands' alone; its first experiments — counting the team per head, and an Exposure that adds every shot up and lets a melee enemy walk — are in `realm-arena-balance.md`, and none was kept. Tests, tooling and documents only. |

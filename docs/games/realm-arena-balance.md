@@ -356,6 +356,49 @@ worth fixing: run the harness before keeping a change to the score. And
 anything that lowers what damage short of a knock-out is worth needs a way
 to see the knock-outs it sets up, which a one-action planner doesn't have.
 
+### A truer Exposure (not kept)
+
+The other two open puzzles (§29.11) are Exposure's: the HP a warband's
+character could lose next turn, which reads the worst single attack on it
+from where each enemy stands. So it stands in front of four Archers as
+happily as one, and two squares from a Knight as if the Knight couldn't
+walk. Two fixes, in Exposure alone:
+
+- **It adds up.** Every enemy's attack, landing or missing as its odds say,
+  and the HP the character could expect to lose to all of them — the chance
+  of each total built up an attack at a time, totals past its HP counted as
+  its HP. A plain sum capped at its HP didn't do: four Archers' sum passes a
+  Man-at-arms' 8 HP whether it stands in the open or behind a wall, so the
+  cap made the two the same.
+- **It walks.** A melee enemy counts from anywhere it could walk to with its
+  next turn's AP less an attack's, over the ground alone (bodies in the way
+  not counted, so it's made once a battlefield). Ranged enemies stayed where
+  they stand: an Archer's 20 squares already reach most of the board.
+
+Each solved its puzzle, and every other puzzle and the planner's pace held.
+Measured against a fresh baseline after main's ruleset change, on seeds
+1–40, 360 battles a run, the team on `main`'s planner:
+
+| Warbands' planner | Hold Out, team wins | Team's last round in Hold Out | Hold the Centre, team wins |
+|---|---:|---:|---:|
+| `main` | 2 of 360 | — | 173 of 360 |
+| It adds up | 4 | +0.11 ± 0.18 rounds | 228 |
+| It walks | 8 | +0.05 ± 0.22 rounds | 255 |
+| Both | 10 | +0.64 ± 0.24 rounds | **342** |
+
+**Why.** Both make the warbands more cautious, and caution costs them. The
+weights (§29.7) were settled against the old Exposure, which undercounted
+the danger; counted more truly at the same weight, keeping out of harm
+outweighs attacking and taking the keep. Hold Out shows it least, as its
+warbands weigh their own characters at a quarter (`HOLD_OUT_OWN_WORTH`), so
+their Exposure counts an eighth; in Hold the Centre, with both, the team
+won all but 18.
+
+**What it says.** A truer Exposure would want its weight tuned down to
+match, which is a sweep of runs rather than one; the puzzles alone can't
+tell whether any weight beats `main`. The patch is small (Exposure's
+`harmAt`, a strike zone per walk), so redoing it is the cheap part.
+
 ## How each lever was built
 
 For re-running: each was an environment switch in a scratch worktree.
