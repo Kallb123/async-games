@@ -38,6 +38,8 @@ export default function RealmArenaFighterCard({ fighter, battle, label, children
     const { CHARACTERS, ABILITIES, ITEMS, EFFECTS } = rulesetOf(battle);
     const character = CHARACTERS[fighter.character];
     const weapon = weaponOf(battle, fighter);
+    const passives = abilitiesOf(fighter, battle).filter(id => ABILITIES[id]!.passive);
+    const effects = effectsOn(fighter);
     return (
         <Section label={label} action={<InfoButton label={`Info about ${character.name}`} onClick={() => setInfo(true)} />}>
             {info && <RealmArenaUnitInfo context={battle} unit={{ kind: 'character', id: fighter.character }} onClose={() => setInfo(false)} />}
@@ -74,14 +76,14 @@ export default function RealmArenaFighterCard({ fighter, battle, label, children
                         )}
                     </div>
                 )}
-                <div className="ag-list">
-                    {abilitiesOf(fighter, battle).filter(id => ABILITIES[id]!.passive).map(id => (
+                {(passives.length > 0 || effects.length > 0) && <div className="ag-list">
+                    {passives.map(id => (
                         <ListRow key={id} icon={ABILITY_MARK} title={ABILITIES[id]!.name} sub={ABILITIES[id]!.description} action={<span className="ag-tag ag-tag--quiet">Passive</span>} />
                     ))}
-                    {effectsOn(fighter).map(id => (
+                    {effects.map(id => (
                         <ListRow key={id} icon={<SpriteImage sprite={EFFECT_ART[id]} boxed />} title={EFFECTS[id]!.name} sub={effectLine(id, battle, fighter.effects[id])} />
                     ))}
-                </div>
+                </div>}
             </div>
         </Section>
     );

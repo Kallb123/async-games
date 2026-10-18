@@ -61,3 +61,15 @@ it("sums allied health while only counting enemies supplied by the visible battl
     expect(markup).toContain("Enemies in sight · 3/8 HP");
     expect(markup).toContain('max="24" value="4"');
 });
+
+
+it("hides the details list when the selected unit has no passives or status effects", async () => {
+    const { default: FighterCard } = await import("./components/RealmArenaFighterCard");
+    const field = buildBattlefield({ name: "No details", rows: [".."], deployments: [], objectives: {} });
+    const fighter = newFighter(0, "a", "archer", 0);
+    const markup = renderToStaticMarkup(React.createElement(FighterCard, {
+        fighter, battle: { field, fighters: [fighter], rulesVersion: 9 }, label: "Archer",
+    }, React.createElement("div", null, "Selected actions")));
+    expect(markup).toContain("Selected actions");
+    expect(markup).not.toContain('class="ag-list"');
+});
