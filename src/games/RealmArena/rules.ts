@@ -580,19 +580,23 @@ function activeEffects(fighter: Pick<Fighter, "effects">, context?: RulesContext
 }
 
 type EffectBonus = "armour" | "damageBonus" | "abilityDamageBonus";
-/** Per catalogue, whether any of its effects carries each bonus: most never do, and `damageTo` is on the planner's hot path. */
-const EFFECT_BONUSES = new WeakMap<object, ReadonlySet<EffectBonus>>();
+/** Per catalogue, whether any of its effects carries each bonus, or cover: most never do, and `damageTo` and `temporaryCover` are on the planner's hot path. */
+const EFFECT_BONUSES = new WeakMap<object, ReadonlySet<EffectBonus | "cover">>();
+
+function effectsCarrying(context?: RulesContext): ReadonlySet<EffectBonus | "cover"> {
+    const { EFFECTS } = rulesetOf(context);
+    let carried = EFFECT_BONUSES.get(EFFECTS);
+    if (!carried) {
+        carried = new Set((["armour", "damageBonus", "abilityDamageBonus", "cover"] as const).filter(bonus => Object.values(EFFECTS).some(effect => effect?.[bonus])));
+        EFFECT_BONUSES.set(EFFECTS, carried);
+    }
+    return carried;
+}
 
 /** One numeric field of a character's active effects added up: Braced's armour, Blessed's damage. */
 function effectTotal(fighter: Partial<Pick<Fighter, "effects">>, field: EffectBonus, context?: RulesContext): number {
     if (!fighter.effects) return 0;
-    const { EFFECTS } = rulesetOf(context);
-    let carried = EFFECT_BONUSES.get(EFFECTS);
-    if (!carried) {
-        carried = new Set((["armour", "damageBonus", "abilityDamageBonus"] as const).filter(bonus => Object.values(EFFECTS).some(effect => effect?.[bonus])));
-        EFFECT_BONUSES.set(EFFECTS, carried);
-    }
-    return carried.has(field) ? activeEffects({ effects: fighter.effects }, context).reduce((sum, [, effect]) => sum + (effect[field] ?? 0), 0) : 0;
+    return effectsCarrying(context).has(field) ? activeEffects({ effects: fighter.effects }, context).reduce((sum, [, effect]) => sum + (effect[field] ?? 0), 0) : 0;
 }
 
 export function reactionsBlocked(fighter: Fighter, context?: RulesContext): boolean {
@@ -623,8 +627,6 @@ export function temporaryCover(state: BattleState, target: Fighter): Cover {
     const rank = { none: 0, half: 1, full: 2 };
     let cover: Cover = "none";
     const offer = (next: Cover | undefined) => { if (next && rank[next] > rank[cover]) cover = next; };
-    for (const [, effect] of activeEffects(target, state)) offer(effect.cover);
-    if (rank[cover] === 2) return cover;
     const catalogue = rulesetOf(state);
     let known = COVER_ABILITIES.get(catalogue);
     if (!known) {
@@ -633,15 +635,22 @@ export function temporaryCover(state: BattleState, target: Fighter): Cover {
         COVER_ABILITIES.set(catalogue, known);
     }
     const { auras, reachesEnemies } = known;
+    // Most catalogues have no effect that covers: every shot's odds ask.
+    if (effectsCarrying(state).has("cover")) for (const [, effect] of activeEffects(target, state)) offer(effect.cover);
+    if (rank[cover] === 2) return cover;
     for (const giver of state.fighters) {
-        if (!isStanding(giver)) continue;
+        // Only the target and those next to it can give it cover. Every shot's
+        // odds ask, so the cheap test goes first: an aura reaching enemies
+        // would otherwise weigh every character on the field (§29.7).
+        const self = giver.id === target.id;
+        if (!isStanding(giver) || (!self && !isNeighbour(state.field, giver.square, target.square))) continue;
         const friendly = allied(state, giver.owner, target.owner);
         if (!friendly && !reachesEnemies) continue;
         for (const [id, ability] of auras) {
             if (!ability.cover || (!friendly && ability.coverFor !== "everyone")) continue;
             if (!ability.passive && !(ability.stance && hasEffect(giver, ability.stance))) continue;
             if (!abilitiesOf(giver, state).includes(id)) continue;
-            if (giver.id === target.id ? ability.coverAffectsSelf : nextTo(state.field, giver.square, target.square)) offer(ability.cover);
+            if (self ? ability.coverAffectsSelf : canSee(state.field, giver.square, target.square)) offer(ability.cover);
             if (rank[cover] === 2) return cover;
         }
     }
@@ -713,11 +722,18 @@ function breakdownOf(base: number, factors: OddsFactor[]): OddsBreakdown {
 /** What each effect on a character adds to every shot at it, one factor per effect: Marked's, Corroded's (§23.2, §31.2). */
 function effectFactors(target: Fighter, context?: RulesContext): OddsFactor[] {
     const { EFFECTS } = rulesetOf(context);
-    return (Object.keys(EFFECTS) as EffectId[]).flatMap((effect): OddsFactor[] => {
-        const { hitBonus } = EFFECTS[effect] as Effect;
-        return hitBonus !== undefined && hasEffect(target, effect) ? [{ kind: "effect", amount: hitBonus, effect }] : [];
-    });
+    // Per catalogue, the few effects that move the odds at all: every shot and strike asks.
+    let moving = HIT_BONUS_EFFECTS.get(EFFECTS);
+    if (!moving) {
+        moving = (Object.keys(EFFECTS) as EffectId[]).flatMap((effect): [EffectId, number][] => {
+            const { hitBonus } = EFFECTS[effect] as Effect;
+            return hitBonus !== undefined ? [[effect, hitBonus]] : [];
+        });
+        HIT_BONUS_EFFECTS.set(EFFECTS, moving);
+    }
+    return moving.flatMap(([effect, amount]): OddsFactor[] => hasEffect(target, effect) ? [{ kind: "effect", amount, effect }] : []);
 }
+const HIT_BONUS_EFFECTS = new WeakMap<object, readonly [EffectId, number][]>();
 
 /**
  * What a melee strike's chance to hit is (§13.3): `MELEE_ACCURACY` plus what
@@ -1574,11 +1590,12 @@ export function act(state: BattleState, player: string, action: Action, roll: Ro
             break;
         }
         case "raise": {
-            // Back on its feet at half HP, with nothing to spend until its
-            // owner's next turn; the points for downing it stay scored (§13.5).
+            // Back on its feet at half HP, with the catalogue's AP to spend
+            // if it's its owner's turn and nothing until their next turn if
+            // not; the points for downing it stay scored (§13.5).
             const target = get(action.target);
             target.hp = Math.ceil(maxHpOf(target, state) / 2);
-            target.ap = ABILITIES.raise.apOnRaise ?? 0;
+            target.ap = target.owner === player ? ABILITIES.raise.apOnRaise ?? 0 : 0;
             events.push({ kind: "raised", fighter: actor.id, target: target.id, hp: target.hp });
             break;
         }

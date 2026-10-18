@@ -1493,3 +1493,45 @@ describe("the Miners (§33)", () => {
         expect(events.at(-1)).toEqual({ kind: "blasted", fighter: 1, squares: [at(field, 3, 2)] });
     });
 });
+
+describe("rules version 8: a passive shield wall, and a raise with AP to spend", () => {
+    const field = fieldOf(["..........", "..........", "....,.....", "..........", ".........."]);
+    const V8 = { rulesVersion: 8 };
+    const archer = fighter(1, "a", "archer", at(field, 0, 2));
+    const target = fighter(2, "b", "mage", at(field, 5, 3));
+    const knight = fighter(3, "b", "knight", at(field, 6, 3));
+    const odds = (wall: Fighter) => shotOdds({ field, fighters: [archer, target, wall], ...V8 }, archer, target);
+
+    it("covers anyone beside a standing Knight, friend or foe, with nothing raised", () => {
+        expect(odds(knight)).toMatchObject({ chance: 60, cover: "half", flanked: false });
+        expect(odds({ ...knight, owner: "a" })).toMatchObject({ chance: 60, cover: "half" });
+        expect(odds({ ...knight, hp: 0 })).toMatchObject({ chance: 80, cover: "none" });
+        // Never the Knight itself.
+        expect(shotOdds({ field, fighters: [archer, knight], ...V8 }, archer, knight)).toMatchObject({ cover: "none" });
+    });
+
+    it("is never an action", () => {
+        expect(check({ field, fighters: [{ ...knight, owner: "a" }], ...V8 }, "a", { kind: "shieldWall", fighter: 3 })).toEqual({ refused: "Shield wall is passive" });
+    });
+
+    it("raises a character on its owner's turn with 2 AP to spend, and an ally's with none", () => {
+        const cleric = fighter(1, "a", "cleric", at(field, 1, 1));
+        const own = fighter(2, "a", "knight", at(field, 2, 2), { hp: 0, ap: 0 });
+        expect(run({ field, fighters: [cleric, own], ...V8 }, "a", { kind: "raise", fighter: 1, target: 2 }).byId(2)).toMatchObject({ hp: 6, ap: 2 });
+        const ally = { ...own, owner: "b" };
+        const sides = { a: "team", b: "team" };
+        expect(run({ field, fighters: [cleric, ally], sides, ...V8 }, "a", { kind: "raise", fighter: 1, target: 2 }).byId(2)).toMatchObject({ hp: 6, ap: 0 });
+    });
+
+    it("leaves a battle begun under version 7 as it was: a shield wall raised for allies alone, and a raise with nothing to spend", () => {
+        const V7 = { rulesVersion: 7 };
+        const wall = (extra: Partial<Fighter>) => shotOdds({ field, fighters: [archer, target, { ...knight, ...extra }], ...V7 }, archer, target);
+        expect(wall({})).toMatchObject({ cover: "none" });
+        expect(wall({ effects: { shieldWall: 1 } })).toMatchObject({ cover: "half" });
+        expect(wall({ owner: "a", effects: { shieldWall: 1 } })).toMatchObject({ cover: "none" });
+        expect(check({ field, fighters: [{ ...knight, owner: "a" }], ...V7 }, "a", { kind: "shieldWall", fighter: 3 })).toEqual({ ap: 2 });
+        const cleric = fighter(1, "a", "cleric", at(field, 1, 1));
+        const own = fighter(2, "a", "knight", at(field, 2, 2), { hp: 0, ap: 0 });
+        expect(run({ field, fighters: [cleric, own], ...V7 }, "a", { kind: "raise", fighter: 1, target: 2 }).byId(2)).toMatchObject({ hp: 6, ap: 0 });
+    });
+});

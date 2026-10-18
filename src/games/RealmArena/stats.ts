@@ -60,7 +60,8 @@ export type UnitRef = { kind: "character"; id: CharacterId } | { kind: "item"; i
  */
 interface AbilityUse {
     reach: "weapon" | "next" | "self" | "aimed" | "move";
-    note?: string;
+    /** Read from the battle's own ability where its catalogue changes who it covers (Shield wall). */
+    note?: string | ((ability: Ability) => string);
 }
 
 /** Who something landing on the 3×3 round a square hits: a fireball, a thunder flask. A smoke pot's cloud hurts nobody, so it's only the 3×3. */
@@ -68,7 +69,7 @@ const AREA = "3×3, friend or foe";
 
 const ABILITY_USE: Readonly<Record<AbilityId, AbilityUse>> = {
     cleave: { reach: "weapon", note: "Two enemies next to it" },
-    shieldWall: { reach: "self", note: "Allies next to it with no cover count as in half cover, until its next turn" },
+    shieldWall: { reach: "self", note: ({ coverFor, passive }) => `${coverFor === "everyone" ? "Anyone" : "Allies"} next to it with no cover count as in half cover${passive ? "" : ", until its next turn"}` },
     aimedShot: { reach: "weapon" },
     sneak: { reach: "move" },
     fireball: { reach: "aimed", note: AREA },
@@ -151,7 +152,7 @@ function abilityStats(id: AbilityId, weapon: Weapon, kind: string, key: string =
         damage: `${ability.damage ?? (strikes ? weapon.damage : NONE)}`,
         range, hit,
         cooldown: ability.passive ? "Passive" : ability.oncePerBattle ? ONCE : ability.oncePerTurn ? PER_TURN : ability.cooldown > 0 ? `${ability.cooldown}` : NONE,
-        extras: extrasOf(context, ability, strikes && weapon.kind === "ranged", note,
+        extras: extrasOf(context, ability, strikes && weapon.kind === "ranged", typeof note === "function" ? note(ability) : note,
             reach === "move" ? `${ability.ap} AP for each AP a move would cost` : undefined),
         description: ability.description,
     };

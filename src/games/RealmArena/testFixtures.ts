@@ -4,6 +4,7 @@
 //
 // Test-only. Nothing under src/app imports this.
 
+import { vi } from "vitest";
 import type { IGameCommand } from "@/utils/apiModels/gameCommand";
 import { runCommand } from "@/utils/games/commandPipeline";
 import { gameCommandVersion } from "@/utils/ui/games";
@@ -18,7 +19,7 @@ import { buildInitialRealmArenaState, RealmArenaGameDataModel, type IRealmArenaG
 import type { IRealmArenaGameDataResponse } from "./apiModels";
 import { pathTo } from "@/utils/games/battlefield/pathfinding";
 import { distance } from "@/utils/games/battlefield/terrain";
-import { allied, areaAround, check, isStanding, moveAp, reachOf, readyMadeMuster, type Action, type BattleState, type Fighter, type MusterPick } from "./rules";
+import { allied, areaAround, check, isStanding, moveAp, reachOf, readyMadeMuster, warbandOwner, type Action, type BattleState, type Fighter, type MusterPick } from "./rules";
 
 export const PLAYERS = ["a", "b"];
 
@@ -188,4 +189,44 @@ export async function playScriptedBattle(settings: RealmArenaSettings = {}, play
         await playScriptedTurn(game);
     }
     return game;
+}
+
+/** The teams the co-op tests field: two players, and three. */
+export const TEAMS = [["a", "b"], ["a", "b", "c"]];
+
+/** Every roll from here on drawn from a seed, so a battle plays the same each run (mulberry32). */
+export function seedRolls(seed: number): void {
+    let state = seed >>> 0;
+    vi.spyOn(globalThis.crypto, "getRandomValues").mockImplementation(<T extends ArrayBufferView | null>(array: T): T => {
+        const values = array as unknown as Uint32Array;
+        for (let i = 0; i < values.length; i++) {
+            state = (state + 0x6d2b79f5) >>> 0;
+            let t = state;
+            t = Math.imul(t ^ (t >>> 15), t | 1);
+            t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+            values[i] = (t ^ (t >>> 14)) >>> 0;
+        }
+        return array;
+    });
+}
+
+/** The warbands of a co-op battle, by owner. */
+export const warbandsOf = (game: RealmArenaTestGame) => game.gameState.turnOrder.map((_, k) => warbandOwner(k));
+
+/**
+ * A co-op battle fought to its end, the team played by the fixtures' script,
+ * timing each player's turn — the warband's turn that follows is nearly all
+ * of it.
+ */
+export async function coopBattle(players: string[], settings: RealmArenaSettings): Promise<{ game: RealmArenaTestGame; times: number[] }> {
+    const game = makeGame(players, {}, settings);
+    await musterAll(game);
+    const times: number[] = [];
+    for (let turn = 0; !game.complete; turn++) {
+        if (turn > 100) throw new Error("the battle outlasted its turn limit");
+        const start = performance.now();
+        await playScriptedTurn(game);
+        times.push(performance.now() - start);
+    }
+    return { game, times };
 }

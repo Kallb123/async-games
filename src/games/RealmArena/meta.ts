@@ -35,7 +35,11 @@ export const meta: GameMeta = {
     // Ruleset release 7 is pinned at creation via CURRENT_RULESET_VERSION,
     // independently of this command protocol version. Older battles keep
     // their rules, on a replay too.
-    commandVersion: 7,
+    // Version 8 pins ruleset release 8: the Knight's and Stonewarden's Shield
+    // wall is a passive covering anyone beside them, friend or foe, and a
+    // character raised on its owner's turn has 2 AP to spend. A tab from
+    // before it would still offer Shield wall as an action.
+    commandVersion: 8,
     oldestReplayableCommandVersion: 2,
     available: true,
 };

@@ -319,8 +319,9 @@ team plays `main`'s planner and the warbands the experiment's, so the same
 seeds differ only in how the warbands play. A warband that plays better shows
 as the team winning less and falling sooner. **540 battles a run**: Solo, 2
 and 3 players against each faction, Hold Out on the Sacked Fort, Normal, 60
-battles a cell on seeds 1–60, compared seed by seed. Written at revision 1.57,
-command version 7.
+battles a cell on seeds 1–60, compared seed by seed. Both experiments ran
+at command version 7, before rules version 8 (the passive Shield wall); the
+record of them is revision 1.58.
 
 ### Counting the team per head (not kept)
 
@@ -376,7 +377,7 @@ walk. Two fixes, in Exposure alone:
   they stand: an Archer's 20 squares already reach most of the board.
 
 Each solved its puzzle, and every other puzzle and the planner's pace held.
-Measured against a fresh baseline after main's ruleset change, on seeds
+Measured against a fresh baseline after the rulesets came in (#925), on seeds
 1–40, 360 battles a run, the team on `main`'s planner:
 
 | Warbands' planner | Hold Out, team wins | Team's last round in Hold Out | Hold the Centre, team wins |
