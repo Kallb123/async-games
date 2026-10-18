@@ -6,9 +6,9 @@
 // carrying the whole of rules.ts into its bundle. The board's own readings of
 // the battle are ui.ts's.
 
-import { ABILITIES, CHARACTERS, EFFECTS, FACTIONS, OPTIONS, type AbilityId, type CharacterId, type FactionId, type OptionId, type Weapon } from "./characters";
-import { nextRankXp, rankOf } from "./mastery";
-import { MELEE_ACCURACY } from "./rules";
+import { CHARACTERS, type AbilityId, type CharacterId, type FactionId, type OptionId, type Weapon } from "./characters";
+import { ruleValuesOf, rulesetOf, type RulesContext } from "./rulesets";
+import { nextRankXp, rankOf, type PlayerMastery } from "./mastery";
 
 /**
  * The placeholder figure each character stands as until PR 9's marked figures
@@ -38,19 +38,22 @@ export const CHARACTER_MARK: Readonly<Record<CharacterId, string>> = {
 export const CHARACTER_IDS = Object.keys(CHARACTERS) as CharacterId[];
 
 /** Whom a faction fields, in one line: "Man-at-Arms, Knight, Archer, …" — what the setup screen and the muster show beside its name (B6). */
-export function factionRosterLine(id: FactionId): string {
+export function factionRosterLine(id: FactionId, context?: RulesContext): string {
+    const { FACTIONS, CHARACTERS } = rulesetOf(context);
     return FACTIONS[id].characters.map(character => CHARACTERS[character].name).join(", ");
 }
 
 /** A weapon in one line: "80% · range 20 · 3 damage", and what it leaves on a hit: "· slowed on a hit". */
-export function weaponLine(weapon: Weapon): string {
-    if (weapon.kind === "melee") return `Melee · ${MELEE_ACCURACY}% · ${weapon.damage} damage`;
+export function weaponLine(weapon: Weapon, context?: RulesContext): string {
+    if (weapon.kind === "melee") return `Melee · ${ruleValuesOf(context).MELEE_ACCURACY}% · ${weapon.damage} damage`;
+    const { EFFECTS } = rulesetOf(context);
     const leaves = weapon.effect ? ` · ${EFFECTS[weapon.effect].name.toLowerCase()} on a hit` : "";
     return `${weapon.accuracy}% · range ${weapon.range} · ${weapon.damage} damage${leaves}`;
 }
 
 /** A character's options (§23.2), lowest rank first: what its muster row offers, locked or not. */
-export function optionsFor(character: CharacterId): OptionId[] {
+export function optionsFor(character: CharacterId, context?: RulesContext): OptionId[] {
+    const { OPTIONS } = rulesetOf(context);
     return (Object.keys(OPTIONS) as OptionId[])
         .filter(id => OPTIONS[id].character === character)
         .sort((a, b) => OPTIONS[a].rank - OPTIONS[b].rank);
@@ -78,10 +81,11 @@ export interface KitView {
 }
 
 /** A character's own kit part, as the starter character fights with it: "Cleave · 2 AP · Strike two enemies…". */
-export function starterView(character: CharacterId, part: KitPart): KitView {
+export function starterView(character: CharacterId, part: KitPart, context?: RulesContext): KitView {
+    const { CHARACTERS, ABILITIES } = rulesetOf(context);
     if (part === "weapon") {
         const { weapon } = CHARACTERS[character];
-        return { icon: weaponMark(character), name: weapon.name, line: weaponLine(weapon) };
+        return { icon: weaponMark(character), name: weapon.name, line: weaponLine(weapon, context) };
     }
     const ability = ABILITIES[part];
     return { icon: ABILITY_MARK, name: ability.name, line: `${ability.ap} AP · ${ability.description}` };
@@ -92,12 +96,13 @@ export function starterView(character: CharacterId, part: KitPart): KitView {
  * swaps in — and what it swaps out and does in its place ("In place of Cleave
  * · 2 AP · Strike one enemy…").
  */
-export function optionView(id: OptionId): KitView {
+export function optionView(id: OptionId, context?: RulesContext): KitView {
+    const { OPTIONS, ABILITIES } = rulesetOf(context);
     const option = OPTIONS[id];
-    const replaced = starterView(option.character, option.replaces).name;
+    const replaced = starterView(option.character, option.replaces, context).name;
     if ("weapon" in option) {
         const { character, weapon } = option;
-        return { icon: weaponMark(character, id), name: weapon.name, line: `In place of the ${replaced} · ${weaponLine(weapon)}` };
+        return { icon: weaponMark(character, id), name: weapon.name, line: `In place of the ${replaced} · ${weaponLine(weapon, context)}` };
     }
     const ability = ABILITIES[option.ability];
     return { icon: ABILITY_MARK, name: ability.name, line: `In place of ${replaced} · ${ability.ap} AP · ${ability.description}` };
@@ -107,4 +112,13 @@ export function optionView(id: OptionId): KitView {
 export function masteryLine(xp: number): string {
     const next = nextRankXp(xp);
     return next === undefined ? `${xp} XP · the highest rank` : `${xp} XP · ${next - xp} more for rank ${rankOf(xp) + 1}`;
+}
+
+/** Active roster plus earned records for retired characters; retired unlocks aren't offered. */
+export function masteryRoster(mastery: PlayerMastery, context?: RulesContext): { id: CharacterId; retired: boolean }[] {
+    const { CHARACTERS, FACTIONS } = rulesetOf(context);
+    const active = new Set(Object.values(FACTIONS).flatMap(faction => faction?.characters ?? []));
+    return (Object.keys(CHARACTERS) as CharacterId[])
+        .filter(id => active.has(id) || (mastery[id]?.xp ?? 0) > 0)
+        .map(id => ({ id, retired: !active.has(id) }));
 }

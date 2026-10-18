@@ -5,7 +5,7 @@ import { ABILITIES, CHARACTERS, ITEMS, kitOf, musterBudget, OPTIONS, REALM, THRO
 import { RUINED_FORT } from "./maps/ruinedFort";
 import {
     abilitiesOf, ACTION_POINTS, act, MELEE_ACCURACY, afflicted, areaAround, blastedBy, blastedIn, centreHolders, centrePoints, check, endTurn, fixedRolls, isBattleOver, moveAp, movementOf, musterPoints, musterRefusal,
-    newFighter, oddsBreakdown, pickOf, purified, reachOf, reactionsTo, readyMadeMuster, shotOdds, shotResult, smokeSquares, standings, strikeChance, startTurn, storedFighter, watchedSquares, weaponOf,
+    newFighter, oddsBreakdown, pickOf, purified, reachOf, reactionsTo, readyMadeMuster, shotOdds, shotResult, smokeSquares, squadHp, standings, strikeChance, startTurn, storedFighter, watchedSquares, weaponOf,
     type Action, type BattleState, type Fighter, type MusterPick,
 } from "./rules";
 
@@ -28,6 +28,12 @@ function run(state: BattleState, player: string, action: Action, rolls: number[]
     const byId = (id: number) => outcome.fighters.find(one => one.id === id)!;
     return { ...outcome, byId };
 }
+
+describe("squadHp", () => {
+    it("counts a fallen fighter's mustered maximum towards the total", () => {
+        expect(squadHp([fighter(0, "a", "knight", 0, { hp: 0, maxHp: 24 })])).toEqual({ remaining: 0, total: 24 });
+    });
+});
 
 describe("hitting (§13.3)", () => {
     it("hits an 80% shot on 1–80, grazes on 81–90 and misses on 91–100", () => {
@@ -115,7 +121,7 @@ describe("hitting (§13.3)", () => {
         it("is a strike's for a melee weapon: its accuracy, and what's on the target", () => {
             const knight = fighter(1, "a", "knight", at(field, 4, 2));
             const marked = fighter(2, "b", "knight", at(field, 5, 2), { effects: { marked: 2 } });
-            const state = { field, fighters: [knight, marked], balanced: true as const };
+            const state = { field, fighters: [knight, marked], rulesVersion: 7 };
             const breakdown = oddsBreakdown(state, knight, marked);
             expect(breakdown).toMatchObject({ base: MELEE_ACCURACY, factors: [{ kind: "effect", amount: 15, effect: "marked" }], chance: 95 });
             expect(breakdown.chance).toBe(strikeChance(state, marked));
@@ -292,7 +298,7 @@ describe("act", () => {
         expect(bashed.byId(2).effects.stunned).toBeGreaterThan(0);
         expect(bashed.byId(2).woundedBy).toEqual(["c", "a"]);
         expect(run(state, "a", { kind: "raise", fighter: 3, target: 4 }).byId(3).spent).toEqual(["raise"]);
-        expect(run({ ...state, balanced: true }, "a", { kind: "raise", fighter: 3, target: 4 }).byId(3).cooldowns).toEqual({ raise: 4 });
+        expect(run({ ...state, rulesVersion: 7 }, "a", { kind: "raise", fighter: 3, target: 4 }).byId(3).cooldowns).toEqual({ raise: 4 });
     });
 
     it("turns a mover to face the way it last stepped, and leaves anyone else facing as they were", () => {
@@ -559,19 +565,19 @@ describe("abilities (§13.5, §13.6)", () => {
 
     it("raise brings a downed ally back at half HP, and waits out a cooldown of four turns", () => {
         const fighters = [fighter(1, "a", "cleric", at(field, 1, 1)), fighter(2, "a", "knight", at(field, 2, 2), { hp: 0, ap: 0 })];
-        const { byId, events } = run({ field, fighters, balanced: true }, "a", { kind: "raise", fighter: 1, target: 2 });
+        const { byId, events } = run({ field, fighters, rulesVersion: 7 }, "a", { kind: "raise", fighter: 1, target: 2 });
         expect(byId(2)).toMatchObject({ hp: 6, ap: 0 });
         expect(byId(1).spent).toEqual([]);
         expect(byId(1).cooldowns).toEqual({ raise: ABILITIES.raise.cooldown });
         expect(ABILITIES.raise.cooldown).toBe(4);
         expect(events).toEqual([{ kind: "raised", fighter: 1, target: 2, hp: 6 }]);
-        const again = { field, fighters: [{ ...byId(1), ap: 4 }, { ...byId(2), hp: 0 }], balanced: true as const };
+        const again = { field, fighters: [{ ...byId(1), ap: 4 }, { ...byId(2), hp: 0 }], rulesVersion: 7 };
         expect(check(again, "a", { kind: "raise", fighter: 1, target: 2 })).toEqual({ refused: "Raise isn't ready yet" });
         // Back in four of its owner's turns.
         let cleric = { ...byId(1), ap: 4 };
         for (let turn = 1; turn <= 4; turn++) {
-            cleric = startTurn({ field, fighters: [cleric], balanced: true }, "a").fighters[0];
-            const verdict = check({ field, fighters: [cleric, { ...byId(2), hp: 0 }], balanced: true }, "a", { kind: "raise", fighter: 1, target: 2 });
+            cleric = startTurn({ field, fighters: [cleric], rulesVersion: 7 }, "a").fighters[0];
+            const verdict = check({ field, fighters: [cleric, { ...byId(2), hp: 0 }], rulesVersion: 7 }, "a", { kind: "raise", fighter: 1, target: 2 });
             expect(verdict, `turn ${turn}`).toEqual(turn < 4 ? { refused: "Raise isn't ready yet" } : { ap: 3 });
         }
     });

@@ -1,4 +1,5 @@
 'use client'
+import type { RulesContext } from "@/games/RealmArena/rulesets";
 import React, { useMemo } from 'react';
 import type { Playback } from '@/games/RealmArena/components/RealmArenaBoard';
 import { captionAt, eventLines, type CaptionCue } from '@/games/RealmArena/ui';
@@ -24,11 +25,11 @@ export const CAPTION_INSET = 44;
  * last one's closing line. `fighters` is the board after the action, which is
  * what `eventLines` names everyone from.
  */
-export function PlaybackCaption({ playback, fighters, viewerId, nameFor }: { playback: Playback; fighters: readonly Fighter[]; viewerId: string; nameFor: (userId: string) => string }) {
+export function PlaybackCaption({ playback, fighters, viewerId, nameFor, context }: { context?: RulesContext; playback: Playback; fighters: readonly Fighter[]; viewerId: string; nameFor: (userId: string) => string }) {
     const { cues, sentences } = useMemo(() => {
-        const sentences = new Map(eventLines(playback.events, fighters, viewerId, nameFor).map(line => [line.event, line.sentence]));
+        const sentences = new Map(eventLines(playback.events, fighters, viewerId, nameFor, context).map(line => [line.event, line.sentence]));
         return { cues: playback.cues.filter((cue): cue is CaptionCue => cue.kind === 'caption' && sentences.has(cue.event)), sentences };
-    }, [playback.events, playback.cues, fighters, viewerId, nameFor]);
+    }, [playback.events, playback.cues, fighters, viewerId, nameFor, context]);
     const sentence = usePlaybackValue(ms => {
         const cue = captionAt(cues, ms);
         return cue ? sentences.get(cue.event) ?? null : null;

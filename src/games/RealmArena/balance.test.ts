@@ -16,10 +16,11 @@ import { characterStats } from "./stats";
 import { abilityWait, eventLines, hpFraction } from "./ui";
 import { nextAction } from "./ai";
 import { actBy, battleOf, endTurnBy, makeGame, musterAll, play, playScriptedBattle, type RealmArenaTestGame } from "./testFixtures";
+import { rulesetFor, rulesetOf } from "./rulesets";
 
 // docs/games/realm-arena-balance.md: the rebalance that command version 7
 // ships (`BALANCE_VERSION`). Each rule is tested on its own against a hand-built
-// battle (`balanced`), and against one from before it (`rulesVersion: 6`),
+// battle (`balanced`, `rulesVersion: 7`), and against one from before it (`rulesVersion: 6`),
 // which must go on playing as it did.
 
 const LEGACY = 6;
@@ -35,7 +36,7 @@ function fighter(id: number, owner: string, character: CharacterId, square: numb
     return { ...newFighter(id, owner, character, square), ap: ACTION_POINTS, ...extra };
 }
 
-const balanced = (field: Battlefield, fighters: Fighter[]): BattleState => ({ field, fighters, balanced: true });
+const balanced = (field: Battlefield, fighters: Fighter[]): BattleState => ({ field, fighters, rulesVersion: 7 });
 const legacy = (field: Battlefield, fighters: Fighter[]): BattleState => ({ field, fighters });
 
 function run(state: BattleState, player: string, action: Action, rolls: number[] = []) {
@@ -65,10 +66,16 @@ describe("the rules version a battle plays by", () => {
     });
 
     it("is read into the battle, and kept by a player's view of it and an undo's snapshot", () => {
-        expect(battleFrom(OPEN, { fighters: [], rulesVersion: 7 }).balanced).toBe(true);
-        expect(battleFrom(OPEN, { fighters: [], rulesVersion: LEGACY })).not.toHaveProperty("balanced");
-        expect(battleFrom(OPEN, { fighters: [] })).not.toHaveProperty("balanced");
-        expect(viewOf({ ...balanced(OPEN, []), fog: true }, "a").balanced).toBe(true);
+        expect(battleFrom(OPEN, { fighters: [], rulesVersion: 7 }).rulesVersion).toBe(7);
+        expect(battleFrom(OPEN, { fighters: [], rulesVersion: LEGACY }).rulesVersion).toBe(LEGACY);
+        expect(battleFrom(OPEN, { fighters: [] })).not.toHaveProperty("rulesVersion");
+        expect(viewOf({ ...balanced(OPEN, []), fog: true }, "a").rulesVersion).toBe(7);
+        // Nothing but the version says which rules a battle plays by: no flag
+        // derived from it rides along to be read instead, or kept when it's lost.
+        expect(battleFrom(OPEN, { fighters: [], rulesVersion: 7 })).not.toHaveProperty("balanced");
+        const stray = { balanced: true, rulesVersion: undefined };
+        expect(rulesetOf(stray)).toBe(rulesetFor(undefined));
+        expect(weaponOf(stray, newFighter(0, "a", "mage", 0))).toMatchObject({ accuracy: 70, range: 10 });
 
         const game = makeGame();
         expect(cloneRealmArenaState(game.specificGameState).rulesVersion).toBe(meta.commandVersion);
@@ -81,13 +88,13 @@ describe("the rules version a battle plays by", () => {
         expect(game.specificGameState.rulesVersion).toBe(meta.commandVersion);
         expect(buildInitialRealmArenaState(["a", "b"], {}, settingsOf(game.specificGameState)).rulesVersion).toBe(meta.commandVersion);
         expect(gameStateToModel(game.specificGameState, "a", null).rulesVersion).toBe(meta.commandVersion);
-        expect(battleOf(game).balanced).toBe(true);
+        expect(isBalanced(battleOf(game).rulesVersion)).toBe(true);
 
         // A battle from before the stamp has none, and goes on without one.
         const unstamped = buildInitialRealmArenaState(["a", "b"], {}, {});
         expect(unstamped).not.toHaveProperty("rulesVersion");
         expect(gameStateToModel(unstamped, "a", null)).not.toHaveProperty("rulesVersion");
-        expect(battleFrom(OPEN, { fighters: [], rulesVersion: unstamped.rulesVersion })).not.toHaveProperty("balanced");
+        expect(battleFrom(OPEN, { fighters: [], rulesVersion: unstamped.rulesVersion })).not.toHaveProperty("rulesVersion");
     });
 });
 
@@ -308,7 +315,7 @@ describe("Heal, once a turn (§13.6)", () => {
     it("has no cooldown but is limited to once a turn", () => {
         expect(ABILITIES.heal.cooldown).toBe(0);
         expect(ABILITIES.heal.oncePerTurn).toBe(true);
-        expect(abilityRules({ balanced: true }, "heal")).toMatchObject({ cooldown: 0, oncePerTurn: true });
+        expect(abilityRules({ rulesVersion: 7 }, "heal")).toMatchObject({ cooldown: 0, oncePerTurn: true });
     });
 
     it("can't be used a second time in a turn, on anyone, and is ready at the start of the next", () => {
@@ -348,7 +355,7 @@ describe("Raise, on a cooldown (§13.6)", () => {
 
     it("is no longer once a battle: a cooldown of four turns instead", () => {
         expect(ABILITIES.raise).not.toHaveProperty("oncePerBattle");
-        expect(abilityRules({ balanced: true }, "raise")).toMatchObject({ cooldown: 4 });
+        expect(abilityRules({ rulesVersion: 7 }, "raise")).toMatchObject({ cooldown: 4 });
         const { byId } = run(balanced(OPEN, fighters), "a", { kind: "raise", fighter: 1, target: 2 });
         expect(byId(1)).toMatchObject({ spent: [], cooldowns: { raise: 4 } });
         expect(abilityWait(byId(1), "raise")).toBe("Back in 4 turns");
@@ -547,7 +554,7 @@ describe("the Mage Bolt", () => {
 
     it("hits 80% of the time out to 12 squares, in the open, in a battle under the rebalance", () => {
         expect(CHARACTERS.mage.weapon).toMatchObject({ name: "Mage Bolt", accuracy: 80, range: 12 });
-        expect(weaponOf({ balanced: true }, mage)).toMatchObject({ name: "Mage Bolt", accuracy: 80, range: 12 });
+        expect(weaponOf({ rulesVersion: 7 }, mage)).toMatchObject({ name: "Mage Bolt", accuracy: 80, range: 12 });
         const state = balanced(ROW, [mage, target(12)]);
         expect(shotOdds(state, mage, target(12))).toMatchObject({ chance: 80, farCover: false });
         expect(shotOdds(balanced(ROW, [mage, target(13)]), mage, target(13))).toBeUndefined();
@@ -563,7 +570,7 @@ describe("the Mage Bolt", () => {
         expect(shotOdds(legacy(ROW, [mage, target(11)]), mage, target(11))).toBeUndefined();
         expect(weaponReaches(legacy(ROW, [mage]), mage, at(ROW, 11, 0))).toBe(false);
         const frost = { ...mage, option: "frostBolt" as const };
-        for (const state of [{}, { balanced: true as const }]) expect(weaponOf(state, frost)).toMatchObject({ name: "Frost bolt", accuracy: 70, range: 10 });
+        for (const state of [{}, { rulesVersion: 7 }]) expect(weaponOf(state, frost)).toMatchObject({ name: "Frost bolt", accuracy: 70, range: 10 });
         // Nobody else's weapon is gated.
         const archer = fighter(3, "a", "archer", at(ROW, 0, 0));
         expect(weaponOf({}, archer)).toBe(CHARACTERS.archer.weapon);

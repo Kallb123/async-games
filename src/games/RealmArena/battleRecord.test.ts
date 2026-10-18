@@ -190,6 +190,20 @@ describe("the battle recorder (§28)", () => {
         expect(recorder.result().fighting.find(row => row.character === "mage")).toMatchObject({ dealt: 3 });
     });
 
+    it("credits a generic effect applied or refreshed and ticked within one step", () => {
+        for (const previous of [undefined, archer.id]) {
+            const recorder = battleRecorder(PLAYERS);
+            recorder.observe(act("0", []), battle([{ ...knight, effectSources: previous === undefined ? {} : { corroded: previous } }, mage, archer]));
+            recorder.observe(act("1", [
+                { kind: "fireball", fighter: mage.id, at: knight.square, targets: [knight.id], damage: 2 },
+                { kind: "effect", fighter: knight.id, effect: "corroded", change: "applied" },
+                { kind: "burned", fighter: knight.id, damage: 2, effect: "corroded" },
+            ]), battle([{ ...knight, hp: knight.hp - 4, effectSources: { corroded: mage.id } }, mage, archer]));
+            expect(recorder.result().fighting.find(row => row.character === "mage")).toMatchObject({ dealt: 4 });
+            expect(recorder.result().fighting.find(row => row.character === "archer")).toMatchObject({ dealt: 0 });
+        }
+    });
+
     it("takes back the healing of an action that was undone, and keeps it once the undo stack lets it go", () => {
         const hurt = { ...knight, hp: 3 };
         const heal: BattleEvent = { kind: "healed", fighter: cleric.id, target: knight.id, hp: 4 };

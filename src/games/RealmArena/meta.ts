@@ -32,8 +32,9 @@ export const meta: GameMeta = {
     // Version 7 rebalances the game (`BALANCE_VERSION`, rules.ts): melee strikes
     // roll to hit, cover counts double at range, a Cleric heals every turn but raises
     // on a cooldown, and Hold Out's team is tougher against smaller warbands.
-    // It is stamped on each battle as it's created (`rulesVersion`), so one
-    // begun before it keeps its rules, on a replay too.
+    // Ruleset release 7 is pinned at creation via CURRENT_RULESET_VERSION,
+    // independently of this command protocol version. Older battles keep
+    // their rules, on a replay too.
     commandVersion: 7,
     oldestReplayableCommandVersion: 2,
     available: true,

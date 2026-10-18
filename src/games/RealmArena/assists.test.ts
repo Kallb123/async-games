@@ -138,13 +138,18 @@ describe("assists in a battle", () => {
         for (const fog of [false, true]) {
             const game = makeGame(["a", "b", "c"], {}, { fog });
             await musterAll(game);
-            for (const fighter of game.specificGameState.fighters) fighter.woundedBy = ["a", "b", "c"].filter(owner => owner !== fighter.owner);
+            for (const fighter of game.specificGameState.fighters) {
+                fighter.woundedBy = ["a", "b", "c"].filter(owner => owner !== fighter.owner);
+                fighter.effectSources = { corroded: 987654 };
+            }
             for (const viewer of ["a", "b", null]) {
                 for (const complete of [false, true]) {
                     const wire = gameStateToModel(game.specificGameState, viewer, null, complete);
                     // A null viewer sees nobody in fog until the battle is over (§27).
                     if (viewer !== null || !fog || complete) expect(wire.fighters.length).toBeGreaterThan(0);
-                    expect(JSON.stringify(wire)).not.toMatch(/woundedBy/);
+                    expect(JSON.stringify(wire)).not.toMatch(/woundedBy|effectSources|987654/);
+                    const replayWire = getReplayAdapter("RealmArenaGameType")!.toResponseState(game.specificGameState, {}, viewer, [], complete);
+                    expect(JSON.stringify(replayWire)).not.toMatch(/woundedBy|effectSources|987654/);
                 }
             }
         }

@@ -1,6 +1,7 @@
 'use client'
 import React from 'react';
-import { ATTACK_AP, type Fighter } from '@/games/RealmArena/rules';
+import { ruleValuesOf, type RulesContext } from '../rulesets';
+import { type Fighter } from '@/games/RealmArena/rules';
 import { whoseName } from '@/games/RealmArena/ui';
 import type { ReachAfter } from '@/games/RealmArena/useTurnDraft';
 import { capitalise, pluralize } from '@/utils/ui/text';
@@ -15,6 +16,7 @@ const SHOWN = 3;
 interface RealmArenaTargetsProps {
     /** What the viewer's selected character could hit (`reachAfter`). */
     reach: ReachAfter;
+    context?: RulesContext;
     fighters: readonly Fighter[];
     viewerId: string;
     nameFor: (userId: string) => string;
@@ -27,9 +29,9 @@ interface RealmArenaTargetsProps {
  * a square would put in reach before they go there — and whether they'd have
  * the AP left to attack from it.
  */
-export default function RealmArenaTargets({ reach: { options, previewing, ap }, fighters, viewerId, nameFor }: RealmArenaTargetsProps) {
+export default function RealmArenaTargets({ reach: { options, previewing, ap }, fighters, viewerId, nameFor, context }: RealmArenaTargetsProps) {
     const where = previewing ? 'from there' : 'in reach';
-    const short = options.length > 0 && ap !== undefined && ap < ATTACK_AP ? ' · no AP to attack' : '';
+    const short = options.length > 0 && ap !== undefined && ap < ruleValuesOf(context).ATTACK_AP ? ' · no AP to attack' : '';
     return (
         <div className="ag-board-tag ag-ra-targets" data-tour="ra-targets">
             <div className="ag-ra-targets-head">
@@ -39,7 +41,7 @@ export default function RealmArenaTargets({ reach: { options, previewing, ap }, 
             {options.slice(0, SHOWN).map(({ target, chance }) => (
                 <div key={target.id} className="ag-ra-targets-row">
                     <RealmArenaCrosshair />
-                    <span className="ag-ra-targets-name">{capitalise(whoseName(fighters, target.id, viewerId, nameFor))}</span>
+                    <span className="ag-ra-targets-name">{capitalise(whoseName(fighters, target.id, viewerId, nameFor, context))}</span>
                     <b>{chance}%</b>
                 </div>
             ))}

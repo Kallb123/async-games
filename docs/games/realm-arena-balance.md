@@ -319,7 +319,7 @@ team plays `main`'s planner and the warbands the experiment's, so the same
 seeds differ only in how the warbands play. A warband that plays better shows
 as the team winning less and falling sooner. **540 battles a run**: Solo, 2
 and 3 players against each faction, Hold Out on the Sacked Fort, Normal, 60
-battles a cell on seeds 1–60, compared seed by seed. Written at revision 1.56,
+battles a cell on seeds 1–60, compared seed by seed. Written at revision 1.57,
 command version 7.
 
 ### Counting the team per head (not kept)

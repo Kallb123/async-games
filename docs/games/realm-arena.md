@@ -1,6 +1,13 @@
 # Realm Arena — Game Design Document
 
-**Status:** v1.53. Split out of Defender of the Realm in its third round of
+**Status:** v1.56. The Realm troop overhaul (§34) is **design only, not
+implemented**. §13's Realm roster and core rules describe the planned kit;
+§34 gives the full changes, with proposed values awaiting answers (§34.10).
+Earlier implementation
+notes and revision history describe the game before this overhaul wherever
+they conflict with §34.
+
+Split out of Defender of the Realm in its third round of
 design, when one concept became two games
 ([`defender-of-the-realm.md`](./defender-of-the-realm.md) §17). It's being
 built first (§10). §11 records every answer. §13 has the battle rules and the
@@ -609,19 +616,18 @@ its time zoomed in:
 | Action | AP |
 |---|---:|
 | Move: spend up to the character's movement allowance | 1 |
-| Sneak (Scout only): the same, without setting off reactions | 2 |
 | Attack: shoot or strike | 2 |
 | Aimed shot (Archer only) | 3 |
 | Hunker down: double the cover against shots at it, until your next turn | 1, and ends the character's turn |
 | Go on overwatch or guard | All the AP it has left (§13.4) |
-| Use an ability | 1–3, depending on the ability (§13.6) |
+| Use an ability | As listed in §13.6 and §34 |
 
 - **Movement allowance** (round 5): each AP spent on moving buys the
-  character's allowance of movement points: Knight 4, most characters 6,
-  Scout 8. Each square along the way costs its movement cost (§13.1). A
+  character's allowance of movement points: Knight 4, other Realm characters
+  6. Each square along the way costs its movement cost (§13.1). A
   move's total cost is rounded up to whole AP. Points left over from the
   move's last AP are lost when it ends. Across open ground, all 4 AP on
-  moving is 16–32 squares in a turn; through rubble, much less.
+  moving is 16–24 squares in a turn for the Realm; through rubble, much less.
 - **A charge is just moving and then striking** (1 + 2 AP), so it no longer
   needs a rule of its own.
 - **Spend AP however you like** (round 4). You can attack twice, attack and
@@ -674,11 +680,10 @@ As proposed in v0.3 (defaults taken):
   step can't soak up a whole bank.
 - **Banked AP not used by your next turn are lost.** Every character starts
   its turn with a fresh 4.
-- **Sneaking sets off neither.**
 - **Resolving reactions.** The server resolves reactions as part of the moving
   player's command, nearest watcher first, and records every roll.
 - **Balance to watch.** A squad all on overwatch can lock down open ground.
-  The answers are moving from cover to cover, sneaking and hunkering down. If
+  The answers include moving from cover to cover and hunkering down. If
   playtesting shows that's not enough, raise the overwatch penalty or the
   cost of a reaction.
 
@@ -686,8 +691,9 @@ As proposed in v0.3 (defaults taken):
 
 As proposed in v0.3 (defaults taken), with AP costs added:
 
-- **Each character has one or two abilities**, each with an AP cost (§13.6)
-  and a cooldown of two or three turns.
+- **Characters have the abilities listed in their kit** (§13.6, §34).
+  Active abilities have their own AP costs and cooldowns; a passive, such as
+  the Knight's Bulwark, is always on.
 - **At 0 HP a character is down**: out of the battle, and its points count for
   whoever knocked it out (§13.7).
 - **A Cleric can raise a downed ally** next to them, at half HP, and again four
@@ -697,17 +703,30 @@ As proposed in v0.3 (defaults taken), with AP costs added:
 
 ### 13.6 The first faction and its characters
 
-As proposed in v0.3 (defaults taken): a human kingdom, the Realm that both
-games are named for. It would also be Defender of the Realm's first faction.
+The Realm is the human kingdom both games are named for. The roster below is
+the **planned, unbuilt** overhaul (§34): the Scout is gone, and each character
+has new abilities beside the ones it kept. Weapons, HP, movement and points are
+as they were.
 
-| Character | Role | Movement per AP | HP | Attack | Ability (AP, cooldown) | Points |
+| Character | Role | Movement per AP | HP | Attack | Abilities | Points |
 |---|---|---:|---:|---|---|---:|
-| **Man-at-arms** | Cheap front line | 6 | 8 | Sword, melee, 4 | **Cleave:** strike two enemies next to them (2 AP, 3 turns) | 15 |
-| **Knight** | Slow and very tough | 4 | 12 | Mace, melee, 4 | **Shield wall:** allies next to the Knight count as in half cover until its next turn (2 AP, 3 turns) | 25 |
-| **Archer** | Long range; the overwatch specialist | 6 | 6 | Bow, 80%, range 20, 3 | **Aimed shot:** +20% to hit (3 AP, 2 turns) | 20 |
-| **Scout** | Fastest and fragile; the flanker | 8 | 6 | Knives, melee, 3 | **Sneak:** move without setting off reactions (2 AP a move, no cooldown) | 20 |
-| **Mage** | Fragile; hits an area | 6 | 5 | Mage Bolt, 80%, range 12, 3 | **Fireball:** 3 damage to every character in a 3×3 area, friend or foe, up to 12 squares away, with no roll (3 AP, 3 turns) | 30 |
-| **Cleric** | Support | 6 | 7 | Staff, melee, 2 | **Heal:** restore 4 HP to themselves or an ally they can see within 12 squares (2 AP, once a turn, no cooldown). **Raise:** bring a downed ally back at half HP (3 AP, 4 turns) | 25 |
+| **Man-at-arms** | Cheap front line | 6 | 8 | Sword, melee, 4 | Cleave, Leap, Slash and Dash | 15 |
+| **Knight** | Slow and very tough | 4 | 12 | Mace, melee, 4 | Bulwark (passive), Taunt, Shove | 25 |
+| **Archer** | Long range; the overwatch specialist | 6 | 6 | Bow, 80%, range 20, 3 | Aimed shot, Poison Arrow, Bouncing Arrow, Splitting Arrow, Shoot + Dodge | 20 |
+| **Mage** | Fragile; hits an area | 6 | 5 | Mage Bolt, 80%, range 12, 3 | Fireball, Ice Ball, Thunder, Focus | 30 |
+| **Cleric** | Support | 6 | 7 | Staff, melee, 2 | Heal, Raise, Beckon, Blessing, Ward | 25 |
+
+The abilities kept from before:
+
+| Ability | Character | AP | Cooldown | What it does |
+|---|---|---:|---|---|
+| **Cleave** | Man-at-arms | 2 | 3 turns | Strike two enemies next to them |
+| **Aimed shot** | Archer | 3 | 2 turns | +20% to hit |
+| **Fireball** | Mage | 3 | 3 turns | 3 damage and burning to every character in a 3×3, friend or foe, up to 12 squares away, with no roll |
+| **Heal** | Cleric | 2 | Once a turn | Restore 4 HP to themselves or an ally they can see within 12 squares |
+| **Raise** | Cleric | 3 | 4 turns | Bring a downed ally next to them back at half HP; on its owner's turn, with 2 AP to act at once (§34.8) |
+
+The new ones, and their costs, are in §34.4–§34.8.
 
 **The budget:** 100 points each for two players, 80 for three, and 70 each for
 four (free-for-all or teams). That's 4–6 characters at two players and 3–4 at
@@ -737,12 +756,14 @@ open. All are first guesses for playtesting, kept in `characters.ts` and
   they could stand, and a Cleric can raise them.
 - **A fireball hits the whole 3×3**, walls or not, once its centre is in range
   and in sight.
-- **A shield wall moves with the Knight.** Whoever is next to it when a shot
-  comes in has at least half cover. It doesn't cover the Knight itself.
+- **Bulwark is always on, and moves with the Knight.** Every character next
+  to it, friend or enemy, has at least half cover when a shot comes in. It
+  doesn't cover the Knight itself, and costs nothing to keep up (§34.5).
 - **Healing is for an ally that is hurt**, and never takes it past full HP.
 - **Raising** needs the fallen ally's square to be one a character can stand
-  on, with nobody standing there. The raised character acts from its owner's
-  next turn. A Cleric's Raise has a cooldown of four turns (§30.13).
+  on, with nobody standing there. If it is the raised ally's owner's turn,
+  the ally gains 2 AP and can act immediately; otherwise it acts from its
+  owner's next turn. A Cleric's Raise has a cooldown of four turns (§34.8).
 - **Downing your own character** (a fireball's friendly fire) scores nobody
   anything.
 - **A cooldown of *n* turns** counts down at the start of each of its owner's
@@ -862,7 +883,7 @@ along the bottom.
   - **The near breach** is on your side of a side wall: the west wall for A,
     the east wall for B. It's slower, but covered by rubble.
   - **Round the outside** runs along the flanks of the fort, past trees and
-    fallen stone, to the enemy's side of the walls. It's the Scout's route.
+    fallen stone, to the enemy's side of the walls. It's a flanking route.
 - **The towers are the overwatch posts.** Your two nearer towers are a short
   climb from your gate. An Archer on one covers most of the courtyard (bow
   range 20; the keep is about a dozen squares away). Taking an enemy tower is how
@@ -1181,6 +1202,11 @@ and mastery options (§23) are built from.
 
 The numbers are first guesses for playtesting, like §13's.
 
+This table records the built effects. The Realm overhaul (§34) adds four
+more — Poisoned, Braced, Blessed and Focused (§34.2) — and two new sources of
+these: Ice Ball slows and Thunder stuns. The Man-at-arms' Shield bash option is
+not the Knight's Shove.
+
 | Effect | What it does | Count | Comes from |
 |---|---|---:|---|
 | **Burning** | 1 damage at the start of each of its owner's next two turns | 2 | Fireball (everyone it hits), a fire flask (§21) |
@@ -1201,10 +1227,11 @@ at that moment, before counting down. So:
 - Marked is counted on the *target's* turns. Marked on your turn, it survives
   the target's next turn start and so lasts through your next turn too.
 
-The two stances become effects too. Hunkered down and Shield wall already end
-at the start of their owner's next turn, so they move into the same field with
-a count of 1. That removes two booleans from the character rather than adding
-a third and fourth.
+In the built rules, the two stances become effects too. Hunkered down and
+Shield wall already end at the start of their owner's next turn, so they move
+into the same field with a count of 1. That removes two booleans from the character rather than adding
+a third and fourth. The planned Knight's Bulwark (§34.5) is a passive
+instead, so it neither counts down nor needs taking up again.
 
 ### 20.2 Rules
 
@@ -1461,14 +1488,15 @@ first, so mastery moved from C4 to C5.
   fog of war, on every character the viewer can see, §27).
   During the muster they're sealed with the rest of the squad.
 
-The rank-1 options, built from effects, items and blasting:
+The rank-1 options as built, from effects, items and blasting. §34.9 says
+how they fit the planned Realm kit: Hunter's mark retires with the Scout, and
+the Knight's Shove is a base ability, not this Shield bash.
 
 | Character | Option | Replaces | What it does |
 |---|---|---|---|
 | Man-at-arms | **Shield bash** | Cleave | Strike one enemy next to them for 2, and stun it (2 AP, 3 turns) |
 | Knight | **Demolish** | Shield wall | Blast one low cover square next to them, and strike everyone else beside it for 2, friend or foe (2 AP, 2 turns) |
 | Archer | **Crippling shot** | Aimed shot | A shot at normal accuracy that slows on a hit (3 AP, 2 turns) |
-| Scout | **Hunter's mark** | Sneak | Mark an enemy it can see within 12 squares (1 AP, 2 turns) |
 | Mage | **Frost bolt** | Bolt | Damage 2 instead of 3, and slows on a hit |
 | Cleric | **Purify** | Raise | Clear every effect from allies within 1 square, itself among them, and give each 2 HP (2 AP, 3 turns) |
 
@@ -1685,8 +1713,9 @@ drawn.
   three quarters is a climb, which costs 1 more movement point
   (`CLIMB_COST`). A full height or more can't be climbed, except onto or off
   a stair, which is never a climb by as much as the stair itself rises — so
-  a stair beside a cliff doesn't scale it. A **Scout** climbs a full height, and no
-  more. A diagonal step can't cut past a corner that can't be entered, or
+  a stair beside a cliff doesn't scale it. No remaining Realm character has
+  the removed Scout's full-height climbing exception (§34.1). A diagonal
+  step can't cut past a corner that can't be entered, or
   that stands a full height above both its ends.
   - Crossing one square of low cover costs what it did: 2 to climb on, and 2
     to climb off onto open ground, against 3 and 1 before.
@@ -2044,8 +2073,8 @@ place — moving — what a player can be held to knowing.
   (`fog`), so a replay plays it the same way, and every battle from before it
   is a battle without fog.
 - **A character sees 20 squares** (`SIGHT_RANGE`), wherever its line of sight
-  is clear (§25.2): the same line a shot needs. An Archer or a Scout, the
-  overwatch specialist and the scout, sees 25; a Knight, slow and buttoned up
+  is clear (§25.2): the same line a shot needs. An Archer, the
+  overwatch specialist, sees 25; a Knight, slow and buttoned up
   in armour, sees 15 (`sight` on `CHARACTERS`, read by `sightOf`). Each sees
   at least as far as anything it can use reaches — its weapon, its abilities
   and its options, any item — so anything a character could shoot, aim or
@@ -2116,8 +2145,10 @@ place — moving — what a player can be held to knowing.
   out of sight (65%): a hit for 3" — that they were hit, and the odds, not
   who fired. That a turn ended is everyone's, so an End turn's line is told to
   all, less the characters going on watch that the viewer can't see. The
-  scoreboard shows how many of another squad the viewer can see, not how
-  many stand.
+  scoreboard shows how many of an enemy squad the viewer can see, not how
+  many stand. The viewer's own squad and allies share vision (§29.6), so their
+  full standing counts are known; the opened co-op team pill also shows each
+  allied squad's remaining and total HP, including the viewer's own.
 - **Not hidden: the scores.** The scoreboard is everyone's, so a point scored
   out of sight is told as the log's "scored 3 for the knock-out", though not
   who was knocked out or by whom. Points hint at a fallen character's cost.
@@ -2135,8 +2166,9 @@ place — moving — what a player can be held to knowing.
   viewer's characters is told with its chance to hit, as the sheet showed it
   before the move: a hint at the cover between them, not a square. A shot
   between two squads the viewer can't see isn't told at all.
-- **Accepted: a shield wall out of sight.** A Knight's shield wall covers an
-  ally beside it whether or not the shooter sees the Knight. The odds shown
+- **Accepted: a shield wall out of sight.** A Knight's Bulwark covers any
+  character beside it, friend or enemy, whether or not the shooter sees the
+  Knight (§34.5). The odds shown
   before a shot can't count a Knight the player can't see; the server does.
 
 ### 27.3 Engine
@@ -2936,7 +2968,11 @@ sure it is.
   faction (`nameFor`, `colourFor`); the muster names the enemy the players
   will face, or "an unknown enemy" for a random one not yet seen (§29.3); the
   scoreboard shows the team's total
-  against the enemy's, with each player's share under it.
+  against the enemy's, with each player's share under it. Opening the team
+  pill shows each player's standing count and remaining/total squad HP,
+  including the viewer's own, with each fighter's mustered maximum contributing
+  to the total even when fallen. During muster it shows muster status instead,
+  and a player who left keeps the “left the battle” message.
 - **The enemy's turn plays out** on the board as any other turn does (§26),
   and the recap gives it a row per action. `recap.ts` builds a player's
   action row from a `RealmArenaAct`'s line and events; that builder comes out
@@ -2965,8 +3001,9 @@ sure it is.
   is handed every owner in the map's deployment order, warbands
   (`warbandsFor`) after the players.
 - The scoreboard is two pills: the team's total, each player's share under
-  it and each one's squad or muster when it's opened, and the enemy's, with
-  how many of it stand or are in sight. The centre names the side that holds
+  it and each one's standing count and remaining/total squad HP when it's
+  opened (or muster status while mustering), and the enemy's, with how many
+  of it stand or are in sight. The centre names the side that holds
   it. During the muster a line names whom the team will face, or says the
   enemy was drawn at random and is still unknown.
 - A finished co-op battle's subtitle and banner are the team's, in
@@ -3848,11 +3885,15 @@ without the stamp, or with a lower one, plays by the old rules to the end:
 melee always hits and rolls nothing, two players' Hold Out of 15 rounds, cover counted once at any range, the Mage's Bolt
 at 70% and range 10, Heal on a two-turn cooldown, Raise once per battle, and no
 `maxHp`, armour or smaller warbands.
-`battleFrom` reads the stamp into `BattleState.balanced`, which the rules,
-the planner and the board all read; the abilities' old limits are
-`UNBALANCED_LIMITS` in `rules.ts`, as `abilityRules` reads them, since the
-`ABILITIES` table is the current rules. What a stale battle's turn sheet *says*
-(the table's descriptions) is the current wording.
+`battleFrom` preserves the stamp in `BattleState.rulesVersion`. It selects an
+immutable catalogue through `rulesetOf`, including the old Mage Bolt, healing
+limits and descriptions, and the `RULES` values read by `ruleValuesOf`. The
+stamp is the only thing that does: there is no `balanced` flag on a battle to
+read instead, and a state that loses its stamp plays the legacy rules. New games use `CURRENT_RULESET_VERSION`, independently of the command
+protocol version; old games, including those without a stamp,
+keep their catalogue for muster, timeout squads, reinforcements, execution,
+previews and replay. See `docs/command-versions.md`, “Realm Arena catalogues”,
+for the release procedure.
 
 **Tests.** `balance.test.ts` pins each rule against a battle with the rules and
 one without; `rules.test.ts`, `coop.test.ts`, `stats.test.ts`, `undo.test.ts`
@@ -3928,8 +3969,9 @@ rest of B6.
 | Bloater | 10 | 6 | 4 | Barbs: melee, 1 | Burst |
 | Broodmother | 20 | 8 | 5, sight 25 | Talons: melee, 3 | Regrowth |
 
-- **Skitterling:** the fast, weak one — it outruns everything but a Scout and
-  climbs as a Scout does, and dies to one good hit.
+- **Skitterling:** the fast, weak one — movement 8 and full-height climbing,
+  and dies to one good hit. Its stats are unchanged by the Realm Scout's
+  removal (§34.1).
 - **Ravager:** the strong one, slower and bulkier. **Rend** (3 AP, cooldown 3)
   strikes one enemy next to it for 6, always.
 - **Spitter:** the ranged one, its tail raised over its head as a scorpion's
@@ -4110,6 +4152,300 @@ Prospector, Sapper.
 
 ---
 
+## 34. Realm troop overhaul (planned; design only)
+
+The revised design for the **Realm faction only**. None of it is built. Where
+it disagrees with an earlier section — the kit, the mastery options, the
+ready-made squads, the computer's examples — this section wins for a battle
+created under it. Weapons, HP, movement and points stay as they are unless
+something below changes them. The new abilities join each character's base
+kit: they aren't mastery options.
+
+**Old battles keep their rules.** A battle plays to its end, and replays,
+under the rules it was created under. That's the job of the versioned
+rulesets, designed separately; this section only says what the new rules are.
+So the Scout, Sneak, Hunter's mark, the activated shield wall and the old
+Raise all stay in the data, for the battles that have them.
+
+**How to read the values.** A plain value or rule is agreed. A value in
+*italics*, or a rule marked *Proposed*, is a recommendation waiting for an
+answer in §34.10. Balance comes after the rules (§34.9).
+
+### 34.1 The roster: no Scout
+
+- **The Realm musters the Man-at-arms, Knight, Archer, Mage and Cleric.** The
+  Scout leaves the roster, and Sneak and Hunter's mark go with it. Nobody
+  inherits its movement of 8, its sight of 25 or its full-height climb. Other
+  factions keep their own movement and climbing, the Skitterling's included.
+- ***Proposed:* each Scout in a ready-made squad becomes an Archer.** Both cost
+  20 points, so every rung of `BUDGETS` still spends its whole budget, and no
+  squad grows past five characters (§30.5):
+
+  | Budget | Before | After |
+  |---:|---|---|
+  | 70 | two Men-at-arms, an Archer, a Scout | two Men-at-arms, two Archers |
+  | 80 | a Knight, a Man-at-arms, an Archer, a Scout | a Knight, a Man-at-arms, two Archers |
+  | 110 | a Knight, a Man-at-arms, an Archer, a Scout, a Mage | a Knight, a Man-at-arms, two Archers, a Mage |
+  | 120 | a Knight, an Archer, a Scout, a Mage, a Cleric | a Knight, two Archers, a Mage, a Cleric |
+
+  The other rungs have no Scout. Computer warbands and Hold Out's growing waves
+  read the same squads (§29.7, §30.10), so they change with them.
+
+### 34.2 Rules the new abilities share
+
+These come up for several abilities at once, so they're settled once, here.
+
+- ***Proposed:* at most two weapon attacks a turn, for every character.** An
+  attack with the character's own weapon — not an ability, which has its
+  cooldown as its limit, and not a reaction. Four AP already buy only two, so
+  the rule changes nothing for a character without bonus AP. It's what keeps
+  Slash and Dash from becoming a third sword stroke (§34.4).
+- ***Proposed:* bonus AP are spent like any other this turn, and lost when it
+  ends.** Slash and Dash and Raise can leave a character with more than 4.
+  Going on watch banks what's left, but never more than 4 (two reactions), so
+  a bonus can't buy a third reaction. The board shades a move for every AP
+  the character has, not just 1–4.
+- **A dodge sets off neither overwatch nor guard.** *Proposed:* neither does
+  anything else an ability moves — Leap's jump, Shove's push and Beckon's
+  pull — so there's one rule: overwatch and guard react to a move, and
+  nothing an ability moves is a move. With Sneak gone, these are the Realm's
+  answers to a squad dug in on overwatch (§13.4). A character an ability moves
+  ends on a square a character could stand on, with nobody else on it.
+- **Five new effects**, kept in `EFFECTS` and counted as every effect is
+  (§20.1). None stacks with itself (§20.2); different effects stack.
+
+  | Effect | What it does | Count | Comes from |
+  |---|---|---:|---|
+  | **Poisoned** | 1 damage at the start of each of its owner's next two turns. A heal clears it | 2 | Poison Arrow |
+  | **Braced** | +1 armour against every blow, until its owner's next turn. Stacks with Hold Out's armour (§30.13) | 1 | Taunt |
+  | **Blessed** | +1 damage on every hit it lands, until the end of its owner's next turn | 2 | Blessing |
+  | **Focused** | +1 damage on every hit of the Mage's abilities, until the end of its owner's next turn | 2 | Focus |
+  | **Warded** | Full cover against every shot, from any side, until the start of its owner's turn after next | 2 | Ward |
+
+  Poisoned does what Burning does, and that's fine: the two may part ways
+  later. A character can be burning and poisoned at once, and a knock-out by
+  poison scores for whoever poisoned it, as burning's does. *Proposed:* a bonus
+  to damage adds to every blow, a graze's included, before armour takes off;
+  neither Blessed nor Focused adds to a tick of Burning or Poisoned.
+
+### 34.3 Aiming the new abilities
+
+Every kind of action says what it's aimed at in `ACTION_AIMS` (§29.3,
+`tactics.ts`), which the board's taps and the computer's planner both read.
+*Proposed:* the new abilities fit it with two small additions, if each follows
+one principle.
+
+**Aim at one thing; the rules work out the rest.** A player taps one target,
+and a helper in `rules.ts` works out what follows from it — whom a leap lands
+beside, where a shove sends its victim, where a pull stops — as
+`demolishArea` and `burstArea` do today. The board previews from that helper,
+and the planner lists one action per target rather than one per combination.
+
+| Ability | Aimed at | Worked out by the rules |
+|---|---|---|
+| Leap | A square (a new range, `leap`) | Every enemy next to the landing |
+| Shove | An enemy in weapon reach | The push, straight away from the Knight |
+| Poison Arrow, Thunder | An enemy, as a shot | The effect, on a hit |
+| Bouncing Arrow | An enemy, as a shot | The bounce, drawn by the server |
+| Splitting Arrow | Two enemies, as a Cleave is (`at: "enemies"`, count 2) | — |
+| Shoot + Dodge | An enemy, as a shot, **then** a square | — |
+| Ice Ball | A square | The 3×3 |
+| Beckon | An ally | Where the pull stops |
+| Ward | An ally | — |
+| Slash and Dash, Taunt, Focus, Blessing | Itself | Who is braced or blessed |
+
+The two additions:
+
+1. **`then`, for a second tap.** Shoot + Dodge is the one ability that needs
+   two: `{ at: "enemy", shot, then: { at: "path", range: "dodge" } }`. After
+   the target, the board shades where the Archer can dodge to, and tapping the
+   Archer itself stays put. The planner doesn't play out every square: for
+   each target it plays the shot, then the best three dodges by the Exposure
+   and Threat ranking it already ranks moves by (§29.7). That's a few plans a
+   target, not hundreds.
+2. **`useful`, on a square aim.** The planner lists only squares where the
+   ability does something, as it already lists a fireball only where someone
+   is in its 3×3: a leap that lands beside an enemy, an Ice Ball with someone
+   in its 3×3. The board still offers every
+   legal square; only the planner trims.
+
+No ability needs aiming code of its own, and the test that fails for a kind of
+action with no aim covers every new one.
+
+### 34.4 Man-at-arms
+
+Keeps Cleave.
+
+- **Leap** (3 AP, cooldown 2): jumps to a square and deals 2 to **every enemy
+  next to where it lands**, so the more enemies beside the landing, the more it
+  deals. *Proposed:*
+  - The landing is within *4* squares as the crow flies, in sight, a square a
+    character could stand on with nobody on it, and no more than a full height
+    above where it leaps from. Any drop is fine.
+  - It flies over whatever is in between, paying no movement cost, and nobody
+    reacts to it (§34.2).
+  - It doesn't roll: it lands as a fireball does. Friends beside the landing
+    aren't hurt.
+- **Slash and Dash** (*0* AP, cooldown 3): +2 AP this turn, and nothing else —
+  no attack or move of its own. *Proposed:* free, so the 2 AP are all gain;
+  with the two-attack limit (§34.2) they buy a Cleave, a Leap or the dash
+  away, not a third sword stroke.
+
+### 34.5 Knight
+
+- **Bulwark** (passive): every character next to the Knight, **friend or
+  enemy**, has at least half cover against a shot. It's the shield wall's
+  cover (§13.6), always on: no AP, no cooldown, nothing to run out. It doesn't
+  cover the Knight itself, and stronger cover still counts. It counts as the
+  shield wall's does today — whenever the target has no cover on the
+  shooter's side, so a flanking shot meets it too — and is doubled at range or
+  by hunkering down, as any cover is (§30.13). Two Knights side by side cover
+  each other. It's renamed from Shield Wall so it isn't confused with the
+  Stonewarden's activated shield wall (§33), which is unchanged.
+- **Taunt** (*1* AP, cooldown 2): every standing character on the Knight's
+  side, the Knight included, is **Braced** (§34.2): +1 armour until its
+  owner's next turn. It stacks with Hold Out's armour, so a team character
+  can wear 2: a sword's 4 then does 2, and no blow does less than 1. It forces
+  nobody's targeting, so the computer and the players face the same rule
+  (§29.7). *Proposed:* the whole side, wherever it stands, since the bonus is
+  small and lasts a turn; a range is the lever if it's too strong.
+- **Shove** (*2* AP, cooldown 2): strikes an enemy next to the Knight for 2
+  and pushes it up to 2 squares; whatever it collides with takes 1. Renamed
+  from Shield Bash so it isn't confused with the Man-at-arms' stunning Shield
+  bash option (§23.2), and it stuns nobody. *Proposed:*
+  - It rolls as a strike does (80%, §30.13). A miss neither hurts nor pushes.
+  - The push goes straight away from the Knight — along the line from the
+    Knight's square through the target's, one of eight directions — a square
+    at a time.
+  - It stops before a step a move couldn't take (§25.2): high cover, a climb
+    of a full height, the map's edge, or another character. It can be pushed
+    onto low cover, and off a height.
+  - **A collision** is being stopped short. Stopped by a character, friend or
+    foe, that character takes 1, and so does the pushed enemy; stopped by
+    anything else, the pushed enemy takes 1. A push that goes its full 2
+    squares collides with nothing.
+  - Nobody reacts to the push (§34.2). An enemy it downs falls where it
+    stopped.
+
+### 34.6 Archer
+
+Keeps Aimed shot. *Proposed:* each new arrow is a shot at the bow's odds (80%,
+range 20, cover counted as for any shot), puts its effect on only with a hit
+(§20.2), and can't be fired on overwatch.
+
+| Ability | AP | Cooldown | What it does |
+|---|---:|---:|---|
+| **Poison Arrow** | *3* | *2* | *3* damage, and Poisoned on a hit (§34.2): Crippling shot's shape, poisoning rather than slowing |
+| **Bouncing Arrow** | *3* | *3* | *3* damage, and on a hit it bounces to one other enemy at random |
+| **Splitting Arrow** | *3* | *3* | Two shots at two enemies the Archer chooses, *2* damage each, each rolled |
+| **Shoot + Dodge** | *3* | *2* | A shot for *3*, then a dodge of up to *3* movement points (half the Archer's allowance) |
+
+- **Bouncing Arrow is magic.** The bounce needs no sight from the Archer, and
+  can show the squad an enemy it couldn't see. That's accepted, as a fireball
+  into the fog is (§27.2). It bounces once, never on. *Proposed:* only a hit
+  bounces, not a graze, to an enemy within *4* squares of the first target,
+  never a friend. The server draws which one and records the draw with the
+  rolls (§17.2), so a replay bounces the same way. The bounce doesn't roll,
+  and deals *2*. With no enemy in reach, it doesn't bounce.
+- **Splitting Arrow's two targets are chosen**, not random. *Proposed:* two
+  different enemies, each one the Archer could shoot, aimed as a Cleave's two
+  are.
+- **Shoot + Dodge's dodge sets off neither overwatch nor guard** (§34.2).
+  *Proposed:* it comes after the shot, hit or miss, pays the ground's
+  movement costs and climbs as a move does, and can be no distance at all.
+
+### 34.7 Mage
+
+- **Fireball is unchanged.** It already sets everyone it hits burning (§20.1);
+  the table in §13.6 now says so.
+- **Ice Ball** (*3* AP, cooldown *3*): puts on **Slowed**, the existing effect
+  (§20.1), unchanged. *Proposed:* a 3×3 as a fireball is — up to 12 squares
+  away, in sight, no roll, friend or foe — dealing *1*.
+- **Thunder** (*3* AP, cooldown *3*): puts on **Stunned**, the existing effect
+  (§20.1), unchanged: the target loses what it banked and starts its next turn
+  with 2 AP. *Proposed:* one enemy, a shot at the Mage Bolt's odds (80%,
+  range 12), dealing *2*. The area stun is the thunder flask's (§21).
+- **Focus** (2 AP, cooldown *3*): the Mage is **Focused** (§34.2). *Proposed:*
+  it adds to every hit of Fireball, Ice Ball and Thunder — on each character
+  they catch, the Mage's own side's included — not to the Mage Bolt. Focus
+  and an ability are 5 AP, more than a turn holds, which is why it lasts into
+  the next.
+
+### 34.8 Cleric
+
+Keeps Heal.
+
+- **Raise** (3 AP, cooldown 4): as before, a downed ally comes back at half HP.
+  New: one raised on its owner's turn gets **2 AP straight away**, and can act
+  this turn. One raised on another player's turn acts from its owner's next
+  turn, as before. The Runepriest's Raise (§33) is unchanged.
+- **Beckon** (*name proposed*; *2* AP, cooldown *2*): pulls an ally up to 4
+  squares nearer the Cleric. *Proposed:* an ally in sight within *8* squares,
+  not the Cleric itself. It follows the cheapest way a move would take to the
+  Cleric, without paying its cost, and stops after 4 squares, next to the
+  Cleric, or before a square with someone on it, whichever comes first. Nobody
+  reacts to it (§34.2).
+- **Blessing** (*name proposed*; *2* AP, cooldown *3*): allies are **Blessed**
+  (§34.2): +1 damage until the end of each one's owner's next turn. *Proposed:*
+  every ally within *3* squares of the Cleric, the Cleric included. Counted on
+  each blessed character's own turns, so an ally of another player's, whose
+  turns come at other times, still gets one turn of it.
+- **Ward** (*name proposed*; *2* AP, cooldown *4*): an ally is **Warded**
+  (§34.2): full cover against every shot, from any side, until the start of
+  its owner's turn after next. It's an effect on the character, not a change
+  to the ground, so it moves with them and nothing on the map has to be
+  stored or redrawn. *Proposed:* an ally in sight
+  within *6* squares, or the Cleric itself. Like any cover it does nothing
+  against a strike or an area: a fireball still lands. Everyone sees it, as
+  every effect is seen (§20.2).
+
+### 34.9 Balance, mastery and the other factions
+
+- **Points are unchanged for now.** Balance comes once the rules are agreed:
+  the other factions either gain abilities of their own or the Realm's points
+  go up, measured with the balance harness (§30.12). Two to watch: a Man-at-arms
+  using Slash and Dash and Cleave in one turn (two strikes and a Cleave, 16
+  damage if all land), and Bulwark covering an enemy in melee with the Knight
+  from the Knight's own Archers.
+- ***Proposed:* the mastery options (§23.2)** keep what they replace, with one
+  change. The Knight's Demolish replaced the activated shield wall; Bulwark is
+  passive, so Demolish replaces Shove instead, both being the Knight knocking
+  things about. Shield bash still replaces Cleave, now named apart from Shove.
+  Crippling shot, Frost bolt and Purify are as they were, though Frost bolt
+  and Ice Ball both slow; if that leaves Frost bolt pointless, it's the one to
+  redesign. Hunter's mark retires with the Scout.
+- **Other factions are unchanged.** The Stonewarden's shield wall and the
+  Runepriest's Raise keep their rules (§33). Giving them the new behaviour is a
+  decision of its own.
+
+### 34.10 Questions (round 11)
+
+Each proposal above, to accept or change:
+
+1. **Two weapon attacks a turn, for everyone** (§34.2), or for the
+   Man-at-arms alone?
+2. **Bonus AP**: lost at the turn's end, banking no more than 4 (§34.2)?
+3. **Nothing an ability moves sets off a reaction** — the dodge (agreed), and
+   also Leap, Shove and Beckon (§34.2)?
+4. **Aiming**: one target per ability, with `then` for Shoot + Dodge and
+   `useful` for the planner (§34.3)?
+5. **Leap**: 4 squares, a full height up at most, no roll, enemies only
+   (§34.4)?
+6. **Slash and Dash**: free (§34.4)?
+7. **Taunt**: 1 AP, the whole side? It no longer taunts, so does it want a
+   new name — *Stand Firm*, say (§34.5)?
+8. **Shove**: 2 AP, rolls, and a collision hurts both characters (§34.5)?
+9. **The Archer's arrows**: their costs, cooldowns and damage; a bounce of 2
+   within 4 squares, on a hit only (§34.6)?
+10. **The Mage**: Ice Ball a 3×3 and Thunder one target; Focus on every hit of
+    an ability, friends' included (§34.7)?
+11. **The Cleric**: the names Beckon, Blessing and Ward, and their values; a
+    ward that covers one ally until its turn after next (§34.8)?
+12. **Ready-made squads**: an Archer for each Scout (§34.1)?
+13. **Mastery**: Demolish replaces Shove (§34.9)?
+
+---
+
 ## Appendix: Working title
 
 "Realm Arena", chosen in round 4. The shared "Realm" ties it to Defender of the
@@ -4186,4 +4522,5 @@ Realm, its sibling in the same world.
 | 1.53 | The rebalance (§30.13, command version 7): melee hits 80% of the time, cover counts double against a shot from further than 10 squares, the Mage Bolt is 80% to a range of 12, in Hold Out against the Realm the team takes 1 less from every hit, two players' Hold Out lasts 13 rounds instead of 15, a Cleric's Heal is once a turn instead of on a cooldown and its Raise is on a four-turn cooldown instead of once a battle, and in Hold Out the team has 50% more HP against warbands a step smaller. A battle keeps the rules it was created under. |
 | 1.54 | A Cleric's Heal and a Broodmother's Regrowth can be aimed at the healer itself, as a healing draught can (§13.6, §31.2). Only what a move may be aimed at grows, so no command version. |
 | 1.55 | The Miners, a third faction (§33, B6): five dwarves — the Miner, the Stonewarden, the Prospector, the Sapper and the Runepriest — each tougher and a little dearer than the Realm character it stands in for, hitting as hard; and Dynamite, the Sapper's blast of 4 over a 3×3, which leaves no effect. |
-| 1.56 | Benchmarking the planner. Open puzzles (§29.11): three it fails today, kept as `it.fails` — taking a likely knock-out over wounding a fresh enemy, stepping out of a crossfire, and stepping out of a Knight's reach. And the balance harness's `--team-planner <ref>` (§30.12), which has the team play an older planner against the checkout's warbands, so a change to the planner is measured as the warbands' alone; its first experiment, counting the team per head, is in `realm-arena-balance.md` and wasn't kept. Tests, tooling and documents only. |
+| 1.56 | The Realm troop overhaul, designed but not built (§34): the Scout leaves the Realm; the Man-at-arms gains Leap and Slash and Dash; the Knight a passive Bulwark (half cover for anyone beside it, enemies too), Taunt (armour for its side for a turn) and Shove; the Archer four new arrows; the Mage Ice Ball, Thunder and Focus; the Cleric Beckon, Blessing and Ward, and a Raise that lets the raised act at once on its owner's turn. Values not yet agreed are proposed, and asked in §34.10. |
+| 1.57 | Benchmarking the planner. Open puzzles (§29.11): three it fails today, kept as `it.fails` — taking a likely knock-out over wounding a fresh enemy, stepping out of a crossfire, and stepping out of a Knight's reach. And the balance harness's `--team-planner <ref>` (§30.12), which has the team play an older planner against the checkout's warbands, so a change to the planner is measured as the warbands' alone; its first experiment, counting the team per head, is in `realm-arena-balance.md` and wasn't kept. Tests, tooling and documents only. |
