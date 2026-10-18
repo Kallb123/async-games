@@ -50,7 +50,7 @@ export const tutorial: GameTutorial<RealmArenaSignal> = {
         {
             anchor: "board",
             title: "Where it can go",
-            body: "Select one of your characters and the board shades where it can get to for 1, 2, 3 or 4 AP. Tap a square to see the path and who'd react to it, and tap again to go.",
+            body: "Select one of your characters and the board shades where it can get to with the AP it has, including any bonus. Tap a square to see the path and who'd react to it, and tap again to go.",
             when: "myTurn",
             advanceOn: "selected",
             hint: "Tap one of your characters",

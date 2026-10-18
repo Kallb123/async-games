@@ -68,6 +68,22 @@ interface AbilityUse {
 const AREA = "3×3, friend or foe";
 
 const ABILITY_USE: Readonly<Record<AbilityId, AbilityUse>> = {
+    leap: { reach: "aimed" },
+    iceBall: { reach: "aimed" },
+    slashAndDash: { reach: "self" },
+    bulwark: { reach: "self" },
+    taunt: { reach: "self" },
+    focus: { reach: "self" },
+    blessing: { reach: "self" },
+    shove: { reach: "weapon" },
+    poisonArrow: { reach: "weapon" },
+    bouncingArrow: { reach: "weapon" },
+    splittingArrow: { reach: "weapon" },
+    shootDodge: { reach: "weapon" },
+    thunder: { reach: "weapon" },
+    beckon: { reach: "aimed" },
+    ward: { reach: "aimed" },
+    runeRaise: { reach: "next" },
     cleave: { reach: "weapon", note: "Two enemies next to it" },
     shieldWall: { reach: "self", note: ({ coverFor, passive }) => `${coverFor === "everyone" ? "Anyone" : "Allies"} next to it with no cover count as in half cover${passive ? "" : ", until its next turn"}` },
     aimedShot: { reach: "weapon" },
@@ -97,7 +113,7 @@ const PER_TURN = "1/turn";
 /** What an effect does, in a line: "Burning: 1 damage a turn, 2 turns". */
 function effectLine(effect: Affliction, context?: RulesContext): string {
     const { EFFECTS } = rulesetOf(context);
-    const { name, count, ...rest } = EFFECTS[effect];
+    const { name, count, ...rest } = EFFECTS[effect]!;
     const what = effect === "slowed" ? "half movement"
         : "damage" in rest ? `${rest.damage} damage a turn`
         : "ap" in rest ? `${rest.ap} AP next turn`
@@ -135,7 +151,7 @@ function weaponStats(weapon: Weapon, kind: string, key: string, context?: RulesC
 
 function abilityStats(id: AbilityId, weapon: Weapon, kind: string, key: string = id, context?: RulesContext): ActionStats {
     const { ABILITIES } = rulesetOf(context);
-    const ability: Ability = ABILITIES[id];
+    const ability: Ability = ABILITIES[id]!;
     const { reach, note } = ABILITY_USE[id];
     const strikes = reach === "weapon";
     const range = strikes ? weaponReach(weapon, 0, context).range
@@ -162,7 +178,7 @@ function optionStats(id: OptionId, context?: RulesContext): ActionStats {
     const { OPTIONS, CHARACTERS, ABILITIES } = rulesetOf(context);
     const option = OPTIONS[id];
     const { character, rank, replaces } = option;
-    const replaced = replaces === "weapon" ? CHARACTERS[character].weapon.name : ABILITIES[replaces].name;
+    const replaced = replaces === "weapon" ? CHARACTERS[character].weapon.name : ABILITIES[replaces]!.name;
     const kind = `Rank ${rank} · in place of ${replaced}`;
     return "weapon" in option
         ? weaponStats(option.weapon, kind, id, context)

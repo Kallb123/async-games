@@ -30,10 +30,10 @@
 
 import { coverAgainst } from "@/utils/games/battlefield/cover";
 import { canSee } from "@/utils/games/battlefield/lineOfSight";
-import { DEFAULT_CLIMB, pathCost, pathTo, reachFrom, type MoveRules, type Reach } from "@/utils/games/battlefield/pathfinding";
-import { coordsOf, distance, facingTowards, isNeighbour, riseOf, squareAt, type Area, type Battlefield, type Cover, type Facing, type Square } from "@/utils/games/battlefield/terrain";
+import { DEFAULT_CLIMB, pathCost, pathTo, reachFrom, stepCost, type MoveRules, type Reach } from "@/utils/games/battlefield/pathfinding";
+import { coordsOf, distance, facingTowards, FULL_HEIGHT, isNeighbour, riseOf, squareAt, type Area, type Battlefield, type Cover, type Facing, type Square } from "@/utils/games/battlefield/terrain";
 import {
-    AFFLICTIONS, factionOf, isCharacterId, isItemId, isOptionId, kitOf, squadPoints,
+    afflictionsOf, factionOf, isCharacterId, isItemId, isOptionId, kitOf, squadPoints,
     type Ability, type AbilityId, type Affliction, type CharacterId, type Effect, type EffectId, type Faction, type FactionId, type Item, type ItemId, type OptionId, type PlayerCount, type Weapon,
 } from "./characters";
 import { currentRuleset, ruleValuesOf, rulesetOf, type RulesContext } from "./rulesets";
@@ -296,28 +296,33 @@ export function allied(state: Pick<BattleState, "sides">, a: string | null | und
 
 export type Action =
     | { kind: "move" | "sneak"; fighter: number; path: Square[] }
-    | { kind: "attack" | "aimedShot" | "heal" | "raise" | "draught" | "shieldBash" | "cripplingShot" | "huntersMark" | "rend" | "regrowth"; fighter: number; target: number }
-    | { kind: "hunker" | "watch" | "shieldWall" | "purify" | "burst"; fighter: number }
-    | { kind: "cleave"; fighter: number; targets: number[] }
+    | { kind: "attack" | "aimedShot" | "heal" | "raise" | "draught" | "shieldBash" | "cripplingShot" | "huntersMark" | "rend" | "regrowth" | "shove" | "poisonArrow" | "bouncingArrow" | "thunder" | "beckon" | "ward" | "runeRaise"; fighter: number; target: number }
+    | { kind: "hunker" | "watch" | "shieldWall" | "purify" | "burst" | "slashAndDash" | "bulwark" | "taunt" | "focus" | "blessing"; fighter: number }
+    | { kind: "cleave" | "splittingArrow"; fighter: number; targets: number[] }
+    | { kind: "shootDodge"; fighter: number; target: number; path: Square[] }
     /** A demolish is aimed at the square of low cover it blasts. */
-    | { kind: "fireball" | "dynamite" | "throw" | "demolish"; fighter: number; at: Square };
+    | { kind: "fireball" | "dynamite" | "throw" | "demolish" | "leap" | "iceBall"; fighter: number; at: Square };
 
 export type ShotResult = "hit" | "graze" | "miss";
 
 /** One thing that happened, in the order it happened: what the board shows coming back, and what a recap tells. */
 export type BattleEvent =
-    | { kind: "moved"; fighter: number; path: Square[]; sneaking: boolean }
-    | { kind: "shot"; fighter: number; target: number; chance: number; roll: number; result: ShotResult; damage: number; reaction: boolean }
+    | { kind: "moved"; fighter: number; path: Square[]; sneaking: boolean; via?: AbilityId }
+    | { kind: "ability"; fighter: number; ability: AbilityId }
+    /** `via` names the ability a shot was, for those that name it (`NAMED_SHOTS`). */
+    | { kind: "shot"; fighter: number; target: number; chance: number; roll: number; result: ShotResult; damage: number; reaction: boolean; via?: AbilityId }
     /**
      * A melee strike. In a battle under `BALANCE_VERSION` it rolled (`chance`
      * and `roll`) and may have `missed`, doing no damage; before it, it always
      * hit and carries neither. A Demolish's splash is a `demolished` event, not
-     * this, and never rolls.
+     * this, and never rolls. `via` names the ability a blow that never rolls
+     * came from, other than a strike's: a Leap landing beside the target, a
+     * Shove's collision, a Bouncing Arrow's bounce (§34).
      */
-    | { kind: "struck"; fighter: number; target: number; damage: number; reaction: boolean; chance?: number; roll?: number; missed?: true }
-    | { kind: "fireball"; fighter: number; at: Square; targets: number[]; damage: number }
+    | { kind: "struck"; fighter: number; target: number; damage: number; reaction: boolean; chance?: number; roll?: number; missed?: true; via?: AbilityId }
+    | { kind: "fireball" | "iceBall"; fighter: number; at: Square; targets: number[]; damage: number; damages?: Record<number, number> }
     /** A Sapper's Dynamite, landing as a fireball does but leaving nothing alight (§33.2). Its `blasted` follows. */
-    | { kind: "dynamite"; fighter: number; at: Square; targets: number[]; damage: number }
+    | { kind: "dynamite"; fighter: number; at: Square; targets: number[]; damage: number; damages?: Record<number, number> }
     | { kind: "downed"; fighter: number; by: number }
     /**
      * A Cleric's Heal; or, by `via`, a healing draught given by `fighter` — to
@@ -326,13 +331,13 @@ export type BattleEvent =
      */
     | { kind: "healed"; fighter: number; target: number; hp: number; via?: "draught" | "purify" }
     /** A thrown item landing: `targets` is everyone it hit, which a smoke pot never does — its cloud is the thrower's `smoke`. */
-    | { kind: "thrown"; fighter: number; item: ItemId; at: Square; targets: number[]; damage: number }
+    | { kind: "thrown"; fighter: number; item: ItemId; at: Square; targets: number[]; damage: number; damages?: Record<number, number> }
     /** Low cover blasted away to scorched ground by `fighter`'s fireball, fire flask or Demolish, after its damage (§22). */
     | { kind: "blasted"; fighter: number; squares: Square[] }
     /** A Knight's Demolish at the cover on `at`: `targets` is everyone beside it that it struck (§23.2). Its `blasted` follows. */
-    | { kind: "demolished"; fighter: number; at: Square; targets: number[]; damage: number }
+    | { kind: "demolished"; fighter: number; at: Square; targets: number[]; damage: number; damages?: Record<number, number> }
     /** A Bloater's Burst: `targets` is everyone next to it that the acid hit (§31.2). Its own `downed` follows theirs. */
-    | { kind: "burst"; fighter: number; targets: number[]; damage: number }
+    | { kind: "burst"; fighter: number; targets: number[]; damage: number; damages?: Record<number, number> }
     /** A Scout's Hunter's mark on `target`, whose `effect` follows (§23.2). */
     | { kind: "marked"; fighter: number; target: number }
     | { kind: "raised"; fighter: number; target: number; hp: number }
@@ -349,6 +354,9 @@ export type BattleEvent =
     /** Burning doing its damage at the start of its owner's turn. */
     | { kind: "burned"; fighter: number; damage: number; effect?: EffectId }
     | { kind: "scored"; player: string; points: number; reason: "centre" | "knockout" | "assist" };
+
+/** Actual damage of an area hit; historical events carry one amount for everyone. */
+export const areaDamage = (event: { damage: number; damages?: Readonly<Record<number, number>> }, target: number): number => event.damages?.[target] ?? event.damage;
 
 /** What a player scored for, as the log and the board say it (§13.7). */
 export const SCORED_FOR: Readonly<Record<Extract<BattleEvent, { kind: "scored" }>["reason"], string>> = {
@@ -395,6 +403,14 @@ export const itemPoints = (item: ItemId | null | undefined, context?: RulesConte
 
 /** What a set of items costs at muster, a missing one nothing. */
 export const itemsPoints = (items: readonly (ItemId | null | undefined)[], context?: RulesContext): number => items.reduce((total, item) => total + itemPoints(item, context), 0);
+
+/** A standing character can still act with a ready free AP ability, even at zero AP. */
+export function canAct(fighter: Fighter, context?: RulesContext): boolean {
+    if (!isStanding(fighter)) return false;
+    if (fighter.ap > 0) return true;
+    const { ABILITIES } = rulesetOf(context);
+    return abilitiesOf(fighter, context).some(id => ABILITIES[id]?.ap === 0 && (ABILITIES[id]?.bonusAp ?? 0) > 0 && !abilityRefusal(fighter, id, context));
+}
 
 /** What a character's kit says it fights with: its character's weapon, or the one its option swaps in (§23.2). Read only through `weaponOf`, which knows the battle's rules. */
 const kitWeapon = (fighter: Pick<Fighter, "character" | "option">, context?: RulesContext): Weapon => kitOf(fighter.character, fighter.option, context).weapon;
@@ -487,7 +503,7 @@ export type AbilityLimits = Pick<Ability, "cooldown" | "oncePerBattle" | "oncePe
 
 /** How often this game's catalogue lets an ability be used. */
 export function abilityRules(state: Pick<BattleState, "rulesVersion">, id: AbilityId): AbilityLimits {
-    const { cooldown, oncePerBattle, oncePerTurn } = rulesetOf(state).ABILITIES[id];
+    const { cooldown, oncePerBattle, oncePerTurn } = rulesetOf(state).ABILITIES[id]!;
     return { cooldown, ...(oncePerBattle ? { oncePerBattle } : {}), ...(oncePerTurn ? { oncePerTurn } : {}) };
 }
 
@@ -574,9 +590,9 @@ export interface ShotOdds {
 }
 
 /** Active effects, read from the match's catalogue rather than today's ids. */
-function activeEffects(fighter: Pick<Fighter, "effects">, context?: RulesContext): [EffectId, Effect][] {
+export function activeEffects(fighter: Pick<Fighter, "effects">, context?: RulesContext): [EffectId, Effect][] {
     const effects = rulesetOf(context).EFFECTS;
-    return (Object.keys(fighter.effects) as EffectId[]).filter(id => hasEffect(fighter, id) && effects[id]).map(id => [id, effects[id]]);
+    return (Object.keys(fighter.effects) as EffectId[]).filter(id => hasEffect(fighter, id) && effects[id]).map(id => [id, effects[id]!]);
 }
 
 type EffectBonus = "armour" | "damageBonus" | "abilityDamageBonus";
@@ -606,7 +622,7 @@ export function reactionsBlocked(fighter: Fighter, context?: RulesContext): bool
 /** A turn's base AP, plus catalogue-wide, character and passive bonuses. */
 export function actionPointsOf(fighter: Pick<Fighter, "character" | "option">, context?: RulesContext): number {
     const { RULES, CHARACTERS, ABILITIES } = rulesetOf(context);
-    const passive = abilitiesOf(fighter, context).reduce((sum, id) => sum + (ABILITIES[id].passive ? ABILITIES[id].bonusAp ?? 0 : 0), 0);
+    const passive = abilitiesOf(fighter, context).reduce((sum, id) => sum + (ABILITIES[id]!.passive ? ABILITIES[id]!.bonusAp ?? 0 : 0), 0);
     return Math.max(0, RULES.ACTION_POINTS + RULES.BONUS_AP + (CHARACTERS[fighter.character].bonusAp ?? 0) + passive);
 }
 
@@ -623,10 +639,13 @@ export function countsAsAttack(kind: string, context?: RulesContext): boolean {
 /** Strongest temporary cover: a passive/active aura, or an effect such as Ward. */
 const COVER_ABILITIES = new WeakMap<object, { auras: [AbilityId, Ability][]; reachesEnemies: boolean }>();
 
-export function temporaryCover(state: BattleState, target: Fighter): Cover {
+function temporaryProtection(state: BattleState, target: Fighter): { cover: Cover; ability?: AbilityId } {
     const rank = { none: 0, half: 1, full: 2 };
     let cover: Cover = "none";
-    const offer = (next: Cover | undefined) => { if (next && rank[next] > rank[cover]) cover = next; };
+    let abilityId: AbilityId | undefined;
+    const offer = (next: Cover | undefined, source?: AbilityId) => {
+        if (next && rank[next] > rank[cover]) { cover = next; abilityId = source; }
+    };
     const catalogue = rulesetOf(state);
     let known = COVER_ABILITIES.get(catalogue);
     if (!known) {
@@ -637,7 +656,7 @@ export function temporaryCover(state: BattleState, target: Fighter): Cover {
     const { auras, reachesEnemies } = known;
     // Most catalogues have no effect that covers: every shot's odds ask.
     if (effectsCarrying(state).has("cover")) for (const [, effect] of activeEffects(target, state)) offer(effect.cover);
-    if (rank[cover] === 2) return cover;
+    if (rank[cover] === 2) return { cover, ability: abilityId };
     for (const giver of state.fighters) {
         // Only the target and those next to it can give it cover. Every shot's
         // odds ask, so the cheap test goes first: an aura reaching enemies
@@ -650,11 +669,16 @@ export function temporaryCover(state: BattleState, target: Fighter): Cover {
             if (!ability.cover || (!friendly && ability.coverFor !== "everyone")) continue;
             if (!ability.passive && !(ability.stance && hasEffect(giver, ability.stance))) continue;
             if (!abilitiesOf(giver, state).includes(id)) continue;
-            if (self ? ability.coverAffectsSelf : canSee(state.field, giver.square, target.square)) offer(ability.cover);
-            if (rank[cover] === 2) return cover;
+            if (self ? ability.coverAffectsSelf : canSee(state.field, giver.square, target.square)) offer(ability.cover, id);
+            if (rank[cover] === 2) return { cover, ability: abilityId };
         }
     }
-    return cover;
+    return { cover, ability: abilityId };
+}
+
+/** The strongest temporary cover, from an aura or effect. */
+export function temporaryCover(state: BattleState, target: Fighter): Cover {
+    return temporaryProtection(state, target).cover;
 }
 
 /**
@@ -673,7 +697,10 @@ export function landedSmoke(throwers: readonly Fighter[]): Square[] {
 }
 
 /** The kinds of shot: an attack, an aimed shot, a crippling shot — at an attack's odds — and one on overwatch. */
-export type ShotKind = "attack" | "aimedShot" | "cripplingShot" | "overwatch";
+export type ShotKind = "attack" | "aimedShot" | "cripplingShot" | "poisonArrow" | "bouncingArrow" | "splittingArrow" | "shootDodge" | "thunder" | "overwatch";
+
+/** The shots whose event names the ability (`via`), so the board can draw it: the Realm's (§34). Older shots' events stay as they were. */
+const NAMED_SHOTS: ReadonlySet<ShotKind> = new Set<ShotKind>(["poisonArrow", "bouncingArrow", "splittingArrow", "shootDodge", "thunder"]);
 
 /**
  * What a shot leaves on a hit, and only then (§20.2): a crippling shot's
@@ -682,9 +709,9 @@ export type ShotKind = "attack" | "aimedShot" | "cripplingShot" | "overwatch";
  */
 export function shotEffect(shooter: Fighter, kind: ShotKind, context?: RulesContext): Affliction | undefined {
     const { ABILITIES } = rulesetOf(context);
-    if (kind === "cripplingShot") return ABILITIES.cripplingShot.effect;
+    const effect = kind !== "attack" && kind !== "overwatch" ? ABILITIES[kind]?.effect : undefined;
     const weapon = kitWeapon(shooter, context);
-    return weapon.kind === "ranged" ? weapon.effect : undefined;
+    return effect ?? (weapon.kind === "ranged" ? weapon.effect : undefined);
 }
 
 /**
@@ -693,7 +720,7 @@ export function shotEffect(shooter: Fighter, kind: ShotKind, context?: RulesCont
  * redoing the sum. The words are the UI's (`oddsLines` in ui.ts).
  */
 export type OddsFactor =
-    | { kind: "cover"; amount: number; cover: Cover; /** What doubled it, when something did. */ doubled?: "hunkered" | "far"; /** Whether it's a shield wall's, standing in for none. */ shield: boolean }
+    | { kind: "cover"; amount: number; cover: Cover; /** What doubled it, when something did. */ doubled?: "hunkered" | "far"; /** Whether temporary cover improves the terrain. */ shield: boolean; /** The ability supplying temporary cover. */ ability?: AbilityId }
     | { kind: "highGround" | "smoke" | "aimedShot" | "overwatch"; amount: number }
     | { kind: "effect"; amount: number; effect: EffectId };
 
@@ -726,7 +753,7 @@ function effectFactors(target: Fighter, context?: RulesContext): OddsFactor[] {
     let moving = HIT_BONUS_EFFECTS.get(EFFECTS);
     if (!moving) {
         moving = (Object.keys(EFFECTS) as EffectId[]).flatMap((effect): [EffectId, number][] => {
-            const { hitBonus } = EFFECTS[effect] as Effect;
+            const { hitBonus } = EFFECTS[effect]! as Effect;
             return hitBonus !== undefined ? [[effect, hitBonus]] : [];
         });
         HIT_BONUS_EFFECTS.set(EFFECTS, moving);
@@ -767,14 +794,14 @@ function shotBreakdown(state: BattleState, attacker: Fighter, target: Fighter, w
     const far = FAR_SHOT_DISTANCE !== null && distance(field, attacker.square, target.square) > FAR_SHOT_DISTANCE;
 
     const sideCover = coverAgainst(field, target.square, attacker.square);
-    const temporary = sideCover === "full" ? "none" : temporaryCover(state, target);
+    const temporary = sideCover === "full" ? { cover: "none" as const } : temporaryProtection(state, target);
     const rank = { none: 0, half: 1, full: 2 };
-    const shield = rank[temporary] > rank[sideCover];
-    const cover = shield ? temporary : sideCover;
+    const shield = rank[temporary.cover] > rank[sideCover];
+    const cover = shield ? temporary.cover : sideCover;
     const hunkered = hasEffect(target, "hunkered");
     const doubled = hunkered ? "hunkered" : far ? "far" : undefined;
     const factors: OddsFactor[] = [
-        { kind: "cover", amount: -COVER_PENALTY[cover] * (doubled ? 2 : 1), cover, doubled, shield },
+        { kind: "cover", amount: -COVER_PENALTY[cover] * (doubled ? 2 : 1), cover, doubled, shield, ...(shield && temporary.ability ? { ability: temporary.ability } : {}) },
         { kind: "highGround", amount: riseOf(field, attacker.square, target.square) >= HIGH_GROUND_RISE ? HIGH_GROUND_BONUS : 0 },
         ...effectFactors(target, state),
         { kind: "smoke", amount: smokeSquares(state).has(target.square) ? -ITEMS.smokePot.hitPenalty : 0 },
@@ -811,10 +838,12 @@ export function shotOdds(state: BattleState, attacker: Fighter, target: Fighter,
     if (!inRange(state.field, attacker.square, target.square, weapon.range)) return undefined;
     const { chance, grazeChance, cover, far, hunkered } = shotBreakdown(state, attacker, target, weapon, kind);
     const flanked = cover === "none";
-    const struck = weapon.damage + (flanked ? FLANK_BONUS : 0);
+    const ability = kind === "attack" || kind === "overwatch" ? undefined : rulesetOf(state).ABILITIES[kind]!;
+    const struck = (ability?.damage ?? weapon.damage) + (flanked ? FLANK_BONUS : 0);
+    const via = ability ? "ability" : "weapon";
     // What lands, armour taken off where the team wears it: a graze is half of the blow before it.
-    const damage = damageTo(state, attacker, target, struck);
-    return { chance, farCover: far && !hunkered && cover !== "none", grazeChance, damage, grazeDamage: damageTo(state, attacker, target, Math.ceil(struck / 2)), cover, flanked };
+    const damage = damageTo(state, attacker, target, struck, via);
+    return { chance, farCover: far && !hunkered && cover !== "none", grazeChance, damage, grazeDamage: damageTo(state, attacker, target, Math.ceil(struck / 2), via), cover, flanked };
 }
 
 /** A roll of 1–100 against a shot's odds: at or under the chance to hit hits, the graze band above it grazes, and anything more misses. */
@@ -986,8 +1015,10 @@ export function sightOf(fighter: Pick<Fighter, "character">, context?: RulesCont
  * clear only of the enemies it knows of, so its shape gives nobody else away;
  * if it crosses another it can't see, that one is found and gone round too.
  * Without fog every enemy is known, so no path `check` allowed finds one.
+ * A dodge supplies its fixed movement-point budget instead of buying reach
+ * with AP; it follows the same discovery and rerouting rule.
  */
-function routed(state: BattleState, mover: Fighter, sent: readonly Square[], sneaking: boolean): { path: Square[]; found: Fighter[]; ap?: number } {
+function routed(state: BattleState, mover: Fighter, sent: readonly Square[], sneaking: boolean, movementPoints?: number): { path: Square[]; found: Fighter[]; ap?: number } {
     const known = new Set(viewOf(state, mover.owner).fighters.map(fighter => fighter.id));
     const unknownOn = (square: Square) => state.fighters.find(other => !allied(state, other.owner, mover.owner) && isStanding(other) && other.square === square && !known.has(other.id));
     const goal = sent[sent.length - 1];
@@ -997,7 +1028,9 @@ function routed(state: BattleState, mover: Fighter, sent: readonly Square[], sne
     for (let enemy = path.slice(1).map(unknownOn).find(Boolean); enemy; enemy = path.slice(1).map(unknownOn).find(Boolean)) {
         found.push(enemy);
         known.add(enemy.id);
-        const reach = reachOf({ ...state, fighters: state.fighters.filter(one => known.has(one.id) || allied(state, one.owner, mover.owner)) }, mover, sneaking);
+        const knownState = { ...state, fighters: state.fighters.filter(one => known.has(one.id) || allied(state, one.owner, mover.owner)) };
+        const reach = movementPoints === undefined ? reachOf(knownState, mover, sneaking)
+            : reachFrom(state.field, mover.square, movementPoints, moveRules(knownState, mover));
         const to = reach.costs[goal] !== Infinity ? goal : nearestTo(state.field, reach, goal, moveRules(state, mover).climb);
         path = pathTo(reach, to)?.squares ?? [mover.square];
         ap = moveAp(mover, reach.costs[to], sneaking, state);
@@ -1043,19 +1076,88 @@ export function assistPoints(character: CharacterId, context?: RulesContext): nu
     return Math.ceil(knockoutPoints(character, context) / ASSIST_DIVISOR);
 }
 
+/** A Leap's legal landing; intervening terrain and movement costs do not matter. */
+export function leapLanding(state: BattleState, actor: Fighter, at: unknown): at is Square {
+    const ability = rulesetOf(state).ABILITIES.leap;
+    return !!ability && isSquare(state.field, at) && at !== actor.square
+        && inRange(state.field, actor.square, at, ability.range!)
+        && riseOf(state.field, at, actor.square) <= ability.maxRise!
+        && state.field.tiles[at].terrain.standable
+        && !state.fighters.some(one => isStanding(one) && one.square === at);
+}
+
+export function leapTargets(state: BattleState, actor: Fighter, at: Square): Fighter[] {
+    return state.fighters.filter(one => isStanding(one) && !allied(state, one.owner, actor.owner) && nextTo(state.field, at, one.square));
+}
+
+/** Trim an ability's walking route to a square a character can finish on. */
+function standingPath(field: Battlefield, path: Square[]): Square[] {
+    let end = path.length;
+    while (end > 1 && !field.tiles[path[end - 1]].terrain.standable) end--;
+    return path.slice(0, end);
+}
+
+/** The push's path and any character it collides with. A drop is allowed. */
+export function shovePath(state: BattleState, actor: Fighter, target: Fighter): { path: Square[]; collision: boolean; hit?: Fighter } {
+    const ability = rulesetOf(state).ABILITIES.shove;
+    const a = coordsOf(state.field, actor.square), b = coordsOf(state.field, target.square);
+    const dc = Math.sign(b.col - a.col), dr = Math.sign(b.row - a.row);
+    const path = [target.square];
+    for (let step = 0; step < (ability?.push ?? 0); step++) {
+        const from = path[path.length - 1], at = coordsOf(state.field, from);
+        const to = squareAt(state.field, at.col + dc, at.row + dr);
+        const hit = state.fighters.find(one => one.id !== target.id && isStanding(one) && one.square === to);
+        if (to === undefined || hit
+            || (riseOf(state.field, to, from) >= FULL_HEIGHT)
+            || stepCost(state.field, from, to, Math.max(DEFAULT_CLIMB, riseOf(state.field, from, to))) === undefined) {
+            return { path: standingPath(state.field, path), collision: true, ...(hit ? { hit } : {}) };
+        }
+        path.push(to);
+    }
+    if (!state.field.tiles[path[path.length - 1]].terrain.standable) {
+        return { path: standingPath(state.field, path), collision: true };
+    }
+    return { path, collision: false };
+}
+
+/** Cheapest walking route towards the Cleric, stopped before anybody's square. */
+export function beckonPath(state: BattleState, cleric: Fighter, target: Fighter): Square[] {
+    const rules = moveRules(state, target);
+    const route = pathTo(reachFrom(state.field, target.square, Infinity, { ...rules, occupied: new Set() }), cleric.square)?.squares;
+    const path = [target.square];
+    for (const square of route?.slice(1, 1 + (rulesetOf(state).ABILITIES.beckon?.pull ?? 0)) ?? []) {
+        if (nextTo(state.field, path[path.length - 1], cleric.square)
+            || state.fighters.some(one => one.id !== target.id && isStanding(one) && one.square === square)) break;
+        path.push(square);
+    }
+    return standingPath(state.field, path);
+}
+
+/** Dodge reach uses terrain and climbing, without reactions or AP spending. */
+export function dodgeReach(state: BattleState, fighter: Fighter): Reach {
+    return reachFrom(state.field, fighter.square, rulesetOf(state).ABILITIES.shootDodge?.dodge ?? 0, moveRules(state, fighter));
+}
+
+export function bounceTargets(state: BattleState, actor: Fighter, target: Fighter): Fighter[] {
+    const range = rulesetOf(state).ABILITIES.bouncingArrow?.bounceRange ?? 0;
+    return state.fighters.filter(one => one.id !== target.id && isStanding(one) && !allied(state, one.owner, actor.owner)
+        && distance(state.field, target.square, one.square) <= range).sort((a, b) => a.id - b.id);
+}
+
 // ─── Checking an action ─────────────────────────────────────────────────────
 
 const isSquare = (field: Battlefield, value: unknown): value is Square =>
     Number.isInteger(value) && (value as number) >= 0 && (value as number) < field.tiles.length;
 
 /** Why a character can't use an ability now, or undefined when it can. */
-function abilityRefusal(fighter: Fighter, ability: AbilityId, context?: RulesContext): string | undefined {
+export function abilityRefusal(fighter: Fighter, ability: AbilityId, context?: RulesContext): string | undefined {
     const { CHARACTERS, ABILITIES } = rulesetOf(context);
-    if (ABILITIES[ability]?.passive) return `${ABILITIES[ability].name} is passive`;
-    if (!ABILITIES[ability] || !abilitiesOf(fighter, context).includes(ability)) return `This ${CHARACTERS[fighter.character].name} can't use ${ABILITIES[ability]?.name ?? ability}`;
-    if (fighter.spent.includes(ability)) return `${ABILITIES[ability].name} has been used this battle`;
-    if (fighter.usedThisTurn?.includes(ability)) return `${ABILITIES[ability].name} has been used this turn`;
-    if ((fighter.cooldowns[ability] ?? 0) > 0) return `${ABILITIES[ability].name} isn't ready yet`;
+    if (ABILITIES[ability]?.passive) return `${ABILITIES[ability]!.name} is passive`;
+    if (!ABILITIES[ability]! || !abilitiesOf(fighter, context).includes(ability)) return `This ${CHARACTERS[fighter.character].name} can't use ${ABILITIES[ability]?.name ?? ability}`;
+    if (ABILITIES[ability]!.bonusAp && (hasEffect(fighter, "hunkered") || fighter.banked > 0)) return "Their turn has ended";
+    if (fighter.spent.includes(ability)) return `${ABILITIES[ability]!.name} has been used this battle`;
+    if (fighter.usedThisTurn?.includes(ability)) return `${ABILITIES[ability]!.name} has been used this turn`;
+    if ((fighter.cooldowns[ability] ?? 0) > 0) return `${ABILITIES[ability]!.name} isn't ready yet`;
     return undefined;
 }
 
@@ -1108,7 +1210,7 @@ export function check(battle: BattleState, player: string, action: unknown): Che
     const afford = (ap: number): Check => ap <= actor.ap ? { ap } : refused("Not enough AP");
     const ability = (abilityId: AbilityId, then: () => string | undefined): Check => {
         const reason = abilityRefusal(actor, abilityId, battle) ?? then();
-        return reason ? refused(reason) : afford(ABILITIES[abilityId].ap);
+        return reason ? refused(reason) : afford(ABILITIES[abilityId]!.ap);
     };
 
     switch (kind) {
@@ -1125,6 +1227,39 @@ export function check(battle: BattleState, player: string, action: unknown): Che
             const reason = attackRefusal(state, actor, target, "attack");
             return reason ? refused(reason) : afford(ATTACK_AP);
         }
+        case "shove":
+        case "poisonArrow":
+        case "bouncingArrow":
+        case "thunder":
+            return ability(kind, () => attackRefusal(state, actor, target, kind === "shove" ? "attack" : kind));
+        case "shootDodge":
+            return ability(kind, () => {
+                const reason = attackRefusal(state, actor, target, kind);
+                if (reason) return reason;
+                if (Array.isArray(path) && path.length === 1 && path[0] === actor.square) return undefined;
+                const cost = pathRefusal(state, actor, path);
+                return typeof cost === "string" ? cost : cost > ABILITIES.shootDodge!.dodge! ? "Too far to dodge" : undefined;
+            });
+        case "splittingArrow":
+            return ability(kind, () => {
+                if (!Array.isArray(targets) || targets.length !== 2 || targets[0] === targets[1]) return "Pick two different enemies";
+                return targets.map(id => attackRefusal(state, actor, fighterById(state, id), kind)).find(Boolean);
+            });
+        case "leap":
+            return ability(kind, () => leapLanding(state, actor, at) ? undefined : "Pick a clear landing in sight within 4 squares, at most one height up");
+        case "beckon":
+        case "ward":
+            return ability(kind, () => {
+                if (!target || !isStanding(target) || !allied(state, actor.owner, target.owner) || (kind === "beckon" && target.id === actor.id)) return "Pick an ally";
+                const reason = aimRefusal(state, actor, target.square, ABILITIES[kind]!.range!);
+                return reason ?? (kind === "beckon" && beckonPath(state, actor, target).length < 2 ? "That ally cannot be pulled closer" : undefined);
+            });
+        case "slashAndDash":
+        case "bulwark":
+        case "taunt":
+        case "focus":
+        case "blessing":
+            return ability(kind, () => undefined);
         case "aimedShot":
             return ability("aimedShot", () => attackRefusal(state, actor, target, "aimedShot"));
         // An attack with the character's own weapon, at its usual odds, that
@@ -1162,15 +1297,17 @@ export function check(battle: BattleState, player: string, action: unknown): Che
             return ability("purify", () => purified(state, actor).length > 0 ? undefined : "Nobody beside them needs it");
         case "fireball":
         case "dynamite":
-            return ability(kind, () => aimRefusal(state, actor, at, ABILITIES[kind].range));
+        case "iceBall":
+            return ability(kind, () => aimRefusal(state, actor, at, ABILITIES[kind]!.range!));
         case "heal":
         case "regrowth":
-            return ability(kind, () => healRefusal(state, actor, target, false, ABILITIES[kind].range));
+            return ability(kind, () => healRefusal(state, actor, target, false, ABILITIES[kind]!.range));
         case "burst":
             return ability("burst", () => state.fighters.some(one => isEnemy(state, actor, one) && burstArea(state.field, actor.square).includes(one.square))
                 ? undefined : "No enemy next to them");
         case "raise":
-            return ability("raise", () => {
+        case "runeRaise":
+            return ability(kind, () => {
                 if (!target || !allied(state, target.owner, actor.owner) || isStanding(target)) return "Pick a downed ally";
                 if (!nextTo(state.field, actor.square, target.square)) return "Too far away to raise";
                 const clear = state.field.tiles[target.square].terrain.standable
@@ -1226,8 +1363,8 @@ export function demolishArea(field: Battlefield, knight: Square, at: Square): Sq
 export const burstArea = (field: Battlefield, bloater: Square): Square[] => demolishArea(field, bloater, bloater);
 
 /** The afflictions on a character, which Purify clears: every one, Marked among them (§23.2). */
-export function afflictionsOn(fighter: Fighter): Affliction[] {
-    return AFFLICTIONS.filter(effect => hasEffect(fighter, effect));
+export function afflictionsOn(fighter: Fighter, context?: RulesContext): Affliction[] {
+    return afflictionsOf(context).filter(effect => hasEffect(fighter, effect));
 }
 
 /**
@@ -1238,7 +1375,7 @@ export function afflictionsOn(fighter: Fighter): Affliction[] {
 export function purified(state: BattleState, cleric: Fighter): Fighter[] {
     return state.fighters.filter(ally => allied(state, ally.owner, cleric.owner) && isStanding(ally)
         && (ally.id === cleric.id || nextTo(state.field, cleric.square, ally.square))
-        && (ally.hp < maxHpOf(ally, state) || afflictionsOn(ally).length > 0));
+        && (ally.hp < maxHpOf(ally, state) || afflictionsOn(ally, state).length > 0));
 }
 
 // ─── Taking an action ───────────────────────────────────────────────────────
@@ -1254,17 +1391,17 @@ export function afflicted(target: Fighter, effect: Affliction, by: number, conte
     const { EFFECTS } = rulesetOf(context);
     if (!isStanding(target)) return undefined;
     const was = target.effects[effect] ?? 0;
-    const fighter: Fighter = { ...target, effects: { ...target.effects, [effect]: Math.max(was, EFFECTS[effect].count) } };
+    const fighter: Fighter = { ...target, effects: { ...target.effects, [effect]: Math.max(was, EFFECTS[effect]!.count) } };
     if (effect === "burning") fighter.burnedBy = by;
-    if (EFFECTS[effect].damage && effect !== "burning") fighter.effectSources = { ...fighter.effectSources, [effect]: by };
-    if (EFFECTS[effect].preventsReactions) fighter.banked = 0;
+    if (EFFECTS[effect]!.damage && effect !== "burning") fighter.effectSources = { ...fighter.effectSources, [effect]: by };
+    if (EFFECTS[effect]!.preventsReactions) fighter.banked = 0;
     return { fighter, event: { kind: "effect", fighter: target.id, effect, change: was > 0 ? "refreshed" : "applied" } };
 }
 
 /** The effects on a character that a heal clears (§20.2). */
 export function healedEffects(fighter: Fighter, context?: RulesContext): EffectId[] {
     const { EFFECTS } = rulesetOf(context);
-    return (Object.keys(EFFECTS) as EffectId[]).filter(effect => "healed" in EFFECTS[effect] && hasEffect(fighter, effect));
+    return (Object.keys(EFFECTS) as EffectId[]).filter(effect => "healed" in EFFECTS[effect]! && hasEffect(fighter, effect));
 }
 
 /**
@@ -1338,7 +1475,11 @@ function resolver(state: BattleState, roll: Roll) {
     const afflict = (by: Fighter, target: Fighter, effect: Affliction) => {
         const result = afflicted(target, effect, by.id, state);
         if (!result) return;
+        const previous = target.effects[effect] ?? 0;
         Object.assign(target, result.fighter);
+        // A buff on another owner's turn lasts through that owner's next
+        // turn, rather than two full turns of theirs.
+        if (rulesetOf(state).EFFECTS[effect]?.decayAt === "end" && target.owner !== by.owner) target.effects[effect] = Math.max(previous, rulesetOf(state).EFFECTS[effect]!.count - 1);
         events.push(result.event);
     };
 
@@ -1350,9 +1491,10 @@ function resolver(state: BattleState, roll: Roll) {
         const rolled = roll();
         const result = shotResult(odds, rolled);
         const damage = result === "hit" ? odds.damage : result === "graze" ? odds.grazeDamage : 0;
-        events.push({ kind: "shot", fighter: by.id, target: target.id, chance: odds.chance, roll: rolled, result, damage, reaction: kind === "overwatch" });
+        events.push({ kind: "shot", fighter: by.id, target: target.id, chance: odds.chance, roll: rolled, result, damage, reaction: kind === "overwatch", ...(NAMED_SHOTS.has(kind) ? { via: kind as AbilityId } : {}) });
         if (damage > 0) wound(by, target, damage);
         if (result === "hit" && effect) afflict(by, target, effect);
+        return result;
     };
 
     /**
@@ -1385,8 +1527,14 @@ function resolver(state: BattleState, roll: Roll) {
     const land = (by: Fighter, squares: readonly Square[], damage: number, effect: Affliction | undefined, told: (targets: number[]) => BattleEvent, via: BlowSource = "ability") => {
         const area = new Set(squares);
         const hit = fighters.filter(one => isStanding(one) && area.has(one.square));
-        events.push(told(hit.map(one => one.id)));
-        if (damage > 0) for (const target of hit) wound(by, target, damageTo(battle, by, target, damage, via));
+        const damages = Object.fromEntries(hit.map(target => [target.id, damageTo(battle, by, target, damage, via)]));
+        const event = told(hit.map(one => one.id));
+        // Old events stay byte-for-byte the same. New bonus/armour effects
+        // need actual amounts for each HP cue and the battle record.
+        if ("targets" in event && "damage" in event && effectsCarrying(state).has("damageBonus")
+            && hit.some(target => damages[target.id] !== damage)) event.damages = damages;
+        events.push(event);
+        if (damage > 0) for (const target of hit) wound(by, target, damages[target.id]);
         if (effect) for (const target of hit) afflict(by, target, effect);
     };
 
@@ -1408,7 +1556,7 @@ function resolver(state: BattleState, roll: Roll) {
         const restored = Math.min(hp, maxHpOf(target, state) - target.hp);
         target.hp += restored;
         events.push({ kind: "healed", fighter: by.id, target: target.id, hp: restored, ...(via ? { via } : {}) });
-        for (const effect of via === "purify" ? afflictionsOn(target) : healedEffects(target, state)) {
+        for (const effect of via === "purify" ? afflictionsOn(target, state) : healedEffects(target, state)) {
             delete target.effects[effect];
             if (target.effectSources) delete target.effectSources[effect];
             events.push({ kind: "effect", fighter: target.id, effect, change: "cleared" });
@@ -1416,7 +1564,18 @@ function resolver(state: BattleState, roll: Roll) {
         delete target.burnedBy;
     };
 
-    return { fighters, battle, events, get, shoot, strike, wound, afflict, land, blast, mend };
+    const hit = (by: Fighter, target: Fighter, blow: number, via: AbilityId) => {
+        const damage = damageTo(battle, by, target, blow, "ability");
+        events.push({ kind: "struck", fighter: by.id, target: target.id, damage, reaction: false, via });
+        wound(by, target, damage);
+    };
+    const relocate = (mover: Fighter, path: Square[], via: AbilityId) => {
+        if (path.length < 2) return;
+        events.push({ kind: "moved", fighter: mover.id, path, sneaking: false, via });
+        mover.facing = facingTowards(state.field, path[path.length - 2], path[path.length - 1]);
+        mover.square = path[path.length - 1];
+    };
+    return { fighters, battle, events, get, shoot, strike, wound, afflict, land, blast, mend, hit, relocate };
 }
 
 /**
@@ -1490,6 +1649,69 @@ export function act(state: BattleState, player: string, action: Action, roll: Ro
             else run.shoot(actor, target, action.kind);
             break;
         }
+        case "leap":
+            run.relocate(actor, [actor.square, action.at], action.kind);
+            for (const target of leapTargets(run.battle, actor, action.at)) run.hit(actor, get(target.id), ABILITIES.leap!.damage!, action.kind);
+            break;
+        case "shove": {
+            const target = get(action.target), ability = ABILITIES.shove!;
+            const push = shovePath(run.battle, actor, target);
+            if (run.strike(actor, target, false, ability.damage, "ability")) {
+                run.relocate(target, push.path, action.kind);
+                if (push.collision) {
+                    if (isStanding(target)) run.hit(actor, target, ability.collisionDamage!, action.kind);
+                    if (push.hit) run.hit(actor, get(push.hit.id), ability.collisionDamage!, action.kind);
+                }
+            }
+            break;
+        }
+        case "beckon": {
+            const target = get(action.target);
+            run.relocate(target, beckonPath(run.battle, actor, target), action.kind);
+            break;
+        }
+        case "poisonArrow":
+        case "thunder":
+            run.shoot(actor, get(action.target), action.kind);
+            break;
+        case "bouncingArrow": {
+            const target = get(action.target);
+            const choices = bounceTargets(run.battle, actor, target);
+            if (run.shoot(actor, target, action.kind) === "hit" && choices.length) {
+                // The command records this additional 1–100 draw with the hit rolls.
+                const ceiling = Math.floor(ROLL_SIDES / choices.length) * choices.length;
+                let drawn = roll();
+                while (drawn > ceiling && drawn <= ROLL_SIDES) drawn = roll();
+                const chosen = choices[(drawn - 1) % choices.length];
+                run.hit(actor, get(chosen.id), ABILITIES.bouncingArrow!.bounceDamage!, action.kind);
+            }
+            break;
+        }
+        case "splittingArrow":
+            for (const id of action.targets) run.shoot(actor, get(id), action.kind);
+            break;
+        case "shootDodge": {
+            run.shoot(actor, get(action.target), action.kind);
+            const { path, found } = routed(run.battle, actor, action.path, false, ABILITIES.shootDodge!.dodge!);
+            for (const enemy of found) events.push({ kind: "spotted", fighter: actor.id, by: enemy.id });
+            run.relocate(actor, path, action.kind);
+            break;
+        }
+        case "slashAndDash":
+            events.push({ kind: "ability", fighter: actor.id, ability: action.kind });
+            break;
+        case "taunt":
+        case "blessing":
+        case "focus":
+        case "ward": {
+            const ability = ABILITIES[action.kind]!;
+            const allies = action.kind === "ward" ? [get(action.target)] : action.kind === "focus" ? [actor]
+                : run.fighters.filter(one => isStanding(one) && allied(state, actor.owner, one.owner)
+                    && (ability.radius === undefined || distance(state.field, actor.square, one.square) <= ability.radius));
+            for (const ally of allies) run.afflict(actor, ally, ability.effect!);
+            break;
+        }
+        case "bulwark": break; // Passive: check always refuses activating it.
         case "shieldBash":
             // For the ability's damage, not the sword's, and stunned if it stays up (§23.2).
             // A miss stuns nobody, as a shot leaves its effect only on a hit.
@@ -1540,18 +1762,19 @@ export function act(state: BattleState, player: string, action: Action, roll: Ro
             for (const id of action.targets) run.strike(actor, get(id), false, undefined, "ability");
             break;
         case "shieldWall":
-            actor.effects[ABILITIES.shieldWall.stance ?? "shieldWall"] = EFFECTS[ABILITIES.shieldWall.stance ?? "shieldWall"].count;
+            actor.effects[ABILITIES.shieldWall.stance ?? "shieldWall"] = EFFECTS[ABILITIES.shieldWall.stance ?? "shieldWall"]!.count;
             events.push({ kind: "shieldWall", fighter: actor.id });
             break;
         case "fireball":
-        case "dynamite": {
+        case "dynamite":
+        case "iceBall": {
             // Every character in the area, friend or foe — the thrower too, if
             // it's that close — and no roll (§13.6). Whoever a fireball doesn't
             // down is left burning: it doesn't roll, so it always does (§20.2);
             // dynamite leaves nothing behind (§33.2). Then the low cover it
             // landed on is gone (§22).
             const kind = action.kind;
-            const ability: Ability = ABILITIES[kind];
+            const ability: Ability = ABILITIES[kind]!;
             const damage = ability.damage ?? 0;
             run.land(actor, areaAround(state.field, action.at), damage, ability.effect,
                 targets => ({ kind, fighter: actor.id, at: action.at, targets, damage }));
@@ -1561,7 +1784,7 @@ export function act(state: BattleState, player: string, action: Action, roll: Ro
         case "heal":
         case "regrowth":
             // The answer to effects: it puts out burning, and clears slowed, stunned and corroded (§20.2).
-            run.mend(actor, get(action.target), ABILITIES[action.kind].hp);
+            run.mend(actor, get(action.target), ABILITIES[action.kind]!.hp);
             break;
         case "purify":
             for (const ally of purified(state, actor)) run.mend(actor, get(ally.id), ABILITIES.purify.hp, "purify");
@@ -1589,13 +1812,14 @@ export function act(state: BattleState, player: string, action: Action, roll: Ro
             run.blast(actor, blastedBy(state.field, item, action.at));
             break;
         }
-        case "raise": {
+        case "raise":
+        case "runeRaise": {
             // Back on its feet at half HP, with the catalogue's AP to spend
             // if it's its owner's turn and nothing until their next turn if
             // not; the points for downing it stay scored (§13.5).
             const target = get(action.target);
             target.hp = Math.ceil(maxHpOf(target, state) / 2);
-            target.ap = target.owner === player ? ABILITIES.raise.apOnRaise ?? 0 : 0;
+            target.ap = target.owner === player ? ABILITIES[action.kind]!.apOnRaise ?? 0 : 0;
             events.push({ kind: "raised", fighter: actor.id, target: target.id, hp: target.hp });
             break;
         }

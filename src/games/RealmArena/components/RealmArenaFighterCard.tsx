@@ -50,7 +50,7 @@ export default function RealmArenaFighterCard({ fighter, battle, label, children
                     <div className="ag-list">
                         <ListRow icon={weaponMark(fighter.character, fighter.option)} title={weapon.name} sub={weaponLine(weapon, battle)} />
                         {abilitiesOf(fighter, battle).map(id => {
-                            const ability = ABILITIES[id];
+                            const ability = ABILITIES[id]!;
                             return (
                                 <ListRow
                                     key={id}

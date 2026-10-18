@@ -82,6 +82,11 @@ export const WHATS_NEW: WhatsNewGroup[] = [
         icon: "✨",
         items: [
             {
+                title: "Realm Arena: new abilities for the Realm",
+                detail: "Leap and dash with Men-at-arms, brace your side and shove enemies with Knights, try four new Archer arrows, freeze and stun with Mages, and pull, bless and ward allies with Clerics. The Scout retires from new squads. Battles already under way keep their original rules.",
+                game: "realmarena",
+            },
+            {
                 title: "Realm Arena's scoreboard shows your allies' full squad and HP",
                 detail: "Allies share vision, so their squads no longer say ‘in sight’ in fog of war. In co-op, tap the scoreboard to see how much HP each allied squad has left out of its full total, including your own.",
                 game: "realmarena",
@@ -123,10 +128,6 @@ export const WHATS_NEW: WhatsNewGroup[] = [
                 title: "Realm Arena rebalanced: tougher Hold Out defenders, melee can miss, cover matters more at range, a longer-reaching Mage",
                 detail: "In Hold Out your characters now have 50% more HP, and against the Renegades every hit on them does 1 less. The enemy warbands muster one step smaller, and a two-player Hold Out lasts 13 rounds instead of 15. In every battle a blow in melee hits 80% of the time rather than always, a target's cover counts double against a shot from further than 10 squares (so those in cover are much safer at a distance, and those in the open no safer), the Mage's Bolt becomes the Mage Bolt (80% to hit, 12 squares), a Cleric can Heal every turn (once a turn, no waiting), and Raise can be used again four turns after the last one instead of once a battle. Battles already under way keep the rules they started with.",
                 game: "realmarena",
-            },
-            {
-                title: "Open a game from home in a new tab",
-                detail: "Your turn cards and finished games on the home page are proper links now: press and hold, or middle-click, to open one in a new tab. And a game's screen starts loading as soon as its card is on screen, before you tap it.",
             },
         ],
     },

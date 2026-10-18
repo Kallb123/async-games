@@ -19,7 +19,7 @@ import type { IReplayStep } from "@/utils/games/replay";
 import { type CharacterId } from "./characters";
 import type { IRealmArenaSpecificGameState } from "./RealmArenaModels";
 import { CHARACTER_IDS } from "./roster";
-import { allied, battleRounds, ENEMY_SIDE, isStanding, isWarband, knockoutPoints, sideOf, squadHp, TEAM_SIDE, waveArrives, type BattleEvent, type BattleState, type Fighter } from "./rules";
+import { areaDamage, allied, battleRounds, ENEMY_SIDE, isStanding, isWarband, knockoutPoints, sideOf, squadHp, TEAM_SIDE, waveArrives, type BattleEvent, type BattleState, type Fighter } from "./rules";
 
 /** What one player's characters of one kind did in a battle, pooled as their mastery is (§23.1). */
 export interface FightingRecord {
@@ -179,7 +179,7 @@ export function battleRecorder(seats: readonly string[], sides?: BattleState["si
             else attacker.dealt += taken;
         };
         for (const event of events) {
-            if (event.kind === "shot" || event.kind === "struck" || event.kind === "fireball" || event.kind === "dynamite" || event.kind === "thrown" || event.kind === "demolished" || event.kind === "burst") attacker = event.fighter;
+            if (event.kind === "shot" || event.kind === "struck" || event.kind === "iceBall" || event.kind === "fireball" || event.kind === "dynamite" || event.kind === "thrown" || event.kind === "demolished" || event.kind === "burst") attacker = event.fighter;
             switch (event.kind) {
                 case "effect": {
                     const sources = effectSources.get(event.fighter) ?? {};
@@ -205,12 +205,13 @@ export function battleRecorder(seats: readonly string[], sides?: BattleState["si
                     wound(event.fighter, event.target, event.damage);
                     break;
                 }
+                case "iceBall":
                 case "fireball":
                 case "dynamite":
                 case "thrown":
                 case "demolished":
                 case "burst":
-                    for (const target of event.targets) wound(event.fighter, target, event.damage);
+                    for (const target of event.targets) wound(event.fighter, target, areaDamage(event, target));
                     break;
                 case "burned":
                     // Credited to whoever set it alight, as its knock-out is (§20.2).

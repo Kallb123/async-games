@@ -115,6 +115,8 @@ describe("Realm Arena replay", () => {
         // decided on here before it reaches every player — and, in fog of war,
         // on what stepOutcomeToModel cuts from it for a viewer (§27).
         const fields: Record<ToldEvent["kind"], string[]> = {
+            iceBall: ["at", "damage", "fighter", "targets"],
+            ability: ["ability", "fighter"],
             moved: ["fighter", "path", "sneaking"],
             shot: ["chance", "damage", "fighter", "reaction", "result", "target"],
             struck: ["chance", "damage", "fighter", "reaction", "target"],
@@ -141,7 +143,7 @@ describe("Realm Arena replay", () => {
         for (const event of events) {
             const { kind, ...rest } = event;
             // A draught's or a Purify's `via`, and a strike's `missed`, are the optional fields.
-            expect(Object.keys(rest).filter(key => key !== "via" && key !== "missed").sort()).toEqual(fields[kind]);
+            expect(Object.keys(rest).filter(key => key !== "via" && key !== "missed" && key !== "damages").sort()).toEqual(fields[kind]);
         }
     });
 
@@ -175,7 +177,7 @@ describe("the sealed muster, replayed (§17.2)", () => {
     // that never does (§21.1).
     async function oneMustered(): Promise<RealmArenaTestGame> {
         // Ranked, so the Mage can carry its option (§23.2), sealed like the rest.
-        const game = makeGame(undefined, { a: { mage: 1 } });
+        const game = makeGame(undefined, { a: { mage: 1 } }, { rulesVersion: 7 });
         const zone = readyMadePicks(game, 0).map(pick => pick.square);
         const picks = [
             { character: "mage" as const, square: zone[0], option: "frostBolt" as const },

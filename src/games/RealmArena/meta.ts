@@ -39,7 +39,10 @@ export const meta: GameMeta = {
     // wall is a passive covering anyone beside them, friend or foe, and a
     // character raised on its owner's turn has 2 AP to spend. A tab from
     // before it would still offer Shield wall as an action.
-    commandVersion: 8,
+    // Version 9 adds the Realm overhaul's actions, effects and targeting,
+    // including Shoot + Dodge's target then path. Older tabs must reload to
+    // display and send these actions; each game still selects its own ruleset.
+    commandVersion: 9,
     oldestReplayableCommandVersion: 2,
     available: true,
 };

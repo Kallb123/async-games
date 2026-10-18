@@ -52,7 +52,7 @@ describe("what a squad sees (§27)", () => {
     it("lets each character see as far as anything it can use reaches, so fog never takes away a shot, an aim or a throw", () => {
         const reaches = (kit: Kit) => [
             kit.weapon.kind === "ranged" ? kit.weapon.range : 1,
-            ...kit.abilities.map(id => { const ability: Ability = ABILITIES[id]; return ability.range ?? 0; }),
+            ...kit.abilities.map(id => { const ability: Ability = ABILITIES[id]!; return ability.range ?? 0; }),
             ...Object.values(ITEMS).map(item => ("range" in item ? item.range : undefined) ?? 0),
         ];
         for (const character of CHARACTER_IDS) {

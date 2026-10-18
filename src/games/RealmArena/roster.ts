@@ -47,7 +47,7 @@ export function factionRosterLine(id: FactionId, context?: RulesContext): string
 export function weaponLine(weapon: Weapon, context?: RulesContext): string {
     if (weapon.kind === "melee") return `Melee · ${ruleValuesOf(context).MELEE_ACCURACY}% · ${weapon.damage} damage`;
     const { EFFECTS } = rulesetOf(context);
-    const leaves = weapon.effect ? ` · ${EFFECTS[weapon.effect].name.toLowerCase()} on a hit` : "";
+    const leaves = weapon.effect ? ` · ${EFFECTS[weapon.effect]!.name.toLowerCase()} on a hit` : "";
     return `${weapon.accuracy}% · range ${weapon.range} · ${weapon.damage} damage${leaves}`;
 }
 
@@ -87,7 +87,7 @@ export function starterView(character: CharacterId, part: KitPart, context?: Rul
         const { weapon } = CHARACTERS[character];
         return { icon: weaponMark(character), name: weapon.name, line: weaponLine(weapon, context) };
     }
-    const ability = ABILITIES[part];
+    const ability = ABILITIES[part]!;
     return { icon: ABILITY_MARK, name: ability.name, line: `${ability.ap} AP · ${ability.description}` };
 }
 
@@ -104,7 +104,7 @@ export function optionView(id: OptionId, context?: RulesContext): KitView {
         const { character, weapon } = option;
         return { icon: weaponMark(character, id), name: weapon.name, line: `In place of the ${replaced} · ${weaponLine(weapon, context)}` };
     }
-    const ability = ABILITIES[option.ability];
+    const ability = ABILITIES[option.ability]!;
     return { icon: ABILITY_MARK, name: ability.name, line: `In place of ${replaced} · ${ability.ap} AP · ${ability.description}` };
 }
 

@@ -35,7 +35,7 @@ const own = (game: RealmArenaTestGame, player: string) => game.specificGameState
  * b's is the ready-made one.
  */
 async function battleWith(squad: readonly (keyof typeof OPTION_OF)[]): Promise<RealmArenaTestGame> {
-    const game = makeGame(undefined, A_RANKED);
+    const game = makeGame(undefined, A_RANKED, { rulesVersion: 7 });
     const field = battlefieldById(game.specificGameState.map);
     const picks = readyMadeMuster(field, 0, squad as never).map(pick => ({ ...pick, option: OPTION_OF[pick.character] }));
     expect((await play(game, muster("a", picks))).outcome.validMove).toBe(true);
@@ -45,7 +45,7 @@ async function battleWith(squad: readonly (keyof typeof OPTION_OF)[]): Promise<R
 
 describe("mustering with options (§23.2)", () => {
     it("takes an option the battle's own snapshot unlocks, and carries it onto the battlefield", async () => {
-        const game = makeGame(undefined, A_RANKED);
+        const game = makeGame(undefined, A_RANKED, { rulesVersion: 7 });
         const picks = optionPicks(game);
         expect((await play(game, muster("a", picks))).outcome.validMove).toBe(true);
         expect((await play(game, muster("b", readyMadePicks(game, 1)))).outcome.validMove).toBe(true);
@@ -76,13 +76,13 @@ describe("mustering with options (§23.2)", () => {
     });
 
     it("seals the options with the squad: its owner's to see until every player has mustered, and everyone's after", async () => {
-        const game = makeGame(undefined, A_RANKED);
+        const game = makeGame(undefined, A_RANKED, { rulesVersion: 7 });
         const picks = optionPicks(game);
         const command = muster("a", picks);
         const { outcome } = await play(game, command);
         // Every option's id and the name of what it swaps in, and the key a pick would carry one under.
         const names = (Object.entries(OPTIONS) as [OptionId, CharacterOption][])
-            .flatMap(([id, option]) => [id, "weapon" in option ? option.weapon.name : ABILITIES[option.ability].name]);
+            .flatMap(([id, option]) => [id, "weapon" in option ? option.weapon.name : ABILITIES[option.ability]!.name]);
         for (const viewer of ["b", null]) {
             const traces = [JSON.stringify((await responseFor(game, viewer)).specificGameState), command.myString(), JSON.stringify(outcome), game.gameState.history[0].text];
             for (const trace of traces) {
@@ -97,7 +97,7 @@ describe("mustering with options (§23.2)", () => {
     });
 
     it("sends each viewer their own ranks the battle snapshotted, and nobody else's", async () => {
-        const game = makeGame(undefined, A_RANKED);
+        const game = makeGame(undefined, A_RANKED, { rulesVersion: 7 });
         expect((await responseFor(game, "a")).specificGameState.mastery).toEqual(A_RANKED);
         for (const viewer of ["b", null]) {
             expect((await responseFor(game, viewer)).specificGameState.mastery).toEqual({});

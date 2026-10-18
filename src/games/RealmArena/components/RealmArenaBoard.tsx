@@ -6,7 +6,7 @@ import BoardZoom, { useBoardCentre, type BoardZoomFocus, type BoardZoomPivot } f
 import ClickableMapNode from '@/components/ui/ClickableMapNode';
 import MapLabelLayer from '@/components/ui/MapLabelLayer';
 import { coverBySide, SIDE_STEPS, type Side } from '@/utils/games/battlefield/cover';
-import { facingTowards, type Battlefield, type Facing, type Square, type TerrainLetter } from '@/utils/games/battlefield/terrain';
+import { type Battlefield, type Facing, type Square, type TerrainLetter } from '@/utils/games/battlefield/terrain';
 import { isoArea, isoBlock, isoBounds, isoCentre, isoCorner, isoDepth, isoGridLines, isoGroundAt, isoPoint, isoPoints, isoRuns, isoSlab, isoSquareAt, isoView, ISO_HALF_HEIGHT, ISO_HALF_WIDTH, type IsoBlock, type IsoRotation, type IsoView, type Point } from '@/utils/ui/isometric';
 import { RealmArenaTerrainArt, RealmArenaTerrainDefs, spriteId, SpriteUse } from '@/games/RealmArena/components/RealmArenaTerrain';
 import { RealmArenaEffectMarks } from '@/games/RealmArena/components/RealmArenaEffects';
@@ -21,7 +21,7 @@ import { CHARACTER_ART, facingCell, ITEM_ART, SMOKE_ART, spriteBox, TERRAIN_ART,
 import { CHARACTERS, ITEMS, type CharacterId, type ItemId } from '@/games/RealmArena/characters';
 import { CENTRE, isStanding, isWarband, maxHpOf, smokeSquares, type BattleState, type Fighter, type FogGhost, type MusterPick, type ToldEvent } from '@/games/RealmArena/rules';
 import type { AttackOption } from '@/games/RealmArena/tactics';
-import { AP_PIP_OFFSET, AP_PIP_RADIUS, AP_PIP_STEP, apPips, areaRect, BOARD_ZOOM, CENTRE_LABEL, EFFECT_MARK_OFFSET, EFFECT_MARK_SIZE, EFFECT_MARK_STEP, FIGURE_RADIUS, FIGURE_RISE, figureRectAt, fxPointsAt, HP_BAR_HEIGHT, HP_BAR_RISE, HP_BAR_WIDTH, ITEM_MARK_OFFSET, ITEM_MARK_SIZE, MARKER_RADIUS, ODDS_HEIGHT, ODDS_RISE, ODDS_WIDTH, PATH_END_RADIUS, RING_RADIUS, ringOf, shadedSquares, SHADOW_ALPHA, SHADOW_RADIUS, shieldPath, SMOKE_SIZE, type GroundShade, type Marker, type ShadeKind, type Ring, type BattleCue, type BoardFollow, type FallCue, type FxPoints, type ScorchCue, type Shove, type Timed, type WalkCue, effectsOn, facingOf, fadeInAt, fadeOutAt, fighterStatus, endOf, hpFraction, legLengthOn, progressOf, shakeAt, shakesOf, shovesOf, shoveAt, terrainLetter, toldAt, toldOf, walkerAt, walkCameraAt, legPoint, walkLift, walkSquares, type Told } from '@/games/RealmArena/ui';
+import { AP_PIP_OFFSET, AP_PIP_RADIUS, AP_PIP_STEP, apPips, areaRect, BOARD_ZOOM, CENTRE_LABEL, EFFECT_MARK_OFFSET, EFFECT_MARK_SIZE, EFFECT_MARK_STEP, FIGURE_RADIUS, FIGURE_RISE, figureRectAt, fxPointsAt, HP_BAR_HEIGHT, HP_BAR_RISE, HP_BAR_WIDTH, ITEM_MARK_OFFSET, ITEM_MARK_SIZE, MARKER_RADIUS, ODDS_HEIGHT, ODDS_RISE, ODDS_WIDTH, PATH_END_RADIUS, RING_RADIUS, ringOf, shadedSquares, SHADOW_ALPHA, SHADOW_RADIUS, shieldPath, SMOKE_SIZE, type GroundShade, type Marker, type ShadeKind, type Ring, type BattleCue, type BoardFollow, type FallCue, type FxPoints, type ScorchCue, type Shove, type Timed, type WalkCue, effectsOn, facingOf, fadeInAt, fadeOutAt, fighterStatus, endOf, hpFraction, legLengthOn, progressOf, shakeAt, shakesOf, shovesOf, shoveAt, terrainLetter, toldAt, toldOf, walkerAt, walkCameraAt, walkFacing, legPoint, walkLift, walkSquares, type Told, type WalkMotion } from '@/games/RealmArena/ui';
 
 /** How deep the ground is drawn under the map's front edges, in quarters. */
 const SLAB_DEPTH = 3;
@@ -188,7 +188,7 @@ const SHADE_CLASS: Readonly<Record<ShadeKind, string>> = {
 
 /** The class a `GroundShade` is drawn with on a square it has: a reach deepens with the AP it costs. */
 function shadeClass({ kind, ap }: GroundShade, square: Square): string {
-    return kind === 'reach' ? `${SHADE_CLASS.reach} ag-ra-reach--${ap!(square)}` : SHADE_CLASS[kind];
+    return kind === 'reach' ? `${SHADE_CLASS.reach} ag-ra-reach--${Math.min(6, ap!(square))}` : SHADE_CLASS[kind];
 }
 
 /** Where a figure's disc is centred: `FIGURE_RISE` over the middle of its square's top. */
@@ -449,18 +449,18 @@ function onePerFrame<T>(read: (ms: number) => T): (ms: number) => T {
  * (`usePlaybackValue`), so only the two slots it passes between render, and no
  * ref is read to find where to draw.
  */
-function WalkerSlot({ artId, view, field, fighter, walker, slot, tintFor, colourFor }: { artId: string; view: IsoView; field: Battlefield; fighter: Fighter; walker: Walker; slot: number; tintFor: TintFor; colourFor: (owner: string) => string }) {
+function WalkerSlot({ artId, view, field, fighter, walker, motion, slot, tintFor, colourFor }: { artId: string; view: IsoView; field: Battlefield; fighter: Fighter; walker: Walker; motion?: WalkMotion; slot: number; tintFor: TintFor; colourFor: (owner: string) => string }) {
     const leg = usePlaybackValue(ms => {
         const now = walker(ms);
         return now && now.at === slot ? `${now.from}>${now.to}` : null;
     });
     if (leg === null) return null;
     const [from, to] = leg.split('>').map(Number);
-    return <WalkingFigure artId={artId} view={view} field={field} fighter={fighter} walker={walker} from={from} to={to} tintFor={tintFor} colourFor={colourFor} />;
+    return <WalkingFigure artId={artId} view={view} field={field} fighter={fighter} walker={walker} from={from} to={to} motion={motion} tintFor={tintFor} colourFor={colourFor} />;
 }
 
-/** A walker on one leg, from `from` to `to`: slid and lifted a frame at a time (`WalkerSlot`). */
-function WalkingFigure({ artId, view, field, fighter, walker, from, to, tintFor, colourFor }: { artId: string; view: IsoView; field: Battlefield; fighter: Fighter; walker: Walker; from: Square; to: Square; tintFor: TintFor; colourFor: (owner: string) => string }) {
+/** A walker on one leg, from `from` to `to`, going as `motion` says: slid and lifted a frame at a time (`WalkerSlot`). */
+function WalkingFigure({ artId, view, field, fighter, walker, from, to, motion, tintFor, colourFor }: { artId: string; view: IsoView; field: Battlefield; fighter: Fighter; walker: Walker; from: Square; to: Square; motion?: WalkMotion; tintFor: TintFor; colourFor: (owner: string) => string }) {
     const feet = isoCentre(view, from);
     // Drawn from wherever the walker is each frame, not from the leg this was
     // rendered for: the render that turns it to its next leg lands a frame or
@@ -478,7 +478,7 @@ function WalkingFigure({ artId, view, field, fighter, walker, from, to, tintFor,
     });
     return (
         <g ref={slide} className="ag-ra-walker">
-            <Figure artId={artId} view={view} square={from} character={fighter.character} facing={facingTowards(field, from, to)} item={fighter.item} tint={tintFor(fighter.owner)} moving={lift} />
+            <Figure artId={artId} view={view} square={from} character={fighter.character} facing={walkFacing(field, { from, to, motion })} item={fighter.item} tint={tintFor(fighter.owner)} moving={lift} />
             <HpBar x={feet.x} y={feet.y} fighter={fighter} colour={colourFor(fighter.owner)} />
         </g>
     );
@@ -999,7 +999,7 @@ export default function RealmArenaBoard({ field, fighters, fogGhosts = [], unsee
         const walker = onePerFrame(ms => walkerAt(walks, ms, legLength));
         walkSquares(walks).forEach((square, slot) => items.push({
             depth: isoDepth(view, square) + 0.6,
-            node: <WalkerSlot key={`walk-${playback?.key}-${id}-${slot}`} artId={artId} view={view} field={field} fighter={walks[0].fighter} walker={walker} slot={slot} tintFor={tintFor} colourFor={colourFor} />,
+            node: <WalkerSlot key={`walk-${playback?.key}-${id}-${slot}`} artId={artId} view={view} field={field} fighter={walks[0].fighter} walker={walker} motion={walks[0].motion} slot={slot} tintFor={tintFor} colourFor={colourFor} />,
         }));
     });
     // Anyone the action downs lies unseen until its blow lands, so its fallen

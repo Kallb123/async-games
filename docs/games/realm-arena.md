@@ -1,8 +1,8 @@
 # Realm Arena — Game Design Document
 
-**Status:** v1.56. The Realm troop overhaul (§34) is **design only, not
-implemented**. §13's Realm roster and core rules describe the planned kit;
-§34 gives the full changes, with proposed values awaiting answers (§34.10).
+**Status:** v1.59. The Realm troop overhaul (§34) is implemented for new
+battles in rules version 9, using §34.10's proposed defaults for playtesting.
+Battles already created keep their original rules.
 Earlier implementation
 notes and revision history describe the game before this overhaul wherever
 they conflict with §34.
@@ -704,7 +704,7 @@ As proposed in v0.3 (defaults taken), with AP costs added:
 ### 13.6 The first faction and its characters
 
 The Realm is the human kingdom both games are named for. The roster below is
-the **planned, unbuilt** overhaul (§34): the Scout is gone, and each character
+the **v9** overhaul (§34): the Scout is gone, and each character
 has new abilities beside the ones it kept. Weapons, HP, movement and points are
 as they were.
 
@@ -1230,7 +1230,7 @@ at that moment, before counting down. So:
 In the built rules, the two stances become effects too. Hunkered down and
 Shield wall already end at the start of their owner's next turn, so they move
 into the same field with a count of 1. That removes two booleans from the character rather than adding
-a third and fourth. The planned Knight's Bulwark (§34.5) is a passive
+a third and fourth. The Knight's v9 Bulwark (§34.5) is a passive
 instead, so it neither counts down nor needs taking up again.
 
 ### 20.2 Rules
@@ -1489,7 +1489,7 @@ first, so mastery moved from C4 to C5.
   During the muster they're sealed with the rest of the squad.
 
 The rank-1 options as built, from effects, items and blasting. §34.9 says
-how they fit the planned Realm kit: Hunter's mark retires with the Scout, and
+how they fit the v9 Realm kit: Hunter's mark retires with the Scout, and
 the Knight's Shove is a base ability, not this Shield bash.
 
 | Character | Option | Replaces | What it does |
@@ -4154,9 +4154,9 @@ Prospector, Sapper.
 
 ---
 
-## 34. Realm troop overhaul (planned; design only)
+## 34. Realm troop overhaul (rules version 9)
 
-The revised design for the **Realm faction only**. None of it is built. Where
+The revised kit for the **Realm faction only**, implemented in rules version 9. Where
 it disagrees with an earlier section — the kit, the mastery options, the
 ready-made squads, the computer's examples — this section wins for a battle
 created under it. Weapons, HP, movement and points stay as they are unless
@@ -4169,16 +4169,16 @@ rulesets, designed separately; this section only says what the new rules are.
 So the Scout, Sneak, Hunter's mark, the activated shield wall and the old
 Raise all stay in the data, for the battles that have them.
 
-**Built so far.** Rules version 8 (`catalogues/v8.ts`) ships two pieces
-ahead of the rest: the shield wall as a passive covering anyone beside its
-holder, friend or foe (Bulwark's rule, §34.5, still under the name Shield
-wall), and a Raise that gives the raised 2 AP on its owner's turn (§34.8).
-Both are shared abilities, so for now they reach the Stonewarden's shield wall
-and the Runepriest's Raise too; splitting those off is left to the overhaul.
+**Implementation.** `catalogues/v9.ts` implements the full kit using the
+proposed names and balance values below (§34.10). New battles are stamped v9;
+versions 0–8 keep their catalogues and behaviour. The Knight's Bulwark is
+separate from the Stonewarden's activated Shield wall, and the Runepriest's
+Raise grants no immediate AP. The command protocol is version 9 so older
+clients refresh before displaying or sending the new actions.
 
-**How to read the values.** A plain value or rule is agreed. A value in
-*italics*, or a rule marked *Proposed*, is a recommendation waiting for an
-answer in §34.10. Balance comes after the rules (§34.9).
+**How to read the values.** The values marked *Proposed* below are the initial
+implemented defaults, ready for playtesting. Future balance changes belong in
+a new rules catalogue; never edit a shipped one.
 
 ### 34.1 The roster: no Scout
 
@@ -4453,6 +4453,36 @@ Each proposal above, to accept or change:
 12. **Ready-made squads**: an Archer for each Scout (§34.1)?
 13. **Mastery**: Demolish replaces Shove (§34.9)?
 
+### 34.11 On the board
+
+How the new kit plays out over the battlefield (§26), on the isometric board
+and the 3D one alike, from the same cues. A blow that doesn't roll and isn't
+a strike — a Leap's landing, a Shove's collision, a Bouncing Arrow's bounce —
+names its ability (`via`) on its `struck` event, and so does each of the new
+arrows and Thunder on its `shot`, so the board can tell them apart; while a
+random enemy is still hidden (§29.3), the names are stripped with the rest of
+its kit, and a Shove plays as an ordinary walk.
+
+- **Leap** jumps in one arc over whatever is between, its shadow staying on
+  the ground, and comes down in a ring of dust over the 3×3, with a thud;
+  everyone it lands beside is hit as it does.
+- **Shove** slashes as a strike does; the enemy is then pushed back without a
+  step, still facing the Knight. A collision throws up dust where it stopped,
+  with a thud, and lands on both at once.
+- **Beckon** pulls the ally along without a step; **Shoot + Dodge** darts away
+  quicker than a walk, once the arrow has landed.
+- **Poison Arrow** flies green; **Bouncing Arrow** flies on from its first
+  target to the one it bounces to.
+- **Ice Ball** is a shard of ice that bursts in frost over the 3×3; **Thunder**
+  is a crack of lightning, flashing where it strikes on a hit.
+- **Taunt**, **Blessing**, **Focus** and **Slash and Dash** light a golden glow
+  under everyone they reach, all at once; **Ward** a ring of runes.
+- The five new effects each have a badge on the effects sheet, between the
+  older effects' and the watch's.
+
+All of it is drawn in `effects.svg` and `fx.svg` and rendered by
+`npm run ra-marks`, as the rest of the battle visuals are (§26.3).
+
 ---
 
 ## Appendix: Working title
@@ -4534,3 +4564,4 @@ Realm, its sibling in the same world.
 | 1.56 | The Realm troop overhaul, designed but not built (§34): the Scout leaves the Realm; the Man-at-arms gains Leap and Slash and Dash; the Knight a passive Bulwark (half cover for anyone beside it, enemies too), Taunt (armour for its side for a turn) and Shove; the Archer four new arrows; the Mage Ice Ball, Thunder and Focus; the Cleric Beckon, Blessing and Ward, and a Raise that lets the raised act at once on its owner's turn. Values not yet agreed are proposed, and asked in §34.10. |
 | 1.57 | Rules version 8 (command version 8) builds two pieces of §34: the Knight's and Stonewarden's Shield wall is a passive, giving anyone beside them, friend or foe, half cover; and a character raised on its owner's turn has 2 AP to spend. Battles created before it keep the activated shield wall and the old Raise. |
 | 1.58 | Benchmarking the planner. Open puzzles (§29.11): three it fails today, kept as `it.fails` — taking a likely knock-out over wounding a fresh enemy, stepping out of a crossfire, and stepping out of a Knight's reach. And the balance harness's `--team-planner <ref>` (§30.12), which has the team play an older planner against the checkout's warbands, so a change to the planner is measured as the warbands' alone; its first experiments — counting the team per head, and an Exposure that adds every shot up and lets a melee enemy walk — are in `realm-arena-balance.md`, and none was kept. Tests, tooling and documents only. |
+| 1.59 | Rules version 9 (command version 9) builds the rest of §34 with its proposed values: the Realm's new kits, the five new effects, their aims and the computer's use of them; battles created before it keep their catalogue. How the board plays it (§34.11): a Leap's arc and landing, a Shove's push and collision, a Beckon's pull, a Bouncing Arrow's bounce, Ice Ball's shard and frost, Thunder's lightning, a glow under everyone blessed or braced and a ring under the warded, and a badge for each new effect, all drawn in the effect and fx masters. |

@@ -2,7 +2,7 @@
 import React from 'react';
 import Section from '@/components/ui/Section';
 import { CHARACTERS } from '@/games/RealmArena/characters';
-import { actionPointsOf, isStanding, maxHpOf, type BattleState, type Fighter } from '@/games/RealmArena/rules';
+import { isStanding, maxHpOf, type BattleState, type Fighter } from '@/games/RealmArena/rules';
 import RealmArenaCrosshair from './RealmArenaCrosshair';
 import { RealmArenaStatusList } from './RealmArenaEffects';
 import { apPips, canAct, effectsOn, fighterName, hpFraction, watchStatus } from '@/games/RealmArena/ui';
@@ -35,7 +35,7 @@ export default function RealmArenaUnits({ battle, player, colourFor, acting, sho
     const { fighters } = battle;
     const squad = fighters.filter(fighter => fighter.owner === player);
     if (squad.length === 0) return null;
-    const ready = acting ? squad.filter(canAct) : [];
+    const ready = acting ? squad.filter(fighter => canAct(fighter, battle)) : [];
     // The first ready one after the selected one, round to the start again.
     const next = ready.find(fighter => fighter.id > (selectedId ?? -1)) ?? ready.find(fighter => fighter.id !== selectedId);
 
@@ -49,7 +49,7 @@ export default function RealmArenaUnits({ battle, player, colourFor, acting, sho
             <div className="ag-ra-units" data-tour="ra-units">
                 {squad.map(fighter => {
                     const standing = isStanding(fighter);
-                    const done = acting && standing && !canAct(fighter);
+                    const done = acting && standing && !canAct(fighter, battle);
                     return (
                         <UnitBox
                             key={fighter.id}
@@ -122,7 +122,7 @@ function UnitStatus({ fighter, acting, done }: { fighter: Fighter; acting: boole
     if (done) return <span>✓ Done</span>;
     if (!acting) return <span>{watchStatus(fighter) ?? 'Waiting'}</span>;
     return (
-        <span className="ag-ra-unit-ap" aria-label={`${fighter.ap} of ${fighter.maxAp ?? actionPointsOf(fighter)} AP left`}>
+        <span className="ag-ra-unit-ap" aria-label={`${fighter.ap} of ${apPips(fighter).length} AP left`}>
             <span className="ag-ra-unit-pips" aria-hidden="true">
                 {apPips(fighter).map((on, i) => (
                     <span key={i} className={`ag-ra-unit-pip${on ? ' ag-ra-unit-pip--on' : ''}`} />

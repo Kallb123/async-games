@@ -35,11 +35,11 @@ import { costsFrom, DEFAULT_CLIMB, reachFrom, pathTo, type Reach } from "@/utils
 import { battlefieldWith, coordsOf, type Battlefield, type Square } from "@/utils/games/battlefield/terrain";
 import { type AbilityId } from "./characters";
 import {
-    abilitiesOf, act, allied, areaAround, blastedIn, CENTRE, centrePoints, check, fighterById, isStanding, landedSmoke,
-    damageTo, maxHpOf, moveAp, movementOf, reachOf, ROLL_SIDES, shotOdds, squadSight, strikeChance, watchedSquares, weaponOf, weaponReaches,
+    abilitiesOf, activeEffects, act, canAct, allied, areaAround, blastedIn, CENTRE, centrePoints, check, fighterById, isStanding, landedSmoke,
+    damageTo, dodgeReach, leapTargets, maxHpOf, moveAp, movementOf, reachOf, ROLL_SIDES, shotOdds, squadSight, strikeChance, watchedSquares, weaponOf, weaponReaches,
     type Action, type BattleEvent, type BattleState, type Fighter, type FogGhost, type ShotOdds,
 } from "./rules";
-import { ACTION_AIMS, rangeKindOf, rangeSquares, reactionPreviews, rollsToHit, shotOf, targetKindOf, targetsOf, type ActionKind } from "./tactics";
+import { ACTION_AIMS, standingAt, rangeKindOf, rangeSquares, reactionPreviews, rollsToHit, shotOf, targetKindOf, targetsOf, type ActionKind } from "./tactics";
 
 /**
  * What each term of a battle's score is worth (§29.7): the same for every
@@ -57,6 +57,8 @@ const WEIGHTS = {
     threat: 0.5,
     /** Each AP of walking between its characters and the centre, once the centre scores. */
     objective: 1,
+    /** Value of each AP above the normal turn allowance. */
+    bonusAp: 0.1,
 };
 
 /**
@@ -146,7 +148,7 @@ export function nextAction(view: BattleState, owner: string, round: number, hunt
     const plan = planFor(view, owner, Number.isFinite(round) ? Math.max(1, round) : 1, memo, hunt);
     let best: Action | undefined;
     let bestScore = score(plan, plan.state, []) + LEAST_GAIN;
-    const ready = plan.state.fighters.filter(fighter => fighter.owner === owner && isStanding(fighter) && fighter.ap > 0).sort((a, b) => a.id - b.id);
+    const ready = plan.state.fighters.filter(fighter => fighter.owner === owner && canAct(fighter, plan.state)).sort((a, b) => a.id - b.id);
     for (const fighter of ready) {
         for (const action of optionsFor(plan, fighter)) {
             const value = judge(plan, action);
@@ -269,11 +271,13 @@ function middleOf(field: Battlefield, area: readonly Square[]): Square | undefin
  * squares it could move to, and what goes at once. In `ACTION_AIMS` order,
  * then by target or square.
  */
+const UNIVERSAL_ACTIONS: ReadonlySet<ActionKind> = new Set(["move", "attack", "hunker", "watch", "throw", "draught"]);
+
 function optionsFor(plan: Plan, fighter: Fighter): Action[] {
     const { state, owner } = plan;
     return (Object.keys(ACTION_AIMS) as ActionKind[]).flatMap((kind): Action[] => {
         const { ABILITIES } = rulesetOf(plan.state);
-        if (Object.hasOwn(ABILITIES, kind) && !abilitiesOf(fighter, plan.state).includes(kind as AbilityId)) return [];
+        if (!UNIVERSAL_ACTIONS.has(kind) && !abilitiesOf(fighter, state).includes(kind as AbilityId)) return [];
         const aim = ACTION_AIMS[kind];
         const target = targetKindOf(kind);
         switch (aim.at) {
@@ -282,15 +286,27 @@ function optionsFor(plan: Plan, fighter: Fighter): Action[] {
             case "self":
                 return allowed(plan, [{ kind, fighter: fighter.id } as Action]);
             case "enemy":
-            case "ally":
-                return target ? targetsOf(state, owner, fighter, target).map(id => ({ kind, fighter: fighter.id, target: id }) as Action) : [];
+            case "ally": {
+                const ids = target ? targetsOf(state, owner, fighter, target) : [];
+                if (aim.at === "enemy" && aim.then) {
+                    const reach = dodgeReach(state, fighter);
+                    const dodges = [...rangeSquares(state, fighter, aim.then.range)].map(square => {
+                        const { battle, moved } = standingAt(state, { ...fighter, ap: fighter.ap - ABILITIES[kind as AbilityId]!.ap }, square);
+                        return { square, value: standingTerms(plan, battle, moved, enemiesOf(battle, owner)) };
+                    }).sort((a, b) => b.value - a.value || a.square - b.square).slice(0, 3);
+                    return allowed(plan, ids.flatMap(id => dodges.map(({ square }) => ({ kind, fighter: fighter.id, target: id,
+                        path: square === fighter.square ? [square] : pathTo(reach, square)!.squares }) as Action)));
+                }
+                return ids.map(id => ({ kind, fighter: fighter.id, target: id }) as Action);
+            }
             case "enemies":
                 return allowed(plan, groupsOf(target ? targetsOf(state, owner, fighter, target) : [], aim.count)
                     .map(targets => ({ kind, fighter: fighter.id, targets }) as Action));
             case "square": {
                 // Somewhere it would land on someone: a blast on empty ground does nothing a stop doesn't.
                 const someone = new Set(state.fighters.filter(isStanding).map(one => one.square));
-                const squares = [...rangeSquares(state, fighter, rangeKindOf(kind, state) ?? aim.range)].filter(at => areaAround(state.field, at).some(square => someone.has(square)));
+                const squares = [...rangeSquares(state, fighter, rangeKindOf(kind, state) ?? aim.range)].filter(at => aim.useful === "leap"
+                    ? leapTargets(state, fighter, at).length > 0 : areaAround(state.field, at).some(square => someone.has(square)));
                 return allowed(plan, squares.map(at => ({ kind, fighter: fighter.id, at }) as Action));
             }
         }
@@ -379,7 +395,7 @@ function judge(plan: Plan, action: Action): number {
         const field = blasted.length > 0 ? battlefieldWith(state.field, blasted) : state.field;
         value += weight * score(plan, { ...state, field, fighters }, events);
     }
-    if (!("path" in action) || (action.kind === "sneak" && rulesetOf(state).ABILITIES.sneak.movesWithoutReactions)) return value;
+    if (!("path" in action) || action.kind === "shootDodge" || (action.kind === "sneak" && rulesetOf(state).ABILITIES.sneak.movesWithoutReactions)) return value;
     const mover = fighterById(state, action.fighter);
     if (!mover) return value;
     for (const reaction of reactionPreviews(state, mover, action.path)) {
@@ -441,6 +457,13 @@ function score(plan: Plan, battle: BattleState, events: readonly BattleEvent[]):
     const enemies = enemiesOf(battle, owner);
     for (const fighter of battle.fighters) {
         if (!isStanding(fighter)) continue;
+        const catalogue = rulesetOf(battle);
+        const effects = activeEffects(fighter, battle).map(([id, effect]) => ({ effect, count: fighter.effects[id]! }));
+        const delayed = effects.reduce((sum, { effect, count }) => sum + (effect.damage ?? 0) * count, 0);
+        total -= side(fighter.owner) * worthOf(fighter, Math.min(fighter.hp, delayed), battle) * WEIGHTS.strength;
+        const focus = effects.reduce((sum, { effect }) => sum + (effect.abilityDamageBonus ?? 0), 0);
+        const readyAbility = focus > 0 && abilitiesOf(fighter, battle).some(id => (catalogue.ABILITIES[id]?.damage ?? 0) > 0 && (fighter.cooldowns[id] ?? 0) <= 1);
+        if (readyAbility) total += side(fighter.owner) * focus * WEIGHTS.threat;
         total += side(fighter.owner) * worthOf(fighter, fighter.hp, plan.state) * WEIGHTS.strength * (side(fighter.owner) > 0 ? ownWorth : 1);
         if (fighter.owner === owner) total += standingTerms(plan, battle, fighter, enemies);
     }
@@ -460,7 +483,8 @@ function standingTerms(plan: Plan, battle: BattleState, fighter: Fighter, enemie
     const { exposure, threat } = harm;
     const armed = fighter.ap >= ruleValuesOf(battle).ATTACK_AP ? 1 : SPENT_THREAT;
     const urgency = Math.min(1, plan.round / ruleValuesOf(battle).CENTRE_SCORES_FROM_ROUND);
-    return -WEIGHTS.exposure * plan.ownWorth * exposure
+    const bonus = Math.max(0, fighter.ap - ruleValuesOf(battle).ACTION_POINTS) * WEIGHTS.bonusAp;
+    return bonus - WEIGHTS.exposure * plan.ownWorth * exposure
         + WEIGHTS.threat * armed * threat
         - WEIGHTS.objective * urgency * plan.toCentre(fighter) / movementOf(fighter, plan.state);
 }

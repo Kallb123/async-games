@@ -101,7 +101,7 @@ describe("hitting (§13.3)", () => {
             const open = fighter(2, "b", "knight", at(field, 5, 3));
             const wall = fighter(3, "b", "knight", at(field, 6, 3), { effects: { shieldWall: 1 } });
             const walled = { field, fighters: [archer, open, wall] };
-            expect(oddsBreakdown(walled, archer, open).factors).toEqual([{ kind: "cover", amount: -20, cover: "half", doubled: undefined, shield: true }]);
+            expect(oddsBreakdown(walled, archer, open).factors).toEqual([{ kind: "cover", amount: -20, cover: "half", doubled: undefined, shield: true, ability: "shieldWall" }]);
             expect(oddsBreakdown(walled, archer, open).chance).toBe(shotOdds(walled, archer, open)?.chance);
         });
 
@@ -674,14 +674,14 @@ describe("mustering", () => {
         const squad = REALM.readyMade[100];
         const picks = readyMadeMuster(narrow, 0, squad);
         expect(musterRefusal(narrow, 0, picks, budget, {}, REALM)).toBeUndefined();
-        expect(() => readyMadeMuster(narrow, 0, [...squad, "scout", "scout"])).toThrow("too small");
+        expect(() => readyMadeMuster(narrow, 0, [...squad, "archer", "archer"])).toThrow("too small");
     });
 
     it("deals a ready-made squad round a zone drawn in parts, along the middle of each (§30.9)", () => {
         // A row along the top and a column down the right: the squad alternates between them.
         const parts = [{ col: 0, row: 0, width: 6, height: 3 }, { col: 7, row: 0, width: 3, height: 9 }];
         const field = buildBattlefield({ name: "Edges", rows: Array(9).fill(".".repeat(10)), deployments: [parts], objectives: {} });
-        const picks = readyMadeMuster(field, 0, ["knight", "archer", "scout", "mage", "cleric"]);
+        const picks = readyMadeMuster(field, 0, ["knight", "archer", "archer", "mage", "cleric"]);
         expect(picks.map(pick => [pick.square % 10, Math.floor(pick.square / 10)])).toEqual([[1, 1], [8, 2], [3, 1], [8, 6], [5, 1]]);
         expect(musterRefusal(field, 0, picks, 200, {}, REALM)).toBeUndefined();
         // More than a part's middle line holds, and it spreads over the whole zone as a narrow one does.
@@ -703,12 +703,12 @@ describe("mustering", () => {
         expect(musterRefusal(RUINED_FORT, 0, "squad", budget, {}, REALM)).toBe("Muster at least one character");
         expect(musterRefusal(RUINED_FORT, 0, [pick("dragon", 0)], budget, {}, REALM)).toBe("That isn't a character");
         expect(musterRefusal(RUINED_FORT, 0, [null], budget, {}, REALM)).toBe("That isn't a character");
-        expect(musterRefusal(RUINED_FORT, 0, [pick("scout", 0)], budget, {}, { ...REALM, characters: ["knight"] })).toBe("That character isn't in your faction");
+        expect(musterRefusal(RUINED_FORT, 0, [pick("archer", 0)], budget, {}, { ...REALM, characters: ["knight"] })).toBe("That character isn't in your faction");
         expect(musterRefusal(RUINED_FORT, 0, ["mage", "mage", "knight", "knight"].map(pick), budget, {}, REALM)).toBe("That squad costs 110 points, and the budget is 100");
-        expect(musterRefusal(RUINED_FORT, 0, [{ character: "scout", square: zone[0] }, { character: "mage", square: zone[0] }], budget, {}, REALM))
+        expect(musterRefusal(RUINED_FORT, 0, [{ character: "archer", square: zone[0] }, { character: "mage", square: zone[0] }], budget, {}, REALM))
             .toBe("Each character needs its own square in your deployment zone");
-        expect(musterRefusal(RUINED_FORT, 1, [pick("scout", 0)], budget, {}, REALM)).toBe("Each character needs its own square in your deployment zone");
-        expect(musterRefusal(RUINED_FORT, 5, [pick("scout", 0)], budget, {}, REALM)).toBe("Each character needs its own square in your deployment zone");
+        expect(musterRefusal(RUINED_FORT, 1, [pick("archer", 0)], budget, {}, REALM)).toBe("Each character needs its own square in your deployment zone");
+        expect(musterRefusal(RUINED_FORT, 5, [pick("archer", 0)], budget, {}, REALM)).toBe("Each character needs its own square in your deployment zone");
     });
 
     it("musters each character at full HP with nothing to spend until its owner's turn", () => {
@@ -735,14 +735,14 @@ describe("mustering", () => {
 
         it("refuses anything but one item's id, and takes null for none", () => {
             for (const item of ["sword", ["fireFlask", "smokePot"], 5, { id: "fireFlask" }]) {
-                expect(musterRefusal(RUINED_FORT, 0, [{ ...pick("scout", 0), item }], budget, {}, REALM), JSON.stringify(item)).toBe("That isn't an item");
+                expect(musterRefusal(RUINED_FORT, 0, [{ ...pick("archer", 0), item }], budget, {}, REALM), JSON.stringify(item)).toBe("That isn't an item");
             }
-            expect(musterRefusal(RUINED_FORT, 0, [{ ...pick("scout", 0), item: null }], budget, {}, REALM)).toBeUndefined();
+            expect(musterRefusal(RUINED_FORT, 0, [{ ...pick("archer", 0), item: null }], budget, {}, REALM)).toBeUndefined();
         });
 
         it("keeps a pick's item, and nothing else it carried", () => {
-            expect(pickOf({ ...pick("scout", 0, "smokePot"), hp: 99 } as never)).toEqual({ character: "scout", square: zone[0], item: "smokePot" });
-            expect(pickOf({ ...pick("scout", 0), item: null } as never)).toEqual({ character: "scout", square: zone[0] });
+            expect(pickOf({ ...pick("archer", 0, "smokePot"), hp: 99 } as never)).toEqual({ character: "archer", square: zone[0], item: "smokePot" });
+            expect(pickOf({ ...pick("archer", 0), item: null } as never)).toEqual({ character: "archer", square: zone[0] });
         });
 
         it("leaves the ready-made squad carrying none, and spending the whole budget still", () => {
@@ -1143,12 +1143,12 @@ describe("options (§23.2)", () => {
 
     describe("the kit", () => {
         it("swaps the one ability or the weapon each option replaces, and nothing else", () => {
-            expect(kitOf("manAtArms", "shieldBash").abilities).toEqual(["shieldBash"]);
-            expect(kitOf("knight", "demolish").abilities).toEqual(["demolish"]);
-            expect(kitOf("archer", "cripplingShot").abilities).toEqual(["cripplingShot"]);
+            expect(kitOf("manAtArms", "shieldBash").abilities).toEqual(["shieldBash", "leap", "slashAndDash"]);
+            expect(kitOf("knight", "demolish").abilities).toEqual(["bulwark", "taunt", "demolish"]);
+            expect(kitOf("archer", "cripplingShot").abilities).toEqual(["cripplingShot", "poisonArrow", "bouncingArrow", "splittingArrow", "shootDodge"]);
             expect(kitOf("scout", "huntersMark").abilities).toEqual(["huntersMark"]);
-            expect(kitOf("cleric", "purify").abilities).toEqual(["heal", "purify"]);
-            expect(kitOf("mage", "frostBolt")).toEqual({ weapon: { name: "Frost bolt", kind: "ranged", damage: 2, accuracy: 70, range: 10, effect: "slowed" }, abilities: ["fireball"] });
+            expect(kitOf("cleric", "purify").abilities).toEqual(["heal", "purify", "beckon", "blessing", "ward"]);
+            expect(kitOf("mage", "frostBolt")).toEqual({ weapon: { name: "Frost bolt", kind: "ranged", damage: 2, accuracy: 70, range: 10, effect: "slowed" }, abilities: ["fireball", "iceBall", "thunder", "focus"] });
             for (const option of Object.keys(OPTIONS) as OptionId[]) {
                 const { character } = OPTIONS[option];
                 if (option !== "frostBolt") expect(kitOf(character, option).weapon).toBe(CHARACTERS[character].weapon);
@@ -1162,7 +1162,7 @@ describe("options (§23.2)", () => {
 
         it("is what the rules read: a starter character can't use an option's ability, nor one with the option the ability it gave up", () => {
             const bash = with_("shieldBash", 1, "a", at(field, 0, 0));
-            expect(abilitiesOf(bash)).toEqual(["shieldBash"]);
+            expect(abilitiesOf(bash)).toEqual(["shieldBash", "leap", "slashAndDash"]);
             const enemy = fighter(2, "b", "knight", at(field, 1, 0));
             const enemy2 = fighter(3, "b", "scout", at(field, 0, 1));
             expect(check({ field, fighters: [bash, enemy, enemy2] }, "a", { kind: "cleave", fighter: 1, targets: [2, 3] })).toEqual({ refused: "This Man-at-arms can't use Cleave" });

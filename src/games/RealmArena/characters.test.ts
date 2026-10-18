@@ -1,3 +1,4 @@
+import { rulesetFor } from "./rulesets";
 import { describe, expect, it } from "vitest";
 import { ABILITIES, BUDGETS, CHARACTERS, enemyNameOf, FACTIONS, musterBudget, squadPoints, UNKNOWN_ENEMY, warbandBudget, type BattleSize, type CharacterId, type Difficulty } from "./characters";
 
@@ -59,7 +60,7 @@ describe("the Miners' characters (§33)", () => {
 describe("the factions (§29.3)", () => {
     it("muster every character, each for one faction alone", () => {
         const rosters = Object.values(FACTIONS).flatMap(faction => faction.characters);
-        expect([...rosters].sort()).toEqual((Object.keys(CHARACTERS) as CharacterId[]).sort());
+        expect([...rosters].sort()).toEqual((Object.keys(CHARACTERS) as CharacterId[]).filter(id => id !== "scout").sort());
     });
 
     describe.each(Object.values(FACTIONS))("$name's ready-made squads (§17.2, §30.5)", faction => {
@@ -70,9 +71,10 @@ describe("the factions (§29.3)", () => {
     });
 
     it("keep the Realm's squads every battle before battle sizes mustered, which a replay musters again", () => {
-        expect(FACTIONS.realm.readyMade[70]).toEqual(["manAtArms", "manAtArms", "archer", "scout"]);
-        expect(FACTIONS.realm.readyMade[80]).toEqual(["knight", "manAtArms", "archer", "scout"]);
-        expect(FACTIONS.realm.readyMade[100]).toEqual(["knight", "manAtArms", "manAtArms", "archer", "cleric"]);
+        const oldRealm = rulesetFor(7).FACTIONS.realm;
+        expect(oldRealm.readyMade[70]).toEqual(["manAtArms", "manAtArms", "archer", "scout"]);
+        expect(oldRealm.readyMade[80]).toEqual(["knight", "manAtArms", "archer", "scout"]);
+        expect(oldRealm.readyMade[100]).toEqual(["knight", "manAtArms", "manAtArms", "archer", "cleric"]);
     });
 
     it("name the enemy by its faction once it's known, and as the enemy until then", () => {

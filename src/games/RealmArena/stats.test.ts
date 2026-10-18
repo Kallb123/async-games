@@ -28,7 +28,7 @@ describe("characterStats", () => {
 
     it("lists the weapon, then each ability, then each option", () => {
         const { actions, options } = characterStats("cleric");
-        expect(actions.map(one => one.name)).toEqual(["Staff", "Heal", "Raise"]);
+        expect(actions.map(one => one.name)).toEqual(["Staff", "Heal", "Raise", "Beckon", "Blessing", "Ward"]);
         expect(options.map(one => [one.name, one.kind])).toEqual([["Purify", `Rank ${OPTIONS.purify.rank} · in place of Raise`]]);
         for (const id of CHARACTER_IDS) expect(characterStats(id).actions).toHaveLength(1 + CHARACTERS[id].abilities.length);
     });
@@ -64,7 +64,7 @@ describe("characterStats", () => {
         expect(row("cleric", "Heal")).toMatchObject({ range: `${ABILITIES.heal.range}`, hit: "—", cooldown: "1/turn", extras: [`Heals ${ABILITIES.heal.hp} HP`] });
         expect(row("bloater", "Burst")).toMatchObject({ cooldown: "Once" });
         expect(row("scout", "Sneak")).toMatchObject({ ap: `${ABILITIES.sneak.ap}`, damage: "—", cooldown: "—", extras: [`${ABILITIES.sneak.ap} AP for each AP a move would cost`] });
-        expect(row("mage", "Frost bolt")).toMatchObject({ damage: `${OPTIONS.frostBolt.weapon.damage}`, hit: `${OPTIONS.frostBolt.weapon.accuracy}%`, extras: ["On a hit: Slowed: half movement, 2 turns"] });
+        expect(row("mage", "Frost bolt")).toMatchObject({ damage: `${OPTIONS.frostBolt.weapon.damage}`, hit: `${OPTIONS.frostBolt.weapon.kind === "ranged" ? OPTIONS.frostBolt.weapon.accuracy : 80}%`, extras: ["On a hit: Slowed: half movement, 2 turns"] });
     });
 });
 

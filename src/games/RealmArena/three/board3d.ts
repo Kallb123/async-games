@@ -19,8 +19,8 @@
 import { Color, Matrix4, OrthographicCamera, Scene, Vector3, WebGLRenderer, type ShaderMaterial } from "three";
 import type { CharacterId } from "@/games/RealmArena/characters";
 import { isStanding, type Fighter, type FogGhost, type MusterPick } from "@/games/RealmArena/rules";
-import { CLIMB_LEG, endOf, fadeOutAt, shakeAt, shovesOf, toldAt, toldOf, walkerAt, walkLift, type BattleCue, type FallCue, type Ring, type ScorchCue, type Shove, type Told, type WalkCue } from "@/games/RealmArena/ui";
-import { facingTowards, type Battlefield, type Facing, type Square } from "@/utils/games/battlefield/terrain";
+import { CLIMB_LEG, endOf, fadeOutAt, shakeAt, shovesOf, toldAt, toldOf, walkerAt, walkFacing, walkLift, type BattleCue, type FallCue, type Ring, type ScorchCue, type Shove, type Told, type WalkCue } from "@/games/RealmArena/ui";
+import { type Battlefield, type Facing, type Square } from "@/utils/games/battlefield/terrain";
 import { easeInOut } from "@/utils/ui/boardZoom";
 import type { Rect } from "@/utils/ui/mapLabels";
 import { billboardAxes, fromBoardUnits, setAxes } from "./billboards";
@@ -611,7 +611,7 @@ export class Board3D {
                     const a = squareCentre(field, leg.from), b = squareCentre(field, leg.to);
                     feet = lerp3(a, b, leg.across);
                     lift = -walkLift(leg, one => field.tiles[one].elevation) * BOARD_RISE;
-                    if (leg.from !== leg.to) facing = facingTowards(field, leg.from, leg.to);
+                    if (leg.from !== leg.to) facing = walkFacing(field, leg);
                     standing = true;
                     level = "item";
                 } else if (walks && ms! < walks[0].start) {

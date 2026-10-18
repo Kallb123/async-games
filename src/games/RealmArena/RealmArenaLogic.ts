@@ -12,6 +12,7 @@ import { DIFFICULTY_NAMES, enemyNameOf, factionById, musterBudget, readyMadeSqua
 import { battlefieldById, battlefieldOf } from "@/games/RealmArena/maps";
 import { addTally, NO_TALLY, type Tally } from "@/games/RealmArena/mastery";
 import {
+    areaDamage,
     abilitiesOf,
     actionPointsOf,
     act,
@@ -178,6 +179,22 @@ const TALLIED: Readonly<Partial<Record<Action["kind"], keyof Tally>>> = {
     attack: "attacks",
     aimedShot: "attacks",
     cleave: "abilities",
+    leap: "abilities",
+    slashAndDash: "abilities",
+    bulwark: "abilities",
+    taunt: "abilities",
+    shove: "abilities",
+    poisonArrow: "abilities",
+    bouncingArrow: "abilities",
+    splittingArrow: "abilities",
+    shootDodge: "abilities",
+    iceBall: "abilities",
+    thunder: "abilities",
+    focus: "abilities",
+    beckon: "abilities",
+    blessing: "abilities",
+    ward: "abilities",
+    runeRaise: "abilities",
     shieldWall: "abilities",
     fireball: "abilities",
     dynamite: "abilities",
@@ -247,7 +264,7 @@ export function tallied(fighters: readonly Fighter[], action: Action, events: re
 // snapshot outlives its turn.
 
 /** The kinds that can ever be taken back: no attack is among them. */
-const UNDOABLE_KINDS: ReadonlySet<Action["kind"]> = new Set(["move", "sneak", "hunker", "watch", "shieldWall", "heal", "regrowth", "raise", "purify", "huntersMark", "draught", "throw", "demolish"]);
+const UNDOABLE_KINDS: ReadonlySet<Action["kind"]> = new Set(["move", "sneak", "hunker", "watch", "shieldWall", "heal", "regrowth", "raise", "purify", "huntersMark", "draught", "throw", "demolish", "slashAndDash", "taunt", "focus", "blessing", "ward", "beckon", "leap", "runeRaise"]);
 
 /**
  * What an undoable action may have done: everything but an attack landing, a
@@ -256,7 +273,7 @@ const UNDOABLE_KINDS: ReadonlySet<Action["kind"]> = new Set(["move", "sneak", "h
  * hurts nobody (§22). A `thrown` or a `demolished` event is peaceful only when
  * it hit nobody, which `peaceful` checks itself.
  */
-const PEACEFUL_EVENTS: ReadonlySet<BattleEvent["kind"]> = new Set(["moved", "healed", "raised", "hunkered", "shieldWall", "watching", "effect", "marked", "blasted"]);
+const PEACEFUL_EVENTS: ReadonlySet<BattleEvent["kind"]> = new Set(["moved", "healed", "raised", "hunkered", "shieldWall", "watching", "effect", "marked", "blasted", "ability"]);
 
 const UNDO_DEPTHS = new WeakMap<object, number>();
 
@@ -409,9 +426,19 @@ export function enemyHidden(coop: IRealmArenaCoop | undefined): boolean {
  */
 export function unnamed(events: readonly BattleEvent[], hidden: (fighter: number) => boolean): BattleEvent[] {
     return events.flatMap((event): BattleEvent[] => {
+        // Only an enemy shoves one of the team: the push would name its kit.
+        if (event.kind === "moved" && event.via === "shove" && !hidden(event.fighter)) return [withoutVia(event)];
         if (!("fighter" in event) || !hidden(event.fighter)) return [event];
         switch (event.kind) {
-            case "moved": return [{ ...event, sneaking: false }];
+            case "moved": return [{ ...withoutVia(event), sneaking: false }];
+            case "shot": return [withoutVia(event)];
+            case "struck": return [withoutVia(event)];
+            case "ability": return [];
+            case "iceBall":
+            case "fireball":
+            case "dynamite":
+            case "demolished":
+            case "burst": return event.targets.map(target => ({ kind: "struck", fighter: event.fighter, target, damage: areaDamage(event, target), reaction: false }));
             case "shieldWall":
             case "marked":
             case "raised": return [];
@@ -419,6 +446,12 @@ export function unnamed(events: readonly BattleEvent[], hidden: (fighter: number
             default: return [event];
         }
     });
+}
+
+/** An event without the ability it names (`via`). */
+function withoutVia<Event extends { via?: unknown }>(event: Event): Omit<Event, "via"> {
+    const { via: _via, ...rest } = event;
+    return rest;
 }
 
 /**
@@ -467,12 +500,15 @@ function clause(event: BattleEvent, fighters: readonly Fighter[], actor: string,
     const veiled = hidden && "fighter" in event && warbands(event.fighter) ? veiledClause(event, name, hitIn) : undefined;
     if (veiled !== undefined) return veiled;
     switch (event.kind) {
-        case "moved": return `${event.sneaking ? "sneaked" : "moved"} ${name(event.fighter)}`;
+        case "ability": return `used ${ABILITIES[event.ability]!.name} with ${name(event.fighter)}`;
+        case "moved": return `${event.via ? `moved with ${ABILITIES[event.via]!.name}` : event.sneaking ? "sneaked" : "moved"} ${name(event.fighter)}`;
         case "shot":
             return event.reaction
                 ? `${name(event.fighter)} fired on overwatch: ${landed(event.damage, event.result === "graze")}`
-                : `shot ${name(event.target)} with ${name(event.fighter)} (${event.chance}%): ${landed(event.damage, event.result === "graze")}`;
+                : `${event.via ? `fired ${ABILITIES[event.via]!.name} at` : "shot"} ${name(event.target)} with ${name(event.fighter)} (${event.chance}%): ${landed(event.damage, event.result === "graze")}`;
         case "struck": {
+            // A Leap's landing, a Shove's collision or a bounce: no strike, and no roll.
+            if (event.via) return `hit ${name(event.target)} with ${name(event.fighter)}'s ${ABILITIES[event.via]!.name} for ${event.damage}`;
             // A strike that rolled and missed did no damage: "and missed", as a shot's "a miss".
             const outcome = event.missed ? "and missed" : `for ${event.damage}`;
             return event.reaction
@@ -480,8 +516,9 @@ function clause(event: BattleEvent, fighters: readonly Fighter[], actor: string,
                 : `struck ${name(event.target)} with ${name(event.fighter)} ${outcome}`;
         }
         case "fireball":
+        case "iceBall":
         case "dynamite":
-            return `${ACTION_PHRASES[event.kind]} with ${name(event.fighter)}, hitting ${pluralize(hitIn(event.targets).length, "character")} for ${event.damage}`;
+            return `${ACTION_PHRASES[event.kind]} with ${name(event.fighter)}, hitting ${pluralize(hitIn(event.targets).length, "character")}${event.damages ? "" : ` for ${event.damage}`}`;
         case "downed": return `${name(event.fighter)} is down`;
         case "healed": {
             const hp = event.hp > 0 ? ` for ${event.hp}` : "";
@@ -497,12 +534,12 @@ function clause(event: BattleEvent, fighters: readonly Fighter[], actor: string,
         }
         case "blasted": return `blasted away ${pluralize(event.squares.length, "square")} of low cover`;
         case "demolished": {
-            const hit = hitIn(event.targets).length === 0 ? "" : `, hitting ${pluralize(hitIn(event.targets).length, "character")} for ${event.damage}`;
+            const hit = hitIn(event.targets).length === 0 ? "" : `, hitting ${pluralize(hitIn(event.targets).length, "character")}${event.damages ? "" : ` for ${event.damage}`}`;
             return `used ${ABILITIES.demolish.name} with ${name(event.fighter)}${hit}`;
         }
         case "marked": return `used ${ABILITIES.huntersMark.name} with ${name(event.fighter)}`;
         case "burst": {
-            const hit = hitIn(event.targets).length === 0 ? "" : `, hitting ${pluralize(hitIn(event.targets).length, "character")} for ${event.damage}`;
+            const hit = hitIn(event.targets).length === 0 ? "" : `, hitting ${pluralize(hitIn(event.targets).length, "character")}${event.damages ? "" : ` for ${event.damage}`}`;
             return `burst ${name(event.fighter)}${hit}`;
         }
         case "raised": return `raised ${name(event.target)} with ${name(event.fighter)}`;
@@ -510,8 +547,8 @@ function clause(event: BattleEvent, fighters: readonly Fighter[], actor: string,
         case "shieldWall": return `raised a shield wall with ${name(event.fighter)}`;
         case "watching": return `put ${name(event.fighter)} on watch`;
         case "spotted": return `${name(event.fighter)} found ${name(event.by)} in its way, and went round`;
-        case "effect": return `${name(event.fighter)} is ${event.change === "cleared" ? "no longer " : ""}${EFFECTS[event.effect].state}`;
-        case "burned": return event.effect ? `${name(event.fighter)} took ${event.damage} damage from ${hidden ? "an effect" : EFFECTS[event.effect].name}` : `${name(event.fighter)} burned for ${event.damage}`;
+        case "effect": return `${name(event.fighter)} is ${event.change === "cleared" ? "no longer " : ""}${EFFECTS[event.effect]!.state}`;
+        case "burned": return event.effect ? `${name(event.fighter)} took ${event.damage} damage from ${hidden ? "an effect" : EFFECTS[event.effect]!.name}` : `${name(event.fighter)} burned for ${event.damage}`;
         case "scored": {
             const who = event.player === actor ? "scored" : `${ownerToken(event.player, coop, context)} scored`;
             return `${who} ${event.points} for ${SCORED_FOR[event.reason]}`;
@@ -530,11 +567,13 @@ function veiledClause(event: BattleEvent, name: (id: number) => string, hitIn: (
     switch (event.kind) {
         case "moved": return `moved ${name(event.fighter)}`;
         case "fireball":
+        case "iceBall":
         case "dynamite":
         case "demolished":
         case "burst": return `used an ability with ${name(event.fighter)}${hit(event.targets, event.damage)}`;
         case "healed": return event.via === "draught" ? undefined : `used an ability on ${name(event.target)} with ${name(event.fighter)}`;
         case "raised": return `used an ability on ${name(event.target)} with ${name(event.fighter)}`;
+        case "ability":
         case "marked":
         case "shieldWall": return `used an ability with ${name(event.fighter)}`;
         default: return undefined;
@@ -633,6 +672,7 @@ function felt(battle: BattleState, events: readonly BattleEvent[]): boolean {
             case "shot":
             case "struck": return enemy(event.fighter) && event.damage > 0 && !enemy(event.target);
             case "fireball":
+            case "iceBall":
             case "dynamite":
             case "thrown":
             case "demolished":
@@ -744,6 +784,7 @@ export function toldTo(events: readonly BattleEvent[], battle: BattleState, view
                 return [{ ...event, path: end !== undefined && seen(end) ? event.path.filter(seen) : [] }];
             }
             case "fireball":
+            case "iceBall":
             case "dynamite":
             case "thrown":
             case "demolished":
@@ -762,6 +803,7 @@ export function toldTo(events: readonly BattleEvent[], battle: BattleState, view
             case "hunkered":
             case "shieldWall":
             case "watching":
+            case "ability":
             case "effect":
             case "burned":
                 return keep(saw(event.fighter));
@@ -1181,6 +1223,22 @@ const ACTION_PHRASES: Readonly<Record<Action["kind"], string>> = {
     watch: "went on watch",
     shieldWall: "raised a shield wall",
     cleave: "cleaved",
+    leap: "leapt",
+    slashAndDash: "used Slash and Dash",
+    bulwark: "used Bulwark",
+    taunt: "used Taunt",
+    shove: "used Shove",
+    poisonArrow: "fired a Poison Arrow",
+    bouncingArrow: "fired a Bouncing Arrow",
+    splittingArrow: "fired a Splitting Arrow",
+    shootDodge: "used Shoot + Dodge",
+    iceBall: "cast Ice Ball",
+    thunder: "cast Thunder",
+    focus: "used Focus",
+    beckon: "used Beckon",
+    blessing: "used Blessing",
+    ward: "used Ward",
+    runeRaise: "raised a fallen ally",
     fireball: "threw a fireball",
     dynamite: "threw dynamite",
     heal: "healed an ally",
@@ -1214,16 +1272,32 @@ function cleanAction(action: Action): Action {
         case "cripplingShot":
         case "huntersMark":
         case "rend":
+        case "shove":
+        case "poisonArrow":
+        case "bouncingArrow":
+        case "thunder":
+        case "beckon":
+        case "ward":
+        case "runeRaise":
         case "regrowth": return { kind: action.kind, fighter: action.fighter, target: action.target };
         case "hunker":
         case "watch":
         case "shieldWall":
         case "purify":
+        case "slashAndDash":
+        case "bulwark":
+        case "taunt":
+        case "focus":
+        case "blessing":
         case "burst": return { kind: action.kind, fighter: action.fighter };
+        case "shootDodge": return { kind: action.kind, fighter: action.fighter, target: action.target, path: [...action.path] };
+        case "splittingArrow":
         case "cleave": return { kind: action.kind, fighter: action.fighter, targets: [...action.targets] };
         case "fireball":
+        case "iceBall":
         case "dynamite":
         case "throw":
+        case "leap":
         case "demolish": return { kind: action.kind, fighter: action.fighter, at: action.at };
     }
 }
