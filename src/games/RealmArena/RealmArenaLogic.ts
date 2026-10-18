@@ -427,12 +427,13 @@ export function enemyHidden(coop: IRealmArenaCoop | undefined): boolean {
  */
 export function unnamed(events: readonly BattleEvent[], hidden: (fighter: number) => boolean): BattleEvent[] {
     return events.flatMap((event): BattleEvent[] => {
+        // Only an enemy shoves one of the team: the push would name its kit.
+        if (event.kind === "moved" && event.via === "shove" && !hidden(event.fighter)) return [withoutVia(event)];
         if (!("fighter" in event) || !hidden(event.fighter)) return [event];
         switch (event.kind) {
-            case "moved": {
-                const { via: _via, ...movement } = event;
-                return [{ ...movement, sneaking: false }];
-            }
+            case "moved": return [{ ...withoutVia(event), sneaking: false }];
+            case "shot": return [withoutVia(event)];
+            case "struck": return [withoutVia(event)];
             case "ability": return [];
             case "iceBall":
             case "fireball":
@@ -446,6 +447,12 @@ export function unnamed(events: readonly BattleEvent[], hidden: (fighter: number
             default: return [event];
         }
     });
+}
+
+/** An event without the ability it names (`via`). */
+function withoutVia<Event extends { via?: unknown }>(event: Event): Omit<Event, "via"> {
+    const { via: _via, ...rest } = event;
+    return rest;
 }
 
 /**
@@ -499,8 +506,10 @@ function clause(event: BattleEvent, fighters: readonly Fighter[], actor: string,
         case "shot":
             return event.reaction
                 ? `${name(event.fighter)} fired on overwatch: ${landed(event.damage, event.result === "graze")}`
-                : `shot ${name(event.target)} with ${name(event.fighter)} (${event.chance}%): ${landed(event.damage, event.result === "graze")}`;
+                : `${event.via ? `fired ${ABILITIES[event.via]!.name} at` : "shot"} ${name(event.target)} with ${name(event.fighter)} (${event.chance}%): ${landed(event.damage, event.result === "graze")}`;
         case "struck": {
+            // A Leap's landing, a Shove's collision or a bounce: no strike, and no roll.
+            if (event.via) return `hit ${name(event.target)} with ${name(event.fighter)}'s ${ABILITIES[event.via]!.name} for ${event.damage}`;
             // A strike that rolled and missed did no damage: "and missed", as a shot's "a miss".
             const outcome = event.missed ? "and missed" : `for ${event.damage}`;
             return event.reaction

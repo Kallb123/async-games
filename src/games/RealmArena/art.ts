@@ -15,7 +15,7 @@
 
 import { FACING_COUNT, FULL_HEIGHT, TERRAIN, type Facing, type TerrainLetter } from "@/utils/games/battlefield/terrain";
 import { ISO_HALF_HEIGHT, ISO_HALF_WIDTH, ISO_STEP, type IsoRotation } from "@/utils/ui/isometric";
-import { ITEM_IDS, type CharacterId, type EffectId, type ItemId } from "./characters";
+import { EFFECT_IDS, ITEM_IDS, type CharacterId, type ItemId } from "./characters";
 import { CHARACTER_IDS } from "./roster";
 
 export const ART_SHEETS = {
@@ -28,8 +28,7 @@ export const ART_SHEETS = {
      * row, in `EFFECT_IDS` order, then the watch's (§13.4). Rendered from its SVG master,
      * `art-masters/realmarena/effects.svg`, by `npm run ra-marks`.
      */
-    realmEffects: { href: "/art/realmarena/realm-effects.svg", width: 480, height: 96 },
-    effects: { href: "/art/realmarena/effects.png", width: 768, height: 96 },
+    effects: { href: "/art/realmarena/effects.png", width: 1248, height: 96 },
     /**
      * The items (§21.2), one `MARK_PX` badge a cell in `ITEM_IDS` order, and
      * then the smoke pot's cloud. Rendered from `art-masters/realmarena/items.svg`
@@ -48,7 +47,7 @@ export const ART_SHEETS = {
      * cells wide. Rendered from `art-masters/realmarena/fx.svg` by
      * `npm run ra-marks`.
      */
-    fx: { href: "/art/realmarena/fx.png", width: 864, height: 192 },
+    fx: { href: "/art/realmarena/fx.png", width: 1536, height: 192 },
     /**
      * The characters (`CHARACTER_ART`): every one in every pose, from all eight
      * facings. Rendered from the models in `art-masters/realmarena/characters`
@@ -182,14 +181,10 @@ const marks = <Id extends string>(sheet: ArtSheet, ids: readonly Id[]) =>
     Object.fromEntries(ids.map((id, index) => [id, mark(sheet, index)])) as Readonly<Record<Id, Sprite>>;
 
 /** The mark a figure wears for each effect on it (§20.2), and its box beside the effect's name. */
-const LEGACY_EFFECT_IDS = ["burning", "stunned", "slowed", "marked", "corroded", "hunkered", "shieldWall"] as const;
-export const EFFECT_ART: Readonly<Record<EffectId, Sprite>> = {
-    ...marks("effects", LEGACY_EFFECT_IDS),
-    ...marks("realmEffects", ["poisoned", "braced", "blessed", "focused", "warded"] as const),
-};
+export const EFFECT_ART = marks("effects", EFFECT_IDS);
 
 /** The mark a figure on watch wears (§13.4), AP banked for overwatch or guard: after the effects' on their sheet, and in their column. */
-export const WATCH_ART = mark("effects", LEGACY_EFFECT_IDS.length);
+export const WATCH_ART = mark("effects", EFFECT_IDS.length);
 
 /** Each item's mark (§21.2): by the shoulder of a figure carrying it, and beside its name wherever it's named. */
 export const ITEM_ART = marks("items", ITEM_IDS);
@@ -203,14 +198,24 @@ export const SMOKE_ART = mark("items", ITEM_IDS.length);
 /** Something thrown: never the draught, which is drunk. */
 export type ThrownItem = Exclude<ItemId, "healingDraught">;
 
-/** What flies (§26.1): the Archer's arrow, the Mage's bolt and fireball, a thrown flask or pot, the Spitter's acid and the Sapper's dynamite. */
-export type Missile = "arrow" | "bolt" | "fireball" | ThrownItem | "acid" | "dynamite";
+/**
+ * What flies (§26.1): the Archer's arrow, the Mage's bolt and fireball, a
+ * thrown flask or pot, the Spitter's acid and the Sapper's dynamite; and the
+ * Realm's Poison Arrow, Ice Ball's shard and Thunder's lightning (§34).
+ */
+export type Missile = "arrow" | "bolt" | "fireball" | ThrownItem | "acid" | "dynamite" | "poisonArrow" | "iceShard" | "lightning";
 
-/** What a burst looks like (§26.1): the fireball's and the fire flask's flame, the thunder flask's flash, the smoke pot's puff, the Bloater's acid, dynamite's blast. */
-export type BurstKind = "fire" | "thunder" | "smoke" | "acid" | "blast";
+/**
+ * What a burst looks like (§26.1): the fireball's and the fire flask's flame,
+ * the thunder flask's flash, the smoke pot's puff, the Bloater's acid,
+ * dynamite's blast; Ice Ball's frost, the dust a Leap's landing or a Shove's
+ * collision throws up, and the glow of a blessing — Taunt, Blessing, Focus,
+ * Slash and Dash — and of a Ward (§34).
+ */
+export type BurstKind = "fire" | "thunder" | "smoke" | "acid" | "blast" | "frost" | "slam" | "aura" | "ward";
 
 /** The order what flies is drawn in along the top of the fx sheet. */
-const MISSILE_IDS: readonly Missile[] = ["arrow", "bolt", "fireball", "fireFlask", "thunderFlask", "smokePot", "acid", "dynamite"];
+const MISSILE_IDS: readonly Missile[] = ["arrow", "bolt", "fireball", "fireFlask", "thunderFlask", "smokePot", "acid", "dynamite", "poisonArrow", "iceShard", "lightning"];
 
 /**
  * Each missile as it flies (§26.1). An arrow, a bolt or a fireball points
@@ -232,6 +237,10 @@ export const BURST_ART: Readonly<Record<BurstKind, Sprite>> = {
     thunder: { sheet: "fx", x: 2 * MARK_PX, y: MARK_PX, width: 2 * MARK_PX, height: MARK_PX },
     acid: { sheet: "fx", x: 4 * MARK_PX, y: MARK_PX, width: 2 * MARK_PX, height: MARK_PX },
     blast: { sheet: "fx", x: 6 * MARK_PX, y: MARK_PX, width: 2 * MARK_PX, height: MARK_PX },
+    frost: { sheet: "fx", x: 8 * MARK_PX, y: MARK_PX, width: 2 * MARK_PX, height: MARK_PX },
+    slam: { sheet: "fx", x: 10 * MARK_PX, y: MARK_PX, width: 2 * MARK_PX, height: MARK_PX },
+    aura: { sheet: "fx", x: 12 * MARK_PX, y: MARK_PX, width: 2 * MARK_PX, height: MARK_PX },
+    ward: { sheet: "fx", x: 14 * MARK_PX, y: MARK_PX, width: 2 * MARK_PX, height: MARK_PX },
     smoke: SMOKE_ART,
 };
 

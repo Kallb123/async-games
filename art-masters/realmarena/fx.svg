@@ -4,11 +4,13 @@
   96px cell each in `MISSILE_ART` order, then the slash: what flies points
   right, its front at the cell's right edge; a flask or pot tumbles, so it's
   upright in the middle, as is a stick of dynamite. Bottom row, 192x96 each:
-  the ring of flame, the thunder flash, the Bloater's splash of acid and
-  dynamite's blast, lying flat as the board's squares do. Rendered to
+  the ring of flame, the thunder flash, the Bloater's splash of acid,
+  dynamite's blast, Ice Ball's frost, the dust a landing or a collision
+  throws up, and the glow of a blessing and of a ward (§34), lying flat as
+  the board's squares do. Rendered to
   public/art/realmarena/fx.png by `npm run ra-marks`.
 -->
-<svg xmlns="http://www.w3.org/2000/svg" width="864" height="192" viewBox="0 0 864 192">
+<svg xmlns="http://www.w3.org/2000/svg" width="1536" height="192" viewBox="0 0 1536 192">
   <defs>
     <radialGradient id="fire-core" cx="0.5" cy="0.5" r="0.5">
       <stop offset="0" stop-color="#fff7d6"/>
@@ -73,6 +75,54 @@
     <path id="flask" d="M41 30 H55 V40 C65 44 71 52 71 62 C71 75 61 83 48 83 C35 83 25 75 25 62 C25 52 31 44 41 40 Z"/>
     <path id="flask-fill" d="M27 63 C33 59 41 66 48 62 C55 58 63 65 69 61 C70 75 60 81 48 81 C36 81 26 75 27 63 Z"/>
     <rect id="cork" x="38" y="19" width="20" height="12" rx="3" fill="#9a6535" stroke="#24150f" stroke-width="4"/>
+    <linearGradient id="poison-tail" x1="1" y1="0" x2="0" y2="0">
+      <stop offset="0" stop-color="#7ee07a" stop-opacity="0.8"/>
+      <stop offset="1" stop-color="#2e7d4f" stop-opacity="0"/>
+    </linearGradient>
+    <linearGradient id="ice-tail" x1="1" y1="0" x2="0" y2="0">
+      <stop offset="0" stop-color="#e4f6ff"/>
+      <stop offset="1" stop-color="#5fb4e8" stop-opacity="0"/>
+    </linearGradient>
+    <linearGradient id="ice-core" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#ffffff"/>
+      <stop offset="0.5" stop-color="#bfe8ff"/>
+      <stop offset="1" stop-color="#5fa8dc"/>
+    </linearGradient>
+    <radialGradient id="spark-glow" cx="0.5" cy="0.5" r="0.5">
+      <stop offset="0" stop-color="#fffbe0" stop-opacity="0.9"/>
+      <stop offset="0.5" stop-color="#ffe46a" stop-opacity="0.45"/>
+      <stop offset="1" stop-color="#8fb1ff" stop-opacity="0"/>
+    </radialGradient>
+    <radialGradient id="frost-glow" cx="0.5" cy="0.55" r="0.5">
+      <stop offset="0" stop-color="#ffffff" stop-opacity="0.95"/>
+      <stop offset="0.45" stop-color="#cdeeff" stop-opacity="0.8"/>
+      <stop offset="0.85" stop-color="#5fa8dc" stop-opacity="0.4"/>
+      <stop offset="1" stop-color="#2f6fa8" stop-opacity="0"/>
+    </radialGradient>
+    <radialGradient id="dust-glow" cx="0.5" cy="0.55" r="0.5">
+      <stop offset="0" stop-color="#d9c7a6" stop-opacity="0"/>
+      <stop offset="0.45" stop-color="#cbb48c" stop-opacity="0.35"/>
+      <stop offset="0.75" stop-color="#a88c63" stop-opacity="0.75"/>
+      <stop offset="1" stop-color="#7a6446" stop-opacity="0"/>
+    </radialGradient>
+    <radialGradient id="aura-glow" cx="0.5" cy="0.55" r="0.5">
+      <stop offset="0" stop-color="#fff8d8" stop-opacity="0.9"/>
+      <stop offset="0.5" stop-color="#ffd659" stop-opacity="0.55"/>
+      <stop offset="0.8" stop-color="#f0a92a" stop-opacity="0.35"/>
+      <stop offset="1" stop-color="#c97a12" stop-opacity="0"/>
+    </radialGradient>
+    <radialGradient id="ward-glow" cx="0.5" cy="0.55" r="0.5">
+      <stop offset="0" stop-color="#e8fdff" stop-opacity="0.2"/>
+      <stop offset="0.6" stop-color="#8fe3ef" stop-opacity="0.45"/>
+      <stop offset="0.85" stop-color="#2a8f9f" stop-opacity="0.7"/>
+      <stop offset="1" stop-color="#1d6470" stop-opacity="0"/>
+    </radialGradient>
+    <!-- A shard of ice, its foot on the origin, jutting up. -->
+    <path id="icicle" d="M-6 0 L-2 -22 L1 -28 L4 -20 L7 0 Z"/>
+    <!-- A ray of light, its foot on the origin, rising and fading. -->
+    <path id="ray" d="M-4 0 L-1 -34 L1 -34 L4 0 Z"/>
+    <!-- A small four-pointed spark, centred on the origin. -->
+    <path id="spark" d="M0 -7 L2 -2 L7 0 L2 2 L0 7 L-2 2 L-7 0 L-2 -2 Z"/>
   </defs>
 
   <g stroke-linejoin="round" stroke-linecap="round">
@@ -146,8 +196,46 @@
       <path d="M52 0 V4 M60 4 L57 7 M44 4 L47 7 M62 11 H58" stroke="#ffe27a" stroke-width="3"/>
     </g>
 
-    <!-- Slash: a blade's bright crescent cut down across the cell, top right to bottom left. -->
+    <!-- Poison Arrow: an arrow, its head green and dripping, a sickly trail behind it. -->
     <g transform="translate(768 0)">
+      <path d="M6 48 C26 40 50 40 74 44 L74 52 C50 56 26 56 6 48 Z" fill="url(#poison-tail)"/>
+      <path d="M8 48 H80" stroke="#24150f" stroke-width="9"/>
+      <path d="M8 48 H80" stroke="#c99a5b" stroke-width="4"/>
+      <path d="M94 48 L74 37 L78 48 L74 59 Z" fill="#7ee07a" stroke="#24150f" stroke-width="4"/>
+      <path d="M78 58 C78 63 81 65 80 69" fill="none" stroke="#24150f" stroke-width="6"/>
+      <path d="M78 58 C78 63 81 65 80 69" fill="none" stroke="#7ee07a" stroke-width="3"/>
+      <path d="M6 48 L20 36 H32 L22 48 Z M6 48 L20 60 H32 L22 48 Z" fill="#2e7d4f" stroke="#24150f" stroke-width="3.5"/>
+    </g>
+
+    <!-- Ice shard: a long crystal of ice, its point at the right edge, a trail of frost behind it. -->
+    <g transform="translate(864 0)">
+      <path d="M6 48 C24 38 44 36 60 38 L60 58 C44 60 24 58 6 48 Z" fill="url(#ice-tail)"/>
+      <g fill="#ffffff">
+        <use href="#spark" transform="translate(20 36) scale(0.6)"/>
+        <use href="#spark" transform="translate(30 60) scale(0.5)"/>
+        <use href="#spark" transform="translate(12 52) scale(0.4)"/>
+      </g>
+      <path d="M93 48 L70 34 L44 39 L36 48 L44 57 L70 62 Z" fill="url(#ice-core)" stroke="#24150f" stroke-width="4"/>
+      <path d="M93 48 L56 44 L36 48 M70 34 L56 44 L70 62" fill="none" stroke="#5fa8dc" stroke-width="2.5"/>
+      <path d="M48 41 L66 38" fill="none" stroke="#fff" stroke-width="3" stroke-opacity="0.85"/>
+    </g>
+
+    <!-- Lightning: a forked crack of light, its front at the right edge. -->
+    <g transform="translate(960 0)">
+      <ellipse cx="54" cy="48" rx="42" ry="20" fill="url(#spark-glow)"/>
+      <g fill="none" stroke="#24150f" stroke-width="10">
+        <path d="M4 52 L22 40 L34 56 L52 36 L62 54 L78 40 L93 48"/>
+        <path d="M52 36 L58 22 M62 54 L70 68"/>
+      </g>
+      <g fill="none" stroke="#fff3a8" stroke-width="5">
+        <path d="M4 52 L22 40 L34 56 L52 36 L62 54 L78 40 L93 48"/>
+        <path d="M52 36 L58 22 M62 54 L70 68"/>
+      </g>
+      <path d="M22 40 L34 56 L52 36 L62 54 L78 40" fill="none" stroke="#ffffff" stroke-width="2"/>
+    </g>
+
+    <!-- Slash: a blade's bright crescent cut down across the cell, top right to bottom left. -->
+    <g transform="translate(1056 0)">
       <path d="M84 10 C78 46 54 74 12 86 C44 70 64 46 70 14 Z" fill="#ffffff" stroke="#24150f" stroke-width="4"/>
       <path d="M78 16 C72 44 54 66 26 80" fill="none" stroke="#c9d6e6" stroke-width="3"/>
       <path d="M90 30 C86 44 80 54 72 62 M62 8 C58 18 54 24 48 30" fill="none" stroke="#ffffff" stroke-width="3" stroke-opacity="0.75"/>
@@ -237,6 +325,85 @@
         <use href="#chip" transform="translate(52 86) rotate(-15)"/>
         <use href="#chip" transform="translate(142 88) rotate(35) scale(1.1)"/>
         <use href="#chip" transform="translate(96 14) rotate(45) scale(0.8)"/>
+      </g>
+    </g>
+
+    <!-- Frost: a burst of cold across the ground, shards of ice jutting up round its edge and a snowflake at its heart. -->
+    <g transform="translate(768 96)">
+      <ellipse cx="96" cy="54" rx="92" ry="40" fill="url(#frost-glow)"/>
+      <g fill="#e4f6ff" stroke="#24150f" stroke-width="3">
+        <use href="#icicle" transform="translate(96 34) scale(0.8)"/>
+        <use href="#icicle" transform="translate(58 38) rotate(-12) scale(0.75)"/>
+        <use href="#icicle" transform="translate(134 38) rotate(12) scale(0.75)"/>
+        <use href="#icicle" transform="translate(26 52) rotate(-24) scale(0.8)"/>
+        <use href="#icicle" transform="translate(166 52) rotate(24) scale(0.8)"/>
+        <use href="#icicle" transform="translate(40 80) rotate(-18) scale(1)"/>
+        <use href="#icicle" transform="translate(152 80) rotate(18) scale(1)"/>
+        <use href="#icicle" transform="translate(78 92) rotate(-6) scale(1.15)"/>
+        <use href="#icicle" transform="translate(116 92) rotate(6) scale(1.15)"/>
+      </g>
+      <g fill="none" stroke-linecap="round">
+        <path d="M70 56 H122 M80 42 L112 70 M80 70 L112 42" stroke="#24150f" stroke-width="8"/>
+        <path d="M70 56 H122 M80 42 L112 70 M80 70 L112 42" stroke="#ffffff" stroke-width="4"/>
+      </g>
+      <circle cx="96" cy="56" r="6" fill="#ffffff" stroke="#24150f" stroke-width="2.5"/>
+    </g>
+
+    <!-- Slam: a ring of dust thrown up from the ground, cracks running out and chips of earth flung wide. -->
+    <g transform="translate(960 96)">
+      <ellipse cx="96" cy="54" rx="92" ry="40" fill="url(#dust-glow)"/>
+      <g fill="none" stroke="#24150f" stroke-width="7">
+        <path d="M96 56 L70 46 L56 50 M96 56 L124 46 L140 50 M96 56 L84 76 L72 82 M96 56 L110 76 L124 84"/>
+      </g>
+      <g fill="none" stroke="#e7d7b6" stroke-width="3">
+        <path d="M96 56 L70 46 L56 50 M96 56 L124 46 L140 50 M96 56 L84 76 L72 82 M96 56 L110 76 L124 84"/>
+      </g>
+      <g fill="#b39a72" stroke="#24150f" stroke-width="3">
+        <use href="#chip" transform="translate(30 44) rotate(20)"/>
+        <use href="#chip" transform="translate(162 42) rotate(-30)"/>
+        <use href="#chip" transform="translate(20 70) scale(0.8)"/>
+        <use href="#chip" transform="translate(174 72) rotate(60) scale(0.9)"/>
+        <use href="#chip" transform="translate(60 88) rotate(-15) scale(0.9)"/>
+        <use href="#chip" transform="translate(136 90) rotate(35)"/>
+        <use href="#chip" transform="translate(96 20) rotate(45) scale(0.7)"/>
+      </g>
+    </g>
+
+    <!-- Aura: a golden glow on the ground, rays of light rising from it and sparks drifting up. -->
+    <g transform="translate(1152 96)">
+      <ellipse cx="96" cy="54" rx="92" ry="40" fill="url(#aura-glow)"/>
+      <ellipse cx="96" cy="58" rx="62" ry="24" fill="none" stroke="#24150f" stroke-width="6"/>
+      <ellipse cx="96" cy="58" rx="62" ry="24" fill="none" stroke="#fff2b0" stroke-width="3"/>
+      <g fill="#fff2b0" fill-opacity="0.85">
+        <use href="#ray" transform="translate(96 58)"/>
+        <use href="#ray" transform="translate(56 66) scale(0.8)"/>
+        <use href="#ray" transform="translate(136 66) scale(0.8)"/>
+        <use href="#ray" transform="translate(70 46) scale(0.6)"/>
+        <use href="#ray" transform="translate(122 46) scale(0.6)"/>
+      </g>
+      <g fill="#ffffff" stroke="#24150f" stroke-width="2">
+        <use href="#spark" transform="translate(44 40)"/>
+        <use href="#spark" transform="translate(150 36) scale(0.8)"/>
+        <use href="#spark" transform="translate(110 22) scale(0.7)"/>
+        <use href="#spark" transform="translate(30 76) scale(0.6)"/>
+        <use href="#spark" transform="translate(166 78) scale(0.7)"/>
+      </g>
+    </g>
+
+    <!-- Ward: a shimmering ring of cover on the ground, runes of light standing round it. -->
+    <g transform="translate(1344 96)">
+      <ellipse cx="96" cy="54" rx="92" ry="40" fill="url(#ward-glow)"/>
+      <ellipse cx="96" cy="56" rx="78" ry="32" fill="none" stroke="#24150f" stroke-width="7"/>
+      <ellipse cx="96" cy="56" rx="78" ry="32" fill="none" stroke="#e8fdff" stroke-width="3.5"/>
+      <g fill="#e8fdff" stroke="#24150f" stroke-width="2.5">
+        <path d="M96 16 L101 24 L96 32 L91 24 Z"/>
+        <path d="M96 80 L101 88 L96 96 L91 88 Z" transform="translate(0 -8)"/>
+        <path d="M18 56 L23 64 L18 72 L13 64 Z" transform="translate(0 -8)"/>
+        <path d="M174 56 L179 64 L174 72 L169 64 Z" transform="translate(0 -8)"/>
+        <path d="M42 26 L47 34 L42 42 L37 34 Z"/>
+        <path d="M150 26 L155 34 L150 42 L145 34 Z"/>
+        <path d="M42 70 L47 78 L42 86 L37 78 Z"/>
+        <path d="M150 70 L155 78 L150 86 L145 78 Z"/>
       </g>
     </g>
   </g>

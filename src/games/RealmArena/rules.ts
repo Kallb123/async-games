@@ -309,14 +309,17 @@ export type ShotResult = "hit" | "graze" | "miss";
 export type BattleEvent =
     | { kind: "moved"; fighter: number; path: Square[]; sneaking: boolean; via?: AbilityId }
     | { kind: "ability"; fighter: number; ability: AbilityId }
-    | { kind: "shot"; fighter: number; target: number; chance: number; roll: number; result: ShotResult; damage: number; reaction: boolean }
+    /** `via` names the ability a shot was, for those that name it (`NAMED_SHOTS`). */
+    | { kind: "shot"; fighter: number; target: number; chance: number; roll: number; result: ShotResult; damage: number; reaction: boolean; via?: AbilityId }
     /**
      * A melee strike. In a battle under `BALANCE_VERSION` it rolled (`chance`
      * and `roll`) and may have `missed`, doing no damage; before it, it always
      * hit and carries neither. A Demolish's splash is a `demolished` event, not
-     * this, and never rolls.
+     * this, and never rolls. `via` names the ability a blow that never rolls
+     * came from, other than a strike's: a Leap landing beside the target, a
+     * Shove's collision, a Bouncing Arrow's bounce (§34).
      */
-    | { kind: "struck"; fighter: number; target: number; damage: number; reaction: boolean; chance?: number; roll?: number; missed?: true }
+    | { kind: "struck"; fighter: number; target: number; damage: number; reaction: boolean; chance?: number; roll?: number; missed?: true; via?: AbilityId }
     | { kind: "fireball" | "iceBall"; fighter: number; at: Square; targets: number[]; damage: number; damages?: Record<number, number> }
     /** A Sapper's Dynamite, landing as a fireball does but leaving nothing alight (§33.2). Its `blasted` follows. */
     | { kind: "dynamite"; fighter: number; at: Square; targets: number[]; damage: number; damages?: Record<number, number> }
@@ -687,6 +690,9 @@ export function landedSmoke(throwers: readonly Fighter[]): Square[] {
 
 /** The kinds of shot: an attack, an aimed shot, a crippling shot — at an attack's odds — and one on overwatch. */
 export type ShotKind = "attack" | "aimedShot" | "cripplingShot" | "poisonArrow" | "bouncingArrow" | "splittingArrow" | "shootDodge" | "thunder" | "overwatch";
+
+/** The shots whose event names the ability (`via`), so the board can draw it: the Realm's (§34). Older shots' events stay as they were. */
+const NAMED_SHOTS: ReadonlySet<ShotKind> = new Set<ShotKind>(["poisonArrow", "bouncingArrow", "splittingArrow", "shootDodge", "thunder"]);
 
 /**
  * What a shot leaves on a hit, and only then (§20.2): a crippling shot's
@@ -1473,7 +1479,7 @@ function resolver(state: BattleState, roll: Roll) {
         const rolled = roll();
         const result = shotResult(odds, rolled);
         const damage = result === "hit" ? odds.damage : result === "graze" ? odds.grazeDamage : 0;
-        events.push({ kind: "shot", fighter: by.id, target: target.id, chance: odds.chance, roll: rolled, result, damage, reaction: kind === "overwatch" });
+        events.push({ kind: "shot", fighter: by.id, target: target.id, chance: odds.chance, roll: rolled, result, damage, reaction: kind === "overwatch", ...(NAMED_SHOTS.has(kind) ? { via: kind as AbilityId } : {}) });
         if (damage > 0) wound(by, target, damage);
         if (result === "hit" && effect) afflict(by, target, effect);
         return result;
@@ -1546,9 +1552,9 @@ function resolver(state: BattleState, roll: Roll) {
         delete target.burnedBy;
     };
 
-    const hit = (by: Fighter, target: Fighter, blow: number) => {
+    const hit = (by: Fighter, target: Fighter, blow: number, via: AbilityId) => {
         const damage = damageTo(battle, by, target, blow, "ability");
-        events.push({ kind: "struck", fighter: by.id, target: target.id, damage, reaction: false });
+        events.push({ kind: "struck", fighter: by.id, target: target.id, damage, reaction: false, via });
         wound(by, target, damage);
     };
     const relocate = (mover: Fighter, path: Square[], via: AbilityId) => {
@@ -1633,7 +1639,7 @@ export function act(state: BattleState, player: string, action: Action, roll: Ro
         }
         case "leap":
             run.relocate(actor, [actor.square, action.at], action.kind);
-            for (const target of leapTargets(run.battle, actor, action.at)) run.hit(actor, get(target.id), ABILITIES.leap!.damage!);
+            for (const target of leapTargets(run.battle, actor, action.at)) run.hit(actor, get(target.id), ABILITIES.leap!.damage!, action.kind);
             break;
         case "shove": {
             const target = get(action.target), ability = ABILITIES.shove!;
@@ -1641,8 +1647,8 @@ export function act(state: BattleState, player: string, action: Action, roll: Ro
             if (run.strike(actor, target, false, ability.damage, "ability")) {
                 run.relocate(target, push.path, action.kind);
                 if (push.collision) {
-                    if (isStanding(target)) run.hit(actor, target, ability.collisionDamage!);
-                    if (push.hit) run.hit(actor, get(push.hit.id), ability.collisionDamage!);
+                    if (isStanding(target)) run.hit(actor, target, ability.collisionDamage!, action.kind);
+                    if (push.hit) run.hit(actor, get(push.hit.id), ability.collisionDamage!, action.kind);
                 }
             }
             break;
@@ -1665,7 +1671,7 @@ export function act(state: BattleState, player: string, action: Action, roll: Ro
                 let drawn = roll();
                 while (drawn > ceiling && drawn <= ROLL_SIDES) drawn = roll();
                 const chosen = choices[(drawn - 1) % choices.length];
-                run.hit(actor, get(chosen.id), ABILITIES.bouncingArrow!.bounceDamage!);
+                run.hit(actor, get(chosen.id), ABILITIES.bouncingArrow!.bounceDamage!, action.kind);
             }
             break;
         }

@@ -19,10 +19,6 @@ describe("the art sheets", () => {
     it("are served at the size the sprites are measured against, from a master of the same size", () => {
         for (const sheet of Object.values(ART_SHEETS)) {
             const size = { width: sheet.width, height: sheet.height };
-            if (sheet.href.endsWith(".svg")) {
-                expect(readFileSync(path.join("public", sheet.href), "utf8")).toContain(`width="${size.width}" height="${size.height}"`);
-                continue;
-            }
             expect(pngSize(path.join("public", sheet.href))).toEqual(size);
             // A drawn sheet's master is the export itself; one rendered from an
             // SVG master (the effects' and the items') declares the same size in
@@ -85,8 +81,8 @@ describe("facingCell", () => {
 describe("EFFECT_ART", () => {
     it("gives every effect a cell of its own on the effects sheet", () => {
         const cells = EFFECT_IDS.map(effect => EFFECT_ART[effect]);
-        expect(cells.every(cell => cell.sheet === "effects" || cell.sheet === "realmEffects")).toBe(true);
-        expect(new Set(cells.map(cell => `${cell.sheet}:${cell.x}`)).size).toBe(EFFECT_IDS.length);
+        expect(cells.every(cell => cell.sheet === "effects")).toBe(true);
+        expect(new Set(cells.map(cell => cell.x)).size).toBe(EFFECT_IDS.length);
         expect(cells.every(cell => SPRITES.has(cell))).toBe(true);
     });
 });
@@ -95,7 +91,7 @@ describe("ITEM_ART", () => {
     it("gives every item a cell of its own on the items sheet, and the smoke's cloud the next", () => {
         const cells = [...ITEM_IDS.map(item => ITEM_ART[item]), SMOKE_ART];
         expect(cells.every(cell => cell.sheet === "items")).toBe(true);
-        expect(new Set(cells.map(cell => `${cell.sheet}:${cell.x}`)).size).toBe(ITEM_IDS.length + 1);
+        expect(new Set(cells.map(cell => cell.x)).size).toBe(ITEM_IDS.length + 1);
         expect(cells.every(cell => SPRITES.has(cell))).toBe(true);
     });
 });
@@ -106,7 +102,7 @@ describe("the battle visuals' art", () => {
         expect(Object.keys(MISSILE_ART).sort()).toEqual([...missiles].sort());
         const cells = [...missiles.map(missile => MISSILE_ART[missile]), SLASH_ART];
         expect(cells.every(cell => cell.sheet === "fx" && cell.y === 0)).toBe(true);
-        expect(new Set(cells.map(cell => `${cell.sheet}:${cell.x}`)).size).toBe(missiles.length + 1);
+        expect(new Set(cells.map(cell => cell.x)).size).toBe(missiles.length + 1);
         expect([...cells, ...Object.values(BURST_ART)].every(cell => SPRITES.has(cell))).toBe(true);
     });
 });

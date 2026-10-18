@@ -11,6 +11,7 @@ import { ACTION_AIMS, rangeSquares, targetsOf } from "./tactics";
 import { MOVE, tapFighter, tapSquare, type TapContext } from "./useTurnDraft";
 import { actBy, battleOf, makeGame, musterAll, play, playScriptedTurn, cmd } from "./testFixtures";
 import { RealmArenaUndo, toldTo, unnamed } from "./RealmArenaLogic";
+import { battleCues, LEAP_LIFT, shakesOf, walkFacing, walkLift, type BattleCue } from "./ui";
 
 vi.mock("./masteryRecord", () => ({ masterySnapshotOf: vi.fn(async () => ({})) }));
 vi.mock("@/utils/users/clerk", () => ({ userIdListToNamesAndMap: async (ids: string[]) => ({ usernameList: ids, userIdNameMap: Object.fromEntries(ids.map(id => [id, id])) }) }));
@@ -331,4 +332,86 @@ it("crosses low cover on a push and stops before high cover", () => {
     expect(shovePath(state, knight, enemy)).toMatchObject({ path: [2, 3, 4], collision: false });
     const wall = buildBattlefield({ name: "Wall", rows: ["...#...."], deployments: [], objectives: {} });
     expect(shovePath({ ...state, field: wall }, knight, enemy)).toMatchObject({ path: [2], collision: true });
+});
+
+describe("the Realm's abilities as the board plays them (§26, §34)", () => {
+    const cuesOf = (state: BattleState, action: Action, rolls: number[] = []) => {
+        const after = run(state, action, rolls);
+        return { after, cues: battleCues(field, after.events, state.fighters, after.fighters, version) };
+    };
+    const ofKind = <Kind extends BattleCue["kind"]>(cues: readonly BattleCue[], kind: Kind) => cues.filter((cue): cue is Extract<BattleCue, { kind: Kind }> => cue.kind === kind);
+
+    it("leaps in one arc, coming down in dust as everyone beside the landing is hit", () => {
+        const man = fighter(0, "manAtArms", 1), enemy = fighter(1, "archer", 6, "b");
+        const { cues } = cuesOf(battle(man, enemy), { kind: "leap", fighter: 0, at: point(5) });
+        const [walk] = ofKind(cues, "walk");
+        expect(walk).toMatchObject({ path: [point(1), point(5)], motion: "leap" });
+        const down = walk.start + walk.length;
+        expect(ofKind(cues, "burst")).toEqual([expect.objectContaining({ burst: "slam", at: point(5), radius: 1, start: down })]);
+        expect(ofKind(cues, "text").find(cue => cue.fighter === 1)).toMatchObject({ start: down, value: "−2", from: point(5) });
+        expect(shakesOf(cues)).toEqual([{ start: down, length: expect.any(Number) }]);
+        expect(walkLift({ from: point(1), to: point(5), across: 0.5, motion: "leap" }, () => 0)).toBe(-LEAP_LIFT);
+    });
+
+    it("pushes its victim back without a step, and a collision lands on both at once", () => {
+        const knight = fighter(0, "knight", 2), enemy = fighter(1, "manAtArms", 3, "b"), blocker = fighter(2, "archer", 5, "a");
+        const { cues } = cuesOf(battle(knight, enemy, blocker), { kind: "shove", fighter: 0, target: 1 }, [1]);
+        expect(ofKind(cues, "slash")).toHaveLength(1);
+        const [walk] = ofKind(cues, "walk");
+        expect(walk).toMatchObject({ fighter: expect.objectContaining({ id: 1 }), path: [point(3), point(4)], motion: "pushed" });
+        const stopped = walk.start + walk.length;
+        expect(ofKind(cues, "burst")).toEqual([expect.objectContaining({ burst: "slam", at: point(4), radius: 0, start: stopped })]);
+        const collisions = ofKind(cues, "text").filter(cue => cue.value === "−1");
+        expect(collisions.map(cue => [cue.fighter, cue.start])).toEqual([[1, stopped], [2, stopped]]);
+        const leg = { from: point(3), to: point(4), motion: "pushed" as const };
+        expect(walkFacing(field, leg)).toBe(walkFacing(field, { from: point(4), to: point(3) }));
+        expect(walkLift({ ...leg, across: 0.5 }, () => 0)).toBeCloseTo(0);
+    });
+
+    it("pulls a Beckoned ally along without a step, and darts away after Shoot + Dodge", () => {
+        const cleric = fighter(0, "cleric", 1), ally = fighter(1, "knight", 7);
+        const [pull] = ofKind(cuesOf(battle(cleric, ally), { kind: "beckon", fighter: 0, target: 1 }).cues, "walk");
+        expect(pull).toMatchObject({ motion: "pulled" });
+        const archer = fighter(0, "archer", 1), enemy = fighter(1, "knight", 9, "b");
+        const { cues } = cuesOf(battle(archer, enemy), { kind: "shootDodge", fighter: 0, target: 1, path: [point(1), point(1, 4)] }, [100]);
+        expect(ofKind(cues, "walk")).toEqual([expect.objectContaining({ motion: "dash" })]);
+    });
+
+    it("flies a Bouncing Arrow on from its first target, and a Poison Arrow green", () => {
+        const archer = fighter(0, "archer", 1), enemy = fighter(1, "knight", 6, "b"), next = fighter(2, "knight", 8, "b");
+        const bounce = ofKind(cuesOf(battle(archer, enemy, next), { kind: "bouncingArrow", fighter: 0, target: 1 }, [1, 1]).cues, "flight");
+        expect(bounce.map(({ missile, from, to }) => [missile, from, to])).toEqual([["arrow", point(1), point(6)], ["arrow", point(6), point(8)]]);
+        const poison = ofKind(cuesOf(battle(archer, enemy), { kind: "poisonArrow", fighter: 0, target: 1 }, [1]).cues, "flight");
+        expect(poison.map(cue => cue.missile)).toEqual(["poisonArrow"]);
+    });
+
+    it("throws Ice Ball as a shard that bursts in frost, and Thunder as lightning that cracks where it strikes", () => {
+        const mage = fighter(0, "mage", 1), enemy = fighter(1, "knight", 6, "b");
+        const ice = cuesOf(battle(mage, enemy), { kind: "iceBall", fighter: 0, at: point(6) }).cues;
+        expect(ofKind(ice, "flight").map(cue => cue.missile)).toEqual(["iceShard"]);
+        expect(ofKind(ice, "burst")).toEqual([expect.objectContaining({ burst: "frost", at: point(6), radius: 1 })]);
+        const thunder = cuesOf(battle(mage, enemy), { kind: "thunder", fighter: 0, target: 1 }, [1]).cues;
+        const [flight] = ofKind(thunder, "flight");
+        expect(flight.missile).toBe("lightning");
+        expect(ofKind(thunder, "burst")).toEqual([expect.objectContaining({ burst: "thunder", at: point(6), radius: 0, start: flight.start + flight.land })]);
+        expect(ofKind(cuesOf(battle(mage, enemy), { kind: "thunder", fighter: 0, target: 1 }, [100]).cues, "burst")).toEqual([]);
+    });
+
+    it("lights everyone a Taunt braces at once, and rings a Ward", () => {
+        const knight = fighter(0, "knight", 1), archer = fighter(1, "archer", 9), mage = fighter(2, "mage", 12);
+        const glows = ofKind(cuesOf(battle(knight, archer, mage), { kind: "taunt", fighter: 0 }).cues, "burst");
+        expect(glows.map(cue => [cue.burst, cue.at])).toEqual([["aura", point(1)], ["aura", point(9)], ["aura", point(12)]]);
+        expect(new Set(glows.map(cue => cue.start)).size).toBe(1);
+        const cleric = fighter(0, "cleric", 1), near = fighter(1, "archer", 5);
+        expect(ofKind(cuesOf(battle(cleric, near), { kind: "ward", fighter: 0, target: 1 }).cues, "burst")).toEqual([expect.objectContaining({ burst: "ward", at: point(5) })]);
+        expect(ofKind(cuesOf(battle(fighter(0, "manAtArms", 1)), { kind: "slashAndDash", fighter: 0 }).cues, "burst")).toEqual([expect.objectContaining({ burst: "aura" })]);
+    });
+
+    it("names the blow a Leap, a collision or a bounce struck, but not while it would name a hidden enemy's kit", () => {
+        const knight = fighter(0, "knight", 2, "ai:0"), enemy = fighter(1, "manAtArms", 3, "a"), blocker = fighter(2, "archer", 5, "ai:0");
+        const { after } = cuesOf(battle(knight, enemy, blocker), { kind: "shove", fighter: 0, target: 1 }, [1]);
+        expect(after.events.filter(event => event.kind === "struck" && event.via === "shove")).toHaveLength(2);
+        const told = unnamed(after.events, id => id !== 1);
+        expect(told.some(event => "via" in event && event.via !== undefined)).toBe(false);
+    });
 });

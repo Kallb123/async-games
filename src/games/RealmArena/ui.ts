@@ -8,9 +8,9 @@ import { isoCentre, ISO_HALF_HEIGHT, ISO_HALF_WIDTH, type IsoView, type Point } 
 import type { IRealmArenaStepOutcome, IRealmArenaStepPart, RealmArenaPartState } from "./apiModels";
 import { andList, capitalise, pluralize, possessive } from "@/utils/ui/text";
 import type { Reach } from "@/utils/games/battlefield/pathfinding";
-import { coordsOf, FACING_COUNT, facingTowards, riseOf, squareAt, TERRAIN, type Battlefield, type Facing, type Square, type Terrain, type TerrainLetter } from "@/utils/games/battlefield/terrain";
+import { coordsOf, distance, FACING_COUNT, facingTowards, riseOf, squareAt, TERRAIN, type Battlefield, type Facing, type Square, type Terrain, type TerrainLetter } from "@/utils/games/battlefield/terrain";
 import { EFFECT_IDS, EFFECTS, ITEM_IDS, ITEMS, type AbilityId, type CharacterId, type EffectId, type Item, type ItemId } from "./characters";
-import { CHARACTER_IDS } from "./roster";
+import { ABILITY_MARK, CHARACTER_IDS } from "./roster";
 import { battlefieldOf } from "./maps";
 import { EFFECT_ART, ITEM_ART, type BurstKind, type Missile, type Sprite, type ThrownItem } from "./art";
 import { areaDamage, actionPointsOf, CENTRE, SCORED_FOR, squadSight, hasEffect, isStanding, isWarband, maxHpOf, moveAp, pickOf, reachOf, shoots, type BattleState, type Fighter, type MusterPick, type OddsBreakdown, type OddsFactor, type ShotResult, type ToldEvent } from "./rules";
@@ -823,7 +823,7 @@ export function eventLines(events: readonly ToldEvent[], fighters: readonly Figh
                 return index === firstMove ? [{ icon: "👣", title: `${Name(event.fighter)} ${event.via ? `moved with ${ABILITIES[event.via]!.name}` : event.sneaking ? "sneaked" : "moved"}` }] : [];
             case "shot": {
                 const title = event.result === "miss" ? "Miss" : `${event.result === "hit" ? "Hit" : "Graze"} for ${event.damage}`;
-                const who = `${Name(event.fighter)}${event.reaction ? " on overwatch" : ""}`;
+                const who = `${Name(event.fighter)}${event.reaction ? " on overwatch" : event.via ? `'s ${ABILITIES[event.via]!.name}` : ""}`;
                 const verb = event.result === "miss" ? "missed" : event.result === "hit" ? "hit" : "grazed";
                 return [{
                     icon: "🎯",
@@ -834,6 +834,10 @@ export function eventLines(events: readonly ToldEvent[], fighters: readonly Figh
                 }];
             }
             case "struck": {
+                if (event.via) {
+                    const title = `${ABILITIES[event.via]!.name}: ${name(event.target)} took ${event.damage}`;
+                    return [{ icon: ABILITY_MARK, title, sentence: `${Name(event.fighter)}'s ${ABILITIES[event.via]!.name} hit ${name(event.target)} for ${event.damage}` }];
+                }
                 // Under the balance rules a strike rolls, like a shot: a miss is told as one, with the odds and the roll.
                 const title = event.missed ? "Miss" : `${Name(event.fighter)} struck ${name(event.target)} for ${event.damage}`;
                 const sentence = event.missed ? `${Name(event.fighter)} struck at ${name(event.target)} and missed` : title;
@@ -1040,7 +1044,30 @@ export interface WalkCue extends Timed {
     kind: "walk";
     fighter: Fighter;
     path: readonly Square[];
+    /** How it goes, when not on foot: absent for a walk. */
+    motion?: WalkMotion;
 }
+
+/**
+ * How a character an ability moves goes (§34): jumping in one arc to where a
+ * Leap lands, pushed back by a Shove without a step, pulled along by a Beckon
+ * without a step, or darting away from Shoot + Dodge's shot.
+ */
+export type WalkMotion = "leap" | "pushed" | "pulled" | "dash";
+
+/** Which motion each ability that moves someone plays its move with. */
+const MOTION_OF: Readonly<Partial<Record<AbilityId, WalkMotion>>> = { leap: "leap", shove: "pushed", beckon: "pulled", shootDodge: "dash" };
+
+/**
+ * How many walk steps a move in each motion takes for each it would take on
+ * foot: a dart is quicker than walking it, and a push or a pull a little
+ * slower, so a single square of it is still seen. A leap is timed by how far
+ * it goes instead (`LEAP_STEPS`), since it crosses no legs.
+ */
+const MOTION_PACE: Readonly<Record<Exclude<WalkMotion, "leap">, number>> = { pushed: 1.4, pulled: 1.2, dash: 0.7 };
+
+/** How many walk steps a Leap hangs in the air: `base`, and `perSquare` for each square it jumps. */
+const LEAP_STEPS = { base: 2, perSquare: 0.5 };
 
 /**
  * Low cover blasted away (§22), standing until the burst that did it fades:
@@ -1116,6 +1143,9 @@ export const FLIGHT_PACE: Readonly<Record<Missile, { base: number; perSquare: nu
     thunderFlask: { base: 300, perSquare: 20, max: 800 },
     smokePot: { base: 300, perSquare: 20, max: 800 },
     dynamite: { base: 300, perSquare: 20, max: 800 },
+    poisonArrow: { base: 180, perSquare: 14, max: 650 },
+    iceShard: { base: 260, perSquare: 18, max: 700 },
+    lightning: { base: 90, perSquare: 6, max: 300 },
 };
 /** How long a shot goes on once it's there: an arrow stuck in a figure, or one glancing off or flying past. */
 const SHOT_AFTER_MS = 350;
@@ -1178,12 +1208,18 @@ export function legLengthOn(view: IsoView): (from: Square, to: Square) => number
 /** What each character that shoots something other than an arrow shoots (§26.1): the Mage's bolt, the Spitter's acid. */
 const SHOT_MISSILE: Readonly<Partial<Record<CharacterId, Missile>>> = { mage: "bolt", spitter: "acid" };
 
+/** What a shot by an ability flies, where it isn't its shooter's usual (§34): Poison Arrow's green arrow, Thunder's lightning. */
+const SHOT_VIA_MISSILE: Readonly<Partial<Record<AbilityId, Missile>>> = { poisonArrow: "poisonArrow", thunder: "lightning" };
+
+/** The glow each blessing puts down under whoever takes it (§34): Taunt's, Blessing's and Focus's light, and Ward's ring. */
+const BUFF_BURST: Readonly<Partial<Record<EffectId, BurstKind>>> = { braced: "aura", blessed: "aura", focused: "aura", warded: "ward" };
+
 /**
  * How each ability that lands on a 3×3 shows (§26.1, §33.2): the glyph its
  * lines and rows lead with, what flies, and what it bursts into.
  */
 export const AREA_BLAST: Readonly<Record<"fireball" | "dynamite" | "iceBall", { icon: string; missile: Missile; burst: BurstKind }>> = {
-    iceBall: { icon: "❄️", missile: "bolt", burst: "thunder" },
+    iceBall: { icon: "❄️", missile: "iceShard", burst: "frost" },
     fireball: { icon: "🔥", missile: "fireball", burst: "fire" },
     dynamite: { icon: "🧨", missile: "dynamite", burst: "blast" },
 };
@@ -1357,25 +1393,36 @@ function timeline(field: Battlefield, events: readonly ToldEvent[], before: read
      * told before it has landed first, and one told after it flies once it's
      * over, as the next thing to land.
      */
-    const walk = (fighter: number, path: readonly Square[]) => {
+    const walk = (fighter: number, path: readonly Square[], motion?: WalkMotion) => {
         const walker = as.get(fighter) ?? afterAs.get(fighter);
         if (!walker || path.length < 2) return;
         const start = landed ?? 0;
-        const steps = path.slice(1).reduce((total, square, i) => total + legWeight(field, path[i], square), 0);
+        const steps = motion === "leap" ? LEAP_STEPS.base + LEAP_STEPS.perSquare * distance(field, path[0], path[path.length - 1])
+            : path.slice(1).reduce((total, square, i) => total + legWeight(field, path[i], square), 0) * (motion ? MOTION_PACE[motion] : 1);
         const length = still ? 0 : Math.round(steps * pace.walkStepMs);
-        cues.push({ kind: "walk", fighter: walker, path, start, length });
+        cues.push({ kind: "walk", fighter: walker, path, start, length, ...(motion ? { motion } : {}) });
         // A walk that takes no time lands nothing: the next thing to land is the first.
         if (length > 0) landed = start + length;
         walked.set(fighter, start + length);
     };
     /** Something flying from a character to a square, in the `flight` that `flightOf` told, landing at `land`. */
-    const fly = (fighter: number, to: Square | undefined, missile: Missile, result: FlightCue["result"], land: number, flight: number, after = 0) => {
-        const from = at.get(fighter);
+    const fly = (fighter: number, to: Square | undefined, missile: Missile, result: FlightCue["result"], land: number, flight: number, after = 0) =>
+        flyFrom(at.get(fighter), to, missile, result, land, flight, after);
+    /** The same from a square: a bounce flies on from where the arrow struck. */
+    const flyFrom = (from: Square | undefined, to: Square | undefined, missile: Missile, result: FlightCue["result"], land: number, flight: number, after = 0) => {
         if (from === undefined || to === undefined) return;
         // A flight is drawn by how far through it is, so even one that takes no time lasts a moment.
         if (still) cues.push({ kind: "flight", missile, from, to, result, start: land, land: 1, length: 1 });
         else cues.push({ kind: "flight", missile, from, to, result, start: land - flight, land: flight, length: flight + after });
     };
+    /** A burst over `at` from `start`: the 3×3 round it at `radius` 1. */
+    const burst = (kind: BurstKind, at: Square | undefined, start: number, radius: 0 | 1 = 0) => {
+        if (at !== undefined) cues.push({ kind: "burst", burst: kind, at, radius, start, length: BURST_MS });
+    };
+    /** Where the last shot struck: a Bouncing Arrow's bounce flies on from there. */
+    let shotAt: Square | undefined;
+    /** When a run of blows that land together — a Leap's landing, a Shove's collision — lands. */
+    let together = null as { via: AbilityId; start: number } | null;
 
     /** Where eventLines tells a move: a broken-up one is told once, so its later segments have no caption. */
     const firstMove = firstMoveOf(events);
@@ -1385,7 +1432,14 @@ function timeline(field: Battlefield, events: readonly ToldEvent[], before: read
         const drawn = cues.length;
         switch (event.kind) {
             case "moved": {
-                walk(event.fighter, event.path);
+                const motion = event.via && MOTION_OF[event.via];
+                walk(event.fighter, event.path, motion);
+                const arrived = walked.get(event.fighter) ?? landed ?? 0;
+                // A Leap comes down in a cloud of dust, and everyone beside it is hit as it does (`struck`, `via`).
+                if (motion === "leap" && event.path.length > 1) {
+                    burst("slam", event.path.at(-1), arrived, 1);
+                    together = { via: "leap", start: arrived };
+                } else if (motion === "pushed") together = { via: "shove", start: arrived };
                 // A move told with no path went out of the viewer's sight (§27): lost there, not left where it was last seen.
                 const end = event.path.at(-1);
                 if (end !== undefined) at.set(event.fighter, end);
@@ -1398,10 +1452,13 @@ function timeline(field: Battlefield, events: readonly ToldEvent[], before: read
             case "shot": {
                 // The Mage's bolt, the Spitter's acid; anyone else who shoots has a bow.
                 const shooter = as.get(event.fighter)?.character;
-                const missile = (shooter && SHOT_MISSILE[shooter]) ?? "arrow";
+                const missile = (event.via && SHOT_VIA_MISSILE[event.via]) ?? (shooter && SHOT_MISSILE[shooter]) ?? "arrow";
                 const to = at.get(event.target);
                 const flight = flightOf(event.fighter, to, missile);
                 const land = beat(flight);
+                shotAt = to;
+                // Thunder cracks where it strikes.
+                if (event.via === "thunder" && event.result !== "miss") burst("thunder", to, land);
                 // An overwatch shot says so as it's loosed, so the camera's pan to the watcher says why.
                 if (event.reaction) say(event.fighter, land - flight, OVERWATCH_WORD);
                 fly(event.fighter, to, missile, event.result, land, flight, SHOT_AFTER_MS);
@@ -1410,6 +1467,26 @@ function timeline(field: Battlefield, events: readonly ToldEvent[], before: read
                 break;
             }
             case "struck": {
+                if (event.via === "bouncingArrow") {
+                    // The arrow flies on from the first target, never missing (§34.6).
+                    const to = at.get(event.target);
+                    const flight = still || shotAt === undefined || to === undefined ? 0 : flightMs(field, "arrow", shotAt, to);
+                    const land = beat(flight);
+                    flyFrom(shotAt, to, "arrow", "hit", land, flight, SHOT_AFTER_MS);
+                    text(event.target, land, minus(event.damage), "hit", { hpChange: -event.damage, from: shotAt });
+                    break;
+                }
+                if (event.via === "leap" || event.via === "shove") {
+                    // Everyone a Leap lands beside, or a Shove's collision, is hit at once, as it comes down or stops.
+                    if (together?.via !== event.via) together = { via: event.via, start: beat() };
+                    const { start } = together;
+                    landed = Math.max(landed ?? 0, start);
+                    // A collision throws up dust where the pushed one stopped: the first blow of it is on them.
+                    const previous = events[index - 1];
+                    if (event.via === "shove" && !(previous?.kind === "struck" && previous.via === "shove")) burst("slam", at.get(event.target), start);
+                    text(event.target, start, minus(event.damage), "hit", { hpChange: -event.damage, from: at.get(event.fighter) });
+                    break;
+                }
                 const land = beat(SLASH_MS);
                 const square = at.get(event.target);
                 if (event.reaction) say(event.fighter, land - SLASH_MS, GUARD_WORD);
@@ -1422,9 +1499,12 @@ function timeline(field: Battlefield, events: readonly ToldEvent[], before: read
             case "burned":
                 text(event.fighter, beat(), minus(event.damage), "hit", { mark: event.effect ?? "burning", hpChange: -event.damage });
                 break;
-            case "ability":
-                say(event.fighter, beat(), ABILITIES[event.ability]!.name);
+            case "ability": {
+                const when = beat();
+                say(event.fighter, when, ABILITIES[event.ability]!.name);
+                burst("aura", at.get(event.fighter), when);
                 break;
+            }
             case "hunkered":
             case "shieldWall":
                 say(event.fighter, beat(), STANCE_WORD[event.kind], event.kind);
@@ -1450,7 +1530,7 @@ function timeline(field: Battlefield, events: readonly ToldEvent[], before: read
                 fly(event.fighter, event.at, missile, "landed", land, flight);
                 // A fireball or dynamite spreads over the 3×3, and so does a flask made to.
                 const radius = item && !(ITEMS[item] as Item).area ? 0 : 1;
-                cues.push({ kind: "burst", burst: item ? THROWN_BURST[item] : blast!.burst, at: event.at, radius, start: land, length: BURST_MS });
+                burst(item ? THROWN_BURST[item] : blast!.burst, event.at, land, radius);
                 landing = { start: land, targets: event.targets };
                 if (event.damage > 0) event.targets.forEach(target => text(target, land, minus(areaDamage(event, target)), "hit", { hpChange: -areaDamage(event, target), from: event.at }));
                 break;
@@ -1467,7 +1547,7 @@ function timeline(field: Battlefield, events: readonly ToldEvent[], before: read
                 } else {
                     land = beat();
                     from = at.get(event.fighter);
-                    if (from !== undefined) cues.push({ kind: "burst", burst: "acid", at: from, radius: 1, start: land, length: BURST_MS });
+                    burst("acid", from, land, 1);
                 }
                 landing = { start: land, targets: event.targets };
                 event.targets.forEach(target => text(target, land, minus(areaDamage(event, target)), "hit", { hpChange: -areaDamage(event, target), from }));
@@ -1501,7 +1581,14 @@ function timeline(field: Battlefield, events: readonly ToldEvent[], before: read
                 const { name } = EFFECTS[event.effect]!;
                 if (cue && (cue.tone === "hit" || cue.tone === "graze") && !cue.label && !cue.mark) cue.label = name;
                 else if (landing?.targets.includes(event.fighter)) text(event.fighter, landing.start, name, "word");
-                else text(event.fighter, beat(), name, "word");
+                else {
+                    // A blessing on several at once — a Taunt, a Blessing — comes down on all of them together.
+                    const previous = events[index - 1];
+                    const when = previous?.kind === "effect" && previous.effect === event.effect && previous.change !== "cleared" && landed !== null ? landed : beat();
+                    text(event.fighter, when, name, "word");
+                    const glow = BUFF_BURST[event.effect];
+                    if (glow) burst(glow, at.get(event.fighter), when);
+                }
                 break;
             }
         }
@@ -1802,12 +1889,16 @@ const MIN_LEG_LENGTH = 0.01;
 export const WALK_HOP = 3;
 /** How far a walker rises at the middle of every step, in board units: the bob of someone on foot. */
 export const WALK_BOB = 0.6;
+/** How high a Leap's arc rises at its middle, in board units, above the line between where it left and where it lands. */
+export const LEAP_LIFT = 14;
 
 /** Where a walker is on its way: the square it is leaving, the one it is heading for and how far over the leg between their middles it has got. */
 export interface WalkerLeg {
     from: Square;
     to: Square;
     across: number;
+    /** How it goes, when not on foot (`WalkCue.motion`). */
+    motion?: WalkMotion;
 }
 
 /**
@@ -1858,7 +1949,8 @@ export function walkerAt(walks: readonly WalkCue[], ms: number, legLength: (from
         before += one.path.length;
     }
     const { path } = walk;
-    if (path.length < 2) return { from: path[0], to: path[0], across: 0, at: first };
+    const motion = walk.motion ? { motion: walk.motion } : {};
+    if (path.length < 2) return { from: path[0], to: path[0], across: 0, at: first, ...motion };
     const lengths = path.slice(1).map((square, leg) => Math.max(MIN_LEG_LENGTH, legLength(path[leg], square)));
     const total = lengths.reduce((sum, length) => sum + length, 0);
     const time = (ms - walk.start) / Math.max(1, walk.length);
@@ -1866,7 +1958,7 @@ export function walkerAt(walks: readonly WalkCue[], ms: number, legLength: (from
     let leg = 0, passed = 0;
     while (leg < lengths.length - 1 && gone >= passed + lengths[leg]) passed += lengths[leg++];
     const across = Math.min(1, Math.max(0, (gone - passed) / lengths[leg]));
-    return { from: path[leg], to: path[leg + 1], across, at: first + (across < 0.5 ? leg : leg + 1) };
+    return { from: path[leg], to: path[leg + 1], across, at: first + (across < 0.5 ? leg : leg + 1), ...motion };
 }
 
 /** Where on the ground over a leg a walker is (board units): between the centres of its two squares, as far over as it has got — without the bob or the hop (`walkLift`). */
@@ -1925,11 +2017,19 @@ export function walkCameraAt(walks: readonly WalkCue[], view: IsoView, ms: numbe
  * How far a walker is lifted off the ground over a leg (board units, up
  * negative): the bob of every step, and over a leg whose two ends stand at
  * different heights (`heightOf`) a hop on top of it, both peaking mid-way and
- * back on the ground at either end.
+ * back on the ground at either end. A Leap is one arc, `LEAP_LIFT` high; one
+ * pushed or pulled takes no step, so it doesn't bob.
  */
-export function walkLift({ from, to, across }: WalkerLeg, heightOf: (square: Square) => number): number {
+export function walkLift({ from, to, across, motion }: WalkerLeg, heightOf: (square: Square) => number): number {
+    if (motion === "leap") return -LEAP_LIFT * Math.sin(Math.PI * across);
     const hop = heightOf(from) !== heightOf(to) ? WALK_HOP : 0;
-    return -(hop + WALK_BOB) * Math.sin(Math.PI * across);
+    const bob = motion === "pushed" || motion === "pulled" ? 0 : WALK_BOB;
+    return -(hop + bob) * Math.sin(Math.PI * across);
+}
+
+/** Which way a walker faces over a leg: the way it goes, or — pushed back by a Shove — the way it was pushed from, staggering backwards. */
+export function walkFacing(field: Battlefield, { from, to, motion }: Pick<WalkerLeg, "from" | "to" | "motion">): Facing {
+    return motion === "pushed" ? facingTowards(field, to, from) : facingTowards(field, from, to);
 }
 
 // ─── Impact (§5) ────────────────────────────────────────────────────────────
@@ -1949,7 +2049,7 @@ export const SHAKE = 2;
 /** How many times the shake swings to and fro over its length. */
 const SHAKE_SWINGS = 2;
 /** The missiles whose landing shakes the battlefield: the ones that explode. */
-const SHAKING_MISSILES: ReadonlySet<Missile> = new Set<Missile>(["fireball", "thunderFlask", "dynamite"]);
+const SHAKING_MISSILES: ReadonlySet<Missile> = new Set<Missile>(["fireball", "thunderFlask", "dynamite", "iceShard", "lightning"]);
 
 /**
  * A figure pushed off its square and back over a stretch of the playback: the
@@ -2003,7 +2103,9 @@ export function shoveAt(shoves: readonly Shove[], ms: number, project: (square: 
 
 /** When each shake of the battlefield is: `SHAKE_MS` from the moment each missile that explodes lands. */
 export function shakesOf(cues: readonly BattleCue[]): Timed[] {
-    return cues.flatMap((cue): Timed[] => cue.kind === "flight" && SHAKING_MISSILES.has(cue.missile) ? [{ start: cue.start + cue.land, length: SHAKE_MS }] : []);
+    return cues.flatMap((cue): Timed[] => cue.kind === "flight" && SHAKING_MISSILES.has(cue.missile) ? [{ start: cue.start + cue.land, length: SHAKE_MS }]
+        // A Leap coming down, or a Shove's collision, lands with a thud.
+        : cue.kind === "burst" && cue.burst === "slam" ? [{ start: cue.start, length: SHAKE_MS }] : []);
 }
 
 /**
@@ -2054,6 +2156,9 @@ export const FLIGHT_ARC: Readonly<Record<Missile, number>> = {
     smokePot: 0.3,
     acid: 0.2,
     dynamite: 0.3,
+    poisonArrow: 0.1,
+    iceShard: 0.25,
+    lightning: 0,
 };
 /**
  * How each missile is drawn (§26.1), in board units: how big it is. A flask, a
@@ -2069,6 +2174,9 @@ export const FLIGHT: Readonly<Record<Missile, { size: number; tumbles?: true }>>
     smokePot: { size: 7, tumbles: true },
     acid: { size: 10 },
     dynamite: { size: 9, tumbles: true },
+    poisonArrow: { size: 12 },
+    iceShard: { size: 12 },
+    lightning: { size: 14 },
 };
 /** How fast a flask or a pot turns over, in degrees a millisecond. */
 export const TUMBLE = 0.9;

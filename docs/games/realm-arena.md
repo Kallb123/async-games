@@ -1,6 +1,6 @@
 # Realm Arena — Game Design Document
 
-**Status:** v1.57. The Realm troop overhaul (§34) is implemented for new
+**Status:** v1.59. The Realm troop overhaul (§34) is implemented for new
 battles in rules version 9, using §34.10's proposed defaults for playtesting.
 Battles already created keep their original rules.
 Earlier implementation
@@ -4453,6 +4453,36 @@ Each proposal above, to accept or change:
 12. **Ready-made squads**: an Archer for each Scout (§34.1)?
 13. **Mastery**: Demolish replaces Shove (§34.9)?
 
+### 34.11 On the board
+
+How the new kit plays out over the battlefield (§26), on the isometric board
+and the 3D one alike, from the same cues. A blow that doesn't roll and isn't
+a strike — a Leap's landing, a Shove's collision, a Bouncing Arrow's bounce —
+names its ability (`via`) on its `struck` event, and so does each of the new
+arrows and Thunder on its `shot`, so the board can tell them apart; while a
+random enemy is still hidden (§29.3), the names are stripped with the rest of
+its kit, and a Shove plays as an ordinary walk.
+
+- **Leap** jumps in one arc over whatever is between, its shadow staying on
+  the ground, and comes down in a ring of dust over the 3×3, with a thud;
+  everyone it lands beside is hit as it does.
+- **Shove** slashes as a strike does; the enemy is then pushed back without a
+  step, still facing the Knight. A collision throws up dust where it stopped,
+  with a thud, and lands on both at once.
+- **Beckon** pulls the ally along without a step; **Shoot + Dodge** darts away
+  quicker than a walk, once the arrow has landed.
+- **Poison Arrow** flies green; **Bouncing Arrow** flies on from its first
+  target to the one it bounces to.
+- **Ice Ball** is a shard of ice that bursts in frost over the 3×3; **Thunder**
+  is a crack of lightning, flashing where it strikes on a hit.
+- **Taunt**, **Blessing**, **Focus** and **Slash and Dash** light a golden glow
+  under everyone they reach, all at once; **Ward** a ring of runes.
+- The five new effects each have a badge on the effects sheet, between the
+  older effects' and the watch's.
+
+All of it is drawn in `effects.svg` and `fx.svg` and rendered by
+`npm run ra-marks`, as the rest of the battle visuals are (§26.3).
+
 ---
 
 ## Appendix: Working title
@@ -4534,5 +4564,4 @@ Realm, its sibling in the same world.
 | 1.56 | The Realm troop overhaul, designed but not built (§34): the Scout leaves the Realm; the Man-at-arms gains Leap and Slash and Dash; the Knight a passive Bulwark (half cover for anyone beside it, enemies too), Taunt (armour for its side for a turn) and Shove; the Archer four new arrows; the Mage Ice Ball, Thunder and Focus; the Cleric Beckon, Blessing and Ward, and a Raise that lets the raised act at once on its owner's turn. Values not yet agreed are proposed, and asked in §34.10. |
 | 1.57 | Rules version 8 (command version 8) builds two pieces of §34: the Knight's and Stonewarden's Shield wall is a passive, giving anyone beside them, friend or foe, half cover; and a character raised on its owner's turn has 2 AP to spend. Battles created before it keep the activated shield wall and the old Raise. |
 | 1.58 | Benchmarking the planner. Open puzzles (§29.11): three it fails today, kept as `it.fails` — taking a likely knock-out over wounding a fresh enemy, stepping out of a crossfire, and stepping out of a Knight's reach. And the balance harness's `--team-planner <ref>` (§30.12), which has the team play an older planner against the checkout's warbands, so a change to the planner is measured as the warbands' alone; its first experiments — counting the team per head, and an Exposure that adds every shot up and lets a melee enemy walk — are in `realm-arena-balance.md`, and none was kept. Tests, tooling and documents only. |
-
-| 1.57 | Implement §34 in rules version 9 using the documented proposals: new Realm kits, effects, targeting and computer actions; old battles retain their original catalogue. New status badges are served as SVG, with no binary additions. |
+| 1.59 | Rules version 9 (command version 9) builds the rest of §34 with its proposed values: the Realm's new kits, the five new effects, their aims and the computer's use of them; battles created before it keep their catalogue. How the board plays it (§34.11): a Leap's arc and landing, a Shove's push and collision, a Beckon's pull, a Bouncing Arrow's bounce, Ice Ball's shard and frost, Thunder's lightning, a glow under everyone blessed or braced and a ring under the warded, and a badge for each new effect, all drawn in the effect and fx masters. |
