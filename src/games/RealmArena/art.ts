@@ -15,7 +15,7 @@
 
 import { FACING_COUNT, FULL_HEIGHT, TERRAIN, type Facing, type TerrainLetter } from "@/utils/games/battlefield/terrain";
 import { ISO_HALF_HEIGHT, ISO_HALF_WIDTH, ISO_STEP, type IsoRotation } from "@/utils/ui/isometric";
-import { EFFECT_IDS, ITEM_IDS, type CharacterId, type ItemId } from "./characters";
+import { ITEM_IDS, type CharacterId, type EffectId, type ItemId } from "./characters";
 import { CHARACTER_IDS } from "./roster";
 
 export const ART_SHEETS = {
@@ -28,6 +28,7 @@ export const ART_SHEETS = {
      * row, in `EFFECT_IDS` order, then the watch's (§13.4). Rendered from its SVG master,
      * `art-masters/realmarena/effects.svg`, by `npm run ra-marks`.
      */
+    realmEffects: { href: "/art/realmarena/realm-effects.svg", width: 480, height: 96 },
     effects: { href: "/art/realmarena/effects.png", width: 768, height: 96 },
     /**
      * The items (§21.2), one `MARK_PX` badge a cell in `ITEM_IDS` order, and
@@ -181,10 +182,14 @@ const marks = <Id extends string>(sheet: ArtSheet, ids: readonly Id[]) =>
     Object.fromEntries(ids.map((id, index) => [id, mark(sheet, index)])) as Readonly<Record<Id, Sprite>>;
 
 /** The mark a figure wears for each effect on it (§20.2), and its box beside the effect's name. */
-export const EFFECT_ART = marks("effects", EFFECT_IDS);
+const LEGACY_EFFECT_IDS = ["burning", "stunned", "slowed", "marked", "corroded", "hunkered", "shieldWall"] as const;
+export const EFFECT_ART: Readonly<Record<EffectId, Sprite>> = {
+    ...marks("effects", LEGACY_EFFECT_IDS),
+    ...marks("realmEffects", ["poisoned", "braced", "blessed", "focused", "warded"] as const),
+};
 
 /** The mark a figure on watch wears (§13.4), AP banked for overwatch or guard: after the effects' on their sheet, and in their column. */
-export const WATCH_ART = mark("effects", EFFECT_IDS.length);
+export const WATCH_ART = mark("effects", LEGACY_EFFECT_IDS.length);
 
 /** Each item's mark (§21.2): by the shoulder of a figure carrying it, and beside its name wherever it's named. */
 export const ITEM_ART = marks("items", ITEM_IDS);

@@ -5553,6 +5553,8 @@ html:has(.ag-pull) { overscroll-behavior-y: contain; }
 .ag-ra-reach--2 { fill-opacity: 0.3; }
 .ag-ra-reach--3 { fill-opacity: 0.42; }
 .ag-ra-reach--4 { fill-opacity: 0.54; }
+.ag-ra-reach--5 { fill-opacity: 0.66; }
+.ag-ra-reach--6 { fill-opacity: 0.78; }
 /* With a weapon or an ability armed, every square it could land on: its range. */
 .ag-ra-range { fill: var(--ra-range); fill-opacity: 0.3; pointer-events: none; }
 /* Over the whole board, under the figures: a tap on any square no one stands on. */

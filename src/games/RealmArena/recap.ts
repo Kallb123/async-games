@@ -142,6 +142,7 @@ function actionKind(events: readonly BattleEvent[]): { type: string; glyph: stri
     const has = (match: (event: BattleEvent) => boolean) => events.some(match);
     // A Bloater downs itself as it bursts (§31.2): that's no knock-out.
     if (has(event => event.kind === "downed" && event.by !== event.fighter)) return { type: RA_KNOCKOUT, glyph: "✕" };
+    if (has(event => event.kind === "iceBall")) return { type: RA_FIREBALL, glyph: AREA_BLAST.iceBall.icon };
     if (has(event => event.kind === "fireball")) return { type: RA_FIREBALL, glyph: AREA_BLAST.fireball.icon };
     if (has(event => event.kind === "dynamite")) return { type: RA_DYNAMITE, glyph: AREA_BLAST.dynamite.icon };
     const thrown = events.find((event): event is Extract<BattleEvent, { kind: "thrown" }> => event.kind === "thrown");
@@ -167,6 +168,7 @@ function hurt(events: readonly BattleEvent[], fighters: readonly Fighter[]): str
             case "shot":
             case "struck": return event.damage > 0 ? [event.target] : [];
             case "fireball":
+            case "iceBall":
             case "dynamite":
             case "thrown":
             case "demolished":
@@ -313,9 +315,7 @@ function enemyRows(base: RowBase, command: IGameCommand, turn: EnemyTurn, lines:
     // Demolish or a Burst names the kind of character that did it.
     const notTeam = (id: number) => !next.fighters.some(fighter => fighter.id === id && !isWarband(fighter.owner));
     const told = (events: readonly BattleEvent[]): readonly BattleEvent[] => next.enemy ? events
-        : unnamed(events, notTeam).flatMap((event): BattleEvent[] => event.kind === "fireball" || event.kind === "dynamite" || event.kind === "demolished" || event.kind === "burst"
-            ? event.targets.map(target => ({ kind: "struck", fighter: event.fighter, target, damage: event.damage, reaction: false }))
-            : [event]);
+        : unnamed(events, notTeam);
     // In fog, only the parts the viewer was told of wrote them a line (§27.2).
     let at = 0;
     const started = said(turn.startedTold, turn.started);

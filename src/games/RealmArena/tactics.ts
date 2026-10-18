@@ -14,7 +14,7 @@ import { rulesetOf, type RulesContext } from "@/games/RealmArena/rulesets";
 import type { Square } from "@/utils/games/battlefield/terrain";
 import { ABILITIES, STRIKING_ABILITIES, type Ability, type AbilityId } from "./characters";
 import {
-    actionPointsOf, check, coverNextTo, fighterById, inRange, itemOf, nextTo, oddsBreakdown, reactionsTo, damageTo, shoots, shotOdds, strikeChance, weaponReaches,
+    abilityRefusal, actionPointsOf, check, dodgeReach, leapLanding, coverNextTo, fighterById, inRange, itemOf, nextTo, oddsBreakdown, reactionsTo, damageTo, shoots, shotOdds, strikeChance, weaponReaches,
     type Action, type BattleState, type Fighter, type ShotKind, type ShotOdds,
 } from "./rules";
 
@@ -24,10 +24,10 @@ import {
  * to it (a Demolish), the item it carries (a throw), or — a number — how far
  * something aimed reaches (a fireball, a Hunter's mark, a heal).
  */
-export type RangeKind = "weapon" | "nextTo" | "cover" | "item" | number;
+export type RangeKind = "weapon" | "nextTo" | "cover" | "item" | "leap" | "dodge" | number;
 
 /** The actions aimed at one character. */
-export type TargetKind = "attack" | "aimedShot" | "heal" | "raise" | "draught" | "shieldBash" | "cripplingShot" | "huntersMark" | "rend" | "regrowth";
+export type TargetKind = "attack" | "aimedShot" | "heal" | "raise" | "draught" | "shieldBash" | "cripplingShot" | "huntersMark" | "rend" | "regrowth" | "shove" | "poisonArrow" | "bouncingArrow" | "splittingArrow" | "shootDodge" | "thunder" | "beckon" | "ward" | "runeRaise";
 
 export type ActionKind = Action["kind"];
 
@@ -40,10 +40,10 @@ export type ActionKind = Action["kind"];
  */
 export type ActionAim =
     | { at: "path" | "self" }
-    | { at: "enemy"; range: RangeKind; shot?: Exclude<ShotKind, "overwatch"> }
+    | { at: "enemy"; range: RangeKind; shot?: Exclude<ShotKind, "overwatch">; then?: { at: "path"; range: "dodge" } }
     | { at: "ally"; range: RangeKind }
-    | { at: "enemies"; count: number; each: TargetKind; range: RangeKind }
-    | { at: "square"; range: RangeKind };
+    | { at: "enemies"; count: number; each: TargetKind; range: RangeKind; shot?: Exclude<ShotKind, "overwatch"> }
+    | { at: "square"; range: RangeKind; useful?: "area" | "leap" };
 
 /**
  * Every kind of action, and what it's aimed at (§29.3): what the board's taps
@@ -52,6 +52,22 @@ export type ActionAim =
  * player and by the computer alike.
  */
 export const ACTION_AIMS: Readonly<Record<ActionKind, ActionAim>> = {
+    leap: { at: "square", range: "leap", useful: "leap" },
+    iceBall: { at: "square", range: 12, useful: "area" },
+    slashAndDash: { at: "self" },
+    bulwark: { at: "self" },
+    taunt: { at: "self" },
+    focus: { at: "self" },
+    blessing: { at: "self" },
+    shove: { at: "enemy", range: "weapon" },
+    poisonArrow: { at: "enemy", range: "weapon", shot: "poisonArrow" },
+    bouncingArrow: { at: "enemy", range: "weapon", shot: "bouncingArrow" },
+    splittingArrow: { at: "enemies", count: 2, each: "splittingArrow", range: "weapon", shot: "splittingArrow" },
+    shootDodge: { at: "enemy", range: "weapon", shot: "shootDodge", then: { at: "path", range: "dodge" } },
+    thunder: { at: "enemy", range: "weapon", shot: "thunder" },
+    beckon: { at: "ally", range: 8 },
+    ward: { at: "ally", range: 6 },
+    runeRaise: { at: "ally", range: "nextTo" },
     move: { at: "path" },
     sneak: { at: "path" },
     attack: { at: "enemy", range: "weapon", shot: "attack" },
@@ -80,7 +96,7 @@ export const ACTION_AIMS: Readonly<Record<ActionKind, ActionAim>> = {
 /** The shot an action takes, if it's one: its odds are `shotOdds`. Anything else aimed at an enemy is a strike or lands. */
 export function shotOf(kind: ActionKind): Exclude<ShotKind, "overwatch"> | undefined {
     const aim = ACTION_AIMS[kind];
-    return aim.at === "enemy" ? aim.shot : undefined;
+    return aim.at === "enemy" || aim.at === "enemies" ? aim.shot : undefined;
 }
 
 /**
@@ -103,6 +119,7 @@ export function targetKindOf(kind: ActionKind): TargetKind | undefined {
 /** What a kind of action's range is read from, for where it could land: undefined for a move or one that goes at once. */
 export function rangeKindOf(kind: ActionKind, context?: RulesContext): RangeKind | undefined {
     const ability = rulesetOf(context).ABILITIES[kind as AbilityId] as Ability | undefined;
+    if (kind === "leap") return "leap";
     if (ability?.range !== undefined) return ability.range;
     const aim = ACTION_AIMS[kind];
     return "range" in aim ? aim.range : undefined;
@@ -118,6 +135,11 @@ export function rangeKindOf(kind: ActionKind, context?: RulesContext): RangeKind
  */
 export function rangeSquares(state: BattleState, fighter: Fighter, kind: RangeKind): ReadonlySet<Square> {
     const { field } = state;
+    if (kind === "dodge") {
+        const reach = dodgeReach(state, fighter);
+        return new Set(field.tiles.flatMap((tile, square) => tile.terrain.standable && reach.costs[square] !== Infinity ? [square] : []));
+    }
+    if (kind === "leap") return new Set(field.tiles.flatMap((_, square) => leapLanding(state, fighter, square) ? [square] : []));
     const range = kind === "item" ? itemOf(fighter, state)?.range : kind;
     if (range === undefined) return new Set();
     const reaches = (square: Square): boolean => {
@@ -132,9 +154,20 @@ export function rangeSquares(state: BattleState, fighter: Fighter, kind: RangeKi
 
 /** The characters an action could be aimed at now, by the server's own `check`. */
 export function targetsOf(state: BattleState, player: string, fighter: Fighter, kind: TargetKind): number[] {
-    return state.fighters
-        .filter(one => !("refused" in check(state, player, { kind, fighter: fighter.id, target: one.id })))
-        .map(one => one.id);
+    let probing = state;
+    if (kind === "splittingArrow") {
+        const ability = rulesetOf(state).ABILITIES.splittingArrow;
+        if (!ability || abilityRefusal(fighter, kind, state) || fighter.ap < ability.ap) return [];
+        // Each selected target must be shootable, independently of the quota
+        // on ordinary weapon attacks; check still validates ownership and sight.
+        probing = { ...state, fighters: state.fighters.map(one => one.id === fighter.id ? { ...one, attacksThisTurn: 0 } : one) };
+    }
+    return state.fighters.filter(one => {
+        const action = kind === "splittingArrow" ? { kind: "attack", fighter: fighter.id, target: one.id }
+            : kind === "shootDodge" ? { kind, fighter: fighter.id, target: one.id, path: [fighter.square] }
+            : { kind, fighter: fighter.id, target: one.id };
+        return !("refused" in check(probing, player, action));
+    }).map(one => one.id);
 }
 
 /** The battle as it would stand with one character moved to another square: what a previewed move is read against. */

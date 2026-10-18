@@ -188,7 +188,7 @@ const SHADE_CLASS: Readonly<Record<ShadeKind, string>> = {
 
 /** The class a `GroundShade` is drawn with on a square it has: a reach deepens with the AP it costs. */
 function shadeClass({ kind, ap }: GroundShade, square: Square): string {
-    return kind === 'reach' ? `${SHADE_CLASS.reach} ag-ra-reach--${ap!(square)}` : SHADE_CLASS[kind];
+    return kind === 'reach' ? `${SHADE_CLASS.reach} ag-ra-reach--${Math.min(6, ap!(square))}` : SHADE_CLASS[kind];
 }
 
 /** Where a figure's disc is centred: `FIGURE_RISE` over the middle of its square's top. */

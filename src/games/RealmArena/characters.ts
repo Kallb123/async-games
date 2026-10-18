@@ -30,13 +30,17 @@ export type AbilityId =
     // The Swarm's (§31).
     | "rend" | "regrowth" | "burst"
     // The Miners' (§33).
-    | "dynamite";
+    | "dynamite"
+    | "leap" | "slashAndDash" | "bulwark" | "taunt" | "shove"
+    | "poisonArrow" | "bouncingArrow" | "splittingArrow" | "shootDodge"
+    | "iceBall" | "thunder" | "focus" | "beckon" | "blessing" | "ward" | "runeRaise";
 
 /**
  * Something that happens to a character for a few of its owner's turns
  * (§20.1): the five conditions, and the two stances a character takes itself.
  */
-export type EffectId = "burning" | "stunned" | "slowed" | "marked" | "corroded" | "hunkered" | "shieldWall";
+export type EffectId = "burning" | "stunned" | "slowed" | "marked" | "corroded" | "hunkered" | "shieldWall"
+    | "poisoned" | "braced" | "blessed" | "focused" | "warded";
 
 export interface Effect {
     /** Damage ticks and expiry happen at this turn boundary; old effects use start. */
@@ -98,6 +102,15 @@ export type Weapon =
     | { name: string; kind: "ranged"; damage: number; accuracy: number; range: number; effect?: Affliction };
 
 export interface Ability {
+    /** Movement and secondary-hit values, selected by the match catalogue. */
+    maxRise?: number;
+    push?: number;
+    collisionDamage?: number;
+    bounceRange?: number;
+    bounceDamage?: number;
+    dodge?: number;
+    pull?: number;
+    radius?: number;
     passive?: boolean;
     apOnRaise?: number;
     bonusAp?: number;
@@ -148,7 +161,7 @@ export interface Ability {
  * own weapon reach, and so roll to hit as a melee weapon's strike does: the one
  * list the rules' `rollsToHit` and the stats sheet both read.
  */
-export const STRIKING_ABILITIES: ReadonlySet<string> = new Set<AbilityId>(["cleave", "shieldBash", "rend"]);
+export const STRIKING_ABILITIES: ReadonlySet<string> = new Set<AbilityId>(["cleave", "shieldBash", "rend", "shove"]);
 
 export interface Character {
     /** Extra AP at the start of its turns. */
@@ -204,7 +217,7 @@ export interface Kit {
 
 /** Kits are reused, starter and swapped alike: the planner reads them thousands of times a turn. */
 const STARTER_KITS = new WeakMap<Character, Kit>();
-const SWAPPED_KITS = new WeakMap<CharacterOption, Kit>();
+const SWAPPED_KITS = new WeakMap<Character, WeakMap<CharacterOption, Kit>>();
 export function kitOf(character: CharacterId, option?: OptionId, context?: RulesContext): Kit {
     const { CHARACTERS, OPTIONS } = rulesetOf(context);
     const starter = CHARACTERS[character];
@@ -218,13 +231,15 @@ export function kitOf(character: CharacterId, option?: OptionId, context?: Rules
         }
         return kit;
     }
-    // An option names its character, so it swaps into one starter only.
-    let kit = SWAPPED_KITS.get(swap);
+    // A shared option may outlive a starter definition: cache both catalogue objects.
+    let swaps = SWAPPED_KITS.get(starter);
+    if (!swaps) SWAPPED_KITS.set(starter, swaps = new WeakMap());
+    let kit = swaps.get(swap);
     if (!kit) {
         kit = Object.freeze("weapon" in swap
             ? { weapon: swap.weapon, abilities }
             : { weapon, abilities: Object.freeze(abilities.map(id => id === swap.replaces ? swap.ability : id)) });
-        SWAPPED_KITS.set(swap, kit);
+        swaps.set(swap, kit);
     }
     return kit;
 }

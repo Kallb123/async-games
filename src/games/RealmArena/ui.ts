@@ -13,7 +13,7 @@ import { EFFECT_IDS, EFFECTS, ITEM_IDS, ITEMS, type AbilityId, type CharacterId,
 import { CHARACTER_IDS } from "./roster";
 import { battlefieldOf } from "./maps";
 import { EFFECT_ART, ITEM_ART, type BurstKind, type Missile, type Sprite, type ThrownItem } from "./art";
-import { actionPointsOf, CENTRE, SCORED_FOR, squadSight, hasEffect, isStanding, isWarband, maxHpOf, moveAp, pickOf, reachOf, shoots, type BattleState, type Fighter, type MusterPick, type OddsBreakdown, type OddsFactor, type ShotResult, type ToldEvent } from "./rules";
+import { areaDamage, actionPointsOf, CENTRE, SCORED_FOR, squadSight, hasEffect, isStanding, isWarband, maxHpOf, moveAp, pickOf, reachOf, shoots, type BattleState, type Fighter, type MusterPick, type OddsBreakdown, type OddsFactor, type ShotResult, type ToldEvent } from "./rules";
 
 const LETTER_OF = new Map<Terrain, TerrainLetter>(
     (Object.entries(TERRAIN) as [TerrainLetter, Terrain][]).map(([letter, terrain]) => [terrain, letter]),
@@ -543,15 +543,12 @@ export function fighterStatus(fighter: Fighter): string[] {
     const watch = watchStatus(fighter);
     return [
         ...(watch ? [watch] : []),
-        ...effectsOn(fighter).map(effect => EFFECTS[effect].name),
+        ...effectsOn(fighter).map(effect => EFFECTS[effect]!.name),
         ...(fighter.item ? [`Carrying a ${ITEMS[fighter.item].name.toLowerCase()}`] : []),
     ];
 }
 
-/** A character with AP left to spend on its owner's turn: what the units strip counts as ready. */
-export function canAct(fighter: Fighter): boolean {
-    return isStanding(fighter) && fighter.ap > 0;
-}
+export { canAct } from "./rules";
 
 /** A character's AP as pips, one of `ACTION_POINTS` each, lit while unspent: the board and the units strip draw the same row. */
 export function apPips(fighter: Fighter): boolean[] {
@@ -594,7 +591,7 @@ function oddsLineOf(factor: OddsFactor, context?: RulesContext): OddsLine {
             return { label: factor.shield ? (factor.cover === "half" ? `${ABILITIES.shieldWall.name} (counts as half cover)` : `Temporary ${factor.cover} cover`) : `${capitalise(factor.cover)} cover`, note: doubled, amount };
         }
         case "highGround": return { label: "High ground", amount };
-        case "effect": return { label: `Target is ${EFFECTS[factor.effect].state}`, amount };
+        case "effect": return { label: `Target is ${EFFECTS[factor.effect]!.state}`, amount };
         case "smoke": return { label: "Target in smoke", amount };
         case "aimedShot": return { label: ABILITIES.aimedShot.name, amount };
         case "overwatch": return { label: "Overwatch", amount };
@@ -821,8 +818,9 @@ export function eventLines(events: readonly ToldEvent[], fighters: readonly Figh
     const firstMove = firstMoveOf(events);
     const draft = (event: ToldEvent, index: number): LineDraft[] => {
         switch (event.kind) {
+            case "ability": return [{ icon: "✦", title: `${Name(event.fighter)} used ${ABILITIES[event.ability]!.name}` }];
             case "moved":
-                return index === firstMove ? [{ icon: "👣", title: `${Name(event.fighter)} ${event.sneaking ? "sneaked" : "moved"}` }] : [];
+                return index === firstMove ? [{ icon: "👣", title: `${Name(event.fighter)} ${event.via ? `moved with ${ABILITIES[event.via]!.name}` : event.sneaking ? "sneaked" : "moved"}` }] : [];
             case "shot": {
                 const title = event.result === "miss" ? "Miss" : `${event.result === "hit" ? "Hit" : "Graze"} for ${event.damage}`;
                 const who = `${Name(event.fighter)}${event.reaction ? " on overwatch" : ""}`;
@@ -848,14 +846,15 @@ export function eventLines(events: readonly ToldEvent[], fighters: readonly Figh
                 }];
             }
             case "fireball":
+            case "iceBall":
             case "dynamite": {
                 const names = event.targets.map(name);
-                const { name: ability } = ABILITIES[event.kind];
+                const { name: ability } = ABILITIES[event.kind]!;
                 return [{
                     icon: AREA_BLAST[event.kind].icon,
                     title: `${ability}: ${event.targets.length === 0 ? "nobody hit" : names.join(", ")}`,
-                    sub: `${event.damage} damage each`,
-                    sentence: `${Owner(event.fighter)} ${ability.toLowerCase()} hit ${caught(names)}${event.targets.length > 0 && event.damage > 0 ? ` for ${event.damage} each` : ""}`,
+                    sub: event.damages ? event.targets.map(id => `${name(id)}: ${areaDamage(event, id)} damage`).join(" · ") : `${event.damage} damage each`,
+                    sentence: `${Owner(event.fighter)} ${ability.toLowerCase()} hit ${caught(names)}${event.targets.length > 0 && event.damage > 0 && !event.damages ? ` for ${event.damage} each` : ""}`,
                 }];
             }
             case "downed":
@@ -882,7 +881,7 @@ export function eventLines(events: readonly ToldEvent[], fighters: readonly Figh
                     mark: ITEM_ART[event.item],
                     title: `${item}: ${event.targets.length === 0 ? "nobody hit" : names.join(", ")}`,
                     ...(event.damage > 0 ? { sub: `${event.damage} damage each` } : {}),
-                    sentence: `${Owner(event.fighter)} ${item.toLowerCase()} ${event.targets.length > 0 && event.damage === 0 ? "caught" : "hit"} ${caught(names)}${event.targets.length > 0 && event.damage > 0 ? ` for ${event.damage} each` : ""}`,
+                    sentence: `${Owner(event.fighter)} ${item.toLowerCase()} ${event.targets.length > 0 && event.damage === 0 ? "caught" : "hit"} ${caught(names)}${event.targets.length > 0 && event.damage > 0 && !event.damages ? ` for ${event.damage} each` : ""}`,
                 }];
             }
             case "blasted":
@@ -910,9 +909,9 @@ export function eventLines(events: readonly ToldEvent[], fighters: readonly Figh
             case "spotted":
                 return [{ icon: "👁", title: `${Name(event.fighter)} found ${name(event.by)} in its way`, sub: "Out of sight until then · went round" }];
             case "effect":
-                return [{ mark: EFFECT_ART[event.effect], title: `${Name(event.fighter)} is ${event.change === "cleared" ? "no longer " : ""}${EFFECTS[event.effect].state}` }];
+                return [{ mark: EFFECT_ART[event.effect], title: `${Name(event.fighter)} is ${event.change === "cleared" ? "no longer " : ""}${EFFECTS[event.effect]!.state}` }];
             case "burned":
-                return [{ mark: EFFECT_ART[event.effect ?? "burning"], title: event.effect ? `${Name(event.fighter)} took ${event.damage} damage from ${EFFECTS[event.effect].name}` : `${Name(event.fighter)} burned for ${event.damage}` }];
+                return [{ mark: EFFECT_ART[event.effect ?? "burning"], title: event.effect ? `${Name(event.fighter)} took ${event.damage} damage from ${EFFECTS[event.effect]!.name}` : `${Name(event.fighter)} burned for ${event.damage}` }];
             case "scored":
                 return [{ icon: "★", title: `${event.player === viewerId ? "You" : nameFor(event.player)} scored ${event.points}`, sub: capitalise(SCORED_FOR[event.reason]) }];
         }
@@ -1183,7 +1182,8 @@ const SHOT_MISSILE: Readonly<Partial<Record<CharacterId, Missile>>> = { mage: "b
  * How each ability that lands on a 3×3 shows (§26.1, §33.2): the glyph its
  * lines and rows lead with, what flies, and what it bursts into.
  */
-export const AREA_BLAST: Readonly<Record<"fireball" | "dynamite", { icon: string; missile: Missile; burst: BurstKind }>> = {
+export const AREA_BLAST: Readonly<Record<"fireball" | "dynamite" | "iceBall", { icon: string; missile: Missile; burst: BurstKind }>> = {
+    iceBall: { icon: "❄️", missile: "bolt", burst: "thunder" },
     fireball: { icon: "🔥", missile: "fireball", burst: "fire" },
     dynamite: { icon: "🧨", missile: "dynamite", burst: "blast" },
 };
@@ -1309,7 +1309,7 @@ function largestFit(floor: number, ceiling: number, fits: (ms: number) => boolea
 
 /** Each thing an action did, timed at `pace`, before its text is laned or any of it is shortened to fit. */
 function timeline(field: Battlefield, events: readonly ToldEvent[], before: readonly Fighter[], after: readonly Fighter[], options: BattleCueOptions, pace: Pace): BattleCue[] {
-    const { EFFECTS, ITEMS } = rulesetOf(options);
+    const { ABILITIES, EFFECTS, ITEMS } = rulesetOf(options);
     const { still = false } = options;
     const as = new Map(before.map(fighter => [fighter.id, fighter]));
     const afterAs = new Map(after.map(fighter => [fighter.id, fighter]));
@@ -1422,6 +1422,9 @@ function timeline(field: Battlefield, events: readonly ToldEvent[], before: read
             case "burned":
                 text(event.fighter, beat(), minus(event.damage), "hit", { mark: event.effect ?? "burning", hpChange: -event.damage });
                 break;
+            case "ability":
+                say(event.fighter, beat(), ABILITIES[event.ability]!.name);
+                break;
             case "hunkered":
             case "shieldWall":
                 say(event.fighter, beat(), STANCE_WORD[event.kind], event.kind);
@@ -1434,6 +1437,7 @@ function timeline(field: Battlefield, events: readonly ToldEvent[], before: read
                 break;
             }
             case "fireball":
+            case "iceBall":
             case "dynamite":
             case "thrown": {
                 const item = event.kind === "thrown" ? event.item : null;
@@ -1448,7 +1452,7 @@ function timeline(field: Battlefield, events: readonly ToldEvent[], before: read
                 const radius = item && !(ITEMS[item] as Item).area ? 0 : 1;
                 cues.push({ kind: "burst", burst: item ? THROWN_BURST[item] : blast!.burst, at: event.at, radius, start: land, length: BURST_MS });
                 landing = { start: land, targets: event.targets };
-                if (event.damage > 0) event.targets.forEach(target => text(target, land, minus(event.damage), "hit", { hpChange: -event.damage, from: event.at }));
+                if (event.damage > 0) event.targets.forEach(target => text(target, land, minus(areaDamage(event, target)), "hit", { hpChange: -areaDamage(event, target), from: event.at }));
                 break;
             }
             case "demolished":
@@ -1466,7 +1470,7 @@ function timeline(field: Battlefield, events: readonly ToldEvent[], before: read
                     if (from !== undefined) cues.push({ kind: "burst", burst: "acid", at: from, radius: 1, start: land, length: BURST_MS });
                 }
                 landing = { start: land, targets: event.targets };
-                event.targets.forEach(target => text(target, land, minus(event.damage), "hit", { hpChange: -event.damage, from }));
+                event.targets.forEach(target => text(target, land, minus(areaDamage(event, target)), "hit", { hpChange: -areaDamage(event, target), from }));
                 break;
             }
             case "blasted":
@@ -1494,7 +1498,7 @@ function timeline(field: Battlefield, events: readonly ToldEvent[], before: read
                     if (cue?.tone === "heal" && !cue.label && cue.value !== "Cured") cue.label = "Cured";
                     break;
                 }
-                const { name } = EFFECTS[event.effect];
+                const { name } = EFFECTS[event.effect]!;
                 if (cue && (cue.tone === "hit" || cue.tone === "graze") && !cue.label && !cue.mark) cue.label = name;
                 else if (landing?.targets.includes(event.fighter)) text(event.fighter, landing.start, name, "word");
                 else text(event.fighter, beat(), name, "word");

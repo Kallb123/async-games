@@ -44,7 +44,7 @@ export function RealmArenaStatusList({ effects = [], item }: { effects?: readonl
             {effects.map(effect => (
                 <span key={effect} className="ag-tag ag-tag--quiet">
                     <SpriteImage sprite={EFFECT_ART[effect]} />
-                    {EFFECTS[effect].name}
+                    {EFFECTS[effect]!.name}
                 </span>
             ))}
             {item && (

@@ -20,7 +20,7 @@ import { enemyNameOf, RA_SOLO_PARAM, REALM_ONLY } from "@/games/RealmArena/chara
 import { rematchFlag } from "@/utils/ui/rematch";
 import { reachAfter, useTurnDraft } from "@/games/RealmArena/useTurnDraft";
 import { battlefieldOf } from "@/games/RealmArena/maps";
-import { allied, armouredTeam, battleFrom, centreHolders, ENEMY_SIDE, isStanding, isWarband, sideScore, squadHp, stoutTeam, TEAM_SIDE, warbandsFor, type Action, type BattleEvent, type Fighter } from "@/games/RealmArena/rules";
+import { canAct, allied, armouredTeam, battleFrom, centreHolders, ENEMY_SIDE, isStanding, isWarband, sideScore, squadHp, stoutTeam, TEAM_SIDE, warbandsFor, type Action, type BattleEvent, type Fighter } from "@/games/RealmArena/rules";
 import { actionFollow, battleCues, centreInSight, endOf, coopColourOf, ENEMY_COLOUR, fighterName, friendlySquares, isFollowedPart, isUnplaced, partFollow, partLabel, reviewParts, STEP_BEAT_MS, STEP_MIN_MS, TEAM_COLOUR, TEAM_NAME, unseenSquares, waveLineOf, withPartState } from "@/games/RealmArena/ui";
 import type { IRealmArenaOutcome } from "@/games/RealmArena/RealmArenaLogic";
 import type { ICommandResponse } from "@/app/api/game/command/route";
@@ -352,7 +352,7 @@ export default function GameRealmArena({ params }: { params: Promise<{ gameid: u
             // A character with nothing left to do this turn — its last AP spent,
             // on watch, hunkered down or knocked out on the way — is let go of.
             const after = (response.gameData as IRealmArenaGameDataResponse).specificGameState.fighters.find(fighter => fighter.id === action.fighter);
-            if (!after || after.ap === 0 || !isStanding(after)) setSelectedId(current => current === action.fighter ? null : current);
+            if (!after || !canAct(after, battle)) setSelectedId(current => current === action.fighter ? null : current);
         }, actTarget(action));
     };
     const turn = useTurnDraft(battle, myUserId, actor, turnKey, act);
@@ -633,7 +633,7 @@ export default function GameRealmArena({ params }: { params: Promise<{ gameid: u
                             aiming={turn && {
                                 reach: turn.reach,
                                 range: turn.range,
-                                path: turn.path,
+                                path: turn.path ?? turn.forcedPath,
                                 area: turn.area,
                                 blasts: turn.blasts,
                                 candidates: turn.candidates,

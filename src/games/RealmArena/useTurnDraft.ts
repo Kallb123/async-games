@@ -4,17 +4,17 @@ import { useResettingState } from "@/utils/hooks/useResettingState";
 import { pathTo, type Reach } from "@/utils/games/battlefield/pathfinding";
 import type { Square } from "@/utils/games/battlefield/terrain";
 import { type Ability, type Item } from "./characters";
-import { allied, blastedBy, check, demolishArea, fighterById, areaAround, isStanding, itemOf, oddsBreakdown, reachOf, damageTo, shotOdds, type Action, type BattleState, type Check, type Fighter, type OddsBreakdown } from "./rules";
+import { allied, blastedBy, beckonPath, shovePath, leapTargets, dodgeReach, check, demolishArea, fighterById, areaAround, isStanding, itemOf, oddsBreakdown, reachOf, damageTo, shotOdds, type Action, type BattleState, type Check, type Fighter, type OddsBreakdown } from "./rules";
 import { ACTION_AIMS, attackOptions, rangeKindOf, rangeSquares, reactionPreviews, rollsToHit, shotOf, targetKindOf, targetsOf, type AttackOption } from "./tactics";
 import { reachShading } from "./ui";
 
 /** What the board is armed for: a tap on a square or a character lines up one of these. */
 export type Aim =
     | "move" | "sneak" | "attack" | "aimedShot" | "cleave" | "fireball" | "dynamite" | "heal" | "raise" | "throw" | "draught"
-    | "shieldBash" | "cripplingShot" | "huntersMark" | "demolish" | "rend" | "regrowth";
+    | "shieldBash" | "cripplingShot" | "huntersMark" | "demolish" | "rend" | "regrowth" | "leap" | "iceBall" | "shove" | "poisonArrow" | "bouncingArrow" | "splittingArrow" | "shootDodge" | "thunder" | "beckon" | "ward" | "runeRaise";
 
 /** The actions that need nothing aimed, and go the moment they're tapped. */
-export const INSTANT_KINDS = ["hunker", "watch", "shieldWall", "purify", "burst"] as const;
+export const INSTANT_KINDS = ["hunker", "watch", "shieldWall", "purify", "burst", "slashAndDash", "bulwark", "taunt", "focus", "blessing"] as const;
 export type InstantKind = typeof INSTANT_KINDS[number];
 
 export interface Draft {
@@ -55,7 +55,7 @@ export function targetOptions(battle: BattleState, fighter: Fighter, aim: Aim, c
 }
 
 const isMoving = (aim: Aim) => ACTION_AIMS[aim].at === "path";
-type AtSquare = "fireball" | "dynamite" | "throw" | "demolish";
+type AtSquare = "fireball" | "dynamite" | "throw" | "demolish" | "leap" | "iceBall";
 
 /** A fireball, dynamite, a throw or a Demolish is aimed at a square, whoever stands on it. */
 export const isAtSquare = (aim: Aim): aim is AtSquare => ACTION_AIMS[aim].at === "square";
@@ -66,8 +66,10 @@ export const isAtSquare = (aim: Aim): aim is AtSquare => ACTION_AIMS[aim].at ===
  * else that square alone.
  */
 function landing(state: BattleState, fighter: Fighter, aim: AtSquare, at: Square): Square[] {
+    if (aim === "leap") return leapTargets(state, fighter, at).map(one => one.square);
+    if (aim === "iceBall") return areaAround(state.field, at);
     if (aim === "demolish") return demolishArea(state.field, fighter.square, at);
-    return aim === "throw" ? (itemOf(fighter, state)?.area ? areaAround(state.field, at) : [at]) : rulesetOf(state).ABILITIES[aim].blasts === "area" ? areaAround(state.field, at) : [at];
+    return aim === "throw" ? (itemOf(fighter, state)?.area ? areaAround(state.field, at) : [at]) : rulesetOf(state).ABILITIES[aim]!.blasts === "area" ? areaAround(state.field, at) : [at];
 }
 
 /** What lands where a fireball, dynamite, a throw or a Demolish is aimed: the ability, or the item thrown. */
@@ -81,8 +83,12 @@ function actionOf(fighter: Fighter, { aim, square, targets }: Draft, path: Squar
         case "fireball":
         case "dynamite":
         case "throw":
+        case "leap":
+        case "iceBall":
         case "demolish": return square === null ? null : { kind: aim, fighter: fighter.id, at: square };
-        case "cleave": return targets.length === 2 ? { kind: "cleave", fighter: fighter.id, targets } : null;
+        case "shootDodge": return targets.length === 1 && path ? { kind: aim, fighter: fighter.id, target: targets[0], path } : null;
+        case "splittingArrow":
+        case "cleave": return targets.length === 2 ? { kind: aim, fighter: fighter.id, targets } : null;
         default: return targets.length === 1 ? { kind: aim, fighter: fighter.id, target: targets[0] } : null;
     }
 }
@@ -115,7 +121,7 @@ export function hpPreview(battle: BattleState, fighter: Fighter, { aim, targets 
         const { ABILITIES } = rulesetOf(battle);
         const target = fighterById(battle, id);
         if (!target) return [];
-        if (aim === "shieldBash" || aim === "rend") return [[id, -damageTo(battle, fighter, target, ABILITIES[aim].damage, "ability")]];
+        if (aim === "shieldBash" || aim === "rend" || aim === "shove") return [[id, -damageTo(battle, fighter, target, ABILITIES[aim]!.damage, "ability")]];
         const shot = shotOf(aim);
         return [[id, -((shot && shotOdds(battle, fighter, target, shot)?.damage) ?? damageTo(battle, fighter, target))]];
     }));
@@ -177,6 +183,7 @@ const lineUp = (next: Draft, same: boolean): TapResult => same ? "send" : next;
 
 /** A tap on a square: a move's destination, or where a fireball, a throw or a Demolish lands. */
 export function tapSquare({ draft, reach }: TapContext, tapped: Square): TapResult {
+    if (draft.aim === "shootDodge" && draft.targets.length === 1 && reach && reach.costs[tapped] !== Infinity) return lineUp({ ...draft, square: tapped }, tapped === draft.square);
     if (isAtSquare(draft.aim)) return lineUp({ ...draft, square: tapped }, tapped === draft.square);
     if (isMoving(draft.aim) && reach && tapped !== reach.from && reach.costs[tapped] !== Infinity) {
         return lineUp({ ...draft, square: tapped }, tapped === draft.square);
@@ -197,10 +204,11 @@ export function tapFighter(context: TapContext, id: number): TapResult {
     if (!target) return undefined;
     if (isAtSquare(aim)) return tapSquare(context, target.square);
     // Itself, only when it can be the aim's target: a draught it drinks, or a Heal or Regrowth on itself.
+    if (aim === "shootDodge" && targets.length === 1 && target.id === fighter.id) return tapSquare(context, fighter.square);
     if (target.id === fighter.id && !candidates.includes(id)) return undefined;
     const enemy = !allied(battle, target.owner, fighter.owner) && isStanding(target);
 
-    if (aim === "cleave") {
+    if (ACTION_AIMS[aim].at === "enemies") {
         if (!candidates.includes(id)) return enemy ? draft : undefined;
         const kept = targets.filter(one => one !== id);
         return { ...draft, targets: kept.length < targets.length ? kept : [...targets.slice(-1), id] };
@@ -213,7 +221,7 @@ export function tapFighter(context: TapContext, id: number): TapResult {
     }
     // An enemy tapped out of reach is lined up anyway, so the sheet can say why it can't be.
     if ((enemy && ACTION_AIMS[aim].at === "enemy") || candidates.includes(id)) {
-        return lineUp({ ...draft, targets: [id] }, targets[0] === id);
+        return lineUp({ ...draft, targets: [id], square: aim === "shootDodge" ? null : draft.square }, aim !== "shootDodge" && targets[0] === id);
     }
     return undefined;
 }
@@ -237,7 +245,7 @@ export function useTurnDraft(battle: BattleState, player: string, fighter: Fight
     // Any change to the character — a move, a shot, a heal, its AP spent —
     // drops what was lined up, so a path or a target from before it can't be
     // sent again from where it no longer stands.
-    const key = fighter ? `${turnKey}:${fighter.id}:${fighter.square}:${fighter.ap}:${fighter.hp}` : turnKey;
+    const key = fighter ? `${turnKey}:${fighter.id}:${fighter.square}:${fighter.ap}:${fighter.hp}:${JSON.stringify(fighter.cooldowns)}:${fighter.attacksThisTurn ?? 0}` : turnKey;
     const [draft, setDraft] = useResettingState<Draft>(MOVE, key);
     // The pieces the searches read, sides among them, so a teammate is passed through as the server's `check` would (§29.6).
     const { field, fighters, sides, rulesVersion } = battle;
@@ -245,21 +253,26 @@ export function useTurnDraft(battle: BattleState, player: string, fighter: Fight
     // The reach is a search over every square of the map, so it's worked out
     // once per character and aim rather than on every render.
     const reach = useMemo(
-        () => fighter && isMoving(aim) ? reachOf({ field, fighters, sides, rulesVersion }, fighter, aim === "sneak") : null,
+        () => fighter && aim === "shootDodge" ? dodgeReach({ field, fighters, sides, rulesVersion }, fighter)
+            : fighter && isMoving(aim) ? reachOf({ field, fighters, sides, rulesVersion }, fighter, aim === "sneak") : null,
         [field, fighters, sides, rulesVersion, fighter, aim],
     );
     const shading = useMemo(() => fighter && reach ? reachShading(fighter, reach, aim === "sneak", battle) : null, [fighter, reach, aim, battle]);
     // Aimed at anything else, the shading is where it could land instead: its range.
-    const rangeKind = rangeKindOf(aim, battle);
+    const rangeKind = aim === "shootDodge" && draft.targets.length === 1 ? "dodge" : rangeKindOf(aim, battle);
     const range = useMemo(() => fighter && rangeKind ? rangeSquares({ field, fighters, sides, rulesVersion }, fighter, rangeKind) : null, [field, fighters, sides, rulesVersion, fighter, rangeKind]);
     if (!fighter) return null;
 
-    const path = reach && draft.square !== null ? pathTo(reach, draft.square)?.squares : undefined;
+    const path = reach && draft.square !== null ? (draft.square === fighter.square ? [fighter.square] : pathTo(reach, draft.square)?.squares) : undefined;
     const action = actionOf(fighter, draft, path);
     const verdict: Check | null = action ? check(battle, player, action) : null;
     const targetKind = targetKindOf(aim);
     const candidates = targetKind ? targetsOf(battle, player, fighter, targetKind) : [];
     const context: TapContext = { battle, fighter, draft, reach, candidates };
+    const forcedTarget = draft.targets.length === 1 ? fighterById(battle, draft.targets[0]) : undefined;
+    const forcedPath = aim === "leap" && draft.square !== null ? [fighter.square, draft.square]
+        : forcedTarget && aim === "shove" ? shovePath(battle, fighter, forcedTarget).path
+        : forcedTarget && aim === "beckon" ? beckonPath(battle, fighter, forcedTarget) : undefined;
     const area = isAtSquare(aim) && draft.square !== null ? landing(battle, fighter, aim, draft.square) : null;
 
     const send = () => {
@@ -291,6 +304,7 @@ export function useTurnDraft(battle: BattleState, player: string, fighter: Fight
         /** Every square the aim could land on, were someone there to aim at. */
         range,
         path: path ?? null,
+        forcedPath: forcedPath ?? null,
         /** Where the character would stand, and with what AP, once a lined-up move is made. */
         after: afterMove(fighter, path, verdict),
         reactions: path && (aim === "move" || (aim === "sneak" && !rulesetOf(battle).ABILITIES.sneak.movesWithoutReactions)) ? reactionPreviews(battle, fighter, path) : [],

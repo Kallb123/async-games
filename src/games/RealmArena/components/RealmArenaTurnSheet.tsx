@@ -30,6 +30,18 @@ export function actTarget(action: Action): string {
 
 /** What to tap, for an aim with nothing lined up yet. */
 const AIM_HINT: Readonly<Record<Aim, string>> = {
+    leap: 'Tap a clear square in sight within 4 squares to jump beside enemies.',
+    iceBall: 'Tap a square: Ice Ball hits and slows everyone in the 3×3, friend or foe.',
+    shove: 'Tap an enemy next to the Knight. A hit pushes it away; collisions hurt.',
+    poisonArrow: 'Tap an enemy. A hit poisons it.',
+    bouncingArrow: 'Tap an enemy. A hit bounces to a random other enemy within 4 squares.',
+    splittingArrow: 'Tap two different enemies in bow range.',
+    shootDodge: 'Tap an enemy, then a shaded square to dodge to. Tap the Archer to stay put.',
+    thunder: 'Tap an enemy. A hit stuns it.',
+    beckon: 'Tap another ally in sight within 8 squares to pull it closer.',
+    ward: 'Tap the Cleric or an ally in sight within 6 squares to give full cover.',
+    runeRaise: 'Tap a downed ally next to them.',
+
     move: 'Tap a shaded square to move there: the darker the shade, the more AP it takes.',
     sneak: 'Tap a shaded square to sneak there. Nobody on watch reacts to a sneak.',
     attack: 'Tap an enemy to see the odds.',
@@ -51,6 +63,18 @@ const AIM_HINT: Readonly<Record<Aim, string>> = {
 
 /** What the send button says, by the action lined up. */
 const SEND_LABEL: Readonly<Record<Aim, string>> = {
+    leap: 'Leap',
+    iceBall: 'Cast Ice Ball',
+    shove: 'Shove',
+    poisonArrow: 'Fire Poison Arrow',
+    bouncingArrow: 'Fire Bouncing Arrow',
+    splittingArrow: 'Fire Splitting Arrow',
+    shootDodge: 'Shoot + Dodge',
+    thunder: 'Cast Thunder',
+    beckon: 'Beckon',
+    ward: 'Ward',
+    runeRaise: 'Raise',
+
     move: 'Move here',
     sneak: 'Sneak here',
     attack: 'Attack',
@@ -75,6 +99,22 @@ const SEND_LABEL: Readonly<Record<Aim, string>> = {
  * it needs in reach before it can be aimed.
  */
 const ABILITY_ROW: Readonly<Record<AbilityId, { icon: string; tag: string; needs?: TargetKind | 'cover'; least?: number }>> = {
+    leap: { icon: ABILITY_MARK, tag: 'Aim' },
+    iceBall: { icon: ABILITY_MARK, tag: 'Aim' },
+    shove: { icon: ABILITY_MARK, tag: 'Aim', needs: 'shove' },
+    poisonArrow: { icon: ABILITY_MARK, tag: 'Aim', needs: 'poisonArrow' },
+    bouncingArrow: { icon: ABILITY_MARK, tag: 'Aim', needs: 'bouncingArrow' },
+    splittingArrow: { icon: ABILITY_MARK, tag: 'Aim', needs: 'splittingArrow', least: 2 },
+    shootDodge: { icon: ABILITY_MARK, tag: 'Aim', needs: 'shootDodge' },
+    thunder: { icon: ABILITY_MARK, tag: 'Aim', needs: 'thunder' },
+    beckon: { icon: ABILITY_MARK, tag: 'Aim', needs: 'beckon' },
+    ward: { icon: ABILITY_MARK, tag: 'Aim', needs: 'ward' },
+    runeRaise: { icon: ABILITY_MARK, tag: 'Aim', needs: 'runeRaise' },
+    slashAndDash: { icon: ABILITY_MARK, tag: 'Use' },
+    bulwark: { icon: ABILITY_MARK, tag: 'Use' },
+    taunt: { icon: ABILITY_MARK, tag: 'Use' },
+    focus: { icon: ABILITY_MARK, tag: 'Use' },
+    blessing: { icon: ABILITY_MARK, tag: 'Use' },
     sneak: { icon: '🤫', tag: 'Sneak' },
     shieldWall: { icon: '🛡️', tag: 'Raise it' },
     fireball: { icon: AREA_BLAST.fireball.icon, tag: 'Aim' },
@@ -180,8 +220,8 @@ export default function RealmArenaTurnSheet({ draft, battle, player, pendingTarg
             {row('move', '👣', 'Move', `1 AP per ${character.movement} squares`, needs(1), 'Move')}
             {row('attack', weaponMark(fighter.character, fighter.option), weapon.name, `${ATTACK_AP} AP · ${weaponLine(weapon, battle)}`,
                 needs(ATTACK_AP) ?? reachable('attack'), 'Attack')}
-            {abilitiesOf(fighter, battle).filter(id => !ABILITIES[id].passive).map(id => {
-                const ability = ABILITIES[id];
+            {abilitiesOf(fighter, battle).filter(id => !ABILITIES[id]!.passive).map(id => {
+                const ability = ABILITIES[id]!;
                 const { icon, tag } = ABILITY_ROW[id];
                 const per = id === 'sneak' ? ` per ${character.movement} squares` : '';
                 const wait = abilityWait(fighter, id) ?? needs(ability.ap) ?? blocked(id);
@@ -274,7 +314,7 @@ function TargetList({ draft, battle, name, disabled, onFocus }: TargetListProps)
                 const aimed = draft.targets.includes(target.id);
                 const pick = () => {
                     draft.pick(target.id);
-                    if (!(aimed && draft.aim === 'cleave')) onFocus(target);
+                    if (!(aimed && (draft.aim === 'cleave' || draft.aim === 'splittingArrow'))) onFocus(target);
                 };
                 return (
                     <BuildRow
@@ -312,7 +352,7 @@ interface LinedUpProps {
 function LinedUp({ draft, battle, name, pending, disabled }: LinedUpProps) {
     const { aim, action, verdict } = draft;
     if (!action) {
-        const chosen = aim === 'cleave' && draft.targets.length === 1 ? ` ${capitalise(name(draft.targets[0]))} is picked.` : '';
+        const chosen = (aim === 'cleave' || aim === 'splittingArrow') && draft.targets.length === 1 ? ` ${capitalise(name(draft.targets[0]))} is picked.` : '';
         return <p className="ag-hint">{AIM_HINT[aim]}{chosen}</p>;
     }
     const refusal = verdict && 'refused' in verdict ? verdict.refused : undefined;
@@ -359,13 +399,14 @@ function Detail({ draft, battle, name, ap, target }: DetailProps) {
     const hint = (text: React.ReactNode) => <p className="ag-hint">{text}</p>;
     const Name = (id: number) => capitalise(name(id));
 
+    if (aim === "shootDodge") return hint(ABILITIES.shootDodge!.description);
     if (draft.path) return <MoveDetail draft={draft} name={name} ap={ap} />;
     if (draft.area) {
         // What lands — a fireball, dynamite, the item thrown, or a Demolish — and on whom.
         const thrown = aim === 'throw' ? itemOf(fighter, battle) : undefined;
         if (thrown?.hitPenalty) return hint('Smoke over the 3×3 until your next turn. It hurts nobody.');
         const area = new Set(draft.area);
-        const caught = battle.fighters.filter(one => isStanding(one) && area.has(one.square));
+        const caught = battle.fighters.filter(one => isStanding(one) && area.has(one.square) && (aim !== 'leap' || !allied(battle, fighter.owner, one.owner)));
         const { damage = 0, effect } = (isAtSquare(aim) ? landsOf(fighter, aim, battle) : undefined) ?? {};
         return hint(<>
             {caught.length === 0 ? `Nobody is ${draft.area.length > 1 ? 'in the blast' : 'there'}.` : landsOn(caught.map(one => name(one.id)).join(', '), damage, effect)}
@@ -373,27 +414,28 @@ function Detail({ draft, battle, name, ap, target }: DetailProps) {
             {draft.blasts?.length ? ` Blasts away ${pluralize(draft.blasts.length, 'square')} of low cover.` : ''}
         </>);
     }
-    if (aim === 'cleave') {
-        const chances = draft.targets.map(id => { const hit = fighterById(battle, id); return hit ? `${strikeChance(battle, hit)}%` : ''; });
-        const damages = draft.targets.map(id => { const hit = fighterById(battle, id); return hit ? damageTo(battle, fighter, hit, undefined, 'ability') : 0; });
+    if (aim === 'cleave' || aim === 'splittingArrow') {
+        const chances = draft.targets.map(id => { const hit = fighterById(battle, id); return hit ? `${aim === "splittingArrow" ? shotOdds(battle, fighter, hit, aim)?.chance : strikeChance(battle, hit)}%` : ''; });
+        const damages = draft.targets.map(id => { const hit = fighterById(battle, id); return hit ? -(draft.hpChange.get(id) ?? 0) : 0; });
         const each = new Set(damages).size === 1 ? `${damages[0]} each` : andList(damages.map(String));
-        return hint(`Strikes ${andList(draft.targets.map(name))} for ${each}, at ${andList(chances)} to hit.`);
+        return hint(`${aim === "splittingArrow" ? "Shoots" : "Strikes"} ${andList(draft.targets.map(name))} for ${each}, at ${andList(chances)} to hit.`);
     }
     if (!target) return null;
     const max = maxHpOf(target, battle);
     if (aim === 'heal' || aim === 'regrowth' || aim === 'draught') {
         const hp = Math.min(healingHp(aim, battle) ?? 0, max - target.hp);
-        const cleared = healedEffects(target, battle).map(effect => EFFECTS[effect].state);
+        const cleared = healedEffects(target, battle).map(effect => EFFECTS[effect]!.state);
         const heals = hp > 0 ? `heals for ${hp} HP` : '';
         const clears = cleared.length > 0 ? `is no longer ${cleared.join(' or ')}` : '';
         return hint(`${Name(target.id)} ${[heals, clears].filter(Boolean).join(', and ')}.`);
     }
-    if (aim === 'raise') {
+    if (aim === 'raise' || aim === 'runeRaise') {
         // Only on its owner's own turn does a raised character have AP to spend.
         const yours = target.owner === fighter.owner;
-        const raisedAp = yours ? ABILITIES.raise.apOnRaise ?? 0 : 0;
+        const raisedAp = yours ? ABILITIES[aim]!.apOnRaise ?? 0 : 0;
         return hint(`${Name(target.id)} stands again at ${Math.ceil(max / 2)} HP, ${raisedAp > 0 ? `with ${raisedAp} AP to spend now` : `and acts from ${yours ? 'your' : 'its owner\'s'} next turn`}.`);
     }
+    if (aim === 'shove' || aim === 'beckon' || aim === 'ward') return hint(ABILITIES[aim]!.description);
     if (aim === 'huntersMark') {
         return hint(`${Name(target.id)} is marked: +${EFFECTS.marked.hitBonus}% to hit them, for every attacker, until their turn after next.`);
     }
@@ -413,14 +455,14 @@ function Detail({ draft, battle, name, ap, target }: DetailProps) {
                 <Stat value={`${odds.grazeChance}%`} label="Graze" />
                 <Stat value={odds.grazeChance > 0 ? `${odds.damage} / ${odds.grazeDamage}` : odds.damage} label="Damage" />
             </div>
-            {hint(`${health} · ${odds.flanked ? 'flanked, +1 damage' : `${odds.cover} cover`}${hasEffect(target, 'hunkered') ? ', hunkered down' : ''}${smokeSquares(battle).has(target.square) ? ', in smoke' : ''}${odds.farCover ? ', cover doubled at range' : ''}${effect ? ` · a hit leaves them ${EFFECTS[effect].state}` : ''}`)}
+            {hint(`${health} · ${odds.flanked ? 'flanked, +1 damage' : `${odds.cover} cover`}${hasEffect(target, 'hunkered') ? ', hunkered down' : ''}${smokeSquares(battle).has(target.square) ? ', in smoke' : ''}${odds.farCover ? ', cover doubled at range' : ''}${effect ? ` · a hit leaves them ${EFFECTS[effect]!.state}` : ''}`)}
         </>
     );
 }
 
 /** What something landing does to everyone it catches: "3 damage to your Knight, and leaves them burning". */
 function landsOn(names: string, damage: number, effect: Affliction | undefined): string {
-    const leaves = effect ? EFFECTS[effect].state : '';
+    const leaves = effect ? EFFECTS[effect]!.state : '';
     if (damage === 0) return `Leaves ${names} ${leaves}.`;
     return `${damage} damage to ${names}${leaves ? `, and leaves them ${leaves}` : ''}.`;
 }

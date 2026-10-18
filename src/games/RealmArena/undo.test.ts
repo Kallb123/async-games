@@ -6,7 +6,8 @@ import { buildAllEvents } from "@/utils/games/recap";
 import { buildTimeline } from "@/utils/games/replay";
 import { resolveStalledTurn } from "@/utils/games/turnTimeout";
 import { undoableCommandsIn } from "@/utils/testing/undoableCommands";
-import { CHARACTERS, REALM } from "./characters";
+import { rulesetOf } from "./rulesets";
+import { CHARACTERS } from "./characters";
 import { battlefieldById } from "./maps";
 import { RealmArenaGameDataModel, type RealmArenaSettings } from "./RealmArenaModels";
 import { cloneRealmArenaState, RealmArenaUndo, undoDepthOf } from "./RealmArenaLogic";
@@ -34,9 +35,10 @@ const byId = (game: RealmArenaTestGame, id: number) => game.specificGameState.fi
 
 /** A battle on a's first turn, a's squad with a Scout in it to sneak with. */
 async function battle(settings: RealmArenaSettings = {}): Promise<RealmArenaTestGame> {
-    const game = makeGame(PLAYERS, {}, settings);
+    const game = makeGame(PLAYERS, {}, { rulesVersion: 7, ...settings });
     const field = battlefieldById(game.specificGameState.map);
-    for (const [seat, squad] of [REALM.readyMade[80], REALM.readyMade[100]].entries()) {
+    const { realm } = rulesetOf(game.specificGameState).FACTIONS;
+    for (const [seat, squad] of [realm.readyMade[80], realm.readyMade[100]].entries()) {
         const { outcome } = await play(game, muster(PLAYERS[seat], readyMadeMuster(field, seat, squad)));
         if (!outcome.validMove) throw new Error(`seat ${seat}'s muster was refused`);
     }

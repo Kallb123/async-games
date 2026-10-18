@@ -1,10 +1,11 @@
 import type { RealmArenaRuleValues } from "./ruleValues";
 import { catalogueV7 } from "./catalogues/v7";
 import { catalogueV8 } from "./catalogues/v8";
+import { catalogueV9 } from "./catalogues/v9";
 import type { Ability, AbilityId, Character, CharacterId, CharacterOption, Effect, EffectId, Faction, FactionId, Item, ItemId, OptionId, Weapon } from "./characters";
 
 /** Independent of commandVersion: a protocol change need not change a match's rules. */
-export const CURRENT_RULESET_VERSION = 8;
+export const CURRENT_RULESET_VERSION = 9;
 
 // Keep each entry's required fields (e.g. Fireball's range) while allowing
 // later catalogues to change their values without copying the whole table.
@@ -13,7 +14,9 @@ export interface RealmArenaRuleset {
     readonly RULES: Readonly<RealmArenaRuleValues>;
     readonly CHARACTERS: Readonly<Partial<Record<CharacterId, Character>>> & Readonly<Record<keyof typeof catalogueV7.CHARACTERS, Character>>;
     readonly ABILITIES: Readonly<Partial<Record<AbilityId, Ability>>> & Table<typeof catalogueV7.ABILITIES, Ability>;
-    readonly OPTIONS: Readonly<Partial<Record<OptionId, CharacterOption>>> & typeof catalogueV7.OPTIONS;
+    readonly OPTIONS: Readonly<Partial<Record<OptionId, CharacterOption>>> & { readonly [Id in keyof typeof catalogueV7.OPTIONS]: typeof catalogueV7.OPTIONS[Id] extends { weapon: Weapon }
+        ? CharacterOption & { replaces: "weapon"; weapon: Weapon }
+        : CharacterOption & { replaces: AbilityId; ability: AbilityId } };
     readonly ITEMS: Readonly<Partial<Record<ItemId, Item>>> & Table<typeof catalogueV7.ITEMS, Item>;
     readonly EFFECTS: Readonly<Partial<Record<EffectId, Effect>>> & Table<typeof catalogueV7.EFFECTS, Effect>;
     readonly FACTIONS: Readonly<Partial<Record<FactionId, Faction>>> & Readonly<Record<keyof typeof catalogueV7.FACTIONS, Faction>>;
@@ -30,6 +33,7 @@ function freeze<T>(value: T): T {
 
 const rulesetV7: RealmArenaRuleset = freeze(catalogueV7);
 const rulesetV8: RealmArenaRuleset = freeze(catalogueV8);
+const rulesetV9: RealmArenaRuleset = freeze(catalogueV9);
 
 // Games created before the balance release had no stamp, or one below 7.
 // These are complete definitions, including the old descriptions and limits.
@@ -50,7 +54,7 @@ const legacyRuleset: RealmArenaRuleset = freeze({
 
 const RULESETS: Readonly<Record<number, RealmArenaRuleset>> = Object.freeze({
     0: legacyRuleset, 1: legacyRuleset, 2: legacyRuleset, 3: legacyRuleset,
-    4: legacyRuleset, 5: legacyRuleset, 6: legacyRuleset, 7: rulesetV7, 8: rulesetV8,
+    4: legacyRuleset, 5: legacyRuleset, 6: legacyRuleset, 7: rulesetV7, 8: rulesetV8, 9: rulesetV9,
 });
 
 // The last version asked for, read before the checks: the planner asks

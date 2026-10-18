@@ -1008,7 +1008,7 @@ describe("the recap of the enemy's turn (§29.9)", () => {
         const folded = feed.events.filter(row => row.actorId === warbandOwner(0));
         const characters = new Set(actions.map(action => action.fighter));
         expect(characters.size).toBe(4);
-        expect(folded.map(row => row.title)).toEqual(["The Renegades moved their Archer, their Knight, their Man-at-arms and their Scout"]);
+        expect(folded.map(row => row.title)).toEqual(["The Renegades moved two Archers, their Knight and their Man-at-arms"]);
         // The team's score against the enemy's, not Bob's against his teammate's.
         expect(feed.tip?.text).toMatch(/^(The team is \d+ points? (ahead|behind)|The scores are level)/);
     });

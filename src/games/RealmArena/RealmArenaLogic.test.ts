@@ -94,7 +94,7 @@ describe("the muster (§17.2)", () => {
         onTestFinished(() => { vi.useRealTimers(); });
         const game = makeGame();
         // A squad nobody else musters, so any trace of it is unmistakable.
-        const picks = readyMadePicks(game, 0).slice(0, 2).map((pick, i) => ({ ...pick, character: (["mage", "scout"] as const)[i] }));
+        const picks = readyMadePicks(game, 0).slice(0, 2).map((pick, i) => ({ ...pick, character: (["mage", "archer"] as const)[i] }));
         expect(picks.map(pick => pick.square)).toContain(46);
         const command = muster("a", picks);
         const { outcome } = await play(game, command);
@@ -119,7 +119,7 @@ describe("the muster (§17.2)", () => {
         await play(game, muster("b", readyMadePicks(game, 1)));
         const view = (await responseFor(game, "b")).specificGameState;
         expect(view.myMuster).toBeNull();
-        expect(view.fighters.filter(one => one.owner === "a").map(one => one.character)).toEqual(["mage", "scout"]);
+        expect(view.fighters.filter(one => one.owner === "a").map(one => one.character)).toEqual(["mage", "archer"]);
     });
 });
 
