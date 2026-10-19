@@ -544,6 +544,7 @@ export function gameStateToModel(
         ...(gs.phase === "muster" ? { factions: [...gs.factions ?? REALM_ONLY] } : {}),
         ...(gs.coop?.mission ? { mission: gs.coop.mission } : {}),
         ...(nextWave ? { nextWave } : {}),
+        ...(gs.coop?.mission === "holdOut" && gs.phase !== "muster" ? { enemiesDefeated: gs.fighters.filter(fighter => isWarband(fighter.owner) && fighter.hp <= 0).length } : {}),
         ...(gs.coop?.difficulty ? { difficulty: gs.coop.difficulty } : {}),
         ...(gs.coop?.teamBlocks ? { teamBlocks: true as const } : {}),
         // A random enemy stays off the wire until it's seen (§29.3), and the
@@ -685,8 +686,8 @@ function partsOf(outcome: IRealmArenaOutcome, viewerId: string | null, gs: IReal
 
     const board = (after: RealmArenaBoard | undefined): RealmArenaPartState | undefined => {
         if (!after) return undefined;
-        const { fighters, ghosts, clouds, blasted, scores, enemy: whom } = gameStateToModel({ ...gs, ...after, sightings: after.sightings, coop: after.coop }, viewerId, null, complete);
-        return { fighters, ghosts, clouds, blasted, scores, ...whom ? { enemy: whom } : {} };
+        const { fighters, ghosts, clouds, blasted, scores, enemiesDefeated, enemy: whom } = gameStateToModel({ ...gs, ...after, sightings: after.sightings, coop: after.coop }, viewerId, null, complete);
+        return { fighters, ghosts, clouds, blasted, scores, ...(enemiesDefeated !== undefined ? { enemiesDefeated } : {}), ...whom ? { enemy: whom } : {} };
     };
     // Warbands taking turns in a block (§29.4) hand over to one another in a
     // part of their own, as the first is handed the player's End turn.

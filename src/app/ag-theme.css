@@ -6110,3 +6110,9 @@ html[data-ag-signed-in="1"] .ag-home-screen--guess.ag-home-landing { display: no
     /* Two CTAs won't sit side by side in a column this narrow. */
     .ag-desk-col--side .ag-btn-row { flex-direction: column; }
 }
+
+/* Hold Out's two squad-health meters share one summary tile. */
+.ag-ra-team-health { display: grid; gap: 4px; min-width: 0; padding: 8px 10px; }
+.ag-ra-team-health > div { display: grid; grid-template-columns: minmax(0, 1fr) auto; column-gap: 4px; }
+.ag-ra-team-health .ag-stat-label { margin: 0; font-size: 10px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ag-ra-team-health meter { display: block; grid-column: 1 / -1; width: 100%; min-width: 0; height: 6px; accent-color: var(--ag-green); }

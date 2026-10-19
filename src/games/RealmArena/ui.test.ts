@@ -1093,9 +1093,9 @@ describe("a review step's parts", () => {
     });
 
     it("draws a part's board over the snapshot's, leaving out an enemy the part had not met", () => {
-        const snapshot = { ...board([start[0]]), enemy: "swarm" as const, round: 3 };
-        const part = board([start[1]], [4]);
-        expect(withPartState(snapshot, part)).toEqual({ ...snapshot, fighters: [start[1]], blasted: [4], enemy: undefined });
+        const snapshot = { ...board([start[0]]), enemy: "swarm" as const, round: 3, enemiesDefeated: 2 };
+        const part = { ...board([start[1]], [4]), enemiesDefeated: 1 };
+        expect(withPartState(snapshot, part)).toEqual({ ...snapshot, fighters: [start[1]], blasted: [4], enemy: undefined, enemiesDefeated: 1 });
         expect(withPartState(snapshot, undefined)).toBe(snapshot);
     });
 

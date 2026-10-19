@@ -30,6 +30,7 @@ import GameShell from "@/components/ui/GameShell";
 import { GameOption } from "@/components/ui/GameOptionsMenu";
 import GameScoreboard, { ScoreEntry } from "@/components/ui/GameScoreboard";
 import GameFinishBanner from "@/components/ui/GameFinishBanner";
+import RealmArenaTeamHealth from "@/games/RealmArena/components/RealmArenaTeamHealth";
 import Stat from "@/components/ui/Stat";
 import { useAuthGuard } from "@/utils/hooks/useAuthGuard";
 import { useEndGame } from "@/utils/hooks/useEndGame";
@@ -587,8 +588,13 @@ export default function GameRealmArena({ params }: { params: Promise<{ gameid: u
             {gs && (
                 <div className="ag-stat-row" data-tour="ra-stats">
                     <Stat value={mustering ? 'Muster' : `${gs.round}/${gs.battleRounds}`} label={mustering ? 'Phase' : 'Round'} />
-                    <Stat value={centre} label="Centre" />
-                    <Stat value={gs.budget} label="Points each" />
+                    {gs.mission === 'holdOut' && !mustering ? <>
+                        <Stat value={gs.enemiesDefeated ?? 0} label="Enemies defeated" />
+                        <RealmArenaTeamHealth battle={battle} />
+                    </> : <>
+                        <Stat value={centre} label="Centre" />
+                        <Stat value={gs.budget} label="Points each" />
+                    </>}
                 </div>
             )}
 

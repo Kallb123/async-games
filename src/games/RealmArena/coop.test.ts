@@ -1059,3 +1059,17 @@ describe("the battle record in co-op (§29.6)", () => {
         expect(charts.some(chart => ("series" in chart && chart.series) || ("extraSeries" in chart && chart.extraSeries))).toBe(false);
     }, 60_000);
 });
+
+
+it("reports defeated enemies in Hold Out even when their bodies leave sight", async () => {
+    const game = makeGame(["a", "b"], {}, { fog: true, coop: { enemy: "realm", mission: "holdOut" } });
+    expect(gameStateToModel(game.specificGameState, "a", null).enemiesDefeated).toBeUndefined();
+    await musterAll(game);
+    const gs = game.specificGameState;
+    const fallen = gs.fighters.find(fighter => isWarband(fighter.owner))!;
+    fallen.hp = 0;
+    const response = gameStateToModel(gs, "a", null);
+    expect(response.enemiesDefeated).toBe(1);
+    expect(response.fighters.some(fighter => fighter.id === fallen.id)).toBe(false);
+    expect(gameStateToModel({ ...gs, coop: { ...gs.coop!, mission: undefined } }, "a", null).enemiesDefeated).toBeUndefined();
+});
