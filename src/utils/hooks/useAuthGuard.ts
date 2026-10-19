@@ -41,14 +41,9 @@ function confirmSession(getToken: () => Promise<unknown>) {
         sessionConfirmed = true;
         sessionListeners.forEach(listener => listener());
         // Timed, because every request on the page waits on it. Reported only
-        // once the page is authorised, and never able to throw into it.
-        try {
-            const metric = sessionMetric('confirm', ask);
-            if (metric) window.__agPerformanceMetric?.(metric.name, metric.value);
-            window.__agPerformanceMark?.('session_ready');
-        } catch (error) {
-            console.error('Reporting the session confirmation failed', error);
-        }
+        // once the page is authorised.
+        reportSessionMetric('confirm', ask);
+        window.__agPerformanceMark?.('session_ready');
     });
 }
 
@@ -71,14 +66,17 @@ let renewingOnReturn = false;
 
 function renewOnReturn() {
     if (document.visibilityState !== 'visible' || !sessionConfirmed || !currentGetToken) return;
-    holdRequestsUntil(askForToken(currentGetToken, 'Renewing the session on return').then(ask => {
-        try {
-            const metric = sessionMetric('resume', ask);
-            if (metric) window.__agPerformanceMetric?.(metric.name, metric.value);
-        } catch (error) {
-            console.error('Reporting the session renewal failed', error);
-        }
-    }));
+    holdRequestsUntil(askForToken(currentGetToken, 'Renewing the session on return').then(ask => reportSessionMetric('resume', ask)));
+}
+
+/** Reports how a session ask went (`sessionMetric`). Telemetry, so it can never throw into the session it is timing. */
+function reportSessionMetric(kind: 'confirm' | 'resume', ask: TokenAsk) {
+    try {
+        const metric = sessionMetric(kind, ask);
+        if (metric) window.__agPerformanceMetric?.(metric.name, metric.value);
+    } catch (error) {
+        console.error(`Reporting the session ${kind} failed`, error);
+    }
 }
 
 function renewSessionOnReturn(getToken: (() => Promise<unknown>) | null) {

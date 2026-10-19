@@ -115,6 +115,42 @@ describe('the player directory cache', () => {
         answer();
     });
 
+    it('leaves a stale id a waited lookup took along to that lookup', async () => {
+        clerkUsers = [person('user_1', 'Ann', 'ann'), person('user_2', 'Bob', 'bob')];
+        await userIdListToUsernameList(['user_1']);
+        vi.advanceTimersByTime(DIRECTORY_TTL_MS + 1);
+        const answers: (() => void)[] = [];
+        getUserList.mockImplementation(({ userId }: { userId: string[] }) => new Promise(resolve => {
+            answers.push(() => resolve({ data: clerkUsers.filter(user => userId.includes(user.id as string)) }));
+        }));
+
+        const waited = userIdListToUsernameList(['user_1', 'user_2']);
+        await userIdListToUsernameList(['user_1']);
+        expect(askedFor().slice(1)).toEqual([['user_2', 'user_1']]);
+        answers.forEach(answer => answer());
+        await waited;
+    });
+
+    it('lets a refresh Clerk never answered go after ten seconds, so the id is refreshed again', async () => {
+        vi.spyOn(console, 'warn').mockImplementation(() => {});
+        clerkUsers = [person('user_1', 'Ann', 'ann')];
+        await userIdListToUsernameList(['user_1']);
+        vi.advanceTimersByTime(DIRECTORY_TTL_MS + 1);
+        getUserList.mockImplementation(() => new Promise(() => {}));
+
+        await userIdListToUsernameList(['user_1']);
+        await userIdListToUsernameList(['user_1']);
+        expect(getUserList).toHaveBeenCalledTimes(2);
+
+        await vi.advanceTimersByTimeAsync(10_001);
+        await userIdListToUsernameList(['user_1']);
+        expect(getUserList).toHaveBeenCalledTimes(3);
+        // The refresh mark is the server's, not the cache's, so it outlives the
+        // cache reset: let this one run out before the next test.
+        await vi.advanceTimersByTimeAsync(10_001);
+        vi.restoreAllMocks();
+    });
+
     it('waits on Clerk again once an entry is past its fifteen minutes', async () => {
         clerkUsers = [person('user_1', 'Ann', 'ann')];
         await userIdListToUsernameList(['user_1']);

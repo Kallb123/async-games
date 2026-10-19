@@ -2,7 +2,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useUser } from "@clerk/nextjs";
 import { useRefreshableData } from "./useRefreshableData";
-import { fetchWithSessionRetry, REQUEST_TIMEOUT_MS } from "./fetchWithSessionRetry";
+import { fetchWithSessionRetry, REQUEST_TIMEOUT_MS, untilSessionRenewed } from "./fetchWithSessionRetry";
 import { CHAT_EVENTS } from "./usePushEvents";
 import { IChatGifRef, normaliseMessageBody } from "@/utils/chat";
 import type { IChatResponse, IChatMessageResponse } from "@/app/api/game/[gameid]/chat/route";
@@ -297,6 +297,9 @@ export function useGameChat(gameId: string, open: boolean, enabled: boolean, vie
         }
         setSending(true);
         try {
+            // Sent the moment the app comes back, it would otherwise go with
+            // the token that expired while the app was away, and be refused.
+            await untilSessionRenewed();
             const response = await fetch(`/api/game/${gameId}/chat`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },

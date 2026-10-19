@@ -205,12 +205,18 @@ async function directoryRecords(userIds: string[]): Promise<Map<string, Director
     const start = performance.now();
     const records = new Map<string, DirectoryRecord>();
     const missing: string[] = [];
+    // Every stale id served, and those of them no refresh is out for yet.
+    let servedStale = 0;
     const stale: string[] = [];
     for (const id of wanted) {
         const held = cachedUser(id);
         if (held && held.state !== 'expired') {
             if (held.record) records.set(id, held.record);
-            if (held.state === 'stale') stale.push(id);
+            if (held.state === 'stale') {
+                servedStale++;
+                // One refresh per id: a stale id already being refreshed is left to it.
+                if (!refreshing.has(id)) stale.push(id);
+            }
         } else {
             missing.push(id);
         }
@@ -218,8 +224,11 @@ async function directoryRecords(userIds: string[]): Promise<Map<string, Director
     const hits = wanted.length - missing.length;
 
     if (missing.length > 0) {
-        const asked = [...missing, ...stale.filter(id => !refreshing.has(id))];
+        const asked = [...missing, ...stale];
         const lookup = lookUpRecords(asked);
+        // The stale ones are being refreshed now too, so a request landing
+        // meanwhile leaves them to this lookup rather than asking again.
+        markRefreshing(stale, () => lookup);
         const found = await withTimeout(() => lookup, CLERK_DIRECTORY_BUDGET_MS, null, 'Clerk name lookup')
             ?? heldPastExpiry(asked)
             ?? await lookup;
@@ -228,7 +237,7 @@ async function directoryRecords(userIds: string[]): Promise<Map<string, Director
         refreshAfterResponse(stale);
     }
 
-    recordNameLookup({ duration: performance.now() - start, hits, misses: missing.length, stale: stale.length });
+    recordNameLookup({ duration: performance.now() - start, hits, misses: missing.length, stale: servedStale });
     return records;
 }
 
@@ -246,16 +255,33 @@ function lookUpRecords(ids: string[]): Promise<DirectoryRecord[]> {
 // the stale window asks Clerk about each of them once.
 const refreshing = new Set<string>();
 
-// Refreshes stale entries once the response has gone (`after`), or at once
-// where there is no response to wait for (a test, a script). A failure only
-// leaves them stale: they are served until they expire, then waited on.
+// How long an id stays marked as being refreshed, at most. Clerk's SDK call has
+// no deadline of its own, and one that never answered would otherwise keep its
+// ids marked, and so never refreshed again, for the life of the instance.
+const CLERK_REFRESH_BUDGET_MS = 10_000;
+
+// Marks `ids` as being refreshed by `lookup` until it settles, or until the
+// budget runs out, whichever is first. Resolves then; never rejects, and the
+// lookup's own failure is its caller's to report.
+function markRefreshing(ids: string[], lookup: () => Promise<unknown>): Promise<unknown> {
+    for (const id of ids) refreshing.add(id);
+    return withTimeout(() => lookup().catch(() => null), CLERK_REFRESH_BUDGET_MS, null, 'Clerk name refresh')
+        .finally(() => { for (const id of ids) refreshing.delete(id); });
+}
+
+// Refreshes stale entries, none already being refreshed, once the response
+// has gone (`after`), or at once where there is no response to wait for (a
+// test, a script). A failure only leaves them stale: they are served until
+// they expire, then waited on.
 function refreshAfterResponse(ids: string[]) {
-    const due = ids.filter(id => !refreshing.has(id));
-    if (due.length === 0) return;
-    for (const id of due) refreshing.add(id);
-    const refresh = () => lookUpRecords(due)
-        .catch(error => console.error(`Refreshing ${due.length} cached player name(s) failed; serving them until they expire`, error))
-        .finally(() => { for (const id of due) refreshing.delete(id); });
+    // Marked now rather than when `after` runs, so the requests between this
+    // response and the refresh leave these ids alone too.
+    let done!: () => void;
+    const refreshed = new Promise<void>(resolve => { done = resolve; });
+    void markRefreshing(ids, () => refreshed);
+    const refresh = () => lookUpRecords(ids)
+        .catch(error => console.error(`Refreshing ${ids.length} cached player name(s) failed; serving them until they expire`, error))
+        .finally(done);
     try {
         after(refresh);
     } catch {
