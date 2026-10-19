@@ -149,4 +149,77 @@ describe("fetchWithSessionRetry's timing", () => {
         expect(timing.retryMs).toBeGreaterThanOrEqual(1000);
         expect(timing.startedAt).toBeGreaterThanOrEqual(before + 1000);
     });
+
+    it("keeps what the renewal said about itself, apart from the fixed wait", async () => {
+        vi.useFakeTimers();
+        stubFetch(401, 200);
+        const { fetchWithSessionRetry } = await import("./fetchWithSessionRetry");
+        const timing: SessionFetchTiming = { startedAt: 0 };
+
+        const pending = fetchWithSessionRetry('/api/x', () => false, async () => ({ outcome: 'answered', tookMs: 2000 }), timing);
+        await vi.runAllTimersAsync();
+        await pending;
+        expect(timing.renewal).toEqual({ outcome: 'answered', tookMs: 2000 });
+        expect(timing.retryMs).toBeGreaterThanOrEqual(1000);
+    });
+
+    it("records no renewal when the renewal says nothing about itself", async () => {
+        vi.useFakeTimers();
+        stubFetch(401, 200);
+        const { fetchWithSessionRetry } = await import("./fetchWithSessionRetry");
+        const timing: SessionFetchTiming = { startedAt: 0 };
+
+        const pending = fetchWithSessionRetry('/api/x', () => false, async () => {}, timing);
+        await vi.runAllTimersAsync();
+        await pending;
+        expect(timing.renewal).toBeUndefined();
+        expect(timing.retryMs).toBeGreaterThanOrEqual(1000);
+    });
+});
+
+describe("holding requests while the session is renewed", () => {
+    afterEach(() => {
+        vi.unstubAllGlobals();
+    });
+
+    async function fresh() {
+        vi.resetModules();
+        const fetch = vi.fn(async () => new Response(null, { status: 200 }));
+        vi.stubGlobal('fetch', fetch);
+        return { fetch, ...await import("./fetchWithSessionRetry") };
+    }
+
+    it("sends a request at once when no renewal is out", async () => {
+        const { fetch, fetchWithSessionRetry, untilSessionRenewed } = await fresh();
+        await untilSessionRenewed();
+        expect((await fetchWithSessionRetry('/api/x', () => false))?.status).toBe(200);
+        expect(fetch).toHaveBeenCalledTimes(1);
+    });
+
+    it("holds a request until the renewal has answered, then sends it", async () => {
+        const { fetch, fetchWithSessionRetry, holdRequestsUntil, untilSessionRenewed } = await fresh();
+        let answer!: () => void;
+        holdRequestsUntil(new Promise<void>(resolve => { answer = resolve; }));
+
+        const pending = fetchWithSessionRetry('/api/x', () => false);
+        let posted = false;
+        void untilSessionRenewed().then(() => { posted = true; });
+        await Promise.resolve();
+        expect(fetch).not.toHaveBeenCalled();
+        expect(posted).toBe(false);
+
+        answer();
+        expect((await pending)?.status).toBe(200);
+        expect(posted).toBe(true);
+        expect(fetch).toHaveBeenCalledTimes(1);
+    });
+
+    it("lets requests go when the renewal fails, and holds nothing after", async () => {
+        const { fetch, fetchWithSessionRetry, holdRequestsUntil } = await fresh();
+        holdRequestsUntil(Promise.reject(new Error('Clerk is down')));
+
+        expect((await fetchWithSessionRetry('/api/x', () => false))?.status).toBe(200);
+        expect((await fetchWithSessionRetry('/api/y', () => false))?.status).toBe(200);
+        expect(fetch).toHaveBeenCalledTimes(2);
+    });
 });

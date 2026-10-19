@@ -3,6 +3,8 @@ import { useCallback, useEffect, useRef, useSyncExternalStore } from "react";
 import { useAuth, useUser } from "@clerk/nextjs";
 import { useRouter } from "next/navigation";
 import { withTimeout } from "@/utils/withTimeout";
+import type { SessionMetric } from "@/utils/performance";
+import { holdRequestsUntil, type TokenAsk } from "./fetchWithSessionRetry";
 
 type ClerkUser = NonNullable<ReturnType<typeof useUser>["user"]>;
 
@@ -35,10 +37,53 @@ function confirmSession(getToken: () => Promise<unknown>) {
     confirming = true;
     // Bounded like every other renewal: a Clerk that never answers holds the
     // app back for SESSION_REFRESH_TIMEOUT_MS, then the 401 retries take over.
-    void withTimeout(getToken, SESSION_REFRESH_TIMEOUT_MS, null, 'Confirming the session token').then(() => {
+    void askForToken(getToken, 'Confirming the session token').then(ask => {
         sessionConfirmed = true;
         sessionListeners.forEach(listener => listener());
+        // Timed, because every request on the page waits on it. Reported only
+        // once the page is authorised.
+        reportSessionMetric('confirm', ask);
+        window.__agPerformanceMark?.('session_ready');
     });
+}
+
+// Clerk's token lasts about a minute, and a phone freezes the timer Clerk renews
+// it on while the app is in the background, so a player coming back has a
+// token that has expired. Every screen refetches on return, and each of those
+// requests used to be refused, wait for a renewal and a fixed second, and go
+// again: 3.4 s at the median on one board poll in seven (2026-10-19 checkpoint).
+// So the token is asked for as the tab comes back, before anything refetches,
+// and requests are held until Clerk has answered (`holdRequestsUntil`).
+// `getToken()` hands back the cached token when it is still good, so a quick
+// glance away costs nothing.
+//
+// Page-wide, like the confirmation above: one listener, using the newest
+// `getToken` a signed-in screen has handed over. Registered on `window` in the
+// capture phase, so it runs before any screen's own `visibilitychange`
+// listener (they are on `document`) has started a refetch.
+let currentGetToken: (() => Promise<unknown>) | null = null;
+let renewingOnReturn = false;
+
+function renewOnReturn() {
+    if (document.visibilityState !== 'visible' || !sessionConfirmed || !currentGetToken) return;
+    holdRequestsUntil(askForToken(currentGetToken, 'Renewing the session on return').then(ask => reportSessionMetric('resume', ask)));
+}
+
+/** Reports how a session ask went (`sessionMetric`). Telemetry, so it can never throw into the session it is timing. */
+function reportSessionMetric(kind: 'confirm' | 'resume', ask: TokenAsk) {
+    try {
+        const metric = sessionMetric(kind, ask);
+        if (metric) window.__agPerformanceMetric?.(metric.name, metric.value);
+    } catch (error) {
+        console.error(`Reporting the session ${kind} failed`, error);
+    }
+}
+
+function renewSessionOnReturn(getToken: (() => Promise<unknown>) | null) {
+    currentGetToken = getToken;
+    if (renewingOnReturn || !getToken) return;
+    renewingOnReturn = true;
+    window.addEventListener('visibilitychange', renewOnReturn, { capture: true });
 }
 
 function subscribeToSession(listener: () => void) {
@@ -59,6 +104,7 @@ export function useIsAuthorised() {
     const confirmed = useSyncExternalStore(subscribeToSession, () => sessionConfirmed, () => false);
     useEffect(() => {
         if (signedIn) confirmSession(getToken);
+        renewSessionOnReturn(signedIn ? getToken : null);
     }, [signedIn, getToken]);
     return {
         user,
@@ -80,6 +126,38 @@ export function useIsAuthorised() {
 const SESSION_REFRESH_TIMEOUT_MS = 5000;
 
 /**
+ * Asks Clerk for a session token, bounded by SESSION_REFRESH_TIMEOUT_MS: a
+ * Clerk that is unreachable, won't renew or never answers is "no new token",
+ * and the caller goes ahead regardless. Says which way it ended, so a failure
+ * isn't timed as a fast answer, nor a deadline as a slow one.
+ */
+async function askForToken(ask: () => Promise<unknown>, label: string): Promise<TokenAsk> {
+    const visible = () => document.visibilityState !== 'hidden';
+    const visibleAtStart = visible();
+    const startedAt = performance.now();
+    const outcome = await withTimeout<TokenAsk['outcome']>(
+        () => ask().then(() => 'answered', (error: unknown) => {
+            console.error(`${label} failed`, error);
+            return 'failed';
+        }),
+        SESSION_REFRESH_TIMEOUT_MS,
+        'timeout',
+        label,
+    );
+    return { outcome, tookMs: visibleAtStart && visible() ? performance.now() - startedAt : null };
+}
+
+/**
+ * How a session confirmation or renewal is reported: its time, under the
+ * `_timeout` name when it ran to the deadline. Nothing for one that failed (it
+ * says nothing about how long Clerk takes) or that the page was hidden for.
+ */
+export function sessionMetric(kind: 'confirm' | 'resume' | 'renew', ask: TokenAsk): { name: SessionMetric; value: number } | null {
+    if (ask.outcome === 'failed' || ask.tookMs === null) return null;
+    return { name: ask.outcome === 'timeout' ? `session_${kind}_timeout` : `session_${kind}`, value: ask.tookMs };
+}
+
+/**
  * Asks Clerk for a fresh session token, so that the cookie the API reads is the
  * current one. Hand it to `fetchWithSessionRetry`, which calls it before
  * retrying a 401.
@@ -95,7 +173,7 @@ const SESSION_REFRESH_TIMEOUT_MS = 5000;
  * its fetch whenever the identity of what it fetches with changes — a fresh
  * function per render there would be a fetch per render.
  */
-export function useSessionRefresh(): () => Promise<void> {
+export function useSessionRefresh(): () => Promise<TokenAsk> {
     const { getToken } = useAuth();
     // Kept current after each render rather than during it: writing a ref while
     // rendering is a side effect (react-hooks/refs), and this is only ever read
@@ -106,16 +184,9 @@ export function useSessionRefresh(): () => Promise<void> {
     });
 
     // Clerk unreachable, a session it won't renew, a call that never answers:
-    // `withTimeout` turns all three into "no new token", and the caller retries
-    // regardless — this is the part of the attempt that can be skipped.
-    return useCallback(async () => {
-        await withTimeout(
-            () => getTokenRef.current({ skipCache: true }),
-            SESSION_REFRESH_TIMEOUT_MS,
-            null,
-            'Renewing the session token',
-        );
-    }, []);
+    // all three are "no new token", and the caller retries regardless — this
+    // is the part of the attempt that can be skipped.
+    return useCallback(() => askForToken(() => getTokenRef.current({ skipCache: true }), 'Renewing the session token'), []);
 }
 
 /**

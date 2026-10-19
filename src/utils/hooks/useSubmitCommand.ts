@@ -7,6 +7,7 @@ import { isGuest, type NamedUser } from "@/utils/ui/players";
 import { recordGuestMoved } from "@/utils/hooks/useGuestMoved";
 import { isDataUnconfirmed } from "@/utils/hooks/dataCache";
 import { gameDataUrl } from "@/utils/hooks/prefetchGameData";
+import { untilSessionRenewed } from "@/utils/hooks/fetchWithSessionRetry";
 
 // A command is a write, so it gets longer than a read before being given up
 // on — but it still gets one. See the `signal` below.
@@ -169,6 +170,9 @@ export function useSubmitCommand<T>(
         setSubmitting(true);
         setPendingTarget(target ?? null);
         try {
+            // A move made the moment the app comes back would otherwise go
+            // with the token that expired while it was away, and be refused.
+            await untilSessionRenewed();
             const res = await fetch('/api/game/command', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },

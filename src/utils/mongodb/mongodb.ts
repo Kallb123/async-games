@@ -14,6 +14,7 @@ import { BannedIsletGameDataModel, BannedIsletInvitationModel } from '@/games/Ba
 import { RaceCarsGameDataModel, RaceCarsInvitationModel } from '@/games/RaceCars/RaceCarsModels';
 import { RealmArenaGameDataModel, RealmArenaInvitationModel } from '@/games/RealmArena/RealmArenaModels';
 import { InvitationModel } from './InvitationData';
+import { recordSpanTime } from '@/utils/api/serverTiming';
 
 // Add new game discriminator keys here whenever a new game is introduced.
 // (KingdomBuilderInvitation is deliberately absent from INVITATION_MODELS, so
@@ -57,6 +58,20 @@ export async function dbConnect() {
       maxConnecting: 3,
     };
     cached.promise = mongoose.connect(MONGODB_URI, opts).then((mongoose) => {
+      // The request's `mongo_query` span holds both the wait for a connection
+      // and the command on it. These split them out, so a slow first query on
+      // an instance that sat idle can be told apart from a slow query:
+      // `mongo_checkout` is the time each command waited for a connection out
+      // of the pool, and `mongo_handshake` the time to open each new one.
+      // Reported to the request whose async context the driver emits in: the
+      // pool serves its wait queue from a microtask the checking-out request
+      // queued, so that is the request that asked, except where two requests
+      // share an instance at once and one's turn serves the other's waiter.
+      // Summed per request, so parallel reads add up past the wall time.
+      // Registered once, on the one client this connection keeps.
+      const client = mongoose.connection.getClient();
+      client.on('connectionCheckedOut', event => recordSpanTime('mongo_checkout', event.durationMS));
+      client.on('connectionReady', event => recordSpanTime('mongo_handshake', event.durationMS));
       return mongoose;
     });
   }

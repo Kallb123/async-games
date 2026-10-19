@@ -2,7 +2,7 @@
 
 import { useRef, useState } from "react";
 
-import { REQUEST_TIMEOUT_MS } from "./fetchWithSessionRetry";
+import { REQUEST_TIMEOUT_MS, untilSessionRenewed } from "./fetchWithSessionRetry";
 import { useSessionRefresh } from "./useAuthGuard";
 
 /** Shared guarded JSON POST state for small screens that update their loaded view in place.
@@ -25,6 +25,7 @@ export function useJsonMutation<T>(endpoint: string, fallbackMessage: string, ti
                 body: JSON.stringify(body),
                 signal: AbortSignal.timeout(timeoutMs),
             });
+            await untilSessionRenewed();
             let response = await request();
             if (response.status === 401) {
                 await refreshSession();

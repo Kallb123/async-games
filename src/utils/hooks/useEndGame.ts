@@ -1,5 +1,6 @@
 import { useCallback, useState } from "react";
 import { useRouter } from "next/navigation";
+import { REQUEST_TIMEOUT_MS, untilSessionRenewed } from "./fetchWithSessionRetry";
 
 // Ends (surrenders) a game via the shared /api/game/end endpoint, then returns
 // the player to the dashboard. Used by the in-game options menu so every game
@@ -13,10 +14,13 @@ export function useEndGame(gameId: string) {
         if (!window.confirm("End this game for everyone? This can't be undone.")) return;
         setEnding(true);
         try {
+            await untilSessionRenewed();
             const res = await fetch("/api/game/end", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({ gameId }),
+                // Without one, a stalled connection would leave `ending` set for good.
+                signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
             });
             if (!res.ok) throw new Error("Failed to end game");
             router.push("/");

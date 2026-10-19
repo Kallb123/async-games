@@ -8,10 +8,13 @@
  * and a game opened after a minute on the dashboard would otherwise read as a
  * minute-long load.
  *
+ * `auth_ready` is Clerk having loaded; `session_ready` is the page having
+ * confirmed its session token once (`useIsAuthorised`), which every request
+ * waits for, so the gap between the two is that confirmation.
  * `game_board_painted` is the frame the board reached the screen; `game_usable`
  * is the first idle moment of the main thread after it (see `useGameData`).
  */
-export const JOURNEY_MILESTONES = ['auth_ready', 'first_data', 'dashboard_usable', 'game_board_painted', 'game_usable'] as const;
+export const JOURNEY_MILESTONES = ['auth_ready', 'session_ready', 'first_data', 'dashboard_usable', 'game_board_painted', 'game_usable'] as const;
 export type JourneyMilestone = typeof JOURNEY_MILESTONES[number];
 
 /**
@@ -31,8 +34,43 @@ export type JourneyMilestone = typeof JOURNEY_MILESTONES[number];
 export const DATA_CACHE_METRICS = ['data_cache_hit', 'data_cache_miss', 'data_prefetch'] as const;
 export type DataCacheMetric = typeof DATA_CACHE_METRICS[number];
 
+/**
+ * Where a screen's first data came from, as the journey that opened it records
+ * it: painted from the cache, a body a screen fetched earlier (`hit`) or one a
+ * prefetch fetched (`prefetch`); not in the cache, but a prefetch for it was
+ * still out and the screen joined it (`joined`); or fetched from scratch
+ * (`miss`). The cache metrics carry it, and so do the milestones marked after
+ * it, so a journey's `first_data` and `game_usable` can be split by it.
+ */
+export const PERFORMANCE_DATA_SOURCES = ['hit', 'prefetch', 'joined', 'miss'] as const;
+export type PerformanceDataSource = typeof PERFORMANCE_DATA_SOURCES[number];
+
+/**
+ * How long Clerk took to hand over a session token, each a duration in ms:
+ *
+ * - `session_confirm`: the page's one confirmation that its token is current,
+ *   which every request waits on (`useIsAuthorised`).
+ * - `session_resume`: the renewal as the tab comes back to the foreground,
+ *   which requests wait on before they are sent (`useAuthGuard`).
+ * - `session_renew`: a renewal after a request was refused with a 401
+ *   (`fetchWithSessionRetry`), tagged with the request it was for. With the
+ *   one on return, these should be rare: a count that stays high says
+ *   something other than a hidden tab is letting tokens lapse.
+ *
+ * Each has a `_timeout` twin, reported instead when Clerk hadn't answered by
+ * the deadline and the app went ahead without it: the count of the two says
+ * how often the deadline is what the player waited on.
+ */
+export const SESSION_METRICS = ['session_confirm', 'session_confirm_timeout', 'session_resume', 'session_resume_timeout', 'session_renew', 'session_renew_timeout'] as const;
+export type SessionMetric = typeof SESSION_METRICS[number];
+
+/** The metrics reported through `window.__agPerformanceMetric`, rather than from a journey or a fetch. */
+export type ClientMetric = DataCacheMetric | SessionMetric;
+/** What a `ClientMetric` may say about where it was taken: see `window.__agPerformanceMetric`. */
+export interface ClientMetricContext { pathname?: string; dataSource?: PerformanceDataSource }
+
 export const PERFORMANCE_METRIC_NAMES = [
-  'navigation', ...JOURNEY_MILESTONES, ...DATA_CACHE_METRICS, 'server_total', 'server_auth', 'server_mongo_connect', 'server_mongo_query', 'server_player_directory', 'server_names', 'server_unread_chat', 'server_kb_worlds', 'server_response_build', 'server_response', 'server_reactions', 'server_achievements', 'server_serialise', 'response_bytes', 'image_load', 'LCP', 'INP', 'CLS', 'FCP', 'TTFB',
+  'navigation', ...JOURNEY_MILESTONES, ...DATA_CACHE_METRICS, ...SESSION_METRICS, 'server_total', 'server_auth', 'server_mongo_connect', 'server_mongo_query', 'server_mongo_checkout', 'server_mongo_handshake', 'server_idle', 'server_instance_new', 'server_player_directory', 'server_names', 'server_unread_chat', 'server_kb_worlds', 'server_response_build', 'server_response', 'server_reactions', 'server_achievements', 'server_serialise', 'response_bytes', 'image_load', 'LCP', 'INP', 'CLS', 'FCP', 'TTFB',
   'TTFB_waiting', 'TTFB_cache', 'TTFB_dns', 'TTFB_connection', 'TTFB_request', 'sw_startup',
   'api_total', 'api_connect', 'api_network', 'api_download', 'session_retry',
   'CLS_largest_shift', 'LCP_load_delay', 'LCP_load', 'LCP_render_delay', 'INP_input_delay', 'INP_processing', 'INP_presentation',
@@ -53,8 +91,8 @@ export const isShiftMetric = (name: string) => name.startsWith('CLS');
 /** A metric counted in bytes rather than milliseconds. */
 export const isByteMetric = (name: string) => name.endsWith('bytes');
 
-/** The largest value the beacon accepts: two minutes for a time, 50 MB for a size. */
-export const performanceValueLimit = (name: string) => isByteMetric(name) ? 50_000_000 : 120_000;
+/** The largest value the beacon accepts: two minutes for a time, a day for how long an instance sat idle, 50 MB for a size. */
+export const performanceValueLimit = (name: string) => isByteMetric(name) ? 50_000_000 : name === 'server_idle' ? 86_400_000 : 120_000;
 
 /**
  * Which of a screen's own data fetches a sample came from: the `entry` fetch
@@ -156,10 +194,12 @@ export function ttfbPhaseMetrics(attribution: TtfbAttributionInput): MetricValue
  * already says which screen it is, so a screen is marked only where two share
  * a route (`/` is the dashboard or the landing page). Never an element's text,
  * id, selector or URL: an id or an avatar's address would identify a player.
- * `unmarked` is an element inside none of them.
+ * `unmarked` is an element inside none of them. `camera` is a board drawn by a
+ * camera rather than laid out as an SVG (`BoardZoom`'s camera mode: Realm
+ * Arena's 3D board), so `board/camera` and `board` tell the two renderers apart.
  */
 export const PERFORMANCE_REGIONS = [
-  'rail', 'topbar', 'board', 'hand', 'build-row', 'log', 'chat', 'dashboard', 'landing',
+  'rail', 'topbar', 'board', 'camera', 'hand', 'build-row', 'log', 'chat', 'dashboard', 'landing',
   'section', 'list-row', 'skeleton', 'avatar', 'thumb', 'banner', 'offer', 'disclosure',
 ] as const;
 export type PerformanceRegion = typeof PERFORMANCE_REGIONS[number];
@@ -250,6 +290,8 @@ export interface PerformanceMetricInput {
   request?: PerformanceRequest;
   /** Vital attribution metrics only: see `PERFORMANCE_REGIONS`. */
   region?: string;
+  /** Journey milestones and the cache metrics only: see `PERFORMANCE_DATA_SOURCES`. */
+  dataSource?: PerformanceDataSource;
   connection?: string;
   build?: string;
 }
@@ -311,6 +353,8 @@ export interface Journey {
   hidden: boolean;
   /** Milestones already reported: each counts once per journey, whichever screen part reaches it first. */
   marked: Set<JourneyMilestone>;
+  /** Where the screen's first data came from, once its cache-enabled screen has said. */
+  dataSource?: PerformanceDataSource;
 }
 
 /**

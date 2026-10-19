@@ -1,7 +1,7 @@
 'use client'
 import { useCallback, useEffect, useRef, useState, type Dispatch, type SetStateAction } from "react";
 import { clearStaleSessionReload } from "./fetchWithSessionRetry";
-import { confirmData, fetchResource, forgetCachedData, loadSharedResource, markDataUnconfirmed, readCachedData, writeCachedData } from "./dataCache";
+import { confirmData, fetchResource, forgetCachedData, isDataJoinable, loadSharedResource, markDataUnconfirmed, readCachedData, writeCachedData } from "./dataCache";
 import { usePushEvents } from "./usePushEvents";
 import type { PerformanceRequest } from "@/utils/performance";
 import { useIsAuthorised, useSessionRefresh } from "./useAuthGuard";
@@ -304,10 +304,11 @@ export function useRefreshableData<T>(
             if (cached) {
                 // Provisional until a request answers (see `isDataUnconfirmed`).
                 markDataUnconfirmed(cacheUserId, url);
-                window.__agPerformanceMetric?.('data_cache_hit', cached.ageMs);
+                window.__agPerformanceMetric?.('data_cache_hit', cached.ageMs, { dataSource: cached.prefetched ? 'prefetch' : 'hit' });
                 window.__agPerformanceMark?.('first_data');
             } else {
-                window.__agPerformanceMetric?.('data_cache_miss', 0);
+                // Asked before `loadSharedResource` below, which joins exactly when this says so.
+                window.__agPerformanceMetric?.('data_cache_miss', 0, { dataSource: isDataJoinable(cacheUserId, url) ? 'joined' : 'miss' });
             }
         }
         let mayJoin = firstDispatch;

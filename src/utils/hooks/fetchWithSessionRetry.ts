@@ -2,8 +2,33 @@
 // refreshOnVisible, or useTurnRecap's own visibilitychange refetch) before
 // Clerk has finished refreshing the session cookie that expired while
 // backgrounded, so the request briefly 401s even though the user is still
-// signed in. One short retry clears that race.
+// signed in. `useAuthGuard` renews the session as the tab comes back and holds
+// requests until it has (`holdRequestsUntil`), which closes that race before
+// the request is sent; one short retry is still what clears it for anything
+// that slips past (a token that lapses mid-visit, a renewal that timed out).
 const AUTH_RETRY_DELAY_MS = 1000;
+
+// The session renewal requests wait for before they are sent, while one is out:
+// the one `useAuthGuard` starts as the tab returns to the foreground, before the
+// screen's refetch goes. Never rejects. Null when none is out.
+let renewal: Promise<void> | null = null;
+
+/**
+ * Holds every request that waits on the session (`fetchWithSessionRetry`, and
+ * the POSTs through `untilSessionRenewed`) until `work` settles. `work` must be
+ * bounded, as `useAuthGuard`'s renewals are: a request waits on it unconditionally.
+ */
+export function holdRequestsUntil(work: Promise<unknown>): void {
+    const held: Promise<void> = work.then(() => {}, () => {}).finally(() => {
+        if (renewal === held) renewal = null;
+    });
+    renewal = held;
+}
+
+/** Settles once no session renewal is out — at once when there is none. A request that can't use `fetchWithSessionRetry` awaits this before it is sent. */
+export function untilSessionRenewed(): Promise<void> {
+    return renewal ?? Promise.resolve();
+}
 
 // How long a request gets before it is treated as never coming back.
 //
@@ -44,15 +69,18 @@ export const REQUEST_TIMEOUT_MS = 20000;
 export async function fetchWithSessionRetry(
     input: string,
     isCancelled: () => boolean,
-    refreshSession?: () => Promise<void>,
+    refreshSession?: RefreshSession,
     timing?: SessionFetchTiming,
 ): Promise<Response | null> {
+    // Only while a renewal is out: with none, the request goes in the same tick.
+    if (renewal) await renewal;
     const first = performance.now();
     if (timing) timing.startedAt = first;
     const res = await attempt(input);
     if (res?.status !== 401) return res;
 
-    await refreshSession?.();
+    const renewed = await refreshSession?.();
+    if (timing && renewed) timing.renewal = renewed;
     await new Promise((resolve) => setTimeout(resolve, AUTH_RETRY_DELAY_MS));
     if (isCancelled()) return null;
     if (timing) {
@@ -68,7 +96,19 @@ export interface SessionFetchTiming {
     startedAt: number;
     /** Set only when the session had to be renewed: how long the refused attempt, the renewal and the wait cost. */
     retryMs?: number;
+    /** Set only when the renewal said how it went: Clerk's part of `retryMs`, which is neither the refused attempt nor the fixed wait. */
+    renewal?: TokenAsk;
 }
+
+/**
+ * How one ask of Clerk for a session token went: whether it answered, ran to
+ * its deadline or failed, and how long it took — null when the page was hidden
+ * for some of it, as a throttled timer makes that time meaningless.
+ */
+export interface TokenAsk { outcome: 'answered' | 'timeout' | 'failed'; tookMs: number | null }
+
+/** Renews the session before a retry, saying how the ask went where it can (`useSessionRefresh` does). */
+export type RefreshSession = () => Promise<TokenAsk | void>;
 
 async function attempt(input: string): Promise<Response | null> {
     try {

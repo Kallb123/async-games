@@ -27,7 +27,7 @@
 //
 // Pure TypeScript with no React in it, so it can be tested without a browser.
 
-import { fetchWithSessionRetry, type SessionFetchTiming } from "./fetchWithSessionRetry";
+import { fetchWithSessionRetry, type RefreshSession, type SessionFetchTiming } from "./fetchWithSessionRetry";
 
 /** How many bodies one tab keeps. A board is 13–32 KB, so this is well under a megabyte. */
 export const DATA_CACHE_MAX_ENTRIES = 20;
@@ -38,6 +38,8 @@ interface Entry {
     fetchedAt: number;
     /** When it was written, on `tick`: a request started before this may be answering an older question. */
     writtenAt: number;
+    /** Whether a prefetch fetched it, rather than a screen: what the performance report splits hits by. */
+    prefetched: boolean;
 }
 
 /** What one request came back with. `response` is null for a network error or a timeout. */
@@ -104,7 +106,7 @@ export function isDataCacheOwner(userId: string | null | undefined): userId is s
  * kept; an entry that looks to be from the future (the clock moved) is treated
  * as stale.
  */
-export function readCachedData<T>(userId: string | null | undefined, url: string, maxAgeMs: number): { body: T; ageMs: number } | null {
+export function readCachedData<T>(userId: string | null | undefined, url: string, maxAgeMs: number): { body: T; ageMs: number; prefetched: boolean } | null {
     if (!isDataCacheOwner(userId)) return null;
     const key = keyOf(userId, url);
     const entry = entries.get(key);
@@ -112,7 +114,7 @@ export function readCachedData<T>(userId: string | null | undefined, url: string
     const ageMs = Date.now() - entry.fetchedAt;
     if (ageMs < 0 || ageMs >= maxAgeMs) return null;
     touch(key, entry);
-    return { body: entry.body as T, ageMs };
+    return { body: entry.body as T, ageMs, prefetched: entry.prefetched };
 }
 
 /**
@@ -120,15 +122,15 @@ export function readCachedData<T>(userId: string | null | undefined, url: string
  * owner, and not when `startedAt` (the `tick` the request that brought it began
  * at) is older than what is already there — a newer fetch or a local write has
  * landed since, and this answer may predate it. A local write passes no
- * `startedAt` and always lands.
+ * `startedAt` and always lands. `prefetched` marks a body a prefetch brought.
  */
-export function writeCachedData(userId: string | null | undefined, url: string, body: unknown, startedAt?: number): boolean {
+export function writeCachedData(userId: string | null | undefined, url: string, body: unknown, { startedAt, prefetched = false }: { startedAt?: number; prefetched?: boolean } = {}): boolean {
     if (!isDataCacheOwner(userId)) return false;
     const key = keyOf(userId, url);
     const existing = entries.get(key);
     if (startedAt !== undefined && existing && existing.writtenAt > startedAt) return false;
     entries.delete(key);
-    entries.set(key, { body, fetchedAt: Date.now(), writtenAt: ++tick });
+    entries.set(key, { body, fetchedAt: Date.now(), writtenAt: ++tick, prefetched });
     while (entries.size > DATA_CACHE_MAX_ENTRIES) {
         const oldest = entries.keys().next().value;
         if (oldest === undefined) break;
@@ -171,7 +173,7 @@ export function isDataUnconfirmed(userId: string | null | undefined, url: string
  * the app gets (`fetchWithSessionRetry`). Never throws: a failure is a
  * `ResourceResult` that isn't `parsed`.
  */
-export async function fetchResource(url: string, isCancelled: () => boolean, refreshSession?: () => Promise<void>): Promise<ResourceResult> {
+export async function fetchResource(url: string, isCancelled: () => boolean, refreshSession?: RefreshSession): Promise<ResourceResult> {
     const timing: SessionFetchTiming = { startedAt: 0 };
     let response: Response | null;
     try {
@@ -215,10 +217,10 @@ const isGoneAnswer = (status: number | undefined) => status === 403 || status ==
  * Resolves to the starter's `ResourceResult` for a joiner too, `joined` saying
  * which it was.
  */
-export function loadSharedResource(userId: string, url: string, options: { join: boolean; refreshSession?: () => Promise<void> }): { result: Promise<ResourceResult>; joined: boolean } {
+export function loadSharedResource(userId: string, url: string, options: { join: boolean; prefetch?: boolean; refreshSession?: RefreshSession }): { result: Promise<ResourceResult>; joined: boolean } {
     const key = keyOf(userId, url);
-    const existing = inFlight.get(key);
-    if (options.join && existing && existing.startedAt > (entries.get(key)?.writtenAt ?? 0)) {
+    const existing = joinable(key);
+    if (options.join && existing) {
         return { result: existing.result, joined: true };
     }
     const startedAt = ++tick;
@@ -227,7 +229,7 @@ export function loadSharedResource(userId: string, url: string, options: { join:
         result: fetchResource(url, () => false, options.refreshSession).then((result) => {
             if (inFlight.get(key) === flight) inFlight.delete(key);
             if (result.parsed) {
-                writeCachedData(userId, url, result.body, startedAt);
+                writeCachedData(userId, url, result.body, { startedAt, prefetched: options.prefetch });
             } else if (isGoneAnswer(result.response?.status)) {
                 forgetCachedData(userId, url);
             }
@@ -236,6 +238,17 @@ export function loadSharedResource(userId: string, url: string, options: { join:
     };
     inFlight.set(key, flight);
     return { result: flight.result, joined: false };
+}
+
+/** The request out for `key` that a screen's entry fetch may join: one that began after the last write to it. */
+function joinable(key: string): InFlight | undefined {
+    const existing = inFlight.get(key);
+    return existing && existing.startedAt > (entries.get(key)?.writtenAt ?? 0) ? existing : undefined;
+}
+
+/** Whether an entry fetch for `url` would join a request already out (`loadSharedResource` with `join`), rather than start one. */
+export function isDataJoinable(userId: string | null | undefined, url: string): boolean {
+    return !!userId && joinable(keyOf(userId, url)) !== undefined;
 }
 
 /** Whether a request for `url` is out for `userId` right now. */

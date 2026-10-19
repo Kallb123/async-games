@@ -84,6 +84,12 @@ describe('serverTimingMetrics', () => {
   it('reports nothing for a response without the header', () => {
     expect(serverTimingMetrics(null)).toEqual([]);
   });
+
+  it('reports the Mongo pool and instance spans', () => {
+    const header = 'idle;dur=900000.0, mongo_checkout;dur=210.4, mongo_handshake;dur=180.0, total;dur=400.0';
+    expect(serverTimingMetrics(header).map(metric => metric.name)).toEqual(['server_idle', 'server_mongo_checkout', 'server_mongo_handshake', 'server_total']);
+    expect(serverTimingMetrics('instance_new;dur=12.0')).toEqual([{ name: 'server_instance_new', value: 12 }]);
+  });
 });
 
 describe('apiFetchMetrics', () => {
@@ -115,6 +121,10 @@ describe('performanceValueLimit', () => {
   it('lets a large body through as bytes but caps a time at two minutes', () => {
     expect(performanceValueLimit('response_bytes')).toBeGreaterThan(1_000_000);
     expect(performanceValueLimit('api_total')).toBe(120_000);
+  });
+
+  it('lets an instance have sat idle for up to a day', () => {
+    expect(performanceValueLimit('server_idle')).toBe(86_400_000);
   });
 });
 

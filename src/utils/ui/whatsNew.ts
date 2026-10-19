@@ -82,6 +82,10 @@ export const WHATS_NEW: WhatsNewGroup[] = [
         icon: "✨",
         items: [
             {
+                title: "Quicker when you come back to the app",
+                detail: "Switching back to the app, or opening it from a notification, now renews your sign-in before your games refresh, so they no longer stall for a few seconds first — and a move you make the moment you're back goes through. Players' names show straight away too, even when you've been away a while.",
+            },
+            {
                 title: "Realm Arena: clearer battle details",
                 detail: "Inspect unit stats during battle, read passives and status effects below their actions, and track defeated enemies and both sides’ health in Hold Out.",
                 game: "realmarena",
@@ -124,10 +128,6 @@ export const WHATS_NEW: WhatsNewGroup[] = [
             {
                 title: "Home page and games load faster",
                 detail: "Going back to a game or to the home page now shows it straight away, from what you saw a moment ago, and brings it up to date underneath. A game also starts loading the moment you touch its card, before you let go. The server is quicker too, above all when you check back often: players' names and pictures are no longer looked up afresh every time, and the home page reads only what it shows rather than every game you've ever finished. A new name or picture can take up to five minutes to reach other players.",
-            },
-            {
-                title: "Quicker to open",
-                detail: "Opening the app, or a game from a notification, no longer waits on an extra sign-in check before the page starts to arrive. The home page and a game's screen now come ready-made instead of being built for you each time you open them, so they show up straight away.",
             },
         ],
     },

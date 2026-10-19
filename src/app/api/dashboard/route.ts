@@ -9,6 +9,7 @@ export async function GET(request: NextRequest) {
     const timing = new ServerTiming();
     const { userId } = await timing.time('auth', auth);
     if (!userId) return timedJson({}, timing, { status: 401, statusText: 'Not signed in' });
+    timing.noteInstance();
     await timing.time('mongo_connect', dbConnect);
     const dashboard = await buildDashboard(userId, (name, work) => timing.time(name, work));
     return timedJson({ success: true, ...dashboard }, timing);
