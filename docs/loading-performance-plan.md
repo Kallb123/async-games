@@ -95,6 +95,16 @@ every phase can be compared with the one before it.
   is cold function instances, which cost seconds on both the API and the
   document, and `/`, which is still rendered on a function. That adds Phase
   1.1e and the "Cold instances" work, and reorders the delivery sequence.
+- [2026-10-19](./performance-checkpoints/2026-10-19.md): the first window with
+  every Phase 1 and 2 change in it (filtered by `since`, not `build`; see its
+  header). The cold document is fixed: TTFB p75 is 549 ms on `/` and 258 ms on
+  a game. So is the warm dashboard: `dashboard_usable` p75 is 822 ms. The cold
+  dashboard hasn't moved (6.2 s median): about 4.3 s between Clerk loading and
+  the data arriving is untimed, and tightly grouped, which points at the 5 s
+  session-confirmation bound. The board's tail is now its `entry` call on an
+  idle instance. Inside it, the name cache misses on almost every `entry`
+  (about 245 ms). About one board poll in seven pays a 3.4 s session retry. CLS
+  and INP are unchanged pending Phase 3.9 and 3.10.
 
 The admin report reads seven days by default, and a deploy leaves the old app in most of that. A checkpoint is therefore taken with **from build** set to the first build after the changes being measured (the report's build list shows each deploy's first-seen time), and the checkpoint records that build and the window in its header. The report's Markdown copy carries both. Every sample is stamped with its page's `NEXT_PUBLIC_BUILD_TIME`, and a server span is reported by the same page, so one `build` filter cleans every metric. A sample with no build (from before the stamp, or a very old cached client) is left out once `build` is set.
 
@@ -153,6 +163,8 @@ The client can't flag a handshake directly. Clerk strips `__clerk_handshake` wit
 - **Exit:** `/` builds as `○`, and the `/` TTFB p75 is under 1 s.
 
 **Exit:** the TTFB p75 for `/` and the game route is under 1 s, and the 4–6 s cluster is gone from the TTFB distribution.
+
+**Met (2026-10-19 checkpoint).** TTFB is 371 ms median and 549 ms p75 on `/`, and 154 and 258 ms on the Realm Arena route. The 4–6 s cluster is gone. A game route's remaining p95 (2.4 s) is likely its static shell rendering again for each game after each deploy.
 
 ### 2. Make game rows real links
 
@@ -295,6 +307,7 @@ Three things to do, in order. The first is settings, not code.
 - **Cons:** `minPoolSize` holds idle connections open per instance, which counts against the Atlas connection limit. The connection cache and the name cache are per-process by design, so a platform setting that changes instance reuse changes their hit rates too.
 - **Mitigation:** set the pool options conservatively and watch the Atlas connection count. Compare `entry` `server_mongo_query` and `api_network` before and after, from a window the admin report's `build` filter keeps clean.
 - **Exit (a starting target, to be tuned from data):** the dashboard `entry` `mongo_query` is under 80 ms at p75 (the same bar as a warm read), and `api_network` on `entry` is under 500 ms at the median.
+- **Evidence (2026-10-19 checkpoint).** `api_network` on `entry` is 271–277 ms at the median (met), and `mongo_connect` is 0 at the median, so most entries now find a warm instance. The `mongo_query` p75 is 1,569 ms (missed). On `entry` the read takes 362 ms at the median on an instance that already holds a connection, against 24 ms on `refresh`, which looks like the first command after a freeze. The span can't separate the pool checkout from the command yet. `names` misses on almost every `entry` (243 ms), because the 5-minute expiry has lapsed, not because the instance is new.
 
 ## Phase 3 — reduce code, render, and art delay
 
