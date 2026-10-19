@@ -24,12 +24,22 @@ export interface DirectoryRecord {
 }
 
 /**
- * How long an entry is believed. The documented freshness target for a rename
- * or a new picture reaching the other players at a table; our own rename and
- * claim routes drop the entry sooner (`forgetCachedUser`), but a picture is
- * changed through Clerk directly and only this bounds it.
+ * How long an entry is believed outright. The documented freshness target for
+ * a rename or a new picture reaching the other players at a table; our own
+ * rename and claim routes drop the entry sooner (`forgetCachedUser`), but a
+ * picture is changed through Clerk directly and only this bounds it.
  */
 export const DIRECTORY_TTL_MS = 5 * 60 * 1000;
+
+/**
+ * How long an entry may still be served once it is past `DIRECTORY_TTL_MS`,
+ * while it is refreshed behind the response (`clerk.ts`). A player coming back
+ * after a quarter of an hour away would otherwise find every name expired and
+ * wait on Clerk for all of them, which the 2026-10-19 checkpoint measured at
+ * about 245 ms on nearly every first request. Past this an entry is only a
+ * fallback for a Clerk that is down or slow, as before.
+ */
+export const DIRECTORY_MAX_AGE_MS = 15 * 60 * 1000;
 
 /**
  * A shorter life for "Clerk doesn't know this id". Worth remembering at all
@@ -46,8 +56,16 @@ export const DIRECTORY_MAX_ENTRIES = 2000;
 interface Entry {
     /** Null for an id Clerk had no user for. */
     record: DirectoryRecord | null;
+    /** Believed outright until this; served while it is refreshed until `expiresAt`. */
+    staleAt: number;
     expiresAt: number;
 }
+
+/**
+ * How far an entry is through its life: believed (`fresh`), served while it is
+ * refreshed (`stale`), or only good for a bad day (`expired`).
+ */
+export type DirectoryEntryState = 'fresh' | 'stale' | 'expired';
 
 // A Map iterates in insertion order, so the first key is always the least
 // recently used one provided every use re-inserts: see `touch`.
@@ -68,17 +86,18 @@ function touch(id: string, entry: Entry) {
 }
 
 /**
- * What is held for an id, expired or not: the caller decides whether stale is
- * good enough (it is, when Clerk is down). `undefined` is "nothing held".
- * A look counts as a use only while the entry is fresh, so an expired entry
- * kept for a bad day doesn't stay young by being asked about.
+ * What is held for an id, expired or not, and how far through its life it is:
+ * the caller decides what each state is good for. `undefined` is "nothing
+ * held". A look counts as a use only while the entry may be served, so an
+ * expired entry kept for a bad day doesn't stay young by being asked about.
  */
-export function cachedUser(id: string): { record: DirectoryRecord | null; fresh: boolean } | undefined {
+export function cachedUser(id: string): { record: DirectoryRecord | null; state: DirectoryEntryState } | undefined {
     const entry = entries.get(id);
     if (!entry) return undefined;
-    const fresh = entry.expiresAt > Date.now();
-    if (fresh) touch(id, entry);
-    return { record: entry.record, fresh };
+    const now = Date.now();
+    const state = entry.staleAt > now ? 'fresh' : entry.expiresAt > now ? 'stale' : 'expired';
+    if (state !== 'expired') touch(id, entry);
+    return { record: entry.record, state };
 }
 
 /** Taken just before a Clerk lookup, and handed back to `rememberUsers` with its answer. */
@@ -97,7 +116,11 @@ export function rememberUsers(askedFor: string[], found: DirectoryRecord[], star
     for (const id of askedFor) {
         if ((forgottenAt.get(id) ?? -1) >= started) continue;
         const record = byId.get(id) ?? null;
-        touch(id, { record, expiresAt: now + (record ? DIRECTORY_TTL_MS : DIRECTORY_MISS_TTL_MS) });
+        // A miss has no stale life: an id Clerk didn't know is asked about again
+        // as soon as the short memory of it lapses.
+        touch(id, record
+            ? { record, staleAt: now + DIRECTORY_TTL_MS, expiresAt: now + DIRECTORY_MAX_AGE_MS }
+            : { record, staleAt: now + DIRECTORY_MISS_TTL_MS, expiresAt: now + DIRECTORY_MISS_TTL_MS });
     }
     while (entries.size > DIRECTORY_MAX_ENTRIES) {
         const oldest = entries.keys().next();

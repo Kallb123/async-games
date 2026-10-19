@@ -11,7 +11,7 @@ import {
 } from './clerk';
 import {
     __heldDirectoryEntriesForTests, __resetDirectoryCacheForTests, DIRECTORY_MAX_ENTRIES,
-    DIRECTORY_MISS_TTL_MS, DIRECTORY_TTL_MS, forgetCachedUser,
+    DIRECTORY_MAX_AGE_MS, DIRECTORY_MISS_TTL_MS, DIRECTORY_TTL_MS, forgetCachedUser,
 } from './directoryCache';
 import { ServerTiming } from '@/utils/api/serverTiming';
 
@@ -82,7 +82,7 @@ describe('the player directory cache', () => {
         expect(getUserList).not.toHaveBeenCalled();
     });
 
-    it('believes an entry for five minutes and then asks again', async () => {
+    it('believes an entry for five minutes, then serves it while it is refreshed behind the answer', async () => {
         clerkUsers = [person('user_1', 'Ann', 'ann')];
         await userIdListToUsernameList(['user_1']);
 
@@ -92,7 +92,46 @@ describe('the player directory cache', () => {
 
         clerkUsers = [person('user_1', 'Annie', 'ann')];
         vi.advanceTimersByTime(2);
+        // Answered from memory, without waiting on Clerk...
+        expect(await userIdListToUsernameList(['user_1'])).toEqual(['Ann']);
+        // ...which is asked once, behind it, and the next lookup has the new name.
+        await vi.waitFor(() => expect(getUserList).toHaveBeenCalledTimes(2));
+        await vi.waitFor(async () => expect(await userIdListToUsernameList(['user_1'])).toEqual(['Annie']));
+        expect(getUserList).toHaveBeenCalledTimes(2);
+    });
+
+    it('refreshes a stale entry once however many lookups land while it is out', async () => {
+        clerkUsers = [person('user_1', 'Ann', 'ann')];
+        await userIdListToUsernameList(['user_1']);
+        vi.advanceTimersByTime(DIRECTORY_TTL_MS + 1);
+        let answer!: () => void;
+        getUserList.mockImplementation(({ userId }: { userId: string[] }) => new Promise(resolve => {
+            answer = () => resolve({ data: clerkUsers.filter(user => userId.includes(user.id as string)) });
+        }));
+
+        await userIdListToUsernameList(['user_1']);
+        await userIdListToUsernameList(['user_1']);
+        expect(getUserList).toHaveBeenCalledTimes(2);
+        answer();
+    });
+
+    it('waits on Clerk again once an entry is past its fifteen minutes', async () => {
+        clerkUsers = [person('user_1', 'Ann', 'ann')];
+        await userIdListToUsernameList(['user_1']);
+        clerkUsers = [person('user_1', 'Annie', 'ann')];
+
+        vi.advanceTimersByTime(DIRECTORY_MAX_AGE_MS + 1);
         expect(await userIdListToUsernameList(['user_1'])).toEqual(['Annie']);
+    });
+
+    it('brings a stale entry along in a lookup that has to wait anyway', async () => {
+        clerkUsers = [person('user_1', 'Ann', 'ann'), person('user_2', 'Bob', 'bob')];
+        await userIdListToUsernameList(['user_1']);
+        vi.advanceTimersByTime(DIRECTORY_TTL_MS + 1);
+        clerkUsers = [person('user_1', 'Annie', 'ann'), person('user_2', 'Bob', 'bob')];
+
+        expect(await userIdListToUsernameList(['user_1', 'user_2'])).toEqual(['Annie', 'Bob']);
+        expect(askedFor()[1]).toEqual(['user_2', 'user_1']);
         expect(getUserList).toHaveBeenCalledTimes(2);
     });
 
@@ -229,17 +268,17 @@ describe('the player directory cache', () => {
         it('serves entries past their expiry rather than fail', async () => {
             clerkUsers = [person('user_1', 'Ann', 'ann'), person('user_2', 'Bob', 'bob')];
             await userIdListToUsernameList(['user_1', 'user_2']);
-            vi.advanceTimersByTime(DIRECTORY_TTL_MS + 1);
+            vi.advanceTimersByTime(DIRECTORY_MAX_AGE_MS + 1);
             getUserList.mockRejectedValue(new Error('Clerk is down'));
 
             expect(await userIdListToUsernameList(['user_1', 'user_2'])).toEqual(['Ann', 'Bob']);
             expect(getUserList).toHaveBeenCalledTimes(2);
         });
 
-        it('serves a fresh entry beside a stale one', async () => {
+        it('serves a fresh entry beside an expired one', async () => {
             clerkUsers = [person('user_1', 'Ann', 'ann'), person('user_2', 'Bob', 'bob')];
             await userIdListToUsernameList(['user_1']);
-            vi.advanceTimersByTime(DIRECTORY_TTL_MS - 10);
+            vi.advanceTimersByTime(DIRECTORY_MAX_AGE_MS - 10);
             await userIdListToUsernameList(['user_2']);
             vi.advanceTimersByTime(20);
             getUserList.mockRejectedValue(new Error('Clerk is down'));
@@ -250,7 +289,7 @@ describe('the player directory cache', () => {
         it('fails as it always did when some id has nothing held', async () => {
             clerkUsers = [person('user_1', 'Ann', 'ann')];
             await userIdListToUsernameList(['user_1']);
-            vi.advanceTimersByTime(DIRECTORY_TTL_MS + 1);
+            vi.advanceTimersByTime(DIRECTORY_MAX_AGE_MS + 1);
             getUserList.mockRejectedValue(new Error('Clerk is down'));
 
             await expect(userIdListToUsernameList(['user_1', 'user_never_seen'])).rejects.toThrow('Clerk is down');
@@ -285,7 +324,7 @@ describe('the player directory cache', () => {
         it('serves entries past their expiry once the budget runs out, and keeps the late answer', async () => {
             clerkUsers = [person('user_1', 'Ann', 'ann')];
             await userIdListToUsernameList(['user_1']);
-            vi.advanceTimersByTime(DIRECTORY_TTL_MS + 1);
+            vi.advanceTimersByTime(DIRECTORY_MAX_AGE_MS + 1);
             const answer = hangClerk();
             clerkUsers = [person('user_1', 'Anne', 'ann')];
 
@@ -329,7 +368,7 @@ describe('reporting to the request', () => {
 
         const header = timing.header();
         expect(header).toMatch(/names;dur=[0-9.]+/);
-        expect(header).toContain('names_cache;desc="hit=1 miss=2"');
+        expect(header).toContain('names_cache;desc="hit=1 miss=2 stale=0"');
         // Counts and timings only: no id and no name ever reaches the header.
         expect(header).not.toMatch(/user_|Ann|Bob/);
     });

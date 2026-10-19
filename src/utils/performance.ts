@@ -50,14 +50,18 @@ export type PerformanceDataSource = typeof PERFORMANCE_DATA_SOURCES[number];
  *
  * - `session_confirm`: the page's one confirmation that its token is current,
  *   which every request waits on (`useIsAuthorised`).
+ * - `session_resume`: the renewal as the tab comes back to the foreground,
+ *   which requests wait on before they are sent (`useAuthGuard`).
  * - `session_renew`: a renewal after a request was refused with a 401
- *   (`fetchWithSessionRetry`), tagged with the request it was for.
+ *   (`fetchWithSessionRetry`), tagged with the request it was for. With the
+ *   one on return, these should be rare: a count that stays high says
+ *   something other than a hidden tab is letting tokens lapse.
  *
  * Each has a `_timeout` twin, reported instead when Clerk hadn't answered by
  * the deadline and the app went ahead without it: the count of the two says
  * how often the deadline is what the player waited on.
  */
-export const SESSION_METRICS = ['session_confirm', 'session_confirm_timeout', 'session_renew', 'session_renew_timeout'] as const;
+export const SESSION_METRICS = ['session_confirm', 'session_confirm_timeout', 'session_resume', 'session_resume_timeout', 'session_renew', 'session_renew_timeout'] as const;
 export type SessionMetric = typeof SESSION_METRICS[number];
 
 /** The metrics reported through `window.__agPerformanceMetric`, rather than from a journey or a fetch. */

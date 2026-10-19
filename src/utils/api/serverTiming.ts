@@ -29,12 +29,15 @@ const TIME_LIMIT_MS = 120_000;
 export type TimeSpan = <T>(name: string, work: () => Promise<T>) => Promise<T>;
 export const untimed: TimeSpan = (_name, work) => work();
 
+/** One player-name lookup: `stale` of its `hits` were served past their believed life and refreshed after. */
+interface NameLookup { duration: number; hits: number; misses: number; stale?: number }
+
 export class ServerTiming {
   private readonly started = performance.now();
   private readonly entries: { name: string; duration: number }[] = [];
   // Work reported from below rather than wrapped in `time()`, summed per name.
   private readonly totals = new Map<string, number>();
-  private nameCounts: { hits: number; misses: number } | null = null;
+  private nameCounts: { hits: number; misses: number; stale: number } | null = null;
 
   /**
    * Notes how long the instance sat unused before this request (`idle`), or,
@@ -62,11 +65,11 @@ export class ServerTiming {
   add(name: string, duration: number) {
     this.totals.set(name, (this.totals.get(name) ?? 0) + duration);
   }
-  /** Adds one player-name lookup: how long it took and how many ids it served from memory or fetched. */
-  addNameLookup({ duration, hits, misses }: { duration: number; hits: number; misses: number }) {
+  /** Adds one player-name lookup: how long it took, how many ids it served from memory (some of them stale, refreshed after) or fetched. */
+  addNameLookup({ duration, hits, misses, stale = 0 }: NameLookup) {
     this.add('names', duration);
-    const counts = this.nameCounts ??= { hits: 0, misses: 0 };
-    counts.hits += hits; counts.misses += misses;
+    const counts = this.nameCounts ??= { hits: 0, misses: 0, stale: 0 };
+    counts.hits += hits; counts.misses += misses; counts.stale += stale;
   }
   header(): string {
     // `names` is nested inside whichever span the lookup ran in (`response` on
@@ -80,12 +83,12 @@ export class ServerTiming {
     const all = [...this.entries, ...[...this.totals].map(([name, duration]) => ({ name, duration })),
       { name: 'total', duration: performance.now() - this.started }];
     const spans = all.map(({ name, duration }) => `${name};dur=${duration.toFixed(1)}`);
-    if (counts) spans.push(`names_cache;desc="hit=${counts.hits} miss=${counts.misses}"`);
+    if (counts) spans.push(`names_cache;desc="hit=${counts.hits} miss=${counts.misses} stale=${counts.stale}"`);
     return spans.join(', ');
   }
 }
 /** Reports a name lookup to the request it is part of; does nothing outside one (a cron, a test). */
-export function recordNameLookup(lookup: { duration: number; hits: number; misses: number }) {
+export function recordNameLookup(lookup: NameLookup) {
   current.getStore()?.addNameLookup(lookup);
 }
 /**

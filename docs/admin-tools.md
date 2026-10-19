@@ -610,7 +610,7 @@ is the instance's first; the client records those spans beside the
 journey. `names` is the time spent resolving player names (the Clerk directory
 lookup), nested inside the span it ran in — `response` on a game,
 `player_directory` on the dashboard — rather than taken out of it, and a
-`names_cache` entry carries the directory cache's hit and miss counts as a
+`names_cache` entry carries the directory cache's hit, miss and stale counts as a
 `desc` (visible in devtools, not recorded). The dashboard also times its unread
 chat counts (`unread_chat`) and Kingdom Builder worlds (`kb_worlds`). The
 **Data** column splits a cache-enabled screen's journey by where its first data

@@ -4,7 +4,7 @@ import { useAuth, useUser } from "@clerk/nextjs";
 import { useRouter } from "next/navigation";
 import { withTimeout } from "@/utils/withTimeout";
 import type { SessionMetric } from "@/utils/performance";
-import type { TokenAsk } from "./fetchWithSessionRetry";
+import { holdRequestsUntil, type TokenAsk } from "./fetchWithSessionRetry";
 
 type ClerkUser = NonNullable<ReturnType<typeof useUser>["user"]>;
 
@@ -52,6 +52,42 @@ function confirmSession(getToken: () => Promise<unknown>) {
     });
 }
 
+// Clerk's token lasts about a minute, and a phone freezes the timer Clerk renews
+// it on while the app is in the background, so a player coming back has a
+// token that has expired. Every screen refetches on return, and each of those
+// requests used to be refused, wait for a renewal and a fixed second, and go
+// again: 3.4 s at the median on one board poll in seven (2026-10-19 checkpoint).
+// So the token is asked for as the tab comes back, before anything refetches,
+// and requests are held until Clerk has answered (`holdRequestsUntil`).
+// `getToken()` hands back the cached token when it is still good, so a quick
+// glance away costs nothing.
+//
+// Page-wide, like the confirmation above: one listener, using the newest
+// `getToken` a signed-in screen has handed over. Registered on `window` in the
+// capture phase, so it runs before any screen's own `visibilitychange`
+// listener (they are on `document`) has started a refetch.
+let currentGetToken: (() => Promise<unknown>) | null = null;
+let renewingOnReturn = false;
+
+function renewOnReturn() {
+    if (document.visibilityState !== 'visible' || !sessionConfirmed || !currentGetToken) return;
+    holdRequestsUntil(askForToken(currentGetToken, 'Renewing the session on return').then(ask => {
+        try {
+            const metric = sessionMetric('resume', ask);
+            if (metric) window.__agPerformanceMetric?.(metric.name, metric.value);
+        } catch (error) {
+            console.error('Reporting the session renewal failed', error);
+        }
+    }));
+}
+
+function renewSessionOnReturn(getToken: (() => Promise<unknown>) | null) {
+    currentGetToken = getToken;
+    if (renewingOnReturn || !getToken) return;
+    renewingOnReturn = true;
+    window.addEventListener('visibilitychange', renewOnReturn, { capture: true });
+}
+
 function subscribeToSession(listener: () => void) {
     sessionListeners.add(listener);
     return () => { sessionListeners.delete(listener); };
@@ -70,6 +106,7 @@ export function useIsAuthorised() {
     const confirmed = useSyncExternalStore(subscribeToSession, () => sessionConfirmed, () => false);
     useEffect(() => {
         if (signedIn) confirmSession(getToken);
+        renewSessionOnReturn(signedIn ? getToken : null);
     }, [signedIn, getToken]);
     return {
         user,
@@ -117,7 +154,7 @@ async function askForToken(ask: () => Promise<unknown>, label: string): Promise<
  * `_timeout` name when it ran to the deadline. Nothing for one that failed (it
  * says nothing about how long Clerk takes) or that the page was hidden for.
  */
-export function sessionMetric(kind: 'confirm' | 'renew', ask: TokenAsk): { name: SessionMetric; value: number } | null {
+export function sessionMetric(kind: 'confirm' | 'resume' | 'renew', ask: TokenAsk): { name: SessionMetric; value: number } | null {
     if (ask.outcome === 'failed' || ask.tookMs === null) return null;
     return { name: ask.outcome === 'timeout' ? `session_${kind}_timeout` : `session_${kind}`, value: ask.tookMs };
 }

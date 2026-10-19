@@ -1,4 +1,5 @@
 import { clerkClient, User } from "@clerk/nextjs/server";
+import { after } from "next/server";
 import { chosenName, isGuest, publicHandle, readableName, UNKNOWN_PLAYER_NAME } from "@/utils/ui/players";
 import { profileImageUrl } from "@/utils/ui/avatar";
 import { recordNameLookup } from "@/utils/api/serverTiming";
@@ -181,9 +182,15 @@ function toDirectoryRecord(user: User): DirectoryRecord {
 // is something to give up *to* (see directoryRecords).
 const CLERK_DIRECTORY_BUDGET_MS = 1500;
 
-// The records for the ids Clerk knows, from memory where it is fresh and from
-// the one Clerk round trip `usersById` makes for the rest. An id Clerk doesn't
-// return is simply absent, exactly as it is from `usersById`'s answer.
+// The records for the ids Clerk knows, from memory where it may be served and
+// from the one Clerk round trip `usersById` makes for the rest. An id Clerk
+// doesn't return is simply absent, exactly as it is from `usersById`'s answer.
+//
+// An entry past its believed life but not its served one (`stale`, see
+// DIRECTORY_MAX_AGE_MS) is answered from memory at once and refreshed after the
+// response, so nobody waits on Clerk for a name they saw a few minutes ago.
+// When some id has to be waited on anyway, the stale ones ride along in that
+// same call instead.
 //
 // If Clerk fails, or hasn't answered within CLERK_DIRECTORY_BUDGET_MS, every id
 // that missed is answered from whatever the cache still holds of it, expired or
@@ -198,10 +205,12 @@ async function directoryRecords(userIds: string[]): Promise<Map<string, Director
     const start = performance.now();
     const records = new Map<string, DirectoryRecord>();
     const missing: string[] = [];
+    const stale: string[] = [];
     for (const id of wanted) {
         const held = cachedUser(id);
-        if (held?.fresh) {
+        if (held && held.state !== 'expired') {
             if (held.record) records.set(id, held.record);
+            if (held.state === 'stale') stale.push(id);
         } else {
             missing.push(id);
         }
@@ -209,20 +218,49 @@ async function directoryRecords(userIds: string[]): Promise<Map<string, Director
     const hits = wanted.length - missing.length;
 
     if (missing.length > 0) {
-        const started = lookupStarted();
-        const lookup = usersById(missing).then(users => {
-            const found = users.map(toDirectoryRecord);
-            rememberUsers(missing, found, started);
-            return found;
-        });
+        const asked = [...missing, ...stale.filter(id => !refreshing.has(id))];
+        const lookup = lookUpRecords(asked);
         const found = await withTimeout(() => lookup, CLERK_DIRECTORY_BUDGET_MS, null, 'Clerk name lookup')
-            ?? heldPastExpiry(missing)
+            ?? heldPastExpiry(asked)
             ?? await lookup;
         for (const record of found) records.set(record.id, record);
+    } else if (stale.length > 0) {
+        refreshAfterResponse(stale);
     }
 
-    recordNameLookup({ duration: performance.now() - start, hits, misses: missing.length });
+    recordNameLookup({ duration: performance.now() - start, hits, misses: missing.length, stale: stale.length });
     return records;
+}
+
+// One Clerk round trip for `ids`, its answer kept in the cache.
+function lookUpRecords(ids: string[]): Promise<DirectoryRecord[]> {
+    const started = lookupStarted();
+    return usersById(ids).then(users => {
+        const found = users.map(toDirectoryRecord);
+        rememberUsers(ids, found, started);
+        return found;
+    });
+}
+
+// The stale ids a refresh is already out for, so a burst of requests inside
+// the stale window asks Clerk about each of them once.
+const refreshing = new Set<string>();
+
+// Refreshes stale entries once the response has gone (`after`), or at once
+// where there is no response to wait for (a test, a script). A failure only
+// leaves them stale: they are served until they expire, then waited on.
+function refreshAfterResponse(ids: string[]) {
+    const due = ids.filter(id => !refreshing.has(id));
+    if (due.length === 0) return;
+    for (const id of due) refreshing.add(id);
+    const refresh = () => lookUpRecords(due)
+        .catch(error => console.error(`Refreshing ${due.length} cached player name(s) failed; serving them until they expire`, error))
+        .finally(() => { for (const id of due) refreshing.delete(id); });
+    try {
+        after(refresh);
+    } catch {
+        void refresh();
+    }
 }
 
 // What the cache still holds for every one of these ids, fresh or not — or null
