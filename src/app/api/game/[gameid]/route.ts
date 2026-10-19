@@ -10,6 +10,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<IG
   const timing = new ServerTiming();
   const { userId } = await timing.time('auth', auth);
   if (!userId) return timedJson({}, timing, { status: 401, statusText: 'Not signed in' });
+  timing.noteInstance();
   await timing.time('mongo_connect', dbConnect);
   const { gameid } = await params;
   const read = await readGameForViewer(gameid, userId, (name, work) => timing.time(name, work));

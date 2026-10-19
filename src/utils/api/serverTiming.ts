@@ -1,15 +1,29 @@
 import { AsyncLocalStorage } from 'node:async_hooks';
 
-// The request whose work is running, so a helper several calls down (the Clerk
-// name lookup, inside every game's model file) can report to it without a
-// timer being passed through all of them. Set by `time()` for the span's work.
-const current = new AsyncLocalStorage<ServerTiming>();
-
-// When this instance loaded, and when it last began a timed request: wall-clock
-// time, since a function frozen between requests may not count the freeze on a
-// monotonic clock, and the freeze is the thing being measured.
-const loadedAt = Date.now();
-let lastRequestAt: number | undefined;
+// Kept on `globalThis`, as `dbConnect` keeps its connection, because Next
+// loads this module more than once per instance: `instrumentation.ts` opens
+// the Mongo connection at boot from a bundle of its own, so the pool listeners
+// `dbConnect` registers then hold that bundle's copy of this module, while the
+// route handlers run requests in theirs. One store per instance means both
+// copies see the same request.
+//
+// - `current`: the request whose work is running, so a helper several calls
+//   down (the Clerk name lookup, inside every game's model file; the Mongo
+//   pool's events) can report to it without a timer being passed through all
+//   of them. Set by `time()` for the span's work.
+// - `bootedAt`, `lastRequestAt`: when the instance first loaded this module (at
+//   boot, from `instrumentation.ts`), and when it last served a signed-in
+//   request. Wall-clock time, since a function frozen between requests may
+//   not count the freeze on a monotonic clock, and the freeze is the thing
+//   being measured.
+declare global {
+  var agServerTiming: { current: AsyncLocalStorage<ServerTiming>; bootedAt: number; lastRequestAt?: number } | undefined;
+}
+const instance = globalThis.agServerTiming ??= { current: new AsyncLocalStorage<ServerTiming>(), bootedAt: Date.now() };
+const current = instance.current;
+const MINUTE_MS = 60_000;
+/** The beacon's cap on a time (`performanceValueLimit`): `instance_new` is clamped to it rather than dropped. */
+const TIME_LIMIT_MS = 120_000;
 
 /** Runs `work` as a span called `name`: a request's `ServerTiming.time`, or `untimed` where nothing is listening. */
 export type TimeSpan = <T>(name: string, work: () => Promise<T>) => Promise<T>;
@@ -22,15 +36,22 @@ export class ServerTiming {
   private readonly totals = new Map<string, number>();
   private nameCounts: { hits: number; misses: number } | null = null;
 
-  constructor() {
-    // How long the instance sat unused before this request (`idle`), or, on
-    // its first, that it is new (`instance_new`, how long since it loaded):
-    // what a slow first query after a quiet spell is checked against.
+  /**
+   * Notes how long the instance sat unused before this request (`idle`), or,
+   * on its first, that it is new (`instance_new`, how long since it booted):
+   * what a slow first query after a quiet spell is checked against. Call it
+   * once the caller is signed in. The clock is the instance's, not the
+   * caller's, so it says something about other players' requests: it is
+   * rounded down to whole minutes, which separates a frozen instance from a
+   * warm one without timing anyone's last request, and a signed-out caller
+   * neither reads it nor resets it.
+   */
+  noteInstance() {
     const now = Date.now();
-    this.entries.push(lastRequestAt === undefined
-      ? { name: 'instance_new', duration: now - loadedAt }
-      : { name: 'idle', duration: now - lastRequestAt });
-    lastRequestAt = now;
+    this.entries.push(instance.lastRequestAt === undefined
+      ? { name: 'instance_new', duration: Math.min(now - instance.bootedAt, TIME_LIMIT_MS) }
+      : { name: 'idle', duration: Math.floor((now - instance.lastRequestAt) / MINUTE_MS) * MINUTE_MS });
+    instance.lastRequestAt = now;
   }
 
   async time<T>(name: string, work: () => Promise<T>): Promise<T> {
@@ -67,7 +88,11 @@ export class ServerTiming {
 export function recordNameLookup(lookup: { duration: number; hits: number; misses: number }) {
   current.getStore()?.addNameLookup(lookup);
 }
-/** Adds `duration` to the span `name` of the request this runs inside; does nothing outside one. */
+/**
+ * Adds `duration` to the span `name` of the request this runs inside; does
+ * nothing outside one. It must never throw: the Mongo pool calls it from inside
+ * the driver's wait-queue processing, which a throw would wedge.
+ */
 export function recordSpanTime(name: string, duration: number) {
   current.getStore()?.add(name, duration);
 }

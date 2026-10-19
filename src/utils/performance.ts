@@ -62,6 +62,8 @@ export type SessionMetric = typeof SESSION_METRICS[number];
 
 /** The metrics reported through `window.__agPerformanceMetric`, rather than from a journey or a fetch. */
 export type ClientMetric = DataCacheMetric | SessionMetric;
+/** What a `ClientMetric` may say about where it was taken: see `window.__agPerformanceMetric`. */
+export interface ClientMetricContext { pathname?: string; dataSource?: PerformanceDataSource }
 
 export const PERFORMANCE_METRIC_NAMES = [
   'navigation', ...JOURNEY_MILESTONES, ...DATA_CACHE_METRICS, ...SESSION_METRICS, 'server_total', 'server_auth', 'server_mongo_connect', 'server_mongo_query', 'server_mongo_checkout', 'server_mongo_handshake', 'server_idle', 'server_instance_new', 'server_player_directory', 'server_names', 'server_unread_chat', 'server_kb_worlds', 'server_response_build', 'server_response', 'server_reactions', 'server_achievements', 'server_serialise', 'response_bytes', 'image_load', 'LCP', 'INP', 'CLS', 'FCP', 'TTFB',

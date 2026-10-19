@@ -10,6 +10,7 @@
 // through `loadSharedResource`, the one request every cached screen shares.
 
 import { isDataCacheOwner, isDataInFlight, loadSharedResource, readCachedData } from "./dataCache";
+import type { RefreshSession } from "./fetchWithSessionRetry";
 
 // Exported so the prefetch and the screen that reads it can't disagree on what
 // they are talking about.
@@ -46,7 +47,7 @@ function savingData(): boolean {
  * Reports `data_prefetch` (how long it took) so the next checkpoint can tell
  * whether the prefetches arrive before the taps. Never on page load or idle.
  */
-export function prefetchGameData(userId: string | null | undefined, gameId: string, refreshSession?: () => Promise<void>): void {
+export function prefetchGameData(userId: string | null | undefined, gameId: string, refreshSession?: RefreshSession): void {
     if (!isDataCacheOwner(userId) || prefetching || savingData()) return;
     const url = gameDataUrl(gameId);
     if (isDataInFlight(userId, url) || readCachedData(userId, url, GAME_DATA_CACHE_MS)) return;

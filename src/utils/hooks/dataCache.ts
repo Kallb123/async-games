@@ -27,7 +27,7 @@
 //
 // Pure TypeScript with no React in it, so it can be tested without a browser.
 
-import { fetchWithSessionRetry, type SessionFetchTiming } from "./fetchWithSessionRetry";
+import { fetchWithSessionRetry, type RefreshSession, type SessionFetchTiming } from "./fetchWithSessionRetry";
 
 /** How many bodies one tab keeps. A board is 13–32 KB, so this is well under a megabyte. */
 export const DATA_CACHE_MAX_ENTRIES = 20;
@@ -124,7 +124,7 @@ export function readCachedData<T>(userId: string | null | undefined, url: string
  * landed since, and this answer may predate it. A local write passes no
  * `startedAt` and always lands. `prefetched` marks a body a prefetch brought.
  */
-export function writeCachedData(userId: string | null | undefined, url: string, body: unknown, startedAt?: number, prefetched = false): boolean {
+export function writeCachedData(userId: string | null | undefined, url: string, body: unknown, { startedAt, prefetched = false }: { startedAt?: number; prefetched?: boolean } = {}): boolean {
     if (!isDataCacheOwner(userId)) return false;
     const key = keyOf(userId, url);
     const existing = entries.get(key);
@@ -173,7 +173,7 @@ export function isDataUnconfirmed(userId: string | null | undefined, url: string
  * the app gets (`fetchWithSessionRetry`). Never throws: a failure is a
  * `ResourceResult` that isn't `parsed`.
  */
-export async function fetchResource(url: string, isCancelled: () => boolean, refreshSession?: () => Promise<void>): Promise<ResourceResult> {
+export async function fetchResource(url: string, isCancelled: () => boolean, refreshSession?: RefreshSession): Promise<ResourceResult> {
     const timing: SessionFetchTiming = { startedAt: 0 };
     let response: Response | null;
     try {
@@ -217,7 +217,7 @@ const isGoneAnswer = (status: number | undefined) => status === 403 || status ==
  * Resolves to the starter's `ResourceResult` for a joiner too, `joined` saying
  * which it was.
  */
-export function loadSharedResource(userId: string, url: string, options: { join: boolean; prefetch?: boolean; refreshSession?: () => Promise<void> }): { result: Promise<ResourceResult>; joined: boolean } {
+export function loadSharedResource(userId: string, url: string, options: { join: boolean; prefetch?: boolean; refreshSession?: RefreshSession }): { result: Promise<ResourceResult>; joined: boolean } {
     const key = keyOf(userId, url);
     const existing = joinable(key);
     if (options.join && existing) {
@@ -229,7 +229,7 @@ export function loadSharedResource(userId: string, url: string, options: { join:
         result: fetchResource(url, () => false, options.refreshSession).then((result) => {
             if (inFlight.get(key) === flight) inFlight.delete(key);
             if (result.parsed) {
-                writeCachedData(userId, url, result.body, startedAt, options.prefetch);
+                writeCachedData(userId, url, result.body, { startedAt, prefetched: options.prefetch });
             } else if (isGoneAnswer(result.response?.status)) {
                 forgetCachedData(userId, url);
             }

@@ -1,7 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-// The module keeps when this instance last began a request, so each test loads it fresh.
+// The instance's clock lives on `globalThis` (see the module), so each test starts a fresh instance.
 async function load() {
+  globalThis.agServerTiming = undefined;
   vi.resetModules();
   return import('./serverTiming');
 }
@@ -16,15 +17,34 @@ afterEach(() => {
 });
 
 describe('ServerTiming', () => {
-  it('says the first request on an instance is its first, and how long the instance sat idle before each later one', async () => {
+  it('says the first request on an instance is its first, and how many whole minutes the instance sat idle before each later one', async () => {
     const { ServerTiming } = await load();
     vi.advanceTimersByTime(40);
-    expect(new ServerTiming().header()).toMatch(/^instance_new;dur=40\.0, total;dur=/);
+    const first = new ServerTiming();
+    first.noteInstance();
+    expect(first.header()).toMatch(/^instance_new;dur=40\.0, total;dur=/);
 
-    vi.advanceTimersByTime(15 * 60_000);
-    const later = new ServerTiming().header();
-    expect(later).toContain('idle;dur=900000.0');
-    expect(later).not.toContain('instance_new');
+    vi.advanceTimersByTime(15 * 60_000 + 59_000);
+    const later = new ServerTiming();
+    later.noteInstance();
+    expect(later.header()).toContain('idle;dur=900000.0');
+    expect(later.header()).not.toContain('instance_new');
+  });
+
+  it('says nothing about the instance, and leaves its clock alone, until the caller is signed in', async () => {
+    const { ServerTiming } = await load();
+    expect(new ServerTiming().header()).not.toMatch(/idle|instance_new/);
+    const first = new ServerTiming();
+    first.noteInstance();
+    expect(first.header()).toContain('instance_new');
+  });
+
+  it('clamps a long-lived instance to the beacon’s cap rather than sending a value it would drop', async () => {
+    const { ServerTiming } = await load();
+    vi.advanceTimersByTime(10 * 60_000);
+    const timing = new ServerTiming();
+    timing.noteInstance();
+    expect(timing.header()).toContain('instance_new;dur=120000.0');
   });
 
   it('sums the time reported from below the request into one span per name', async () => {
@@ -38,6 +58,15 @@ describe('ServerTiming', () => {
     const header = timing.header();
     expect(header).toContain('mongo_checkout;dur=150.5');
     expect(header).toContain('mongo_handshake;dur=90.0');
+  });
+
+  it('shares one instance between every copy of the module, as Next loads it more than once', async () => {
+    const boot = await load();
+    vi.resetModules();
+    const route = await import('./serverTiming');
+    const timing = new route.ServerTiming();
+    await timing.time('mongo_query', async () => boot.recordSpanTime('mongo_checkout', 75));
+    expect(timing.header()).toContain('mongo_checkout;dur=75.0');
   });
 
   it('reports nothing reported outside a request to any request', async () => {

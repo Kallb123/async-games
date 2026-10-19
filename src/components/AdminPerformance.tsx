@@ -67,7 +67,7 @@ export default function AdminPerformance() {
       {data && <div className="ag-field-row"><label>Route <select className="ag-select" value={route} onChange={event => setRoute(event.target.value)}><option value="all">All routes</option>{routes.map(value => <option key={value}>{value}</option>)}</select></label><label>Metric <select className="ag-select" value={metric} onChange={event => setMetric(event.target.value)}><option value="all">All metrics</option>{metrics.map(value => <option key={value}>{value}</option>)}</select></label></div>}
     </Section>
     {data && <ListSection label="Timing percentiles" isLoading={false} isRefreshing={isRefreshing} skeletonRows={0} empty={<div className="ag-empty">No performance samples yet. Use the app, then refresh.</div>}>
-      {rows.map(row => <ListRow key={`${row.name}-${row.route}-${row.cache}-${row.request}-${row.region}-${row.dataSource}`} title={[row.name, row.route, row.cache, row.request, row.region, row.dataSource].filter(Boolean).join(' · ')} sub={`${row.samples} samples · median ${value(row.name, row.median)} · p95 ${value(row.name, row.p95)}`} action={<strong>p75 {value(row.name, row.p75)}</strong>} />)}
+      {rows.map(row => ({ row, parts: [row.name, row.route, row.cache, row.request, row.region, row.dataSource].filter(Boolean) })).map(({ row, parts }) => <ListRow key={parts.join('-')} title={parts.join(' · ')} sub={`${row.samples} samples · median ${value(row.name, row.median)} · p95 ${value(row.name, row.p95)}`} action={<strong>p75 {value(row.name, row.p75)}</strong>} />)}
     </ListSection>}
   </>;
 }

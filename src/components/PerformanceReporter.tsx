@@ -5,8 +5,8 @@ import { useEffect } from 'react';
 import { onCLS, onFCP, onINP, onLCP, onTTFB } from 'web-vitals/attribution';
 import { apiEntryMatcher } from '@/utils/apiResourceEntries';
 import type { SessionFetchTiming } from '@/utils/hooks/fetchWithSessionRetry';
-import { SESSION_REFRESH_TIMEOUT_MS } from '@/utils/hooks/useAuthGuard';
-import { apiFetchMetrics, loadJourney, nextJourney, performanceRegion, safeRoute, serverTimingMetrics, vitalPhaseMetrics, type ClientMetric, type Journey, type JourneyMilestone, type PerformanceDataSource, type PerformanceMetricInput, type PerformanceMetricName, type PerformanceRequest, type VitalAttributionInput } from '@/utils/performance';
+import { sessionMetric } from '@/utils/hooks/useAuthGuard';
+import { apiFetchMetrics, loadJourney, nextJourney, performanceRegion, safeRoute, serverTimingMetrics, vitalPhaseMetrics, type ClientMetric, type ClientMetricContext, type Journey, type JourneyMilestone, type PerformanceMetricInput, type PerformanceMetricName, type PerformanceRequest, type VitalAttributionInput } from '@/utils/performance';
 
 declare global {
   interface Window {
@@ -19,7 +19,7 @@ declare global {
      * says where the current screen's first data came from, and tags the rest
      * of its journey with it.
      */
-    __agPerformanceMetric?: (name: ClientMetric, value: number, context?: { pathname?: string; dataSource?: PerformanceDataSource }) => void;
+    __agPerformanceMetric?: (name: ClientMetric, value: number, context?: ClientMetricContext) => void;
     /** A screen's own data fetch, answered: its server spans, retry, size and time on the wire. */
     __agPerformanceFetch?: (fetch: PerformanceFetch) => void;
   }
@@ -120,8 +120,8 @@ function reportFetch({ url, response, timing, request }: PerformanceFetch) {
   const spans = serverTimingMetrics(response.headers.get('server-timing'));
   for (const span of spans) enqueue(sample(span.name, span.value, request));
   if (timing.retryMs !== undefined) enqueue(sample('session_retry', timing.retryMs, request));
-  // A renewal that ran to its deadline gave up rather than answered.
-  if (timing.renewMs !== undefined) enqueue(sample(timing.renewMs >= SESSION_REFRESH_TIMEOUT_MS ? 'session_renew_timeout' : 'session_renew', timing.renewMs, request));
+  const renewal = timing.renewal && sessionMetric('renew', timing.renewal);
+  if (renewal) enqueue(sample(renewal.name, renewal.value, request));
   // Taken now: by the time the browser's record arrives the player may be on
   // another screen, and these belong to this one.
   const context = sampleContext(request);
@@ -158,7 +158,7 @@ function registerVitals() {
   onINP(metric => reportAttributedVital(metric, metric.attribution.interactionTargetElement));
 }
 
-function recordClientMetric(name: ClientMetric, value: number, { pathname, dataSource }: { pathname?: string; dataSource?: PerformanceDataSource } = {}) {
+function recordClientMetric(name: ClientMetric, value: number, { pathname, dataSource }: ClientMetricContext = {}) {
   // Read first: a screen's first-data source tags its journey from here on,
   // so the milestones it marks next can be split by it.
   if (dataSource) currentJourney().dataSource = dataSource;

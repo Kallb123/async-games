@@ -44,7 +44,7 @@ export const REQUEST_TIMEOUT_MS = 20000;
 export async function fetchWithSessionRetry(
     input: string,
     isCancelled: () => boolean,
-    refreshSession?: () => Promise<void>,
+    refreshSession?: RefreshSession,
     timing?: SessionFetchTiming,
 ): Promise<Response | null> {
     const first = performance.now();
@@ -52,11 +52,8 @@ export async function fetchWithSessionRetry(
     const res = await attempt(input);
     if (res?.status !== 401) return res;
 
-    if (refreshSession) {
-        const renewing = performance.now();
-        await refreshSession();
-        if (timing) timing.renewMs = performance.now() - renewing;
-    }
+    const renewal = await refreshSession?.();
+    if (timing && renewal) timing.renewal = renewal;
     await new Promise((resolve) => setTimeout(resolve, AUTH_RETRY_DELAY_MS));
     if (isCancelled()) return null;
     if (timing) {
@@ -72,9 +69,19 @@ export interface SessionFetchTiming {
     startedAt: number;
     /** Set only when the session had to be renewed: how long the refused attempt, the renewal and the wait cost. */
     retryMs?: number;
-    /** Set only when there was a renewal to run: how long Clerk took over it, the part of `retryMs` that is neither the refused attempt nor the fixed wait. */
-    renewMs?: number;
+    /** Set only when the renewal said how it went: Clerk's part of `retryMs`, which is neither the refused attempt nor the fixed wait. */
+    renewal?: TokenAsk;
 }
+
+/**
+ * How one ask of Clerk for a session token went: whether it answered, ran to
+ * its deadline or failed, and how long it took — null when the page was hidden
+ * for some of it, as a throttled timer makes that time meaningless.
+ */
+export interface TokenAsk { outcome: 'answered' | 'timeout' | 'failed'; tookMs: number | null }
+
+/** Renews the session before a retry, saying how the ask went where it can (`useSessionRefresh` does). */
+export type RefreshSession = () => Promise<TokenAsk | void>;
 
 async function attempt(input: string): Promise<Response | null> {
     try {

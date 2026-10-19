@@ -3,6 +3,8 @@ import { useCallback, useEffect, useRef, useSyncExternalStore } from "react";
 import { useAuth, useUser } from "@clerk/nextjs";
 import { useRouter } from "next/navigation";
 import { withTimeout } from "@/utils/withTimeout";
+import type { SessionMetric } from "@/utils/performance";
+import type { TokenAsk } from "./fetchWithSessionRetry";
 
 type ClerkUser = NonNullable<ReturnType<typeof useUser>["user"]>;
 
@@ -35,15 +37,18 @@ function confirmSession(getToken: () => Promise<unknown>) {
     confirming = true;
     // Bounded like every other renewal: a Clerk that never answers holds the
     // app back for SESSION_REFRESH_TIMEOUT_MS, then the 401 retries take over.
-    // Timed, because every request on the page waits on it: a confirmation
-    // that ran to the deadline is reported as the deadline, not as an answer.
-    const startedAt = performance.now();
-    void withTimeout(getToken, SESSION_REFRESH_TIMEOUT_MS, null, 'Confirming the session token').then(() => {
-        const tookMs = performance.now() - startedAt;
-        window.__agPerformanceMetric?.(tookMs >= SESSION_REFRESH_TIMEOUT_MS ? 'session_confirm_timeout' : 'session_confirm', tookMs);
-        window.__agPerformanceMark?.('session_ready');
+    void askForToken(getToken, 'Confirming the session token').then(ask => {
         sessionConfirmed = true;
         sessionListeners.forEach(listener => listener());
+        // Timed, because every request on the page waits on it. Reported only
+        // once the page is authorised, and never able to throw into it.
+        try {
+            const metric = sessionMetric('confirm', ask);
+            if (metric) window.__agPerformanceMetric?.(metric.name, metric.value);
+            window.__agPerformanceMark?.('session_ready');
+        } catch (error) {
+            console.error('Reporting the session confirmation failed', error);
+        }
     });
 }
 
@@ -83,7 +88,39 @@ export function useIsAuthorised() {
  * exact reason; `withTimeout` is how everything that isn't a `fetch` gets the
  * same treatment.
  */
-export const SESSION_REFRESH_TIMEOUT_MS = 5000;
+const SESSION_REFRESH_TIMEOUT_MS = 5000;
+
+/**
+ * Asks Clerk for a session token, bounded by SESSION_REFRESH_TIMEOUT_MS: a
+ * Clerk that is unreachable, won't renew or never answers is "no new token",
+ * and the caller goes ahead regardless. Says which way it ended, so a failure
+ * isn't timed as a fast answer, nor a deadline as a slow one.
+ */
+async function askForToken(ask: () => Promise<unknown>, label: string): Promise<TokenAsk> {
+    const visible = () => document.visibilityState !== 'hidden';
+    const visibleAtStart = visible();
+    const startedAt = performance.now();
+    const outcome = await withTimeout<TokenAsk['outcome']>(
+        () => ask().then(() => 'answered', (error: unknown) => {
+            console.error(`${label} failed`, error);
+            return 'failed';
+        }),
+        SESSION_REFRESH_TIMEOUT_MS,
+        'timeout',
+        label,
+    );
+    return { outcome, tookMs: visibleAtStart && visible() ? performance.now() - startedAt : null };
+}
+
+/**
+ * How a session confirmation or renewal is reported: its time, under the
+ * `_timeout` name when it ran to the deadline. Nothing for one that failed (it
+ * says nothing about how long Clerk takes) or that the page was hidden for.
+ */
+export function sessionMetric(kind: 'confirm' | 'renew', ask: TokenAsk): { name: SessionMetric; value: number } | null {
+    if (ask.outcome === 'failed' || ask.tookMs === null) return null;
+    return { name: ask.outcome === 'timeout' ? `session_${kind}_timeout` : `session_${kind}`, value: ask.tookMs };
+}
 
 /**
  * Asks Clerk for a fresh session token, so that the cookie the API reads is the
@@ -101,7 +138,7 @@ export const SESSION_REFRESH_TIMEOUT_MS = 5000;
  * its fetch whenever the identity of what it fetches with changes — a fresh
  * function per render there would be a fetch per render.
  */
-export function useSessionRefresh(): () => Promise<void> {
+export function useSessionRefresh(): () => Promise<TokenAsk> {
     const { getToken } = useAuth();
     // Kept current after each render rather than during it: writing a ref while
     // rendering is a side effect (react-hooks/refs), and this is only ever read
@@ -112,16 +149,9 @@ export function useSessionRefresh(): () => Promise<void> {
     });
 
     // Clerk unreachable, a session it won't renew, a call that never answers:
-    // `withTimeout` turns all three into "no new token", and the caller retries
-    // regardless — this is the part of the attempt that can be skipped.
-    return useCallback(async () => {
-        await withTimeout(
-            () => getTokenRef.current({ skipCache: true }),
-            SESSION_REFRESH_TIMEOUT_MS,
-            null,
-            'Renewing the session token',
-        );
-    }, []);
+    // all three are "no new token", and the caller retries regardless — this
+    // is the part of the attempt that can be skipped.
+    return useCallback(() => askForToken(() => getTokenRef.current({ skipCache: true }), 'Renewing the session token'), []);
 }
 
 /**
