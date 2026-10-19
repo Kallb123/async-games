@@ -815,7 +815,7 @@ export default function BoardZoom({ zoomWidth, maxWidth, viewBox, focus, onFocus
                                 <>
                                     {/* Scrolled over in the board's place, the shape of its viewBox at the zoom. */}
                                     <div className="ag-board-zoom-spacer" style={{ aspectRatio: `${viewBox.width} / ${viewBox.height}` }} aria-hidden="true" />
-                                    <div className="ag-board-zoom-slot">{children}</div>
+                                    <div className="ag-board-zoom-slot" data-perf-region="camera">{children}</div>
                                 </>
                             ) : children}
                         </BoardCentreContext.Provider>

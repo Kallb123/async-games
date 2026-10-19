@@ -35,7 +35,13 @@ function confirmSession(getToken: () => Promise<unknown>) {
     confirming = true;
     // Bounded like every other renewal: a Clerk that never answers holds the
     // app back for SESSION_REFRESH_TIMEOUT_MS, then the 401 retries take over.
+    // Timed, because every request on the page waits on it: a confirmation
+    // that ran to the deadline is reported as the deadline, not as an answer.
+    const startedAt = performance.now();
     void withTimeout(getToken, SESSION_REFRESH_TIMEOUT_MS, null, 'Confirming the session token').then(() => {
+        const tookMs = performance.now() - startedAt;
+        window.__agPerformanceMetric?.(tookMs >= SESSION_REFRESH_TIMEOUT_MS ? 'session_confirm_timeout' : 'session_confirm', tookMs);
+        window.__agPerformanceMark?.('session_ready');
         sessionConfirmed = true;
         sessionListeners.forEach(listener => listener());
     });
@@ -77,7 +83,7 @@ export function useIsAuthorised() {
  * exact reason; `withTimeout` is how everything that isn't a `fetch` gets the
  * same treatment.
  */
-const SESSION_REFRESH_TIMEOUT_MS = 5000;
+export const SESSION_REFRESH_TIMEOUT_MS = 5000;
 
 /**
  * Asks Clerk for a fresh session token, so that the cookie the API reads is the

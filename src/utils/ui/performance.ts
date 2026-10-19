@@ -15,9 +15,9 @@ const cell = (text: string) => text.replace(/\\/g, '\\\\').replace(/\|/g, '\\|')
 export function performanceTable<Row extends PerformanceSummary>(rows: Row[], lead: { heading: string; cell: (row: Row) => string }[] = []): string[] {
   const leading = (row: Row) => lead.map(column => `${cell(column.cell(row))} | `).join('');
   return [
-    `| ${lead.map(column => `${column.heading} | `).join('')}Metric | Route | Load | Request | Region | Samples | Median | p75 | p95 |`,
-    `| ${lead.map(() => '--- | ').join('')}--- | --- | --- | --- | --- | ---: | ---: | ---: | ---: |`,
-    ...rows.map(row => `| ${leading(row)}${cell(row.name)} | ${cell(row.route)} | ${cell(row.cache ?? '')} | ${cell(row.request ?? '')} | ${cell(row.region ?? '')} | ${row.samples} | ${[row.median, row.p75, row.p95].map(n => formatPerformanceValue(row.name, n)).join(' | ')} |`),
+    `| ${lead.map(column => `${column.heading} | `).join('')}Metric | Route | Load | Request | Region | Data | Samples | Median | p75 | p95 |`,
+    `| ${lead.map(() => '--- | ').join('')}--- | --- | --- | --- | --- | --- | ---: | ---: | ---: | ---: |`,
+    ...rows.map(row => `| ${leading(row)}${cell(row.name)} | ${cell(row.route)} | ${cell(row.cache ?? '')} | ${cell(row.request ?? '')} | ${cell(row.region ?? '')} | ${cell(row.dataSource ?? '')} | ${row.samples} | ${[row.median, row.p75, row.p95].map(n => formatPerformanceValue(row.name, n)).join(' | ')} |`),
   ];
 }
 

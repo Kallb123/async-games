@@ -207,8 +207,8 @@ test('time the plan’s journeys on a throttled phone', async ({ browser, page: 
 /** Each step's samples summarised across runs, as the admin report summarises a week. A screen's later refreshes are left out. */
 function journeysMarkdown(samples: Sample[]): string {
   const timed = samples.filter(sample => sample.request !== 'refresh' && sample.step !== 'setup');
-  const rows = summarisePerformance(timed, sample => [sample.step, sample.name, sample.route, sample.cache, sample.request, sample.region])
-    .map(({ sample, stats }) => ({ step: sample.step, name: sample.name, route: sample.route, cache: sample.cache, request: sample.request, region: sample.region, ...stats }));
+  const rows = summarisePerformance(timed, sample => [sample.step, sample.name, sample.route, sample.cache, sample.request, sample.region, sample.dataSource])
+    .map(({ sample, stats }) => ({ step: sample.step, name: sample.name, route: sample.route, cache: sample.cache, request: sample.request, region: sample.region, dataSource: sample.dataSource, ...stats }));
   return [
     '# Journey traces',
     '',

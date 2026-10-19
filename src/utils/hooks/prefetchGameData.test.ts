@@ -53,7 +53,7 @@ describe("prefetchGameData", () => {
         await vi.advanceTimersByTimeAsync(0);
 
         expect(readCachedData(ALICE, gameDataUrl("g1"), GAME_DATA_CACHE_MS)?.body).toEqual({ gameData: { n: 1 } });
-        expect(metric).toHaveBeenCalledWith("data_prefetch", expect.any(Number), "/");
+        expect(metric).toHaveBeenCalledWith("data_prefetch", expect.any(Number), { pathname: "/" });
     });
 
     it("does nothing until the viewer is authorised", () => {

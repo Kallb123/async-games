@@ -149,4 +149,31 @@ describe("fetchWithSessionRetry's timing", () => {
         expect(timing.retryMs).toBeGreaterThanOrEqual(1000);
         expect(timing.startedAt).toBeGreaterThanOrEqual(before + 1000);
     });
+
+    it("records the renewal on its own, apart from the fixed wait", async () => {
+        vi.useFakeTimers();
+        stubFetch(401, 200);
+        const { fetchWithSessionRetry } = await import("./fetchWithSessionRetry");
+        const timing: SessionFetchTiming = { startedAt: 0 };
+
+        const pending = fetchWithSessionRetry('/api/x', () => false, () => new Promise(resolve => setTimeout(resolve, 2000)), timing);
+        await vi.runAllTimersAsync();
+        await pending;
+        expect(timing.renewMs).toBeGreaterThanOrEqual(2000);
+        expect(timing.renewMs).toBeLessThan(3000);
+        expect(timing.retryMs).toBeGreaterThanOrEqual(3000);
+    });
+
+    it("records no renewal when there was nothing to renew with", async () => {
+        vi.useFakeTimers();
+        stubFetch(401, 200);
+        const { fetchWithSessionRetry } = await import("./fetchWithSessionRetry");
+        const timing: SessionFetchTiming = { startedAt: 0 };
+
+        const pending = fetchWithSessionRetry('/api/x', () => false, undefined, timing);
+        await vi.runAllTimersAsync();
+        await pending;
+        expect(timing.renewMs).toBeUndefined();
+        expect(timing.retryMs).toBeGreaterThanOrEqual(1000);
+    });
 });

@@ -107,7 +107,7 @@ describe("a screen that opted in to the cache", () => {
         expect(second.current.isLoading).toBe(false);
         expect(second.current.isRefreshing).toBe(true);
         expect(requested(URL_A)).toBe(2);
-        expect(metric).toHaveBeenCalledWith("data_cache_hit", 4_000);
+        expect(metric).toHaveBeenCalledWith("data_cache_hit", 4_000, { dataSource: "hit" });
         expect(mark).toHaveBeenCalledWith("first_data");
         expect(isDataUnconfirmed(ALICE, URL_A)).toBe(true);
 
@@ -124,8 +124,8 @@ describe("a screen that opted in to the cache", () => {
         await screen.render();
         expect(screen.current.data).toBeNull();
         expect(screen.current.isLoading).toBe(true);
-        expect(metric).toHaveBeenCalledWith("data_cache_miss", 0);
-        expect(metric).not.toHaveBeenCalledWith("data_cache_hit", expect.anything());
+        expect(metric).toHaveBeenCalledWith("data_cache_miss", 0, { dataSource: "miss" });
+        expect(metric).not.toHaveBeenCalledWith("data_cache_hit", expect.anything(), expect.anything());
         expect(isDataUnconfirmed(ALICE, URL_A)).toBe(false);
     });
 
@@ -194,6 +194,8 @@ describe("a screen that opted in to the cache", () => {
         await screen.render();
         expect(requested(url)).toBe(1);
         expect(screen.current.isLoading).toBe(true);
+        // Not in the cache, but not a wait from scratch either: the report says which.
+        expect(metric).toHaveBeenCalledWith("data_cache_miss", 0, { dataSource: "joined" });
 
         await answer(url, { n: 7 });
         expect(screen.current.data).toEqual({ n: 7 });
@@ -215,6 +217,7 @@ describe("a screen that opted in to the cache", () => {
         expect(screen.current.isRefreshing).toBe(true);
         expect(requested(url)).toBe(2);
         expect(isDataUnconfirmed(ALICE, url)).toBe(true);
+        expect(metric).toHaveBeenCalledWith("data_cache_hit", expect.any(Number), { dataSource: "prefetch" });
 
         // ...and the bar comes down when the second answer lands.
         await answer(url, { n: 8 });

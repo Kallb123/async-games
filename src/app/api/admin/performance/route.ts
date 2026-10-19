@@ -4,7 +4,7 @@ import { dbConnect } from '@/utils/mongodb/mongodb';
 import { PerformanceMetricModel } from '@/utils/mongodb/PerformanceMetricData';
 import { consumeRateLimit } from '@/utils/rateLimit';
 import { CANONICAL_BUILD, PERFORMANCE_RETENTION_MS, parsePerformanceWindow } from '@/utils/performanceWindow';
-import { JOURNEY_METRICS, summarisePerformance, type PerformanceCache, type PerformanceRequest, type PerformanceStats } from '@/utils/performance';
+import { JOURNEY_METRICS, summarisePerformance, type PerformanceCache, type PerformanceDataSource, type PerformanceRequest, type PerformanceStats } from '@/utils/performance';
 
 export interface PerformanceSummary extends PerformanceStats {
   name: string; route: string;
@@ -14,6 +14,8 @@ export interface PerformanceSummary extends PerformanceStats {
   request?: PerformanceRequest;
   /** A vital's attribution: the part of the page it names (see `PERFORMANCE_REGIONS`). */
   region?: string;
+  /** Journey milestones and the cache metrics: where the screen's first data came from (see `PERFORMANCE_DATA_SOURCES`). */
+  dataSource?: PerformanceDataSource;
 }
 /** One deploy seen in the retention window, for the report's "from build" choice. */
 export interface PerformanceBuild { build: string; firstSeen: string; samples: number; }
@@ -87,7 +89,7 @@ export async function GET(request: NextRequest) {
   // timestamp (see `CANONICAL_BUILD`), so string order is time order. A sample
   // with no `build` doesn't match `$gte`, so it drops out when this is set.
   const read = (filter: object) => PerformanceMetricModel.find({ createdAt: { $gte: since }, ...(build && { build: { $gte: build } }), ...filter })
-    .select({ name: 1, route: 1, value: 1, cache: 1, request: 1, region: 1, _id: 0 }).sort({ createdAt: -1 }).limit(20_000).lean();
+    .select({ name: 1, route: 1, value: 1, cache: 1, request: 1, region: 1, dataSource: 1, _id: 0 }).sort({ createdAt: -1 }).limit(20_000).lean();
   const [reads, builds] = await Promise.all([
     Promise.all([
       read({ request: { $exists: false }, $or: [{ name: { $nin: [...JOURNEY_METRICS] } }, { cache: { $exists: true } }] }),
@@ -97,11 +99,12 @@ export async function GET(request: NextRequest) {
   ]);
   const rows = reads.flat();
   const loadOf = (row: { name: string; cache?: string }) => JOURNEY_METRICS.has(row.name) ? row.cache : undefined;
-  const summaries = summarisePerformance(rows, row => [row.name, row.route, loadOf(row), row.request, row.region])
+  const summaries = summarisePerformance(rows, row => [row.name, row.route, loadOf(row), row.request, row.region, row.dataSource])
     .map(({ sample, stats }): PerformanceSummary => {
       const cache = loadOf(sample);
       return { name: sample.name, route: sample.route, ...(cache && { cache: cache as PerformanceCache }),
-        ...(sample.request && { request: sample.request as PerformanceRequest }), ...(sample.region && { region: sample.region }), ...stats };
+        ...(sample.request && { request: sample.request as PerformanceRequest }), ...(sample.region && { region: sample.region }),
+        ...(sample.dataSource && { dataSource: sample.dataSource as PerformanceDataSource }), ...stats };
     })
     .sort((a, b) => b.samples - a.samples || a.name.localeCompare(b.name));
   return NextResponse.json({ since: since.toISOString(), build, totalSamples: rows.length, summaries, builds } satisfies AdminPerformanceResponse);

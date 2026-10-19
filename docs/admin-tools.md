@@ -597,19 +597,27 @@ API route at all — a client screen behind the same `isAdmin` gate is enough.
 plan. It shows median, p75 and p95 values per metric and route, over the last seven
 days unless the page says otherwise: it can start the window at 24 hours, 7 or 30 days
 ago or at a date and time (`since`), and keep only samples sent by one build or a later
-one (`build`, picked from the newest builds the report lists), which is how a
+one (`build`, picked from the newest builds the report lists, or "Built since the
+window start", which reaches any build however many deploys followed it), which is how a
 checkpoint leaves out the app from before a deploy. The
 browser records Core Web Vitals plus navigation intent, route commit, Clerk
 authorisation, first JSON, dashboard usability, board paint/interactivity,
 response bytes and image load duration. Dashboard and game responses also expose
-`Server-Timing` for authentication, Mongo connection/query, response building,
-reaction lookup and JSON serialisation; the client records those spans beside the
+`Server-Timing` for authentication, Mongo connection/query (and, inside the query,
+the pool's connection waits and handshakes), response building, reaction lookup and
+JSON serialisation, plus how long the instance sat idle before the request or that it
+is the instance's first; the client records those spans beside the
 journey. `names` is the time spent resolving player names (the Clerk directory
 lookup), nested inside the span it ran in — `response` on a game,
 `player_directory` on the dashboard — rather than taken out of it, and a
 `names_cache` entry carries the directory cache's hit and miss counts as a
 `desc` (visible in devtools, not recorded). The dashboard also times its unread
-chat counts (`unread_chat`) and Kingdom Builder worlds (`kb_worlds`).
+chat counts (`unread_chat`) and Kingdom Builder worlds (`kb_worlds`). The
+**Data** column splits a cache-enabled screen's journey by where its first data
+came from (`hit`, `prefetch`, `joined` or `miss`); the session's confirmation and
+renewals are timed as `session_confirm` and `session_renew`, each with a
+`_timeout` twin for one that ran to its deadline. See "How the client timings are
+measured" in the loading performance plan for each.
 
 A document load's `TTFB` is also split into the phases the browser reports for
 it — `TTFB_waiting`, `TTFB_cache`, `TTFB_dns`, `TTFB_connection` and

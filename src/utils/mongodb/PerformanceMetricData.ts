@@ -9,6 +9,7 @@ export interface IPerformanceMetric {
   cache?: string;
   request?: string;
   region?: string;
+  dataSource?: string;
   connection?: string;
   build?: string;
   createdAt: Date;
@@ -22,6 +23,7 @@ const PerformanceMetricSchema = new Schema<IPerformanceMetric>({
   cache: String,
   request: String,
   region: String,
+  dataSource: String,
   connection: String,
   build: String,
   createdAt: { type: Date, default: Date.now, expires: 60 * 60 * 24 * 30, index: true },

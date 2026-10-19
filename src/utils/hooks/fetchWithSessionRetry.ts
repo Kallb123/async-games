@@ -52,7 +52,11 @@ export async function fetchWithSessionRetry(
     const res = await attempt(input);
     if (res?.status !== 401) return res;
 
-    await refreshSession?.();
+    if (refreshSession) {
+        const renewing = performance.now();
+        await refreshSession();
+        if (timing) timing.renewMs = performance.now() - renewing;
+    }
     await new Promise((resolve) => setTimeout(resolve, AUTH_RETRY_DELAY_MS));
     if (isCancelled()) return null;
     if (timing) {
@@ -68,6 +72,8 @@ export interface SessionFetchTiming {
     startedAt: number;
     /** Set only when the session had to be renewed: how long the refused attempt, the renewal and the wait cost. */
     retryMs?: number;
+    /** Set only when there was a renewal to run: how long Clerk took over it, the part of `retryMs` that is neither the refused attempt nor the fixed wait. */
+    renewMs?: number;
 }
 
 async function attempt(input: string): Promise<Response | null> {

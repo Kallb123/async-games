@@ -5,14 +5,21 @@ import { useEffect } from 'react';
 import { onCLS, onFCP, onINP, onLCP, onTTFB } from 'web-vitals/attribution';
 import { apiEntryMatcher } from '@/utils/apiResourceEntries';
 import type { SessionFetchTiming } from '@/utils/hooks/fetchWithSessionRetry';
-import { apiFetchMetrics, loadJourney, nextJourney, performanceRegion, safeRoute, serverTimingMetrics, vitalPhaseMetrics, type Journey, type DataCacheMetric, type JourneyMilestone, type PerformanceMetricInput, type PerformanceMetricName, type PerformanceRequest, type VitalAttributionInput } from '@/utils/performance';
+import { SESSION_REFRESH_TIMEOUT_MS } from '@/utils/hooks/useAuthGuard';
+import { apiFetchMetrics, loadJourney, nextJourney, performanceRegion, safeRoute, serverTimingMetrics, vitalPhaseMetrics, type ClientMetric, type Journey, type JourneyMilestone, type PerformanceDataSource, type PerformanceMetricInput, type PerformanceMetricName, type PerformanceRequest, type VitalAttributionInput } from '@/utils/performance';
 
 declare global {
   interface Window {
     /** A milestone reached now, timed from the start of the current journey. */
     __agPerformanceMark?: (name: JourneyMilestone) => void;
-    /** How the data cache did (see `DATA_CACHE_METRICS`). `pathname` names the route it was for, when that isn't the one the player is on by now. */
-    __agPerformanceMetric?: (name: DataCacheMetric, value: number, pathname?: string) => void;
+    /**
+     * How the data cache did (see `DATA_CACHE_METRICS`), or how long Clerk took
+     * over the session (see `SESSION_METRICS`). `pathname` names the route it
+     * was for, when that isn't the one the player is on by now; `dataSource`
+     * says where the current screen's first data came from, and tags the rest
+     * of its journey with it.
+     */
+    __agPerformanceMetric?: (name: ClientMetric, value: number, context?: { pathname?: string; dataSource?: PerformanceDataSource }) => void;
     /** A screen's own data fetch, answered: its server spans, retry, size and time on the wire. */
     __agPerformanceFetch?: (fetch: PerformanceFetch) => void;
   }
@@ -113,6 +120,8 @@ function reportFetch({ url, response, timing, request }: PerformanceFetch) {
   const spans = serverTimingMetrics(response.headers.get('server-timing'));
   for (const span of spans) enqueue(sample(span.name, span.value, request));
   if (timing.retryMs !== undefined) enqueue(sample('session_retry', timing.retryMs, request));
+  // A renewal that ran to its deadline gave up rather than answered.
+  if (timing.renewMs !== undefined) enqueue(sample(timing.renewMs >= SESSION_REFRESH_TIMEOUT_MS ? 'session_renew_timeout' : 'session_renew', timing.renewMs, request));
   // Taken now: by the time the browser's record arrives the player may be on
   // another screen, and these belong to this one.
   const context = sampleContext(request);
@@ -149,8 +158,11 @@ function registerVitals() {
   onINP(metric => reportAttributedVital(metric, metric.attribution.interactionTargetElement));
 }
 
-function recordDataMetric(name: DataCacheMetric, value: number, pathname?: string) {
-  const metric = sample(name, value);
+function recordClientMetric(name: ClientMetric, value: number, { pathname, dataSource }: { pathname?: string; dataSource?: PerformanceDataSource } = {}) {
+  // Read first: a screen's first-data source tags its journey from here on,
+  // so the milestones it marks next can be split by it.
+  if (dataSource) currentJourney().dataSource = dataSource;
+  const metric = { ...sample(name, value), dataSource };
   enqueue(pathname === undefined ? metric : { ...metric, route: safeRoute(pathname) });
 }
 
@@ -161,7 +173,7 @@ function mark(name: JourneyMilestone) {
   const current = currentJourney();
   if (current.hidden || current.marked.has(name)) return;
   current.marked.add(name);
-  report(name, now - current.start);
+  enqueue({ ...sample(name, now - current.start), dataSource: current.dataSource });
 }
 
 /** App-wide route, Core Web Vital, and custom journey timing collector. */
@@ -171,7 +183,7 @@ export default function PerformanceReporter() {
   useEffect(() => {
     registerVitals();
     window.__agPerformanceMark = mark;
-    window.__agPerformanceMetric = recordDataMetric;
+    window.__agPerformanceMetric = recordClientMetric;
     window.__agPerformanceFetch = reportFetch;
     currentJourney();
     // Any tap or key press may be the one that navigates: post-mutation
