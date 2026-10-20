@@ -178,8 +178,9 @@ export default function GameRealmArena({ params }: { params: Promise<{ gameid: u
     // and a long walk doesn't start off the frame. That is worked out as the
     // action is sent, and goes when the playback does.
     const [own, setOwn] = useState<OwnPlayback | null>(null);
-    // Reset during render rather than by `useResettingState`, whose value would
-    // come back on returning to the mode it was held in.
+    // Reset during render by hand rather than by `useResettingState`: `own` is
+    // moved on with an updater (`setOwn(current => …)`), which its setter
+    // doesn't take.
     const [ownMode, setOwnMode] = useState(nav.mode);
     if (ownMode !== nav.mode) {
         setOwnMode(nav.mode);
