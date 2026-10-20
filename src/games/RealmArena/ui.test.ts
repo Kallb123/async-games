@@ -1230,6 +1230,28 @@ describe("an HP bar through an action", () => {
         expect(toldAt(two, after, 500 + HP_TWEEN_MS * 2).drawn.hp).toBe(max - 6);
     });
 
+    it("holds a mover's HP until the overwatch shot or guard blow that hits it lands, mid-walk", () => {
+        const mover = ready(0, "a", "knight", 10);
+        const watchers = [ready(1, "b", "archer", 50), ready(2, "b", "knight", 13)];
+        const left = { ...mover, square: 15, hp: mover.hp - 5 };
+        const cues = battleCues(FIELD, [
+            { kind: "moved", fighter: 0, path: [10, 11, 12], sneaking: false },
+            { kind: "shot", fighter: 1, target: 0, chance: 60, result: "hit", damage: 3, reaction: true },
+            { kind: "moved", fighter: 0, path: [12, 13], sneaking: false },
+            { kind: "struck", fighter: 2, target: 0, damage: 2, reaction: true },
+            { kind: "moved", fighter: 0, path: [13, 14, 15], sneaking: false },
+        ], [mover, ...watchers], [left, ...watchers]);
+        const blows = cues.filter((cue): cue is TextCue => cue.kind === "text" && cue.fighter === 0 && cue.hpChange !== undefined);
+        expect(blows.map(cue => cue.hpChange)).toEqual([-3, -2]);
+        const one = toldOf(cues, mover, left, false)!;
+        expect(one.steps.map(step => step.at)).toEqual(blows.map(cue => cue.start));
+        // Full HP through the walk and the arrow's flight; each blow takes its HP only as it lands.
+        expect(toldAt(one, left, blows[0].start - 1).drawn.hp).toBe(mover.hp);
+        expect(toldAt(one, left, blows[0].start + HP_TWEEN_MS).drawn.hp).toBe(mover.hp - 3);
+        expect(toldAt(one, left, blows[1].start - 1).drawn.hp).toBeGreaterThan(mover.hp - 5);
+        expect(toldAt(one, left, blows[1].start + HP_TWEEN_MS).drawn.hp).toBe(mover.hp - 5);
+    });
+
     it("always ends the last step on the fighter's real HP, even if the cues don't add up", () => {
         const after = hurt(max - 3);
         const lying = told([text(0, -1)], after);
