@@ -21,7 +21,7 @@ import { rematchFlag } from "@/utils/ui/rematch";
 import { reachAfter, useTurnDraft } from "@/games/RealmArena/useTurnDraft";
 import { battlefieldOf } from "@/games/RealmArena/maps";
 import { canAct, allied, armouredTeam, battleFrom, centreHolders, ENEMY_SIDE, isStanding, isWarband, sideScore, squadHp, stoutTeam, TEAM_SIDE, warbandsFor, type Action, type BattleEvent, type Fighter } from "@/games/RealmArena/rules";
-import { actionFollow, battleCues, centreInSight, endOf, coopColourOf, ENEMY_COLOUR, fighterName, friendlySquares, isFollowedPart, isUnplaced, partFollow, partLabel, reviewParts, STEP_BEAT_MS, STEP_MIN_MS, TEAM_COLOUR, TEAM_NAME, unseenSquares, waveLineOf, withPartState } from "@/games/RealmArena/ui";
+import { actionFollow, battleCues, centreInSight, endOf, coopColourOf, ENEMY_COLOUR, fighterName, foundBy, friendlySquares, isFollowedPart, isUnplaced, partFollow, partLabel, reviewParts, STEP_BEAT_MS, STEP_MIN_MS, TEAM_COLOUR, TEAM_NAME, unseenSquares, waveLineOf, withPartState } from "@/games/RealmArena/ui";
 import type { IRealmArenaOutcome } from "@/games/RealmArena/RealmArenaLogic";
 import type { ICommandResponse } from "@/app/api/game/command/route";
 import TurnNavControls from "@/components/games/TurnNavControls";
@@ -429,6 +429,14 @@ export default function GameRealmArena({ params }: { params: Promise<{ gameid: u
     // (§26.1), whoever took it.
     const playback: Playback | null = nav.isLive ? ownPlayback
         : partPlays ? { key: partKey, cues: part.cues, events: part.events, field: part.field, before: part.before.fighters } : null;
+    // The text round the board — the units, the selected card, the team meter,
+    // the squads' standing — keeps everyone as the action found them while its
+    // figures play it, so an overwatch shot or a guard's blow isn't taken off
+    // before the board shows it land (the board steps its own bars, `toldAt`).
+    const holding = !!playback && (nav.isLive || playedKey !== partKey);
+    const shownFighters = holding && playback ? foundBy(fighters, playback.before) : fighters;
+    const shownBattle = holding ? { ...battle, fighters: shownFighters } : battle;
+    const shownSelected = selected && shownFighters.find(fighter => fighter.id === selected.id);
     // Which part of the step the dock says it is on, for a step with several.
     const stepDetail = parts.length > 1 ? partLabel(parts, partIndex, enemyName) : undefined;
 
@@ -475,17 +483,17 @@ export default function GameRealmArena({ params }: { params: Promise<{ gameid: u
     const squadSub = (userId: string, detailed = false): string => {
         if (mustering) return musterSub(userId);
         if (dropped.includes(userId)) return 'left the battle';
-        const squad = fighters.filter(fighter => fighter.owner === userId);
+        const squad = shownFighters.filter(fighter => fighter.owner === userId);
         const ally = allied(battle, userId, myUserId);
         const standing = standingLine(squad, fogged && !ally);
         // Allies share vision, so their whole squad and its HP are known too.
         if (!detailed || !ally) return standing;
-        const hp = squadHp(squad, battle);
+        const hp = squadHp(squad, shownBattle);
         return `${standing} · ${hp.remaining}/${hp.total} HP`;
     };
     const seatOrder = scoreboardSeatOrder(gameData, myUserId);
     const scores = gs?.scores ?? {};
-    const enemyStanding = standingLine(fighters.filter(fighter => isWarband(fighter.owner)), fogged);
+    const enemyStanding = standingLine(shownFighters.filter(fighter => isWarband(fighter.owner)), fogged);
     // In Hold Out the enemy's line also says when its next wave comes (§30.3)
     // and how many it brings (§30.11). The round before it lands, the board
     // lights up where it will.
@@ -590,7 +598,7 @@ export default function GameRealmArena({ params }: { params: Promise<{ gameid: u
                     <Stat value={mustering ? 'Muster' : `${gs.round}/${gs.battleRounds}`} label={mustering ? 'Phase' : 'Round'} />
                     {gs.mission === 'holdOut' && !mustering ? <>
                         <Stat value={gs.enemiesDefeated ?? 0} label="Enemies defeated" />
-                        <RealmArenaTeamHealth battle={battle} />
+                        <RealmArenaTeamHealth battle={shownBattle} />
                     </> : <>
                         <Stat value={centre} label="Centre" />
                         <Stat value={gs.budget} label="Points each" />
@@ -688,15 +696,15 @@ export default function GameRealmArena({ params }: { params: Promise<{ gameid: u
                         </div>
                     )}
 
-                    {selected && (
-                        <RealmArenaFighterCard fighter={selected} battle={battle} label={`${fighterName(fighters, selected, battle)} · ${playerName(selected.owner)}`}>
+                    {selected && shownSelected && (
+                        <RealmArenaFighterCard fighter={shownSelected} battle={shownBattle} label={`${fighterName(fighters, selected, battle)} · ${playerName(selected.owner)}`}>
                             {turn && <RealmArenaTurnSheet draft={turn} battle={battle} player={myUserId} pendingTarget={pendingTarget} />}
                         </RealmArenaFighterCard>
                     )}
 
                     {!mustering && (
                         <RealmArenaUnits
-                            battle={battle}
+                            battle={shownBattle}
                             player={myUserId}
                             colourFor={colourFor}
                             acting={battleTurn}

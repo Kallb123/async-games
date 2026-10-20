@@ -7,7 +7,7 @@ import { at, fieldOf, hillOf } from "@/utils/games/battlefield/testFixtures";
 import { ACTION_POINTS, isWarband, newFighter, reachOf, warbandOwner, type BattleEvent, type Fighter, type ToldEvent } from "./rules";
 import { ABILITIES, kitOf, type CharacterId } from "./characters";
 import { EFFECT_ART, ITEM_ART, type Missile } from "./art";
-import { abilityWait, ringOf, shieldPath, shadedSquares, SHIELD_WIDTH, actionFollow, boardFocus, oddsLines, aimFocus, coopColourOf, ALLY_COLOUR, ENEMY_COLOUR, TEAM_COLOUR, actionSquares, apPips, friendlySquares, spreadWide, areaRect, battleCues, canAct, effectsOn, eventLines, facingOf, fighterName, fighterStatus, focusOn, handItem, handOut, hpFraction, itemsOf, NO_ITEMS, numberedName, placeTap, reachFocus, reachShading, squadCounts, squadOf, whoseName, FLIGHT_PACE, CLIMB_LEG, DIAGONAL_LEG, flightMs, legWeight, HIT_TEXT_MS, PLAYBACK_MS, WALK_STEP_MS, moveFrame, isUnplaced, type BattleCue, type Placement, waveLineOf, reviewParts, withPartState, partLabel, HP_CHIP_MS, HP_TWEEN_MS, stepped, toldAt, toldOf, type TextCue, IMPACT_MS, KNOCK, LUNGE, SHAKE, SHAKE_MS, WALK_BOB, WALK_HOP, shakeAt, shakesOf, shoveAt, shovesOf, endOf, captionAt, legLengthOn, walkEase, walkerAt, walkerGroundAt, walkCameraAt, walkLift, walkSquares, flightAt, hitTextAt, POP_MS, burstAt, slashAt, progressOf, fadeOutAt, fadeInAt, FLIGHT_ARC, type FxPoints, type CaptionCue, type FallCue, type FlightCue, type SlashCue, type WalkCue, BOARD_ZOOM, boardZoomFor } from "./ui";
+import { abilityWait, ringOf, shieldPath, shadedSquares, SHIELD_WIDTH, actionFollow, boardFocus, oddsLines, aimFocus, coopColourOf, ALLY_COLOUR, ENEMY_COLOUR, TEAM_COLOUR, actionSquares, apPips, friendlySquares, spreadWide, areaRect, battleCues, canAct, effectsOn, eventLines, facingOf, fighterName, fighterStatus, focusOn, handItem, handOut, hpFraction, itemsOf, NO_ITEMS, numberedName, placeTap, reachFocus, reachShading, squadCounts, squadOf, whoseName, FLIGHT_PACE, CLIMB_LEG, DIAGONAL_LEG, flightMs, legWeight, HIT_TEXT_MS, PLAYBACK_MS, WALK_STEP_MS, moveFrame, isUnplaced, type BattleCue, type Placement, waveLineOf, reviewParts, withPartState, partLabel, HP_CHIP_MS, HP_TWEEN_MS, stepped, toldAt, toldOf, foundBy, type TextCue, IMPACT_MS, KNOCK, LUNGE, SHAKE, SHAKE_MS, WALK_BOB, WALK_HOP, shakeAt, shakesOf, shoveAt, shovesOf, endOf, captionAt, legLengthOn, walkEase, walkerAt, walkerGroundAt, walkCameraAt, walkLift, walkSquares, flightAt, hitTextAt, POP_MS, burstAt, slashAt, progressOf, fadeOutAt, fadeInAt, FLIGHT_ARC, type FxPoints, type CaptionCue, type FallCue, type FlightCue, type SlashCue, type WalkCue, BOARD_ZOOM, boardZoomFor } from "./ui";
 import type { OddsBreakdown } from "./rules";
 import { REALM_ARENA_MAPS } from "./maps";
 import { azimuthOf, boardFrame, cameraBasis, topOf } from "./three/iso3d";
@@ -1221,6 +1221,14 @@ describe("an HP bar through an action", () => {
         expect(toldAt(one, hurt(max - 4), 500 + HP_TWEEN_MS).drawn.hp).toBe(max - 4);
     });
 
+    it("prints a fighter as the action found it while it plays, and leaves anyone it found nothing of", () => {
+        const stranger = ready(5, "b", "archer", 50);
+        const shown = foundBy([hurt(max - 4), stranger], [before]);
+        expect(shown[0].hp).toBe(max);
+        expect(shown[0].square).toBe(before.square);
+        expect(shown[1]).toBe(stranger);
+    });
+
     it("carries a second blow on from where the first had got to", () => {
         const after = hurt(max - 6);
         const two = told([text(500, -4), text(500 + HP_TWEEN_MS / 2, -2)], after);
@@ -1228,6 +1236,28 @@ describe("an HP bar through an action", () => {
         expect(toldAt(two, after, 500 + HP_TWEEN_MS / 2).drawn.hp).toBe(max - 2);
         expect(toldAt(two, after, 500 + HP_TWEEN_MS).drawn.hp).toBe(max - 4);
         expect(toldAt(two, after, 500 + HP_TWEEN_MS * 2).drawn.hp).toBe(max - 6);
+    });
+
+    it("holds a mover's HP until the overwatch shot or guard blow that hits it lands, mid-walk", () => {
+        const mover = ready(0, "a", "knight", 10);
+        const watchers = [ready(1, "b", "archer", 50), ready(2, "b", "knight", 13)];
+        const left = { ...mover, square: 15, hp: mover.hp - 5 };
+        const cues = battleCues(FIELD, [
+            { kind: "moved", fighter: 0, path: [10, 11, 12], sneaking: false },
+            { kind: "shot", fighter: 1, target: 0, chance: 60, result: "hit", damage: 3, reaction: true },
+            { kind: "moved", fighter: 0, path: [12, 13], sneaking: false },
+            { kind: "struck", fighter: 2, target: 0, damage: 2, reaction: true },
+            { kind: "moved", fighter: 0, path: [13, 14, 15], sneaking: false },
+        ], [mover, ...watchers], [left, ...watchers]);
+        const blows = cues.filter((cue): cue is TextCue => cue.kind === "text" && cue.fighter === 0 && cue.hpChange !== undefined);
+        expect(blows.map(cue => cue.hpChange)).toEqual([-3, -2]);
+        const one = toldOf(cues, mover, left, false)!;
+        expect(one.steps.map(step => step.at)).toEqual(blows.map(cue => cue.start));
+        // Full HP through the walk and the arrow's flight; each blow takes its HP only as it lands.
+        expect(toldAt(one, left, blows[0].start - 1).drawn.hp).toBe(mover.hp);
+        expect(toldAt(one, left, blows[0].start + HP_TWEEN_MS).drawn.hp).toBe(mover.hp - 3);
+        expect(toldAt(one, left, blows[1].start - 1).drawn.hp).toBeGreaterThan(mover.hp - 5);
+        expect(toldAt(one, left, blows[1].start + HP_TWEEN_MS).drawn.hp).toBe(mover.hp - 5);
     });
 
     it("always ends the last step on the fighter's real HP, even if the cues don't add up", () => {

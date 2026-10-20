@@ -449,18 +449,24 @@ function onePerFrame<T>(read: (ms: number) => T): (ms: number) => T {
  * (`usePlaybackValue`), so only the two slots it passes between render, and no
  * ref is read to find where to draw.
  */
-function WalkerSlot({ artId, view, field, fighter, walker, motion, slot, tintFor, colourFor }: { artId: string; view: IsoView; field: Battlefield; fighter: Fighter; walker: Walker; motion?: WalkMotion; slot: number; tintFor: TintFor; colourFor: (owner: string) => string }) {
+function WalkerSlot({ artId, view, field, fighter, walker, motion, slot, tintFor, colourFor, told, resting }: { artId: string; view: IsoView; field: Battlefield; fighter: Fighter; walker: Walker; motion?: WalkMotion; slot: number; tintFor: TintFor; colourFor: (owner: string) => string; told?: Told; resting?: Fighter }) {
     const leg = usePlaybackValue(ms => {
         const now = walker(ms);
         return now && now.at === slot ? `${now.from}>${now.to}` : null;
     });
     if (leg === null) return null;
     const [from, to] = leg.split('>').map(Number);
-    return <WalkingFigure artId={artId} view={view} field={field} fighter={fighter} walker={walker} from={from} to={to} motion={motion} tintFor={tintFor} colourFor={colourFor} />;
+    return <WalkingFigure artId={artId} view={view} field={field} fighter={fighter} walker={walker} from={from} to={to} motion={motion} tintFor={tintFor} colourFor={colourFor} told={told} resting={resting} />;
 }
 
-/** A walker on one leg, from `from` to `to`, going as `motion` says: slid and lifted a frame at a time (`WalkerSlot`). */
-function WalkingFigure({ artId, view, field, fighter, walker, from, to, motion, tintFor, colourFor }: { artId: string; view: IsoView; field: Battlefield; fighter: Fighter; walker: Walker; from: Square; to: Square; motion?: WalkMotion; tintFor: TintFor; colourFor: (owner: string) => string }) {
+/**
+ * A walker on one leg, from `from` to `to`, going as `motion` says: slid and
+ * lifted a frame at a time (`WalkerSlot`). Its bar is as the action found it
+ * until the blows that land on it do — an overwatch shot or a guard's blow
+ * catches a mover on the way — which `told` and `resting` (the walker as it
+ * ends) step it through, as they do a resting figure's.
+ */
+function WalkingFigure({ artId, view, field, fighter, walker, from, to, motion, tintFor, colourFor, told, resting }: { artId: string; view: IsoView; field: Battlefield; fighter: Fighter; walker: Walker; from: Square; to: Square; motion?: WalkMotion; tintFor: TintFor; colourFor: (owner: string) => string; told?: Told; resting?: Fighter }) {
     const feet = isoCentre(view, from);
     // Drawn from wherever the walker is each frame, not from the leg this was
     // rendered for: the render that turns it to its next leg lands a frame or
@@ -479,7 +485,7 @@ function WalkingFigure({ artId, view, field, fighter, walker, from, to, motion, 
     return (
         <g ref={slide} className="ag-ra-walker">
             <Figure artId={artId} view={view} square={from} character={fighter.character} facing={walkFacing(field, { from, to, motion })} item={fighter.item} tint={tintFor(fighter.owner)} moving={lift} />
-            <HpBar x={feet.x} y={feet.y} fighter={fighter} colour={colourFor(fighter.owner)} />
+            <HpBar x={feet.x} y={feet.y} fighter={told && resting ? resting : fighter} colour={colourFor(fighter.owner)} told={told && resting ? told : undefined} />
         </g>
     );
 }
@@ -976,6 +982,15 @@ export default function RealmArenaBoard({ field, fighters, fogGhosts = [], unsee
         ),
     }));
 
+    // What the action being played tells of a figure's bar, marks and item (`toldOf`), worked out once for the walker and the resting figure alike.
+    const found = new Map<number, Fighter>();
+    if (playback) for (const fighter of playback.before) found.set(fighter.id, fighter);
+    const toldCache = new Map<number, Told | null>();
+    const toldFor = (fighter: Fighter): Told | null => {
+        if (!playback) return null;
+        if (!toldCache.has(fighter.id)) toldCache.set(fighter.id, toldOf(playback.cues, found.get(fighter.id), fighter, still));
+        return toldCache.get(fighter.id)!;
+    };
     // Whoever the action being played walks is drawn walking (`WalkerSlot`), and
     // its resting figure — the whole of it, marks and all — stays hidden until
     // its last walk is over (`Arriving`).
@@ -996,20 +1011,18 @@ export default function RealmArenaBoard({ field, fighters, fogGhosts = [], unsee
     const legLength = legLengthOn(view);
     // Every slot of a walker asks where it is each frame, so it is worked out once a frame, not once a slot.
     walking.forEach((walks, id) => {
+        const resting = fighters.find(one => one.id === id);
+        const told = resting && toldFor(resting) || undefined;
         const walker = onePerFrame(ms => walkerAt(walks, ms, legLength));
         walkSquares(walks).forEach((square, slot) => items.push({
             depth: isoDepth(view, square) + 0.6,
-            node: <WalkerSlot key={`walk-${playback?.key}-${id}-${slot}`} artId={artId} view={view} field={field} fighter={walks[0].fighter} walker={walker} motion={walks[0].motion} slot={slot} tintFor={tintFor} colourFor={colourFor} />,
+            node: <WalkerSlot key={`walk-${playback?.key}-${id}-${slot}`} artId={artId} view={view} field={field} fighter={walks[0].fighter} walker={walker} motion={walks[0].motion} slot={slot} tintFor={tintFor} colourFor={colourFor} told={told} resting={resting} />,
         }));
     });
     // Anyone the action downs lies unseen until its blow lands, so its fallen
     // figure never shows round the standing one (`Falling`) before the shot flies.
     const falls = new Map<number, FallCue>();
-    const found = new Map<number, Fighter>();
-    if (playback) {
-        for (const cue of playback.cues) if (cue.kind === 'fall') falls.set(cue.fighter.id, cue);
-        for (const fighter of playback.before) found.set(fighter.id, fighter);
-    }
+    if (playback) for (const cue of playback.cues) if (cue.kind === 'fall') falls.set(cue.fighter.id, cue);
     for (const fighter of fighters) {
         const arrives = arrival(fighter.id);
         const props: FighterNodeProps = {
@@ -1021,7 +1034,7 @@ export default function RealmArenaBoard({ field, fighters, fogGhosts = [], unsee
             facingFor, tintFor, nameFor, onSelect,
         };
         // Its bar, marks and item are as the action found them until the cue that changed them lands.
-        const told = playback ? toldOf(playback.cues, found.get(fighter.id), fighter, still) : null;
+        const told = toldFor(fighter);
         const node = told
             ? <ToldFighterNode key={`${fighter.id}-${playback?.key}`} {...props} told={told} />
             : <FighterNode key={fighter.id} {...props} />;
