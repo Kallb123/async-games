@@ -1844,6 +1844,22 @@ export function toldOf(cues: readonly BattleCue[], before: Fighter | undefined, 
 }
 
 /**
+ * `fighters` as an action found them in what the page prints as text — HP, marks
+ * and item — while its figures still play it, so a unit strip, a fighter card or a
+ * team meter doesn't take off an overwatch shot's or a guard's blow before the
+ * board has shown it land. Anyone the action found nothing of (not in sight when
+ * it began) stays as they are. The board itself steps each bar through the
+ * action as its cues land (`toldAt`); this is the plain text's hold until then.
+ */
+export function foundBy(fighters: readonly Fighter[], before: readonly Fighter[]): Fighter[] {
+    const found = new Map(before.map(fighter => [fighter.id, fighter]));
+    return fighters.map(fighter => {
+        const was = found.get(fighter.id);
+        return was ? { ...fighter, hp: was.hp, effects: was.effects, banked: was.banked, item: was.item } : fighter;
+    });
+}
+
+/**
  * Where a value that starts at `from` and moves to each of `steps` is `ms` into
  * the playback: each step begins `delay` after its cue and takes `tween` to get
  * there, from wherever the one before had got to — so a second blow landing
