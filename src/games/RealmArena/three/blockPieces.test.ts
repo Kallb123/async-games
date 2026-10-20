@@ -3,7 +3,7 @@ import { buildBattlefield } from "@/utils/games/battlefield/terrain";
 import { pieceCorner, piecesOf } from "./blockPieces";
 import { QUARTER } from "./iso3d";
 
-const field = (rows: string[]) => buildBattlefield({ name: "test", rows, deployments: [], objectives: {} });
+const field = (rows: string[], elevation?: string[]) => buildBattlefield({ name: "test", rows, elevation, deployments: [], objectives: {} });
 
 describe("a raised square's pieces", () => {
     it("are the same every time, and a heap is chunks of different heights, the tallest the full height", () => {
@@ -35,5 +35,12 @@ describe("a raised square's pieces", () => {
         const [hx, hz] = [piece.sx / 2, piece.sz / 2];
         expect(x + hx * c + hz * s).toBeCloseTo(piece.x + hx);
         expect(z - hx * s + hz * c).toBeCloseTo(piece.z + hz);
+    });
+
+    it("stand on the ground the map raises under them, as tall as their terrain", () => {
+        const map = field(["...", ".#.", "..."], ["000", "020", "000"]);
+        const [block] = piecesOf(map, 4, 2.4);
+        expect(block.y).toBeCloseTo(2 * QUARTER);
+        expect(block.sy).toBeCloseTo(map.tiles[4].terrain.height * QUARTER);
     });
 });

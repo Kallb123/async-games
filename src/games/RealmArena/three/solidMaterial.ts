@@ -35,6 +35,9 @@ varying vec2 vUv;
 varying float vFacesUp;
 varying float vFoot;
 #endif
+#ifdef TEXTURED
+varying vec2 vUv;
+#endif
 #ifdef INSTANCE_OPACITY
 attribute float instanceOpacity;
 #endif
@@ -69,6 +72,9 @@ void main() {
     vUv = vFacesUp > 0.5 ? vec2(uv.x * length(placed[0].xyz), uv.y * across) + instanceSkin.z : vec2(u * along + instanceSkin.z, 1.0 - (1.0 - position.y) * stood / MAPPED_ROWS - instanceSkin.y / MAPPED_ROWS);
     vFoot = position.y * stood;
 #endif
+#ifdef TEXTURED
+    vUv = uv;
+#endif
     vOpacity = 1.0;
 #ifdef INSTANCE_OPACITY
     vOpacity = instanceOpacity;
@@ -94,6 +100,10 @@ varying vec2 vUv;
 varying float vFacesUp;
 varying float vFoot;
 #endif
+#ifdef TEXTURED
+uniform sampler2D texturedMap;
+varying vec2 vUv;
+#endif
 varying float vOpacity;
 varying vec3 vColour;
 varying vec3 vNormal;
@@ -104,6 +114,10 @@ void main() {
     vec3 base = vColour;
 #ifdef MAPPED
     base *= vFacesUp > 0.5 ? texture2D(topMap, vUv).rgb : texture2D(sideMap, vUv).rgb * mix(0.72, 1.0, smoothstep(0.0, 0.14, vFoot));
+#endif
+#ifdef TEXTURED
+    // The texture is sRGB, read back to linear by the GPU: written out again, to be worked in as written.
+    base *= linearToOutputTexel(texture2D(texturedMap, vUv)).rgb;
 #endif
     if (vFlags.x > 0.5) base *= vTint;
     vec3 shaded = base;
@@ -138,6 +152,8 @@ export interface SolidOptions {
      * `uv`, and each instance an `instanceSkin` (flip, drop and slide).
      */
     mapped?: { side: Texture; top: Texture; rows: number };
+    /** Coloured by an sRGB texture as well (multiplied), laid on by the geometry's own `uv`: the ground's picture on its raised squares (`groundFaces`). */
+    textured?: Texture;
 }
 
 /**
@@ -145,7 +161,7 @@ export interface SolidOptions {
  * (`lightSolids`). Geometry needs a `color` and a `flags` attribute: a plain
  * solid gets one colour and zero flags (`coloured`, terrain3d.ts).
  */
-export function solidMaterial({ opacity = 1, perInstance = false, behind = false, translucent = false, outline = false, mapped }: SolidOptions = {}): ShaderMaterial {
+export function solidMaterial({ opacity = 1, perInstance = false, behind = false, translucent = false, outline = false, mapped, textured }: SolidOptions = {}): ShaderMaterial {
     const blended = opacity < 1 || perInstance || translucent;
     return new ShaderMaterial({
         vertexShader,
@@ -155,6 +171,7 @@ export function solidMaterial({ opacity = 1, perInstance = false, behind = false
             ...(perInstance && { INSTANCE_OPACITY: "" }),
             ...(behind && { BEHIND: BEHIND_BIAS.toFixed(3) }),
             ...(mapped && { MAPPED: "", MAPPED_ROWS: mapped.rows.toFixed(4) }),
+            ...(textured && { TEXTURED: "" }),
             ...(outline && { OUTLINE: OUTLINE_WIDTH.toFixed(4), OUTLINE_SHADE: OUTLINE_COLOUR }),
         },
         side: outline ? BackSide : FrontSide,
@@ -167,6 +184,7 @@ export function solidMaterial({ opacity = 1, perInstance = false, behind = false
             halfway: { value: new Vector3(0, 1, 0) },
             opacity: { value: opacity },
             ...(mapped && { sideMap: { value: mapped.side }, topMap: { value: mapped.top } }),
+            ...(textured && { texturedMap: { value: textured } }),
         },
     });
 }

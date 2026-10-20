@@ -10,6 +10,7 @@
 import { variantOf } from "@/games/RealmArena/art";
 import { terrainLetter } from "@/games/RealmArena/ui";
 import type { Battlefield, Square, TerrainLetter } from "@/utils/games/battlefield/terrain";
+import { groundOf } from "./groundFaces";
 import { QUARTER } from "./iso3d";
 
 /** One box of a block: its corner nearest the origin and its size in world units, turned `turn` radians about its own middle. */
@@ -53,7 +54,9 @@ function piece(square: Square, index: number, rows: number, at: Pick<Piece, "x" 
 export function piecesOf(field: Battlefield, square: Square, rows: number): Piece[] {
     const letter = terrainLetter(field, square);
     const col = square % field.width, row = Math.floor(square / field.width);
-    const height = Math.max(field.tiles[square].elevation * QUARTER, 0.02);
+    // Standing on the ground under it, which a plinth of its own raises where the map does (`groundFaces`).
+    const foot = groundOf(field, square) * QUARTER;
+    const height = Math.max(field.tiles[square].terrain.height * QUARTER, 0.02);
     const heap = HEAPS[letter];
     if (heap) {
         // One chunk to a quarter of the square, one of them standing the full height and the rest lower, each nudged and turned.
@@ -63,10 +66,10 @@ export function piecesOf(field: Battlefield, square: Square, rows: number): Piec
             const sy = index === tallest ? height : height * (0.4 + 0.5 * chance(square, index, 6));
             const cx = (index % 2) * 0.5 + 0.25 + (chance(square, index, 7) - 0.5) * 0.1;
             const cz = Math.floor(index / 2) * 0.5 + 0.25 + (chance(square, index, 8) - 0.5) * 0.1;
-            return piece(square, index, rows, { x: col + cx - sx / 2, y: 0, z: row + cz - sz / 2, sx, sy, sz, turn: (chance(square, index, 9) - 0.5) * 0.8 });
+            return piece(square, index, rows, { x: col + cx - sx / 2, y: foot, z: row + cz - sz / 2, sx, sy, sz, turn: (chance(square, index, 9) - 0.5) * 0.8 });
         });
     }
-    const pieces = [piece(square, 0, rows, { x: col, y: 0, z: row, sx: 1, sy: height, sz: 1, turn: 0 })];
+    const pieces = [piece(square, 0, rows, { x: col, y: foot, z: row, sx: 1, sy: height, sz: 1, turn: 0 })];
     if (!BATTLEMENTED.has(letter)) return pieces;
     // Along each edge that borders lower ground (or the map's edge), two merlons on top.
     const lower = (dc: number, dr: number) => {
@@ -79,7 +82,7 @@ export function piecesOf(field: Battlefield, square: Square, rows: number): Piec
         for (const start of MERLON_AT) {
             const sx = alongX ? MERLON.length : MERLON.depth, sz = alongX ? MERLON.depth : MERLON.length;
             const x = col + (alongX ? start : dc < 0 ? 0 : 1 - MERLON.depth), z = row + (alongX ? (dr < 0 ? 0 : 1 - MERLON.depth) : start);
-            pieces.push(piece(square, pieces.length, rows, { x, y: height, z, sx, sy: MERLON.rise, sz, turn: 0 }));
+            pieces.push(piece(square, pieces.length, rows, { x, y: foot + height, z, sx, sy: MERLON.rise, sz, turn: 0 }));
         }
     }
     return pieces;

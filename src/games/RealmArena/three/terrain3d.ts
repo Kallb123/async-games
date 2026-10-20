@@ -5,7 +5,10 @@
 // - the ground is one texture over one plane: each square's grass diamond — and
 //   scorched ground where cover was blasted (§22) — unwarped from its sheet
 //   into the square it covers, with the lines between squares over it;
-// - every raised square is a box from the ground up to its top, one instanced
+// - ground the map raises stands on a plinth, and the board's edge is a slab a
+//   full height thick, their tops and sides drawn with the ground's own picture
+//   and their sides shaded by the way they face (`groundFaces`);
+// - every raised square is a box from its ground up to its top, one instanced
 //   draw a terrain, its sides skinned with the brick and its top with the
 //   flagstone (or grassed rock) cut from the same sheets (`blockTextures`);
 // - trees are a trunk and two cones, one instanced draw for every tree;
@@ -22,6 +25,7 @@ import { ART_SHEETS, BLOCK_SKIN, grassOf, TERRAIN_ART, variantOf, type ArtSheet,
 import { terrainLetter } from "@/games/RealmArena/ui";
 import type { Battlefield, Square, TerrainLetter } from "@/utils/games/battlefield/terrain";
 import { piecesOf, pieceCorner } from "./blockPieces";
+import { groundFaces } from "./groundFaces";
 import { QUARTER } from "./iso3d";
 import { solidMaterial, type SolidOptions } from "./solidMaterial";
 
@@ -295,6 +299,38 @@ function overlayPlane(field: Battlefield, lift: number, opacity = 1): { data: Ui
 
 const UP = new Vector3(0, 1, 0);
 
+/**
+ * The ground's faces (`groundFaces`) as one mesh, each drawn with its square's
+ * picture from the ground's texture: a top lit full on, as the ground's plane
+ * is drawn, and a side shaded as a block's is.
+ */
+function groundSolid(field: Battlefield, ground: Texture): { mesh: Mesh; solid: ShaderMaterial; geometry: BufferGeometry } {
+    const positions: number[] = [], normals: number[] = [], uvs: number[] = [], colours: number[] = [], flags: number[] = [], indices: number[] = [];
+    for (const { square, corners, normal, cell } of groundFaces(field)) {
+        const col = square % field.width, row = Math.floor(square / field.width);
+        const first = positions.length / 3;
+        const top = normal[1] > 0.5;
+        corners.forEach((corner, i) => {
+            positions.push(...corner);
+            normals.push(...normal);
+            // The ground's texture runs its first row along its top, as the plane's does.
+            uvs.push((col + cell[i][0]) / field.width, 1 - (row + cell[i][1]) / field.height);
+            colours.push(1, 1, 1);
+            flags.push(0, top ? 1 : 0, 0);
+        });
+        indices.push(first, first + 1, first + 2, first, first + 2, first + 3);
+    }
+    const geometry = new BufferGeometry();
+    geometry.setAttribute("position", new Float32BufferAttribute(positions, 3));
+    geometry.setAttribute("normal", new Float32BufferAttribute(normals, 3));
+    geometry.setAttribute("uv", new Float32BufferAttribute(uvs, 2));
+    geometry.setAttribute("color", new Float32BufferAttribute(colours, 3));
+    geometry.setAttribute("flags", new Float32BufferAttribute(flags, 3));
+    geometry.setIndex(indices);
+    const solid = solidMaterial({ textured: ground });
+    return { mesh: new Mesh(geometry, solid), solid, geometry };
+}
+
 /** What a set of raised squares is drawn with: an instanced mesh a terrain, and what to turn the light of and to dispose of with them. */
 interface RaisedSquares {
     meshes: InstancedMesh[];
@@ -393,6 +429,12 @@ export function buildTerrain(field: Battlefield, sheets: Sheets): Terrain {
     const groundMesh = new Mesh(new PlaneGeometry(field.width, field.height).rotateX(-Math.PI / 2).translate(field.width / 2, 0, field.height / 2), groundMaterial);
     group.add(groundMesh);
     disposables.push(ground, groundMaterial, groundMesh.geometry);
+
+    // The raised ground and the board's thickness.
+    const slab = groundSolid(field, ground);
+    group.add(slab.mesh);
+    solids.push(slab.solid);
+    disposables.push(slab.solid, slab.geometry);
 
     // The raised squares, one instanced draw per terrain, and the trees.
     const raised = raisedSquares(field, sheets, field.tiles.keys());
