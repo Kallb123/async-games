@@ -136,11 +136,6 @@ export const WHATS_NEW: WhatsNewGroup[] = [
         icon: "🔧",
         items: [
             {
-                title: "Reviewing a turn plays it from the start every time",
-                detail: "In Realm Arena's match review, leaving a turn partway through its playback and coming back to it later carried on from where it had got to — and once it had played through, coming back only showed how it ended. A turn you step back to now always plays from its first action.",
-                game: "realmarena",
-            },
-            {
                 title: "Completed tutorials stay dismissed",
                 detail: "Realm Arena and the other games now remember when you finish or skip their tutorial even if saving your progress fails. You can still take the tour again from the game menu.",
                 game: "realmarena",
@@ -181,6 +176,10 @@ export const WHATS_NEW: WhatsNewGroup[] = [
             {
                 title: "Taking back several moves in a row clears them all from the recap",
                 detail: "Undoing one move already left it out of the recap and your next-turn notification, but undoing two or three in a row only hid the last one — the earlier moves you took back still showed up as if you'd played them. Every move you undo now disappears, however many you take back.",
+            },
+            {
+                title: "Boards zoom onto the action from where you were looking",
+                detail: "When a board brings something into view by itself — your car and the spaces a roll lets it reach in Race Cars, or the fighter you select in Realm Arena — it used to snap to the new zoom first, often out at the corner of the map, and then slide across to the spot. It now zooms and pans in one smooth move, starting from exactly the part of the board you were already looking at.",
             },
         ],
     },
