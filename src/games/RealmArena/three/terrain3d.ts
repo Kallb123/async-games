@@ -23,7 +23,7 @@ import {
 import { mergeGeometries } from "three/addons/utils/BufferGeometryUtils.js";
 import { ART_SHEETS, BLOCK_SKIN, grassOf, TERRAIN_ART, variantOf, type ArtSheet, type Sprite } from "@/games/RealmArena/art";
 import { terrainLetter } from "@/games/RealmArena/ui";
-import type { Battlefield, Square, TerrainLetter } from "@/utils/games/battlefield/terrain";
+import { groundOf, type Battlefield, type Square, type TerrainLetter } from "@/utils/games/battlefield/terrain";
 import { piecesOf, pieceCorner } from "./blockPieces";
 import { groundFaces } from "./groundFaces";
 import { QUARTER } from "./iso3d";
@@ -258,8 +258,7 @@ export interface Terrain {
  * eye on a raised top rather than being hidden under it.
  */
 export function groundHeight(field: Battlefield, square: Square): number {
-    const { elevation, terrain } = field.tiles[square];
-    return (terrainLetter(field, square) === "T" ? elevation - terrain.height : elevation) * QUARTER;
+    return (terrainLetter(field, square) === "T" ? groundOf(field, square) : field.tiles[square].elevation) * QUARTER;
 }
 
 /**
@@ -368,7 +367,7 @@ function raisedSquares(field: Battlefield, sheets: Sheets, squares: Iterable<Squ
         if (tree) {
             onLetter.forEach((square, index) => {
                 const col = square % field.width, row = Math.floor(square / field.width);
-                const ground = (field.tiles[square].elevation - field.tiles[square].terrain.height) * QUARTER;
+                const ground = groundOf(field, square) * QUARTER;
                 matrix.makeRotationY(variantOf(square, 7)).setPosition(col + 0.5, ground, row + 0.5);
                 mesh.setMatrixAt(index, matrix);
             });

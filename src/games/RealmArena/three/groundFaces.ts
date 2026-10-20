@@ -11,8 +11,8 @@
 // picture of the ground on its square's top (`cell`), so a side is the same
 // grass or scorched ground as the top it falls from, shaded by the way it faces.
 
-import type { Battlefield, Square } from "@/utils/games/battlefield/terrain";
-import { BOARD_DEPTH, QUARTER, type Vec3 } from "./iso3d";
+import { coordsOf, groundOf, squareAt, type Battlefield, type Square } from "@/utils/games/battlefield/terrain";
+import { BOARD_DEPTH, cross, dot, minus, QUARTER, type Vec3 } from "./iso3d";
 
 /** One face of the ground: four corners, anticlockwise seen from outside it. */
 export interface GroundFace {
@@ -28,39 +28,31 @@ export interface GroundFace {
     cell: [[number, number], [number, number], [number, number], [number, number]];
 }
 
-/** The ground a square's terrain stands on, in quarters: its top, less what its terrain raises it. */
-export const groundOf = (field: Pick<Battlefield, "tiles">, square: Square): number => {
-    const { elevation, terrain } = field.tiles[square];
-    return elevation - terrain.height;
-};
-
 /** The four ways out of a square: the step to the neighbour, and which of its edges it crosses. */
 const SIDES: readonly { dc: number; dr: number }[] = [{ dc: 0, dr: -1 }, { dc: 0, dr: 1 }, { dc: -1, dr: 0 }, { dc: 1, dr: 0 }];
 
-const minus = (a: Vec3, b: Vec3): Vec3 => [a[0] - b[0], a[1] - b[1], a[2] - b[2]];
-const cross = (a: Vec3, b: Vec3): Vec3 => [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]];
+/** Whether a face's corners run anticlockwise seen from the way it faces. */
+export const facesOut = (corners: GroundFace["corners"], normal: Vec3) => dot(cross(minus(corners[1], corners[0]), minus(corners[2], corners[0])), normal) >= 0;
 
 /** A face, its corners turned round if they run clockwise seen from the way it faces. */
 function face(square: Square, corners: GroundFace["corners"], cell: GroundFace["cell"], normal: Vec3): GroundFace {
-    const turn = cross(minus(corners[1], corners[0]), minus(corners[2], corners[0]));
-    if (turn[0] * normal[0] + turn[1] * normal[1] + turn[2] * normal[2] >= 0) return { square, corners, cell, normal };
+    if (facesOut(corners, normal)) return { square, corners, cell, normal };
     return { square, corners: [corners[0], corners[3], corners[2], corners[1]], cell: [cell[0], cell[3], cell[2], cell[1]], normal };
 }
 
 /** Every face of the ground `field` stands on, but the flat ground's own plane. */
 export function groundFaces(field: Battlefield): GroundFace[] {
     const faces: GroundFace[] = [];
-    const { width, height } = field;
     for (let square = 0; square < field.tiles.length; square++) {
-        const col = square % width, row = Math.floor(square / width);
+        const { col, row } = coordsOf(field, square);
         const top = groundOf(field, square);
         const y = top * QUARTER;
         if (top > 0) {
             faces.push(face(square, [[col, y, row], [col, y, row + 1], [col + 1, y, row + 1], [col + 1, y, row]], [[0, 0], [0, 1], [1, 1], [1, 0]], [0, 1, 0]));
         }
         for (const { dc, dr } of SIDES) {
-            const [c, r] = [col + dc, row + dr];
-            const beside = c < 0 || r < 0 || c >= width || r >= height ? -BOARD_DEPTH : groundOf(field, r * width + c);
+            const next = squareAt(field, col + dc, row + dr);
+            const beside = next === undefined ? -BOARD_DEPTH : groundOf(field, next);
             if (beside >= top) continue;
             const foot = beside * QUARTER;
             // The edge the side hangs from, as two points of the square's top, and its picture from there down.

@@ -9,8 +9,7 @@
 
 import { variantOf } from "@/games/RealmArena/art";
 import { terrainLetter } from "@/games/RealmArena/ui";
-import type { Battlefield, Square, TerrainLetter } from "@/utils/games/battlefield/terrain";
-import { groundOf } from "./groundFaces";
+import { groundOf, squareAt, type Battlefield, type Square, type TerrainLetter } from "@/utils/games/battlefield/terrain";
 import { QUARTER } from "./iso3d";
 
 /** One box of a block: its corner nearest the origin and its size in world units, turned `turn` radians about its own middle. */
@@ -73,8 +72,8 @@ export function piecesOf(field: Battlefield, square: Square, rows: number): Piec
     if (!BATTLEMENTED.has(letter)) return pieces;
     // Along each edge that borders lower ground (or the map's edge), two merlons on top.
     const lower = (dc: number, dr: number) => {
-        const [c, r] = [col + dc, row + dr];
-        return c < 0 || r < 0 || c >= field.width || r >= field.height || field.tiles[r * field.width + c].elevation < field.tiles[square].elevation;
+        const next = squareAt(field, col + dc, row + dr);
+        return next === undefined || field.tiles[next].elevation < field.tiles[square].elevation;
     };
     const edges: [number, number, boolean][] = [[0, -1, true], [0, 1, true], [-1, 0, false], [1, 0, false]];
     for (const [dc, dr, alongX] of edges) {

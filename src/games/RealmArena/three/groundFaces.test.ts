@@ -1,12 +1,9 @@
 import { describe, expect, it } from "vitest";
 import { buildBattlefield, FULL_HEIGHT } from "@/utils/games/battlefield/terrain";
-import { groundFaces } from "./groundFaces";
-import { BOARD_DEPTH, QUARTER, type Vec3 } from "./iso3d";
+import { facesOut, groundFaces } from "./groundFaces";
+import { BOARD_DEPTH, QUARTER } from "./iso3d";
 
 const field = (rows: string[], elevation?: string[]) => buildBattlefield({ name: "test", rows, elevation, deployments: [], objectives: {} });
-
-const minus = (a: Vec3, b: Vec3): Vec3 => [a[0] - b[0], a[1] - b[1], a[2] - b[2]];
-const cross = (a: Vec3, b: Vec3): Vec3 => [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]];
 
 describe("the ground's faces", () => {
     it("are a slab a full height thick under flat ground: a side along each edge of the map, and no tops", () => {
@@ -43,8 +40,7 @@ describe("the ground's faces", () => {
 
     it("run every face's corners anticlockwise seen from the way it faces, with its picture on its own square", () => {
         for (const { corners, normal, cell } of groundFaces(field(["...", "...", "..."], ["010", "131", "010"]))) {
-            const turn = cross(minus(corners[1], corners[0]), minus(corners[2], corners[0]));
-            expect(turn[0] * normal[0] + turn[1] * normal[1] + turn[2] * normal[2]).toBeGreaterThan(0);
+            expect(facesOut(corners, normal)).toBe(true);
             for (const [u, v] of cell) for (const at of [u, v]) expect(at).toBeGreaterThanOrEqual(0), expect(at).toBeLessThanOrEqual(1);
         }
     });

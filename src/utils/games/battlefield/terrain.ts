@@ -97,6 +97,12 @@ export function towersOver(field: Battlefield, square: Square, a: Square, b: Squ
     return field.tiles[square].elevation >= Math.max(field.tiles[a].elevation, field.tiles[b].elevation) + FULL_HEIGHT;
 }
 
+/** The ground a square's terrain stands on, in quarters: its top, less what its terrain raises it. */
+export function groundOf(field: Pick<Battlefield, "tiles">, square: Square): number {
+    const { elevation, terrain } = field.tiles[square];
+    return elevation - terrain.height;
+}
+
 /** How much higher one square's top is than another's, in quarters; below it, negative. */
 export function riseOf(field: Battlefield, square: Square, above: Square): number {
     return field.tiles[square].elevation - field.tiles[above].elevation;
@@ -221,10 +227,7 @@ export function battlefieldWith(field: Battlefield, blasted: readonly Square[]):
     const cleared = blasted.filter(square => field.tiles[square]?.terrain.destructible);
     if (cleared.length === 0) return field;
     const tiles = [...field.tiles];
-    for (const square of cleared) {
-        const { terrain, elevation } = field.tiles[square];
-        tiles[square] = { terrain: TERRAIN["_"], elevation: elevation - terrain.height };
-    }
+    for (const square of cleared) tiles[square] = { terrain: TERRAIN["_"], elevation: groundOf(field, square) };
     return { ...field, tiles };
 }
 
