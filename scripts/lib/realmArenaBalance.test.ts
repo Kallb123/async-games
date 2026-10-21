@@ -20,8 +20,12 @@ function sample(fields: Partial<BattleSample>): BattleSample {
 }
 
 describe("the balance harness's scenarios", () => {
-    it("names a scenario by what the host picked, leaving out what's normal", () => {
-        expect(scenarioKey(SOLO)).toBe("1 player (Solo) vs Swarm · Hold Out (Sacked Fort)");
+    it("names a scenario by what the host picked, leaving out what's normal, and the battlefield it's fought on", () => {
+        // A Hold Out battlefield the team doesn't fit falls back (§35.3): Solo on the Ruined Fort, two on the Sacked Fort.
+        expect(scenarioKey(SOLO)).toBe("1 player (Solo) vs Swarm · Hold Out (Ruined Fort)");
+        expect(scenarioKey({ ...SOLO, players: 3, map: "sunkenVillage" })).toBe("3 players vs Swarm · Hold Out (Sunken Village)");
+        expect(scenarioKey({ ...SOLO, players: 2, map: "sunkenVillage" })).toBe("2 players vs Swarm · Hold Out (Sacked Fort)");
+        expect(scenarioKey({ ...SOLO, players: 2, map: "gate" })).toBe("2 players vs Swarm · Hold Out (gate fort)");
         expect(scenarioKey({ ...SOLO, players: 3, enemy: "realm", mission: "holdTheCentre", difficulty: "hard", size: "large", fog: true }))
             .toBe("3 players vs Realm · Hold the Centre · Hard, Large battle, fog");
         expect(scenarioKey({ ...SOLO, players: 2, team: "miners", enemy: "miners" })).toBe("2 players as Miners vs Miners · Hold Out (Sacked Fort)");
@@ -33,6 +37,7 @@ describe("the balance harness's scenarios", () => {
             .toEqual({ fog: true, size: "small", coop: { enemy: "swarm", difficulty: "easy" } });
         // Hold Out on the gate forts stores no map.
         expect(settingsOf({ ...SOLO, map: "gate" }).coop).toEqual({ enemy: "swarm", mission: "holdOut" });
+        expect(settingsOf({ ...SOLO, map: "sunkenVillage" }).coop).toEqual({ enemy: "swarm", mission: "holdOut", map: "sunkenVillage" });
         // A team of another faction is the one faction its players may muster from.
         expect(settingsOf({ ...SOLO, team: "miners" })).toMatchObject({ factions: ["miners"] });
     });
