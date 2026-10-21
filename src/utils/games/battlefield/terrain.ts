@@ -39,15 +39,9 @@ export interface Terrain {
      * how far it rises above the character (`coverOfRise`).
      */
     cover: Cover;
-    /** Whether it blocks sight whatever the heights, as trees do. Everything else blocks it by standing a full height above both ends (`lineOfSight.ts`). */
+    /** Whether it blocks sight whatever the heights, as trees do. Everything else blocks it by standing a full height above both ends, or above them at all if it `screens` (`lineOfSight.ts`). */
     blocksSight: boolean;
-    /**
-     * Too thick to see through, as a hedge is, though lower than a character:
-     * it blocks sight between two squares that both stand below its top,
-     * where anything else has to stand a full height above both
-     * (`lineOfSight.ts`). Whoever stands level with its top or higher — on a
-     * tower, say — sees over it.
-     */
+    /** Too thick to see through, as a hedge is, though lower than a character: whoever stands level with its top or higher — on a tower, say — sees over it. */
     screens?: true;
     /** A stair: a step onto or off it is never a climb, by as much as its own height (`pathfinding.ts`). */
     stairs?: true;
@@ -111,9 +105,13 @@ export function coverOfRise(rise: number): Cover {
     return rise >= FULL_HEIGHT ? "full" : rise >= HALF_HEIGHT ? "half" : "none";
 }
 
-/** Whether a square stands a full height above both of two others: a wall between them, that a step can't cut the corner of. */
-export function towersOver(field: Battlefield, square: Square, a: Square, b: Square): boolean {
-    return field.tiles[square].elevation >= Math.max(field.tiles[a].elevation, field.tiles[b].elevation) + FULL_HEIGHT;
+/**
+ * Whether a square stands `by` above both of two others — a full height,
+ * unless told otherwise: a wall between them, to see past or cut a corner by.
+ * A hedge blocks sight standing above them at all (`Terrain.screens`).
+ */
+export function towersOver(field: Battlefield, square: Square, a: Square, b: Square, by = FULL_HEIGHT): boolean {
+    return field.tiles[square].elevation >= Math.max(field.tiles[a].elevation, field.tiles[b].elevation) + by;
 }
 
 /** The ground a square's terrain stands on, in quarters: its top, less what its terrain raises it. */
