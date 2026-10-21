@@ -31,5 +31,14 @@ export interface RealmArenaRuleValues {
     KNOCKOUT_DIVISOR: number;
     ASSIST_DIVISOR: number;
     SIGHT_RANGE: number;
+    /**
+     * Whether sight runs from eye to eye, so what hides a character depends on
+     * the angle it's seen from (realm-arena.md §36), on a battlefield whose
+     * hedges stand a full height. Without it, sight is blocked by anything a
+     * full height above both ends, and hedges are the low ones nobody below
+     * sees through (`Battlefield.levelSight`). Absent in the catalogues before
+     * version 10, which played without it.
+     */
+    ANGLED_SIGHT?: boolean;
     BATTLE_ROUNDS: Readonly<Record<PlayerCount, number>>;
 }

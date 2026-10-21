@@ -5,7 +5,8 @@
 // id rather than the map, so the map stays code and a fix to it reaches every
 // battle — which is also why the id, once used, can never be renamed.
 
-import { battlefieldWith, type Battlefield, type Square } from "@/utils/games/battlefield/terrain";
+import { battlefieldWith, TERRAIN, withTerrain, type Battlefield, type Square } from "@/utils/games/battlefield/terrain";
+import { ruleValuesOf, type RulesContext } from "../rulesets";
 import { FOUR_GATE_FORT } from "./fourGateFort";
 import { RING_FORT } from "./ringFort";
 import { RUINED_FORT } from "./ruinedFort";
@@ -79,11 +80,26 @@ export function battlefieldById(id: string): Battlefield {
 }
 
 /**
- * The battlefield as it stands in a battle: its map, with the low cover
- * blasted so far cleared to scorched ground (docs/games/realm-arena.md §22).
- * What every rule reads, on the server and the board alike. A battle stored
- * before anything could be blasted has no list, and nothing blasted.
+ * A map as a battle begun before sight had angles (§36) is fought on it: seen
+ * across by the rule it began with (`Battlefield.levelSight`), and with its
+ * hedges the low ones they were then.
  */
-export function battlefieldOf(id: string, blasted: readonly Square[] | undefined): Battlefield {
-    return battlefieldWith(battlefieldById(id), blasted ?? []);
+function levelSighted(map: Battlefield): Battlefield {
+    const hedges = map.tiles.flatMap((tile, square) => tile.terrain === TERRAIN.h ? [square] : []);
+    return { ...withTerrain(map, hedges, TERRAIN.v), levelSight: true };
+}
+
+// Made once a map, so each keeps one identity, as the map itself does.
+const LEVEL_SIGHTED = new Map(Object.values(REALM_ARENA_MAPS).map(map => [map, levelSighted(map)]));
+
+/**
+ * The battlefield as it stands in a battle: its map, with the low cover
+ * blasted so far cleared to scorched ground (docs/games/realm-arena.md §22),
+ * as the rules the battle was created under have it (`context`). What every
+ * rule reads, on the server and the board alike. A battle stored before
+ * anything could be blasted has no list, and nothing blasted.
+ */
+export function battlefieldOf(id: string, blasted: readonly Square[] | undefined, context: RulesContext): Battlefield {
+    const map = battlefieldById(id);
+    return battlefieldWith(ruleValuesOf(context).ANGLED_SIGHT ? map : LEVEL_SIGHTED.get(map)!, blasted ?? []);
 }

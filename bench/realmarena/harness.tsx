@@ -114,7 +114,7 @@ export function BenchBoard({ fixture, Board }: { fixture: Fixture; Board: Board 
     // As the board screen derives them for a co-op battle.
     const { fighters, ghosts, clouds, blasted } = view.shown;
     const blastedKey = blasted.join(",");
-    const field = useMemo(() => battlefieldOf(fixture.after.map, blastedKey ? blastedKey.split(",").map(Number) : []), [fixture.after.map, blastedKey]);
+    const field = useMemo(() => battlefieldOf(fixture.after.map, blastedKey ? blastedKey.split(",").map(Number) : [], fixture.after), [fixture.after, blastedKey]);
     const fog = fixture.after.fog;
     const battle = battleFrom(field, { fighters, fog, clouds, seats, coop: true });
     const unseen = useMemo(
@@ -194,7 +194,7 @@ async function enemyTurn(fixture: Fixture, maxParts: number): Promise<PartTiming
 
 /** The view sent round the battlefield: each corner and the middle, alternately just fitted and at the deepest step, so every glide zooms. */
 async function pan(fixture: Fixture) {
-    const field = battlefieldOf(fixture.after.map, fixture.after.blasted);
+    const field = battlefieldOf(fixture.after.map, fixture.after.blasted, fixture.after);
     const { width, height } = field;
     const at = (col: number, row: number) => row * width + col;
     const regions = [

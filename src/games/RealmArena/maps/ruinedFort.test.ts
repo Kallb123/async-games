@@ -55,11 +55,13 @@ describe("the Ruined Fort", () => {
         expect(courtyard.filter(square => costs[square] < Infinity)).toEqual([]);
     });
 
-    it("covers whoever is on a tower top by half from its parapet, and leaves them in sight (§25.2)", () => {
+    it("covers whoever is on a tower top by half from its parapet, and leaves them in sight from far enough out (§25.2)", () => {
         // The north-west tower's top, shot at from the open ground west of the fort.
-        const top = squareAt(FORT, 7, 13)!, outside = squareAt(FORT, 3, 13)!;
+        const top = squareAt(FORT, 7, 13)!, outside = squareAt(FORT, 0, 13)!, under = squareAt(FORT, 3, 13)!;
         expect(FORT.tiles[squareAt(FORT, 6, 13)!].terrain.name).toBe("Parapet");
         expect(canSee(FORT, outside, top)).toBe(true);
         expect(coverAgainst(FORT, top, outside)).toBe("half");
+        // Close under the tower, the parapet is too steep to see over.
+        expect(canSee(FORT, under, top)).toBe(false);
     });
 });

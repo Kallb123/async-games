@@ -97,7 +97,7 @@ const INVALID: ICommandOutcome = { validMove: false, turnOver: false };
  * lifts once the battle is (`complete`, §27).
  */
 export function battleOf(gs: IRealmArenaSpecificGameState, complete = false): BattleState {
-    return battleFrom(battlefieldOf(gs.map, gs.blasted ?? []), {
+    return battleFrom(battlefieldOf(gs.map, gs.blasted ?? [], gs), {
         fighters: (gs.fighters ?? []).map(storedFighter),
         fog: gs.fog === true && !complete,
         seats: gs.seats,

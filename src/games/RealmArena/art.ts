@@ -141,6 +141,7 @@ const STAIR = TERRAIN["s"].height;
 /** The parapet's battlements stand on brick a height below its top, so they rise from a tower's floor like the curtain wall's do from the ground. */
 const PARAPET_FOOT = TERRAIN["P"].height - FULL_HEIGHT;
 const HEDGE = TERRAIN["h"].height;
+const LOW_HEDGE = TERRAIN["v"].height;
 
 /**
  * What each terrain is drawn with, bottom up, standing on its square's
@@ -165,6 +166,7 @@ export const TERRAIN_ART: Readonly<Record<TerrainLetter, readonly ArtLayer[]>> =
     "_": [{ sprites: SCORCHED, at: 0 }],
     "=": [{ sprites: LANES, at: 0 }],
     "h": [{ sprites: [HEDGE_COLUMN], at: 0, clip: HEDGE }],
+    "v": [{ sprites: [HEDGE_COLUMN], at: 0, clip: LOW_HEDGE }],
     "H": [{ sprites: [COTTAGE_COLUMN], at: 0, clip: FULL_HEIGHT }],
 };
 
@@ -185,6 +187,7 @@ export const BLOCK_SKIN: Readonly<Partial<Record<TerrainLetter, { side: Sprite; 
     "s": { side: BRICK_COLUMN, top: MOSSY_ROCK },
     "^": { side: BRICK_COLUMN, top: MOSSY_ROCK },
     "h": { side: HEDGE_COLUMN, top: HEDGE_COLUMN },
+    "v": { side: HEDGE_COLUMN, top: HEDGE_COLUMN },
     "H": { side: COTTAGE_COLUMN, top: COTTAGE_COLUMN },
 };
 

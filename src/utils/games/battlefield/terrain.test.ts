@@ -37,12 +37,12 @@ describe("TERRAIN", () => {
         expect(coverOfRise(TERRAIN["P"].height - TERRAIN["^"].height)).toBe("half");
     });
 
-    it("plays the Sunken Village's terrain as what it's drawn from, but for a hedge's sight (§35.1)", () => {
+    it("plays the Sunken Village's terrain as what it's drawn from, but for a hedge burning (§35.1)", () => {
         const rules = ({ name: _, ...rest }: Terrain) => rest;
         expect(rules(TERRAIN["="])).toEqual(rules(TERRAIN["."]));
         expect(rules(TERRAIN["H"])).toEqual(rules(TERRAIN["#"]));
-        // A hedge is a low wall nobody below its top can see through.
-        expect(rules(TERRAIN["h"])).toEqual({ ...rules(TERRAIN["o"]), screens: true });
+        // A hedge is a wall a blast can clear.
+        expect(rules(TERRAIN["h"])).toEqual({ ...rules(TERRAIN["#"]), destructible: true });
     });
 });
 

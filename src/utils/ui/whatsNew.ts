@@ -82,6 +82,11 @@ export const WHATS_NEW: WhatsNewGroup[] = [
         icon: "✨",
         items: [
             {
+                title: "Realm Arena: line of sight depends on the angle",
+                detail: "Height now decides what you can see over. From higher ground you see over a wall to anyone standing back from it, but not to someone pressed close behind it, and the edge of a rise or a tower's parapet hides the ground just below. The Sunken Village's hedges now stand a full height, so they can be burned away but not climbed through. Battles already under way keep their original rules.",
+                game: "realmarena",
+            },
+            {
                 title: "Realm Arena: a new Hold Out battlefield, the Sunken Village",
                 detail: "For a team of three: hold a village green sunk below hedges, lanes and roofless cottages that hide the enemy until it's close, so archers can't pick you off from across the map. Nobody sees through a hedge, but anyone can push through one, and a fireball burns it away.",
                 game: "realmarena",
@@ -123,11 +128,6 @@ export const WHATS_NEW: WhatsNewGroup[] = [
             {
                 title: "Realm Arena: Clerics and Broodmothers can heal themselves",
                 detail: "A Cleric's Heal and a Broodmother's Regrowth can now be aimed at the healer itself, not only at an ally — handy when the healer is the one taking the hits.",
-                game: "realmarena",
-            },
-            {
-                title: "Realm Arena: see the cover you're moving into, and why a shot's odds are what they are",
-                detail: "Line up a move and the square you'd end on shows a shield on each side that gives cover: a whole one for full cover, half a shield for half. And every target now has a ? beside its chance to hit, which breaks the number down: the weapon's own accuracy, then what cover, height, smoke, range and the rest add or take off.",
                 game: "realmarena",
             },
         ],

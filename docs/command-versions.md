@@ -129,7 +129,8 @@ To release changed units or abilities:
    original catalogue. `currentRuleset` is derived from that registry.
 3. Express supported behavior changes in the new catalogue: `RULES` owns AP,
    attack limits, reaction costs and bank caps, accuracy, cover and armour,
-   scoring and round limits. Abilities declare `passive`, `apOnRaise`,
+   scoring and round limits, and line of sight (`ANGLED_SIGHT`), which picks
+   the battlefield a battle is fought on (`battlefieldOf`). Abilities declare `passive`, `apOnRaise`,
    `bonusAp`, `countsAsAttack`, `movesWithoutReactions` and cover/stance flags,
    including `coverFor` for an aura that also covers enemies.
    Effects declare tick/expiry boundaries, damage, AP and movement modifiers,
@@ -146,7 +147,8 @@ To release changed units or abilities:
    without a stamp selects legacy. Preserve `rulesVersion` in filtered views,
    snapshots and replay settings: it is the only thing that selects a
    catalogue (there is no derived `balanced` flag to read instead), so a state
-   that drops it plays by the legacy rules. Anything sized by a turn's AP, such
+   that drops it plays by the legacy rules. `battlefieldOf` takes it too, so
+   the battlefield is the one the battle's sight is read on. Anything sized by a turn's AP, such
    as the undo stack (`undoDepthOf`), reads it from the catalogue too.
 5. Test old and new games under the same current commands, including muster,
    validation, effects, previews, undo and replay. Keep narration and recap

@@ -1,17 +1,22 @@
 // Seeing across a battlefield (docs/games/realm-arena.md §13.1, §25): one
-// square sees another when the straight line between their centres crosses
-// nothing that blocks sight. Trees always do. A hedge does when its top
-// stands above both ends: from the ground it hides what's past it, though
-// it's no taller than a low wall, and from a tower it's looked over (§35.1).
-// Anything else does when it stands a full height above both ends — a wall
-// between two characters on the ground, but not between a tower top and the
-// ground beyond the wall. Low cover and characters never do. A figure may
-// look down the side of full cover directly beside it: an angled line may
-// leave through that first square, but the same cover further away still
-// blocks sight. The walk is exact integer arithmetic, so it always chooses
-// the same squares.
+// character sees another when the straight line from its eyes to theirs
+// passes over everything between them. Each square the line crosses blocks it
+// when the square's top reaches the line anywhere over the square, so what
+// hides a character depends on the angle it's seen from: a wall hides two
+// characters on the ground from each other, but from a tower top it hides
+// only whoever is close enough behind it that the line down to them still
+// passes through the wall, and the edge of a rise hides the ground at its foot
+// from someone standing back from it. Trees block sight whatever the
+// heights. A figure may look down the side of full cover directly beside it:
+// an angled line may leave through that first square, but the same cover
+// further away still blocks sight. The walk and the heights are exact
+// integer arithmetic, so they always choose the same squares.
+//
+// A battle begun before sight had angles keeps the rule it began with
+// (`Battlefield.levelSight`): a square blocks sight when it stands a full
+// height above both ends, or, for a low hedge, above them at all.
 
-import { coordsOf, isNeighbour, towersOver, type Battlefield, type Square } from "./terrain";
+import { coordsOf, FULL_HEIGHT, isNeighbour, towersOver, type Battlefield, type Square } from "./terrain";
 
 /** The squares a line between two squares' centres passes through, ends left out. */
 export interface SightLine {
@@ -57,21 +62,50 @@ export function sightLine(field: Battlefield, from: Square, to: Square, within =
 }
 
 /**
- * Whether one square can see another. A line through a corner is blocked only
- * when the squares either side of it both block sight — a diagonal wall — so
- * a single tree doesn't hide what's past its corner.
+ * Where a character's eyes are above the top of its square, in eighths of a
+ * height: an eighth below the top of its head. So a wall a full height tall
+ * hides two characters on level ground from each other, and low cover three
+ * quarters tall doesn't.
+ */
+const EYE_HEIGHT = 2 * FULL_HEIGHT - 1;
+
+/**
+ * Whether one square can see another: whether a character standing on one
+ * could see the eyes of one standing on the other — or, on a field with
+ * `levelSight`, whether nothing between them stands a full height above
+ * both. A line through a corner is blocked only when the squares either side
+ * of it both block it — a diagonal wall — so a single tree doesn't hide
+ * what's past its corner.
  */
 export function canSee(field: Battlefield, from: Square, to: Square): boolean {
+    const a = coordsOf(field, from), b = coordsOf(field, to);
+    const across = b.col - a.col, down = b.row - a.row;
+    // How far along the line, from 0 at `from` to `scale` at `to`: every edge it crosses is a whole number of steps.
+    const scale = 2 * Math.max(Math.abs(across), 1) * Math.max(Math.abs(down), 1);
+    // Heights in eighths, so an eye is a whole number of them.
+    const eyeOf = (square: Square) => 2 * field.tiles[square].elevation + EYE_HEIGHT;
+    const eye = eyeOf(from), drop = eyeOf(to) - eye;
+    // The stretch of the line over one column (or row) `offset` from `from`'s, when the line moves `delta` columns in all.
+    const stretch = (offset: number, delta: number): [number, number] => {
+        if (delta === 0) return [0, scale];
+        const ends = [(2 * offset - 1) * scale / (2 * delta), (2 * offset + 1) * scale / (2 * delta)];
+        return [Math.min(...ends), Math.max(...ends)];
+    };
     const blocks = (square: Square) => {
-        const { terrain } = field.tiles[square];
-        return terrain.blocksSight || towersOver(field, square, from, to, terrain.screens ? 1 : undefined);
+        const { terrain, elevation } = field.tiles[square];
+        if (terrain.blocksSight) return true;
+        if (field.levelSight) return towersOver(field, square, from, to, terrain.screens ? 1 : undefined);
+        const c = coordsOf(field, square);
+        const [colIn, colOut] = stretch(c.col - a.col, across), [rowIn, rowOut] = stretch(c.row - a.row, down);
+        // The line is lowest over the square where it leaves it, going down, or where it enters it, going up.
+        const lowest = drop < 0 ? Math.min(colOut, rowOut) : Math.max(colIn, rowIn);
+        return 2 * elevation * scale >= eye * scale + drop * lowest;
     };
     const { crossed, grazed } = sightLine(field, from, to);
-    const a = coordsOf(field, from), b = coordsOf(field, to);
     const besideAtAnAngle = (square: Square) => {
         if (!isNeighbour(field, from, square)) return false;
         const cover = coordsOf(field, square);
-        return (cover.col - a.col) * (b.row - a.row) !== (cover.row - a.row) * (b.col - a.col);
+        return (cover.col - a.col) * down !== (cover.row - a.row) * across;
     };
     return !crossed.some(square => blocks(square) && !besideAtAnAngle(square))
         && !grazed.some(([one, other]) => blocks(one) && blocks(other));

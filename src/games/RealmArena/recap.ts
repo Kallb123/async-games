@@ -581,7 +581,7 @@ function tip(liveState: unknown, forUserId: string): IRecapTip | null {
     if (squad.length === 0) return null;
 
     // Once the battle has begun, every seat has mustered.
-    const battle = battleFrom(battlefieldOf(gs.map, gs.blasted), { ...gs, seats: gs.mustered });
+    const battle = battleFrom(battlefieldOf(gs.map, gs.blasted, gs), { ...gs, seats: gs.mustered });
     // In co-op it's the team's score against the enemy's (§29.5); otherwise
     // the viewer's against the best of anyone else's.
     const [mine, best] = gs.coop

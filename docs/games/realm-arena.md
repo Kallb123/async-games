@@ -1,8 +1,9 @@
 # Realm Arena — Game Design Document
 
-**Status:** v1.59. The Realm troop overhaul (§34) is implemented for new
-battles in rules version 9, using §34.10's proposed defaults for playtesting.
-Battles already created keep their original rules.
+**Status:** v1.61. The Realm troop overhaul (§34) is implemented for new
+battles in rules version 9, using §34.10's proposed defaults for playtesting,
+and sight with angles (§36) in rules version 10. Battles already created keep
+their original rules.
 Earlier implementation
 notes and revision history describe the game before this overhaul wherever
 they conflict with §34.
@@ -1709,7 +1710,8 @@ drawn.
   a wall between two characters on the ground, but not between a tower top
   and the ground beyond the wall. Trees block it whatever the heights. A
   hedge blocks it for two characters both below its top (§35.1). Low cover
-  and characters never do.
+  and characters never do. *From rules version 10, sight has angles instead
+  (§36): what blocks it is whatever reaches the line from eye to eye.*
 - **Climbing.** A step up or down of a quarter is an ordinary step. Half or
   three quarters is a climb, which costs 1 more movement point
   (`CLIMB_COST`). A full height or more can't be climbed, except onto or off
@@ -4507,10 +4509,13 @@ new rule:
 |---|---|---|
 | `=` | Lane | Open ground: packed earth, drawn as it. |
 | `H` | Cottage wall | A wall (`#`): limewashed fieldstone, with no battlements. |
-| `h` | Hedge | A low wall (`o`): climbed through for a climb's cost, never stood on, three quarters high so half cover by its height, and burned or hacked away by whatever blasts low cover (§22). The one difference: **nobody below its top sees through a hedge**, though a low wall is seen over by anyone. |
+| `h` | Hedge | *From rules version 10 (§36):* a wall (`#`) a full height tall, that a blast clears as it does low cover. |
+| `v` | Hedge | *Before rules version 10, as `h` (§36):* a low wall (`o`): climbed through for a climb's cost, never stood on, three quarters high so half cover by its height, and burned or hacked away by whatever blasts low cover (§22). The one difference: **nobody below its top sees through a hedge**, though a low wall is seen over by anyone. |
 
 A hedge is cover that's cheap to get through but blocks sight: a warband can
 push through one to close in, and a fireball can burn a sightline open.
+*From rules version 10 a hedge stands a full height instead, and plays as a
+wall a blast can clear (§36).*
 
 **Seen over from above.** Solid terrain blocks sight only when it stands a
 full height above both characters, since a character sees over anything
@@ -4520,8 +4525,8 @@ Instead it blocks sight between two characters who both stand below its top,
 and nobody else: whoever stands level with its top or higher — on a tower top,
 a stair, a hill — looks over it, as over a wall, and so does whoever is
 looking up at them. Trees still block whatever the heights. The rule is the
-terrain's own (`screens`), read by `canSee`, so any map that puts hedges near
-high ground gets it. On the Sunken Village nobody stands that high: the
+terrain's own (`screens`, on `v` since rules version 10), read by `canSee`,
+so any map that puts hedges near high ground gets it. On the Sunken Village nobody stands that high: the
 village is half a height up and a hedge on it tops out a height and a quarter
 up.
 
@@ -4643,6 +4648,93 @@ Open questions:
    which co-op doesn't seat yet (§29).
 3. An achievement for winning on it, beside *Hold the Keep* (§30.4)?
 
+## 36. Sight with angles (rules version 10)
+
+Sight used to ask one question of each square between two characters: does
+it stand a full height above both of them? That made height all or nothing.
+Half a height up, a character saw over every wall on the ground whatever the
+angle, so someone pressed against the far side of a wall was as plain to see
+as someone in the open. Sight now asks whether the line can clear the cover
+at the angle it's seen from.
+
+### 36.1 The rule
+
+- **Sight runs from eye to eye.** A character's eyes are an eighth of a
+  height below the top of its head: seven eighths of a full height above the
+  top of its square (`EYE_HEIGHT` in `lineOfSight.ts`). One square sees another
+  when the straight line from the eyes on one to the eyes on the other passes
+  over every square it crosses.
+- **A square blocks the line when its top reaches it** anywhere over that
+  square: where the line leaves the square going down, or where it enters it
+  going up. A wall a full height tall reaches the line between two characters
+  on level ground, and low cover three quarters tall doesn't, so the ground
+  plays as before.
+- **What changes is the angle.** From higher ground a character sees over a
+  wall to anyone standing back from it, but not to someone pressed close
+  behind it, whom the wall still hides: the line down to them still passes
+  through it. The edge of a rise hides the ground at its foot from someone
+  standing back from the edge, and a tower's parapet hides the ground just
+  below the tower. Looking up, it's the same line the other way.
+- **Unchanged:** trees block sight whatever the heights. A line through a
+  corner is blocked only when the squares on both sides block it, and a
+  character beside full cover may still look down its side (§13.6).
+- **Cover is unchanged.** It is still measured from the character behind it
+  (§25.2), so a wall still gives full cover against an archer on a tower who
+  can see over it. Only whether the shot can be taken changes.
+- **Exact.** The line is measured in whole steps along it and the heights in
+  eighths, all integer arithmetic, so the server and the board always agree.
+
+### 36.2 Hedges stand a full height
+
+Judged by the angle at their real three quarters, hedges would hide nobody on
+level ground, and the Sunken Village would lose the short sightlines it was
+built for. So a hedge now stands a **full height**, and plays as a wall: full
+cover by its height, no climbing through it, and sight blocked by its height
+as any wall's is. What sets it apart is that a blast still clears it to
+scorched ground, as it does low cover (§22), so a fireball still burns a
+sightline open, and now a way through too. The hedge round the village keeps
+its gaps for the lanes and the field gates.
+
+### 36.3 Versioning
+
+This changes which shots and moves are legal, so it is **rules version 10**
+(`RULES.ANGLED_SIGHT` in `catalogues/v10.ts`) and **command version 10**. A
+battle keeps the sight it was created with (§30.13), on a replay too.
+`battlefieldOf` reads the battle's stamp: a battle created under version 10
+is fought on the map itself, and an older one on the map's level-sighted copy
+(`Battlefield.levelSight`), made once per map. That copy keeps the old rule,
+and on it the Sunken Village's hedges are the low ones its battles began with
+(`v`, a letter no map draws). Every place that builds the battle's field passes
+the stamp: the rules, the recap, the review and the board.
+
+### 36.4 Measured
+
+The share of what's in bow range (20 squares) that each square anyone can
+stand on can see, averaged over the map, by the old rule and the new, and, on
+the two maps built for Hold Out, the quickest walk from a warband's zone to the
+team (the line battles' walks don't cross a hedge or change):
+
+| | In sight, level | In sight, angled | Quickest walk, level | Quickest walk, angled |
+|---|---:|---:|---:|---:|
+| Ruined Fort | 53.7% | 53.4% | | |
+| Ring Fort | 67.4% | 67.3% | | |
+| Four-Gate Fort | 62.8% | 62.6% | | |
+| Twin-Gate Fort | 63.0% | 62.5% | | |
+| Three-Gate Fort | 64.6% | 64.1% | | |
+| Sacked Fort | 59.4% | 59.2% | 19 | 19 |
+| Sunken Village | 27.1% | 27.1% | 21.5 | 22 |
+
+The forts are flat apart from their towers, so little changes: a tower top
+no longer sees the ground right under its parapet, nor whoever presses
+against a wall a long way off. On the Sunken Village the full-height hedges
+hide what the low ones hid, and the walk in is half a point longer, since a
+hedge is no longer climbed through. Every map's fairness tests hold.
+
+### 36.5 Tests
+
+`lineOfSight.test.ts` (both rules), `ruinedFort.test.ts` (the tower top) and
+`sight.test.ts` (which rule a battle plays by).
+
 ---
 
 ## Appendix: Working title
@@ -4726,3 +4818,4 @@ Realm, its sibling in the same world.
 | 1.58 | Benchmarking the planner. Open puzzles (§29.11): three it fails today, kept as `it.fails` — taking a likely knock-out over wounding a fresh enemy, stepping out of a crossfire, and stepping out of a Knight's reach. And the balance harness's `--team-planner <ref>` (§30.12), which has the team play an older planner against the checkout's warbands, so a change to the planner is measured as the warbands' alone; its first experiments — counting the team per head, and an Exposure that adds every shot up and lets a melee enemy walk — are in `realm-arena-balance.md`, and none was kept. Tests, tooling and documents only. |
 | 1.59 | Rules version 9 (command version 9) builds the rest of §34 with its proposed values: the Realm's new kits, the five new effects, their aims and the computer's use of them; battles created before it keep their catalogue. How the board plays it (§34.11): a Leap's arc and landing, a Shove's push and collision, a Beckon's pull, a Bouncing Arrow's bounce, Ice Ball's shard and frost, Thunder's lightning, a glow under everyone blessed or braced and a ring under the warded, and a badge for each new effect, all drawn in the effect and fx masters. |
 | 1.60 | The Sunken Village (§35), Hold Out's second battlefield, for a team of three: a sunken green ringed by hedges, lanes and roofless cottages that keep archers' sightlines short. Three new terrains: lanes, cottage walls, and hedges, which can be climbed through and burned away, and which nobody sees through unless one end stands as high as the hedge's top, as a tower does. The first map with an elevation layer, and ideas for the next battlefields. |
+| 1.61 | Sight with angles (§36, rules and command version 10): sight runs from eye to eye, so what hides a character depends on the angle it's seen from. From higher ground, a wall still hides whoever is pressed close behind it, and the edge of a rise or a parapet hides the ground just below it. Hedges stand a full height, a wall that a blast clears. Battles created before it keep level sight and the low hedge. |
