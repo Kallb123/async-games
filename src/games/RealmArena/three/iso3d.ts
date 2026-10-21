@@ -32,7 +32,9 @@ export const QUARTER = Math.sqrt(2 / 3) / FULL_HEIGHT;
 /** The camera's angle above the ground. */
 const ELEVATION = Math.PI / 6;
 
-const dot = (a: Vec3, b: Vec3) => a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
+export const dot = (a: Vec3, b: Vec3) => a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
+export const minus = (a: Vec3, b: Vec3): Vec3 => [a[0] - b[0], a[1] - b[1], a[2] - b[2]];
+export const cross = (a: Vec3, b: Vec3): Vec3 => [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]];
 const scale = (a: Vec3, s: number): Vec3 => [a[0] * s, a[1] * s, a[2] * s];
 const add = (a: Vec3, b: Vec3): Vec3 => [a[0] + b[0], a[1] + b[1], a[2] + b[2]];
 const normalise = (a: Vec3): Vec3 => scale(a, 1 / Math.hypot(...a));
@@ -162,6 +164,12 @@ export function figureMatrix(at: Vec3, facing: Facing | number, fallen: boolean)
 /** The battlefield's tallest top, in quarters: what the frame leaves room for over the ground. */
 export const topOf = (field: Pick<Battlefield, "tiles">): number => Math.max(0, ...field.tiles.map(tile => tile.elevation));
 
+/**
+ * How thick the board is drawn, in quarters: a full height, so its edge reads
+ * as a slab under the battlefield and not a sheet of paper (`groundFaces`).
+ */
+export const BOARD_DEPTH = FULL_HEIGHT;
+
 /** Room kept over the back of the map, in world units, for a figure standing there and the HP bar over it: about a square, as the isometric board's `HEADROOM` is. */
 const HEADROOM = 1.3;
 
@@ -183,16 +191,16 @@ export interface BoardLayout { basis: CameraBasis; frame: BoardFrame }
 
 /**
  * The frame round a `grid`-sized battlefield standing `top` quarters high, at
- * `basis`'s turn: the ground and its tallest tops, with `HEADROOM` over the back,
- * at least `MIN_ASPECT` as tall as it is wide, with the ground in the middle of
- * it. Its size is the same at every turn, as the isometric board's is — a turn
+ * `basis`'s turn: the ground, the board's thickness under it (`BOARD_DEPTH`)
+ * and its tallest tops, with `HEADROOM` over the back, at least `MIN_ASPECT` as
+ * tall as it is wide, with the ground in the middle of it. Its size is the same at every turn, as the isometric board's is — a turn
  * swaps the map's sides round, but the diamond they make is as wide and as tall
  * either way, and the ground's middle is where it is held — so the viewBox
  * `BoardZoom` is given never changes with the turn, and a turn only moves things
  * about inside it (`turnedPoint`).
  */
 export function boardFrame(basis: CameraBasis, grid: { width: number; height: number }, top: number): BoardFrame {
-    const ground = regionOnScreen(basis, { x: 0, y: 0, width: grid.width, height: grid.height }, 0);
+    const ground = regionOnScreen(basis, { x: 0, y: 0, width: grid.width, height: grid.height }, -BOARD_DEPTH);
     const raised = regionOnScreen(basis, { x: 0, y: 0, width: grid.width, height: grid.height }, top);
     const drawn = raised.y + raised.height + HEADROOM - ground.y;
     const height = Math.max(drawn, ground.width * MIN_ASPECT);
