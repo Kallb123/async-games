@@ -20,7 +20,7 @@ import type { RealmArenaCoopInvite, RealmArenaInvitationRequest } from "@/games/
 import { fittingHoldOutMap } from "@/games/RealmArena/maps/holdOut";
 import { factionRosterLine } from "@/games/RealmArena/roster";
 import { warbandSteps } from "@/games/RealmArena/rules";
-import { BATTLE_SIZE_NAMES, COOP_PLAYERS, DIFFICULTY_IDS, DIFFICULTY_NAMES, FACTION_IDS, FACTIONS, musterBudget, RA_SOLO_PARAM, RANDOM_ENEMY, warbandBudget, type BattleSize, type Difficulty, type FactionId } from "@/games/RealmArena/characters";
+import { BATTLE_SIZE_NAMES, COOP_PLAYERS, DIFFICULTY_IDS, DIFFICULTY_NAMES, FACTION_IDS, FACTIONS, fitsCoop, musterBudget, RA_SOLO_PARAM, RANDOM_ENEMY, warbandBudget, type BattleSize, type Difficulty, type FactionId } from "@/games/RealmArena/characters";
 
 type Mode = 'freeForAll' | 'coop' | 'solo';
 type Enemy = RealmArenaCoopInvite['enemy'];
@@ -30,8 +30,10 @@ type Battlefield = NonNullable<RealmArenaCoopInvite['map']> | 'line';
 const INVITE_PATH = '/api/newgame/realmarena';
 
 // Co-op is for a team its battlefields are built for (§29.2), so the party's
-// limits are its own while it's chosen. A team of one is Solo, which invites
-// nobody (§30.6), so the team this screen invites starts at two.
+// limits are its own while it's chosen: the biggest team any setting seats,
+// four in Hold Out (§37), with the mission and the battlefield narrowed to
+// what the party fits below. A team of one is Solo, which invites nobody
+// (§30.6), so the team this screen invites starts at two.
 const COOP_PARTY = { ...GAME_META.realmarena, name: `${GAME_META.realmarena.name} co-op`, minPlayers: GAME_META.realmarena.minPlayers, maxPlayers: COOP_PLAYERS.max };
 
 // Whom a co-op team can fight (§29.3): every faction, or one drawn at random
@@ -43,15 +45,15 @@ const ENEMY_CHOICES: OptionChoice<Enemy>[] = [
 
 // What a co-op team sets out to do (§30.3): the keep's points race, or surviving the waves.
 const MISSION_CHOICES: OptionChoice<Mission>[] = [
-  { id: 'holdCentre', label: 'Hold the Centre', description: 'Score points by controlling the keep and knocking enemies out.' },
+  { id: 'holdCentre', label: 'Hold the Centre', description: 'For up to three. Score points by controlling the keep and knocking enemies out.' },
   { id: 'holdOut', label: 'Hold Out', description: 'Survive enemy waves, each bigger than the last, until the last round.' },
 ];
 
 // Where Hold Out is fought (§30.9, §35): a battlefield built for it, or the line battle Hold the Centre is fought on.
 const BATTLEFIELD_CHOICES: OptionChoice<Battlefield>[] = [
-  { id: 'sackedFort', label: 'Sacked Fort', description: 'Start in the ruined keep in the middle, with the enemy closing in, and landing its waves, all round the edges.' },
-  { id: 'sunkenVillage', label: 'Sunken Village', description: 'For three. Start on the sunken green, with the enemy closing in through hedges and roofless cottages that hide it until it is close.' },
-  { id: 'line', label: 'Gate Fort', description: 'The Twin- or Three-Gate Fort, as in Hold the Centre: start along one edge, with the enemy opposite.' },
+  { id: 'sackedFort', label: 'Sacked Fort', description: 'For two to four. Start in the ruined keep in the middle, with the enemy closing in, and landing its waves, all round the edges.' },
+  { id: 'sunkenVillage', label: 'Sunken Village', description: 'For three or four. Start on the sunken green, with the enemy closing in through hedges and roofless cottages that hide it until it is close.' },
+  { id: 'line', label: 'Gate Fort', description: 'For up to three. The Twin- or Three-Gate Fort, as in Hold the Centre: start along one edge, with the enemy opposite.' },
 ];
 
 // How many points every squad musters (§30.5), for any mode.
@@ -115,9 +117,19 @@ function NewGameRealmArenaForm() {
     invitedCount: players.length,
   });
   const { starting, start } = useStartSoloGame(INVITE_PATH);
-  // A battlefield built for another size of team isn't offered, and a pick of one the party has since outgrown falls back as the battle would.
-  const battlefieldChoices = BATTLEFIELD_CHOICES.filter(choice => choice.id === 'line' || fittingHoldOutMap(choice.id, partySize) === choice.id);
-  const pickedBattlefield = battlefield === 'line' ? battlefield : fittingHoldOutMap(battlefield, partySize) ?? 'line';
+  // A team of four plays Hold Out on a battlefield of its own (§37): what a
+  // setting seats is `coopTeamMax`, so a party that outgrows the line battles
+  // (Hold the Centre, the gate forts) is offered neither, and a pick it has
+  // outgrown stands aside for what the battle would have — as a pick of a
+  // battlefield built for another size of team falls back as the battle would.
+  // Solo is a team of one whatever the invitees still counted in `partySize`.
+  const needsOwnMap = !solo && !fitsCoop(partySize);
+  const missionChoices = needsOwnMap ? MISSION_CHOICES.filter(choice => choice.id === 'holdOut') : MISSION_CHOICES;
+  const pickedMission = needsOwnMap ? 'holdOut' : mission;
+  const battlefieldChoices = BATTLEFIELD_CHOICES.filter(choice => choice.id === 'line' ? !needsOwnMap : fittingHoldOutMap(choice.id, partySize) === choice.id);
+  const pickedBattlefield = battlefield !== 'line'
+    ? fittingHoldOutMap(battlefield, partySize) ?? 'line'
+    : needsOwnMap ? 'sackedFort' : 'line';
 
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
@@ -131,7 +143,7 @@ function NewGameRealmArenaForm() {
       ...(size !== 'normal' ? { size } : {}),
       ...(coop ? { coop: {
         enemy,
-        ...(mission === 'holdOut' ? { mission, ...(map ? { map } : {}) } : {}),
+        ...(pickedMission === 'holdOut' ? { mission: pickedMission, ...(map ? { map } : {}) } : {}),
         ...(difficulty !== 'normal' ? { difficulty } : {}),
         // A team of one has nothing to take turns in blocks of, so solo never sends it.
         ...(teamBlocks && !solo ? { teamBlocks: true as const } : {}),
@@ -177,14 +189,20 @@ function NewGameRealmArenaForm() {
         <OptionChoiceSection label="Enemy" value={enemy} onChange={setEnemy} choices={ENEMY_CHOICES} />
       )}
       {coop && (
-        <OptionChoiceSection label="Mission" value={mission} onChange={setMission} choices={MISSION_CHOICES} />
+        <OptionChoiceSection
+          label="Mission"
+          value={pickedMission}
+          onChange={setMission}
+          choices={missionChoices}
+          footer={needsOwnMap && !solo ? <p className="ag-hint">A team of four plays Hold Out.</p> : undefined}
+        />
       )}
       {/* Solo has the one battlefield, the Ruined Fort (§30.6). */}
-      {coop && !solo && mission === 'holdOut' && (
+      {coop && !solo && pickedMission === 'holdOut' && (
         <OptionChoiceSection label="Battlefield" value={pickedBattlefield} onChange={setBattlefield} choices={battlefieldChoices} />
       )}
       {coop && (
-        <OptionChoiceSection label="Difficulty" value={difficulty} onChange={setDifficulty} choices={difficultyChoices(mission, size)} />
+        <OptionChoiceSection label="Difficulty" value={difficulty} onChange={setDifficulty} choices={difficultyChoices(pickedMission, size)} />
       )}
       <OptionChoiceSection label="Battle size" value={size} onChange={setSize} choices={SIZE_CHOICES} />
       <OptionSection label="Factions" footer={<p className="ag-hint">Each player picks one of these as they muster. At least one stays on.</p>}>

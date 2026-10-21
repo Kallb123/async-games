@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { TERRAIN } from "@/utils/games/battlefield/terrain";
-import { mapFor } from ".";
-import { SACKED_FORT_THREE, SACKED_FORT_TWO } from "./sackedFort";
+import { mapFor, REALM_ARENA_MAPS } from ".";
+import { SACKED_FORT_FOUR, SACKED_FORT_THREE, SACKED_FORT_TWO } from "./sackedFort";
 
 // The Sacked Fort (§30.9): one map, with a set of zones for each size of
 // team — the team in the keep in the middle and a warband for each player
@@ -10,6 +10,7 @@ import { SACKED_FORT_THREE, SACKED_FORT_TWO } from "./sackedFort";
 describe.each([
     { FORT: SACKED_FORT_TWO, team: 2 },
     { FORT: SACKED_FORT_THREE, team: 3 },
+    { FORT: SACKED_FORT_FOUR, team: 4 },
 ] as const)("the Sacked Fort for a team of $team", ({ FORT }) => {
     const size = FORT.width;
 
@@ -28,10 +29,13 @@ describe.each([
 });
 
 describe("mapFor with the Sacked Fort (§30.9)", () => {
-    it("puts a co-op team of two or three on it when the host picked it, and anyone else on their usual map", () => {
-        expect([2, 3].map(players => mapFor(players, true, "sackedFort"))).toEqual(["sackedFortTwo", "sackedFortThree"]);
+    it("puts a co-op team of two, three or four on it when the host picked it, and anyone else on their usual map", () => {
+        expect([2, 3, 4].map(players => mapFor(players, true, "sackedFort"))).toEqual(["sackedFortTwo", "sackedFortThree", "sackedFortFour"]);
         expect(mapFor(1, true, "sackedFort")).toBe("ruinedFort");
         expect(mapFor(2, false, "sackedFort")).toBe("ruinedFort");
         expect(mapFor(2, true)).toBe("twinGateFort");
+        // A team of four has no line battle, so the setting check (`fitsCoop`) keeps one from being asked for; the map it would get has no zone for the fourth.
+        expect(SACKED_FORT_FOUR.deployments).toHaveLength(8);
+        expect(REALM_ARENA_MAPS[mapFor(4, true)].deployments).toHaveLength(6);
     });
 });

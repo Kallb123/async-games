@@ -82,6 +82,11 @@ export const WHATS_NEW: WhatsNewGroup[] = [
         icon: "✨",
         items: [
             {
+                title: "Realm Arena: Hold Out for a team of four",
+                detail: "Four of you can now fight Hold Out together, on the Sacked Fort or the Sunken Village: a quarter of the middle each, four warbands closing in from the edges, and the same four waves over 13 rounds. Hold the Centre and the gate forts still seat up to three.",
+                game: "realmarena",
+            },
+            {
                 title: "Realm Arena: line of sight depends on the angle",
                 detail: "Height now decides what you can see over. From higher ground you see over a wall to anyone standing back from it, but not to someone pressed close behind it, and the edge of a rise or a tower's parapet hides the ground just below. The Sunken Village's hedges now stand a full height, so they can be burned away but not climbed through. Battles already under way keep their original rules.",
                 game: "realmarena",
@@ -123,11 +128,6 @@ export const WHATS_NEW: WhatsNewGroup[] = [
             {
                 title: "Realm Arena: choose your faction — the Realm, the Swarm or the Miners",
                 detail: "Each player now picks a faction as they muster, from those the host allows, and co-op can pit you against any of them. The Swarm fields more, cheaper and weaker beasts whose acid corrodes; the new Miners are dwarves out of the deep mines, each one tougher than the Realm's and a little dearer for it, so you field fewer of them. Miners hack through cover with their pickaxes, Stonewardens hold the line behind slabs of stone, Prospectors shoot steady crossbows, Runepriests heal and raise the fallen, and Sappers throw dynamite that blasts a 3×3 and the low cover in it. Miners of your own are tough enough that they don't wear Hold Out's armour against the Renegades.",
-                game: "realmarena",
-            },
-            {
-                title: "Realm Arena: Clerics and Broodmothers can heal themselves",
-                detail: "A Cleric's Heal and a Broodmother's Regrowth can now be aimed at the healer itself, not only at an ally — handy when the healer is the one taking the hits.",
                 game: "realmarena",
             },
         ],

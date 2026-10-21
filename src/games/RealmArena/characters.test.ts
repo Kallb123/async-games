@@ -1,6 +1,6 @@
 import { rulesetFor } from "./rulesets";
 import { describe, expect, it } from "vitest";
-import { ABILITIES, BUDGETS, CHARACTERS, enemyNameOf, FACTIONS, musterBudget, squadPoints, UNKNOWN_ENEMY, warbandBudget, type BattleSize, type CharacterId, type Difficulty } from "./characters";
+import { ABILITIES, BUDGETS, CHARACTERS, COOP_PLAYERS, coopTeamMax, enemyNameOf, FACTIONS, fitsCoop, musterBudget, squadPoints, UNKNOWN_ENEMY, warbandBudget, type BattleSize, type CharacterId, type Difficulty } from "./characters";
 
 describe("the first faction's characters (§13.6)", () => {
     it("each have 5–12 HP and abilities that exist", () => {
@@ -89,8 +89,8 @@ describe("budgets (§13.6, §30.5)", () => {
 
     it("are what every battle before battle sizes mustered, at normal size and difficulty", () => {
         expect([2, 3, 4].map(players => musterBudget(players, false))).toEqual([100, 80, 70]);
-        expect([2, 3].map(players => musterBudget(players, true))).toEqual([80, 80]);
-        expect([2, 3].map(players => warbandBudget(players))).toEqual([80, 80]);
+        expect([2, 3, 4].map(players => musterBudget(players, true))).toEqual([80, 80, 80]);
+        expect([2, 3, 4].map(players => warbandBudget(players))).toEqual([80, 80, 80]);
     });
 
     it("give the plan's warbands at a normal size: 70, 80 or 100 points", () => {
@@ -115,6 +115,28 @@ describe("budgets (§13.6, §30.5)", () => {
             expect(easy).toBeLessThan(normal);
             expect(normal).toBe(musterBudget(2, true, size));
             expect(hard).toBeGreaterThan(normal);
+        }
+    });
+});
+
+describe("the teams a co-op setting seats (§29.1, §37)", () => {
+    const LINE = [{}, { mission: "holdOut" }, { mission: "holdOut", map: undefined }];
+
+    it("is three, but for Hold Out on a battlefield of its own that has a version for four", () => {
+        expect(COOP_PLAYERS).toEqual({ min: 1, max: 4 });
+        for (const setting of LINE) expect(coopTeamMax(setting), JSON.stringify(setting)).toBe(3);
+        // A map picked for Hold the Centre is no map: the mission decides.
+        expect(coopTeamMax({ map: "sackedFort" })).toBe(3);
+        expect(coopTeamMax({ mission: "holdOut", map: "sackedFort" })).toBe(4);
+        expect(coopTeamMax({ mission: "holdOut", map: "sunkenVillage" })).toBe(4);
+    });
+
+    it("fits a team of one to the setting's most, and refuses four anywhere but Hold Out on its own battlefields", () => {
+        for (const setting of LINE) {
+            expect([0, 1, 2, 3, 4].map(players => fitsCoop(players, setting)), JSON.stringify(setting)).toEqual([false, true, true, true, false]);
+        }
+        for (const map of ["sackedFort", "sunkenVillage"] as const) {
+            expect([0, 1, 2, 3, 4, 5].map(players => fitsCoop(players, { mission: "holdOut", map }))).toEqual([false, true, true, true, true, false]);
         }
     });
 });

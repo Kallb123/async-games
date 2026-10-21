@@ -81,11 +81,13 @@ describe("Realm Arena achievements", () => {
     });
 
     it("awards Hold the Keep only for winning Hold Out on the Sacked Fort", () => {
-        for (const map of ["sackedFortTwo", "sackedFortThree"] as const) {
+        for (const map of ["sackedFortTwo", "sackedFortThree", "sackedFortFour"] as const) {
             expect(check("realmarena.hold-the-keep", view({ mission: "holdOut", map }), "win")).toBe(true);
             expect(check("realmarena.hold-the-keep", view({ mission: "holdOut", map }), "loss")).toBe(false);
         }
         expect(check("realmarena.hold-the-keep", view({ mission: "holdOut" }), "win")).toBe(false);
+        // Not on the Sunken Village, for three or four.
+        for (const map of ["sunkenVillageThree", "sunkenVillageFour"] as const) expect(check("realmarena.hold-the-keep", view({ mission: "holdOut", map }), "win")).toBe(false);
     });
 
     it("awards Broken Tide only for a Hold Out won with the whole enemy down", () => {

@@ -15,7 +15,7 @@ import {
 import type { IRealmArenaStepOutcome, RealmArenaPartState } from "./apiModels";
 import type { GameResultBarChart, GameResultChart, GameResultTable } from "@/utils/apiModels/GameDataApi";
 import {
-    battleOf, coopBattle, endTurnBy, makeGame, muster, musterAll, play, playScriptedBattle, playScriptedTurn, readyMadePicks, seedRolls, TEAMS, warbandsOf, type RealmArenaTestGame,
+    battleOf, coopBattle, endTurnBy, makeGame, muster, musterAll, play, playScriptedBattle, playScriptedTurn, readyMadePicks, seedRolls, TEAMS, FOUR_TEAM, warbandsOf, type RealmArenaTestGame,
 } from "./testFixtures";
 
 // docs/games/realm-arena.md §29, PR 4a: the enemy's turn. Co-op from the setup
@@ -197,17 +197,20 @@ describe("Hold Out's growing waves (§30.10)", () => {
     });
 
     it("has room for its last wave's strength in every warband's zone, for every faction, size and difficulty", () => {
-        for (const players of TEAMS) {
-            for (const map of [undefined, ...COOP_MAPS]) {
-                const field = battlefieldById(mapFor(players.length, true, map));
-                for (const faction of FACTION_IDS) {
-                    for (const size of ["small", "normal", "large"] as const) {
-                        for (const difficulty of ["easy", "normal", "hard"] as const) {
-                            const squad = FACTIONS[faction].readyMade[warbandBudget(players.length, size, difficulty)];
-                            const strongest = waveStrength(squad, lastWaveRound(battleRounds(players.length)));
-                            for (let k = 0; k < players.length; k++) {
-                                expect(() => readyMadeMuster(field, players.length + k, strongest), `${field.name}, ${faction}, ${size}, ${difficulty}`).not.toThrow();
-                            }
+        // Every setting each team seats: a team of four only Hold Out on a battlefield of its own (§37).
+        const settings = [
+            ...TEAMS.flatMap(players => [undefined, ...COOP_MAPS].map(map => ({ players, map }))),
+            ...COOP_MAPS.map(map => ({ players: FOUR_TEAM, map })),
+        ];
+        for (const { players, map } of settings) {
+            const field = battlefieldById(mapFor(players.length, true, map));
+            for (const faction of FACTION_IDS) {
+                for (const size of ["small", "normal", "large"] as const) {
+                    for (const difficulty of ["easy", "normal", "hard"] as const) {
+                        const squad = FACTIONS[faction].readyMade[warbandBudget(players.length, size, difficulty)];
+                        const strongest = waveStrength(squad, lastWaveRound(battleRounds(players.length, { mission: "holdOut" })));
+                        for (let k = 0; k < players.length; k++) {
+                            expect(() => readyMadeMuster(field, players.length + k, strongest), `${field.name}, ${faction}, ${size}, ${difficulty}`).not.toThrow();
                         }
                     }
                 }
@@ -501,13 +504,38 @@ describe("a co-op battle's creation (§29.2, §29.3)", () => {
         expect(setup).not.toContain(REALM.enemyName);
     });
 
-    it("plays a free-for-all for a party its battlefields aren't built for", async () => {
-        const invite = { turnTimer: 0, coop: { enemy: "realm" } };
-        const game = await createGame.call(invite, invite, ["a", "b", "c", "d"]);
-        expect(game.specificGameState.coop).toBeUndefined();
-        expect(game.specificGameState.map).toBe("fourGateFort");
-        // …and says so, since the host asked for co-op.
-        expect(game.gameState.history.map(entry => entry.text)).toContain("Setup: co-op is for up to 3 players, so this is a free-for-all");
+    it("puts a team of four on the Sacked Fort or the Sunken Village when the host picked it for Hold Out, one in each quarter of the middle (§37)", async () => {
+        for (const [map, id, name, ground] of [["sackedFort", "sackedFortFour", "Sacked Fort", "keep"], ["sunkenVillage", "sunkenVillageFour", "Sunken Village", "green"]] as const) {
+            const invite = { turnTimer: 0, coop: { enemy: "realm", mission: "holdOut", map } };
+            const game = await createGame.call(invite, invite, [...FOUR_TEAM]);
+            expect(game.specificGameState.map).toBe(id);
+            expect(game.specificGameState.coop).toEqual({ enemy: "realm", nextWarband: 0, mission: "holdOut", map });
+            const setup = game.gameState.history.map(entry => entry.text).join("\n");
+            expect(setup).toContain(`Setup: Hold Out on the ${name}, over 13 battle rounds`);
+            expect(setup).toContain("a warband for each of them closing in from the edges");
+            expect(setup).toContain(`deploys in the north-west of the ${ground}`);
+            expect(setup).toContain(`deploys in the south-west of the ${ground}`);
+            expect(setup).not.toContain("free-for-all");
+        }
+    });
+
+    it("starts a lobby that filled short of four on the map for the team it has, as it does for a team of two or three (§37)", async () => {
+        for (const [map, players, id] of [["sunkenVillage", 3, "sunkenVillageThree"], ["sunkenVillage", 2, "sackedFortTwo"], ["sackedFort", 3, "sackedFortThree"]] as const) {
+            const invite = { turnTimer: 0, coop: { enemy: "realm", mission: "holdOut", map } };
+            const game = await createGame.call(invite, invite, FOUR_TEAM.slice(0, players));
+            expect(game.specificGameState.map).toBe(id);
+        }
+    });
+
+    it("plays a free-for-all for a party its setting isn't built for: four in Hold the Centre or on the gate forts seat only three (§37)", async () => {
+        for (const coop of [{ enemy: "realm" }, { enemy: "realm", mission: "holdOut" }]) {
+            const invite = { turnTimer: 0, coop };
+            const game = await createGame.call(invite, invite, [...FOUR_TEAM]);
+            expect(game.specificGameState.coop).toBeUndefined();
+            expect(game.specificGameState.map).toBe("fourGateFort");
+            // …and says so, since the host asked for co-op.
+            expect(game.gameState.history.map(entry => entry.text)).toContain("Setup: this co-op battle is for up to 3 players, so this is a free-for-all");
+        }
     });
 });
 
@@ -853,7 +881,7 @@ describe("the computer in whole battles (§29.11)", () => {
         let won = 0;
         for (let seed = 0; seed < 20; seed++) {
             seedRolls(100 + seed);
-            const { game } = await coopBattle(TEAMS[seed % 2], { coop: { enemy: "realm" } });
+            const { game } = await coopBattle(TEAMS[seed % TEAMS.length], { coop: { enemy: "realm" } });
             // The ending says what the standings do.
             expect(game.endReason).toBe(enemyWon(game) ? "teamloss" : "teamwin");
             if (enemyWon(game)) won++;
@@ -895,6 +923,45 @@ describe("the computer in whole battles (§29.11)", () => {
         expect(error).not.toHaveBeenCalled();
     }, 120_000);
 
+    it("never breaks in Hold Out for a team of four, on the Sacked Fort and the Sunken Village, with and without fog, to an ending it words (§37)", async () => {
+        const warn = vi.spyOn(console, "warn");
+        const error = vi.spyOn(console, "error");
+        let seed = 800;
+        for (const map of COOP_MAPS) {
+            for (const fog of [false, true]) {
+                seedRolls(seed++);
+                const { game } = await coopBattle(FOUR_TEAM, { fog, coop: { enemy: "realm", mission: "holdOut", map } });
+                expect(game.specificGameState.map).toBe(`${map}Four`);
+                expect(game.complete).toBe(true);
+                expect(["teamwin", "teamloss"]).toContain(game.endReason);
+                expect(game.endDetail).toMatch(game.endReason === "teamwin"
+                    ? /^(held out for all 13 rounds|beat the last wave in round \d+)$/
+                    : /^overrun in round \d+$/);
+                expect(battleRoundsOf(game.specificGameState)).toBe(13);
+                // Every one of the four warbands fought.
+                const recorded = game.gameState.commandHistory.flatMap(command => (command as RealmArenaEndTurn).recordedEnemyActions ?? []);
+                expect(new Set(recorded.map(action => battleOf(game).fighters[action.fighter].owner))).toEqual(new Set(warbandsOf(game)));
+            }
+        }
+        expect(warn).not.toHaveBeenCalled();
+        expect(error).not.toHaveBeenCalled();
+    }, 180_000);
+
+    it("lasts 13 rounds in a team of four's Hold Out, with its four waves landing at 4, 7, 10 and 13 (§30.3)", async () => {
+        for (const map of COOP_MAPS) {
+            const game = makeGame(FOUR_TEAM, {}, { coop: { enemy: "realm", mission: "holdOut", map } });
+            await musterAll(game);
+            const rounds = battleRoundsOf(game.specificGameState);
+            expect(Array.from({ length: rounds }, (_, k) => k + 1).filter(round => waveArrives(round, rounds))).toEqual([4, 7, 10, 13]);
+            expect(lastWaveRound(rounds)).toBe(13);
+            // Over once 13 rounds are played, and not before.
+            game.specificGameState.roundsPlayed = 12;
+            expect(new RealmArenaGameType().CheckGameOver(game)).toBe(false);
+            game.specificGameState.roundsPlayed = 13;
+            expect(new RealmArenaGameType().CheckGameOver(game)).toBe(true);
+        }
+    });
+
     it("replays a large battle on Hard to the same end without asking the planner", async () => {
         seedRolls(13);
         const { game } = await coopBattle(["a", "b"], { fog: true, size: "large", coop: { enemy: "realm", mission: "holdOut", difficulty: "hard" } });
@@ -933,6 +1000,17 @@ describe("the computer in whole battles (§29.11)", () => {
         const lastId = game.gameState.commandHistory.at(-1)?.id ?? null;
         const timeline = await buildTimeline(game, { a: "Alice", b: "Bob", c: "Cat" }, [], undefined, "a");
         expect((timeline.snapshots[0].specificGameState as { map: string }).map).toBe("sackedFortThree");
+        expect(timeline.snapshots[timeline.currentIndex].specificGameState).toEqual(gameStateToModel(game.specificGameState, "a", lastId, true));
+    }, 60_000);
+
+    it("replays a battle of four on the Sunken Village to the same end, on the same battlefield, without asking the planner (§37)", async () => {
+        seedRolls(19);
+        const { game } = await coopBattle(FOUR_TEAM, { fog: true, coop: { enemy: "realm", mission: "holdOut", map: "sunkenVillage" } });
+        vi.restoreAllMocks();
+        planner.broken = true;
+        const lastId = game.gameState.commandHistory.at(-1)?.id ?? null;
+        const timeline = await buildTimeline(game, { a: "Alice", b: "Bob", c: "Cat", d: "Dan" }, [], undefined, "a");
+        expect((timeline.snapshots[0].specificGameState as { map: string }).map).toBe("sunkenVillageFour");
         expect(timeline.snapshots[timeline.currentIndex].specificGameState).toEqual(gameStateToModel(game.specificGameState, "a", lastId, true));
     }, 60_000);
 

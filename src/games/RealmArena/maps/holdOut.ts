@@ -14,8 +14,8 @@ export type CoopMap = typeof COOP_MAPS[number];
 
 /** Each of Hold Out's own battlefields, for each size of team it's built for. */
 export const HOLD_OUT_MAPS: Readonly<Record<CoopMap, Readonly<Record<number, RealmArenaMapId>>>> = {
-    sackedFort: { 2: "sackedFortTwo", 3: "sackedFortThree" },
-    sunkenVillage: { 3: "sunkenVillageThree" },
+    sackedFort: { 2: "sackedFortTwo", 3: "sackedFortThree", 4: "sackedFortFour" },
+    sunkenVillage: { 3: "sunkenVillageThree", 4: "sunkenVillageFour" },
 };
 
 /**

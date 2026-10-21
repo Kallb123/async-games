@@ -33,7 +33,7 @@ import { canSee } from "@/utils/games/battlefield/lineOfSight";
 import { DEFAULT_CLIMB, pathCost, pathTo, reachFrom, stepCost, type MoveRules, type Reach } from "@/utils/games/battlefield/pathfinding";
 import { coordsOf, distance, facingTowards, FULL_HEIGHT, isNeighbour, riseOf, squareAt, type Area, type Battlefield, type Cover, type Facing, type Square } from "@/utils/games/battlefield/terrain";
 import {
-    afflictionsOf, factionOf, isCharacterId, isItemId, isOptionId, kitOf, squadPoints,
+    afflictionsOf, factionOf, isCharacterId, isItemId, isOptionId, kitOf, LINE_COOP_MAX, squadPoints,
     type Ability, type AbilityId, type Affliction, type CharacterId, type Effect, type EffectId, type Faction, type FactionId, type Item, type ItemId, type OptionId, type PlayerCount, type Weapon,
 } from "./characters";
 import { currentRuleset, ruleValuesOf, rulesetOf, type RulesContext } from "./rulesets";
@@ -1958,13 +1958,17 @@ export interface BattleKind {
  * (§30.6) lasts a duel's: its round is one player's turn and one warband's, as
  * a duel's is two players'. Hold Out for exactly two players, created under
  * `BALANCE_VERSION`, lasts `HOLD_OUT_PAIR_ROUNDS` instead — and not Solo's, nor
- * a duel's, nor Hold the Centre's. Everything that asks when a battle ends, or
- * when its waves land, asks here with the battle's `kind`, so none can differ.
+ * a duel's, nor Hold the Centre's. A team of four in Hold Out lasts a team of
+ * three's, 13 rounds (§37), so its four waves land in rounds 4, 7, 10 and 13
+ * as the others' do; a free-for-all of four keeps its 12. Everything that asks
+ * when a battle ends, or when its waves land, asks here with the battle's
+ * `kind`, so none can differ.
  */
 export function battleRounds(playerCount: number, { mission, rulesVersion }: BattleKind = {}): number {
     const rules = ruleValuesOf({ rulesVersion });
     if (playerCount === 2 && mission === "holdOut") return rules.HOLD_OUT_PAIR_ROUNDS;
-    const rounds = rules.BATTLE_ROUNDS[(playerCount === 1 ? 2 : playerCount) as PlayerCount];
+    const seats = playerCount === 1 ? 2 : mission === "holdOut" ? Math.min(playerCount, LINE_COOP_MAX) : playerCount;
+    const rounds = rules.BATTLE_ROUNDS[seats as PlayerCount];
     if (rounds === undefined) throw new Error(`Realm Arena has no battle length for ${playerCount} players`);
     return rounds;
 }

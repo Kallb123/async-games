@@ -107,5 +107,8 @@ describe("mapFor (§29.2)", () => {
 
     it("picks maps with a zone for every player and every warband", () => {
         for (const players of [1, 2, 3]) expect(REALM_ARENA_MAPS[mapFor(players, true)].deployments).toHaveLength(2 * players);
+        // A team of four has Hold Out's own battlefields alone (§37): the line battle seats three.
+        for (const map of ["sackedFort", "sunkenVillage"] as const) expect(REALM_ARENA_MAPS[mapFor(4, true, map)].deployments).toHaveLength(8);
+        expect(REALM_ARENA_MAPS[mapFor(4, true)].deployments).toHaveLength(6);
     });
 });

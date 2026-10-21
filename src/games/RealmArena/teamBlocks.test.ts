@@ -29,8 +29,8 @@ afterEach(() => {
 
 const HOLD_OUT = { enemy: "realm", mission: "holdOut" } as const;
 
-async function battle(teamBlocks: boolean, players = ["a", "b"]): Promise<RealmArenaTestGame> {
-    const game = makeGame(players, {}, { coop: { ...HOLD_OUT, ...(teamBlocks ? { teamBlocks: true as const } : {}) } });
+async function battle(teamBlocks: boolean, players = ["a", "b"], map?: "sackedFort"): Promise<RealmArenaTestGame> {
+    const game = makeGame(players, {}, { coop: { ...HOLD_OUT, ...(map ? { map } : {}), ...(teamBlocks ? { teamBlocks: true as const } : {}) } });
     await musterAll(game);
     return game;
 }
@@ -109,6 +109,21 @@ describe("the rotation", () => {
         }
         expect(seen).toEqual(["a", "b", "c"]);
         expect(game.currentTurn).toBe("a");
+    });
+
+    it("takes four players in seat order and then all four warbands in a block (§37)", async () => {
+        const game = await battle(true, ["a", "b", "c", "d"], "sackedFort");
+        expect(game.specificGameState.map).toBe("sackedFortFour");
+        const seen: string[] = [];
+        for (let turn = 0; turn < 3; turn++) {
+            seen.push(game.currentTurn);
+            expect(await endTurn(game)).toEqual([]);
+        }
+        seen.push(game.currentTurn);
+        expect(await endTurn(game)).toEqual([0, 1, 2, 3].map(warbandOwner));
+        expect(seen).toEqual(["a", "b", "c", "d"]);
+        expect(game.currentTurn).toBe("a");
+        expect(game.specificGameState.roundsPlayed).toBe(1);
     });
 
     it("skips a warband that has been wiped out", async () => {
