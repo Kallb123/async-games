@@ -407,7 +407,7 @@ For re-running: each was an environment switch in a scratch worktree.
 - **Restore *n*:** a `restoreDowned(gs)` in `RealmArenaLogic.ts`, called in
   `landWave` right after `rally(gs)`. For each seat, take the downed fighters
   it owns sorted by id, and move each onto a free standable square of
-  `battlefieldOf(gs.map, gs.blasted).deployments[seatIndex]` with
+  `battlefieldOf(gs.map, gs.blasted, gs).deployments[seatIndex]` with
   `hp = ceil(CHARACTERS[c].hp / 2)`, `effects = {}`, `ap = 0`, `banked = 0`.
   A real version would also log the line, record it for the recap, and say
   in fog who saw it.

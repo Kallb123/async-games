@@ -42,7 +42,9 @@ export const meta: GameMeta = {
     // Version 9 adds the Realm overhaul's actions, effects and targeting,
     // including Shoot + Dodge's target then path. Older tabs must reload to
     // display and send these actions; each game still selects its own ruleset.
-    commandVersion: 9,
+    // Version 10 sees at an angle in the battles created under it (rules
+    // version 10): an older tab would offer shots and moves by the old sight.
+    commandVersion: 10,
     oldestReplayableCommandVersion: 2,
     available: true,
 };

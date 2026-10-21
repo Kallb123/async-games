@@ -1704,13 +1704,15 @@ export interface ReviewPart {
  * `mapId` is the map it is fought on: each part is played on it as the part
  * found it, with what had been blasted by then cleared (`ReviewPart.field`),
  * which times its flights and walks (`battleCues`). `options` is how each part's cues are built:
- * `still` for a player who sees no walk or flight.
+ * `still` for a player who sees no walk or flight. Its `rulesVersion` is the
+ * battle's, which picks the field each part is played on (`battlefieldOf`):
+ * left out, it's the legacy one.
  */
 export function reviewParts(mapId: string, outcome: IRealmArenaStepOutcome | undefined, before: BoardBefore, after: readonly Fighter[] = [], options: BattleCueOptions = {}): ReviewPart[] {
     const told: (Omit<IRealmArenaStepPart, "kind"> & Partial<Pick<IRealmArenaStepPart, "kind">>)[] = outcome?.parts?.length ? outcome.parts : [{ events: outcome?.events ?? [] }];
     let from = before;
     return told.map(part => {
-        const field = battlefieldOf(mapId, from.blasted);
+        const field = battlefieldOf(mapId, from.blasted, options);
         const cues = battleCues(field, part.events, from.fighters, part.state?.fighters ?? after, options);
         const played: ReviewPart = { kind: part.kind, events: part.events, field, cues, before: from, state: part.state };
         if (part.state) from = { fighters: part.state.fighters, blasted: part.state.blasted };

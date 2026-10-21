@@ -220,7 +220,8 @@ export default function GameRealmArena({ params }: { params: Promise<{ gameid: u
     // ground out again — only when something more is blasted.
     const blastedKey = (gs?.blasted ?? []).join(',');
     const map = gs?.map ?? '';
-    const field = useMemo(() => battlefieldOf(map, blastedKey ? blastedKey.split(',').map(Number) : []), [map, blastedKey]);
+    const rulesVersion = gs?.rulesVersion;
+    const field = useMemo(() => battlefieldOf(map, blastedKey ? blastedKey.split(',').map(Number) : [], { rulesVersion }), [map, blastedKey, rulesVersion]);
 
     // In co-op the players are one side against the computer's warbands (§29.6),
     // and every squad musters 80 points (§29.1).

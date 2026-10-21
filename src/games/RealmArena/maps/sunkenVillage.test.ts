@@ -45,8 +45,8 @@ describe("the Sunken Village", () => {
         expect(seen(VILLAGE)).toBeLessThan(seen(SACKED_FORT_THREE) / 2);
     });
 
-    it("can be got through: the hedge round the village has three gaps a side, and a hedge can be climbed through", () => {
-        expect(TERRAIN.h.moveCost).toBeLessThan(Infinity);
+    it("can be got through: the hedge round the village has three gaps a side, and a hedge can be burned or hacked through", () => {
+        expect(TERRAIN.h.destructible).toBe(true);
         // Six squares in on the north side: the lane's gap and the two field gates.
         const line = Array.from({ length: size }, (_, col) => VILLAGE.tiles[6 * size + col].terrain).slice(6, size - 6);
         expect(line.map(terrain => terrain === TERRAIN.h ? "h" : "-").join("").split("h").filter(Boolean)).toHaveLength(3);

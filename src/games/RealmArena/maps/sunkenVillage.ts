@@ -13,16 +13,16 @@
 // from the fields: the way in is through the inn's doors or round it. In each
 // corner, a cottage, a byre and an orchard behind garden hedges; round the
 // whole village, a hedge with a gap for each lane and two field gates a side.
-// Hedges block sight but can be climbed through, burned or hacked down; walls
-// and trees can't. Turned a quarter it's unchanged, so no edge has the easier
-// approach.
+// Hedges stand a full height, blocking sight and the way through, but can be
+// burned or hacked down (§36); walls and trees can't. Turned a quarter it's
+// unchanged, so no edge has the easier approach.
 //
 // Letters are `TERRAIN`'s (src/utils/games/battlefield/terrain.ts): `.` open
 // ground, `=` a lane (plays as open ground), `,` rubble and `o` low walls
-// (half cover), `h` a hedge (half cover, and blocks sight), `H` a cottage wall
-// and `T` trees (full cover, and block sight). The elevation is the ground in
-// quarters: the village at `2`, half a height up, the green at `0`, and a
-// ramp at `1` where the path from each inn's back door comes down to it.
+// (half cover), `h` a hedge (a wall that can be burned away), `H` a cottage
+// wall and `T` trees (full cover, and block sight). The elevation is the
+// ground in quarters: the village at `2`, half a height up, the green at `0`,
+// and a ramp at `1` where the path from each inn's back door comes down to it.
 
 import { buildBattlefield, type BattlefieldMap } from "@/utils/games/battlefield/terrain";
 import { MIDDLE_CENTRE, THREE_IN_THE_MIDDLE } from "./middleOut";

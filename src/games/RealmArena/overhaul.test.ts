@@ -31,8 +31,9 @@ function run(state: BattleState, action: Action, rolls: number[] = []) {
 const get = (state: Pick<BattleState, "fighters">, id: number) => state.fighters.find(one => one.id === id)!;
 
 describe("Realm overhaul catalogue isolation", () => {
-    it("starts new games at v9, preserving the legacy, v7 and v8 kits", () => {
-        expect(CURRENT_RULESET_VERSION).toBe(9);
+    it("plays v9's kits from v9 on, preserving the legacy, v7 and v8 kits", () => {
+        expect(CURRENT_RULESET_VERSION).toBeGreaterThanOrEqual(9);
+        expect(rulesetFor(10).CHARACTERS).toBe(rulesetFor(9).CHARACTERS);
         for (const rulesVersion of [undefined, 7, 8]) {
             const old = rulesetFor(rulesVersion);
             expect(old.FACTIONS.realm.characters).toContain("scout");
@@ -249,7 +250,7 @@ it("keeps old games stamped and undoes bonus AP with its cooldown and attack cou
     expect(gs.fighters.find(one => one.id === own.id)!.ap).toBe(6);
     expect((await play(game, cmd(RealmArenaUndo, "a"))).outcome.validMove).toBe(true);
     expect(gs.fighters).toEqual(before);
-    expect(gs.rulesVersion).toBe(9);
+    expect(gs.rulesVersion).toBe(CURRENT_RULESET_VERSION);
     const old = makeGame(undefined, undefined, { rulesVersion: 8 });
     await musterAll(old);
     expect(old.specificGameState.rulesVersion).toBe(8);

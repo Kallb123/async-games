@@ -67,7 +67,7 @@ async function load(Board: Board, glStats: GlStats | undefined): Promise<LoadRes
         mountActualMs: mountRenderMs(),
         domNodes: boardNodes(),
         figures: fixture.before.fighters.length,
-        tiles: battlefieldOf(fixture.after.map, fixture.after.blasted).tiles.length,
+        tiles: battlefieldOf(fixture.after.map, fixture.after.blasted, fixture.after).tiles.length,
     };
 }
 

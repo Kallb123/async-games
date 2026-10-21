@@ -39,13 +39,13 @@ export interface Terrain {
      * how far it rises above the character (`coverOfRise`).
      */
     cover: Cover;
-    /** Whether it blocks sight whatever the heights, as trees do. Everything else blocks it by standing a full height above both ends, or above them at all if it `screens` (`lineOfSight.ts`). */
+    /** Whether it blocks sight whatever the heights, as trees do. Everything else blocks it by its top reaching the line between two characters' eyes (`lineOfSight.ts`). */
     blocksSight: boolean;
-    /** Too thick to see through, as a hedge is, though lower than a character: whoever stands level with its top or higher — on a tower, say — sees over it. */
+    /** Under `levelSight` only: too thick to see through, as the low hedge is, though lower than a character — whoever stands level with its top or higher sees over it. */
     screens?: true;
     /** A stair: a step onto or off it is never a climb, by as much as its own height (`pathfinding.ts`). */
     stairs?: true;
-    /** Low cover, which a blast can clear away to scorched ground (`battlefieldWith`, realm-arena.md §22). Walls and trees never can. */
+    /** Low cover or a hedge, which a blast can clear away to scorched ground (`battlefieldWith`, realm-arena.md §22). Walls and trees never can. */
     destructible?: true;
 }
 
@@ -72,9 +72,12 @@ const LOW_WALL: Terrain = { name: "Low wall", ...LOW_COVER, height: 3 };
  * The Sunken Village (§35) brings three of its own. A lane is open ground
  * worn to packed earth, and a cottage wall is a wall built of fieldstone:
  * each plays exactly as the one it's drawn from. A hedge is the one new
- * rule: climbed through and given cover by like a low wall, and burned or
- * hacked away like one, but too thick to see through — for anyone standing
- * below its top. A tower looks over a hedge as it does over a wall.
+ * rule: a wall a full height tall — full cover, no way over, and sight
+ * blocked by its height as by any wall's — that a blast burns or hacks away
+ * as it does low cover. A battle begun before hedges grew to a full height
+ * keeps the low hedge it started with, `v`: climbed through and given cover
+ * by like a low wall, but too thick to see through for anyone below its top
+ * (`levelSight`). No map draws it.
  */
 export const TERRAIN = {
     ".": OPEN,
@@ -87,7 +90,8 @@ export const TERRAIN = {
     "^": { ...OPEN, name: "Tower top", height: TOWER_HEIGHT },
     "_": { ...OPEN, name: "Scorched ground" },
     "=": { ...OPEN, name: "Lane" },
-    "h": { ...LOW_WALL, name: "Hedge", screens: true },
+    "h": { ...WALL, name: "Hedge", destructible: true },
+    "v": { ...LOW_WALL, name: "Hedge", screens: true },
     "H": { ...WALL, name: "Cottage wall" },
 } as const satisfies Record<string, Terrain>;
 
@@ -107,8 +111,8 @@ export function coverOfRise(rise: number): Cover {
 
 /**
  * Whether a square stands `by` above both of two others — a full height,
- * unless told otherwise: a wall between them, to see past or cut a corner by.
- * A hedge blocks sight standing above them at all (`Terrain.screens`).
+ * unless told otherwise: a wall between them, that a diagonal step can't cut
+ * the corner of, or that blocks `levelSight`.
  */
 export function towersOver(field: Battlefield, square: Square, a: Square, b: Square, by = FULL_HEIGHT): boolean {
     return field.tiles[square].elevation >= Math.max(field.tiles[a].elevation, field.tiles[b].elevation) + by;
@@ -175,6 +179,13 @@ export interface Battlefield {
     /** Each seat's deployment as the areas it was drawn as: what the board outlines, and what a ready-made squad is spread over. */
     deploymentAreas: readonly (readonly Area[])[];
     objectives: Readonly<Record<string, readonly Square[]>>;
+    /**
+     * Sees by the rule from before sight had angles (`lineOfSight.ts`): blocked
+     * by anything a full height above both ends, by trees, and by low hedges
+     * for anyone below their top. Only a battle begun under that rule is
+     * fought on such a field.
+     */
+    levelSight?: true;
 }
 
 /** The squares of an area of a map `width` squares across, row by row. The area is taken to fit on the map: `buildBattlefield` is what checks it. */
@@ -242,9 +253,13 @@ export function buildBattlefield(map: BattlefieldMap): Battlefield {
  */
 export function battlefieldWith(field: Battlefield, blasted: readonly Square[]): Battlefield {
     const cleared = blasted.filter(square => field.tiles[square]?.terrain.destructible);
-    if (cleared.length === 0) return field;
+    return cleared.length === 0 ? field : withTerrain(field, cleared, TERRAIN["_"]);
+}
+
+/** A battlefield with each of `squares` holding `terrain` instead, on the ground it stood on. */
+export function withTerrain(field: Battlefield, squares: readonly Square[], terrain: Terrain): Battlefield {
     const tiles = [...field.tiles];
-    for (const square of cleared) tiles[square] = { terrain: TERRAIN["_"], elevation: groundOf(field, square) };
+    for (const square of squares) tiles[square] = { terrain, elevation: groundOf(field, square) + terrain.height };
     return { ...field, tiles };
 }
 
