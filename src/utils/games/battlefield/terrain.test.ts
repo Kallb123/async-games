@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { battlefieldWith, buildBattlefield, coordsOf, coverOfRise, distance, facingTowards, FULL_HEIGHT, riseOf, squareAt, TERRAIN, type BattlefieldMap } from "./terrain";
+import { battlefieldWith, buildBattlefield, coordsOf, coverOfRise, distance, facingTowards, FULL_HEIGHT, riseOf, squareAt, TERRAIN, type BattlefieldMap, type Terrain } from "./terrain";
 import { coverAgainst } from "./cover";
 import { pathCost } from "./pathfinding";
 
@@ -35,6 +35,14 @@ describe("TERRAIN", () => {
         // A parapet gives whoever is on the tower top half cover, by standing half a height above it.
         expect(TERRAIN["P"]).toMatchObject({ moveCost: Infinity, standable: false });
         expect(coverOfRise(TERRAIN["P"].height - TERRAIN["^"].height)).toBe("half");
+    });
+
+    it("plays the Sunken Village's terrain as what it's drawn from, but for a hedge's sight (§35.1)", () => {
+        const rules = ({ name: _, ...rest }: Terrain) => rest;
+        expect(rules(TERRAIN["="])).toEqual(rules(TERRAIN["."]));
+        expect(rules(TERRAIN["H"])).toEqual(rules(TERRAIN["#"]));
+        // A hedge is a low wall nobody below its top can see through.
+        expect(rules(TERRAIN["h"])).toEqual({ ...rules(TERRAIN["o"]), screens: true });
     });
 });
 

@@ -1707,8 +1707,9 @@ drawn.
   behind it against an archer on a tower who can see over it.
 - **Sight** is blocked by anything a full height above both characters:
   a wall between two characters on the ground, but not between a tower top
-  and the ground beyond the wall. Trees block it whatever the heights. Low
-  cover and characters never do.
+  and the ground beyond the wall. Trees block it whatever the heights. A
+  hedge blocks it for two characters both below its top (§35.1). Low cover
+  and characters never do.
 - **Climbing.** A step up or down of a quarter is an ordinary step. Half or
   three quarters is a climb, which costs 1 more movement point
   (`CLIMB_COST`). A full height or more can't be climbed, except onto or off
@@ -2354,8 +2355,9 @@ has a battlefield for each size of team.
 | **Three-Gate Fort** | 3 | 64 × 48 | about 21 × 3 each | 24 | 128 |
 | Four-Gate Fort (free-for-all, for comparison) | — | 48 × 48 | 8 × 8 each | 16 | 144 |
 
-Hold Out has a battlefield of its own as well, the Sacked Fort, with the
-team in the middle and the warbands round the edges (§30.9).
+Hold Out has battlefields of its own as well, the Sacked Fort and the Sunken
+Village, with the team in the middle and the warbands round the edges (§30.9,
+§35).
 
 - **The fort** is the Ruined Fort's, stretched: a curtain wall across the
   middle of the map with a gate facing each zone on each side, a tower between
@@ -3282,8 +3284,8 @@ surviving the waves as the first co-op mission of its own. This is it.
   the Centre, so every battle fought so far is one.
 - **Same battlefields.** Hold Out is fought on the co-op forts (§29.2), the
   team along one edge and the warbands opposite, mustered as now. No new map
-  and no new art. (Since joined by a battlefield of its own, the Sacked Fort,
-  §30.9.)
+  and no new art. (Since joined by battlefields of its own, the Sacked Fort,
+  §30.9, and the Sunken Village, §35.)
 - **The enemy comes in waves.** The warbands take the field as now: that's
   the first wave. At the start of every third round (4, 7, 10, 13 …) the next
   wave arrives: each warband is brought back up to strength, a fresh
@@ -4485,6 +4487,164 @@ All of it is drawn in `effects.svg` and `fx.svg` and rendered by
 
 ---
 
+## 35. The Sunken Village: a second battlefield for Hold Out
+
+Archers rule the Sacked Fort (§30.9). Outside its walls the ground is open, so
+from wherever an archer stands it sees most of what its bow reaches, and a
+warband's archers are shooting into the keep on their first turn. The Sunken
+Village is Hold Out's second battlefield, built so that a shot has to be
+earned: **ground an archer can't see far across**, which pulls the fight in
+close. It keeps the Sacked Fort's shape, with the team in the middle and the
+warbands closing in, and landing their waves, from every edge. It's built for
+a team of three.
+
+### 35.1 New terrain
+
+Three new letters in `TERRAIN`. Two are only drawn differently, and one has a
+new rule:
+
+| Letter | Terrain | Plays as |
+|---|---|---|
+| `=` | Lane | Open ground: packed earth, drawn as it. |
+| `H` | Cottage wall | A wall (`#`): limewashed fieldstone, with no battlements. |
+| `h` | Hedge | A low wall (`o`): climbed through for a climb's cost, never stood on, three quarters high so half cover by its height, and burned or hacked away by whatever blasts low cover (§22). The one difference: **nobody below its top sees through a hedge**, though a low wall is seen over by anyone. |
+
+A hedge is cover that's cheap to get through but blocks sight: a warband can
+push through one to close in, and a fireball can burn a sightline open.
+
+**Seen over from above.** Solid terrain blocks sight only when it stands a
+full height above both characters, since a character sees over anything
+shorter than itself; that is how a tower top looks over a wall (§25.2). A
+hedge is shorter than a character, so by that rule it would block nothing.
+Instead it blocks sight between two characters who both stand below its top,
+and nobody else: whoever stands level with its top or higher — on a tower top,
+a stair, a hill — looks over it, as over a wall, and so does whoever is
+looking up at them. Trees still block whatever the heights. The rule is the
+terrain's own (`screens`), read by `canSee`, so any map that puts hedges near
+high ground gets it. On the Sunken Village nobody stands that high: the
+village is half a height up and a hedge on it tops out a height and a quarter
+up.
+
+### 35.2 The map
+
+54 squares square, unchanged by a quarter turn (`maps/sunkenVillage.ts`),
+from the middle outwards:
+
+- **The green**, 12 × 12, sunk half a height below the village round it: the
+  first battlefield with an elevation layer. The team musters across its
+  middle, three zones of 4 × 6, as on the Sacked Fort for three. The rise at
+  its edge gives half cover to whoever is on the green, and the high ground
+  (§25.2) to whoever reaches the rim. Climbing down costs a climb anywhere,
+  except at a ramp a quarter at a time where the path from each inn comes down.
+  The green's middle is the centre, which scores as usual and decides nothing.
+- **A lane round the green**, and round that, front-garden hedges with gaps
+  for the paths in.
+- **An inn on each side**, roofless, standing across the lane in from the
+  edge. Nobody in the fields sees down the lane to the green. The way in is
+  through the inn's front and back doors, set apart, or round its sides.
+- **In each corner** a cottage, a byre and an orchard behind garden hedges.
+- **A hedge round the whole village**, six squares in from the edge, with a
+  gap for the lane and two field gates on each side. Between it and the edge
+  are fields with a copse and broken walls.
+- **The warbands' zones** are the Sacked Fort for three's: every edge three
+  squares deep, in thirds, each warband a third of every edge
+  (`THREE_IN_THE_MIDDLE` in `maps/middleOut.ts`, now shared by both maps).
+
+### 35.3 Picking it
+
+The setup's *Battlefield* under Hold Out (§30.9) offers the Sunken Village to
+a party of three, stored as `coop.map: "sunkenVillage"`; the battle's map is
+`sunkenVillageThree`, one id per size of team as the Sacked Fort's are, so a
+version for two can join it. A lobby can still start
+short of the party the host set up for, so a team the Sunken Village isn't
+built for fights on the Sacked Fort if it fits, and on the line battle if not.
+`fittingHoldOutMap` decides it, for `mapFor` and for the setup screen alike,
+and lives in `maps/holdOut.ts`, apart from the maps, so the setup screen
+doesn't load a battlefield to ask.
+
+### 35.4 Measured
+
+Against the Sacked Fort for three. The share of what's in bow range (20
+squares) that each square anyone can stand on can see, averaged over the map,
+and the lines from anywhere a warband can stand after its first move (6
+squares) onto the team's zones, within bow range:
+
+| | Sacked Fort | Sunken Village |
+|---|---:|---:|
+| What's in bow range that's in sight | 59.5% | 27.2% |
+| First-move lines onto the team | 5,192 of 9,310 | 66 of 3,600 |
+| Quickest walk from a warband's zone to the team | 19 | 21.5 |
+
+From a warband's own zone nobody can see the green at all. The planner's turns
+are quicker here, with fewer lines to weigh: a large battle on Hard against the
+Swarm for three, in fog, plans in about 220 ms a turn on average and 360 ms at
+the slowest, against about 270 ms and 520 ms on the Sacked Fort.
+
+The balance harness (§30.12), 40 battles a map for a team of three against
+the Realm, on Normal, without fog, the planner playing both sides: the team
+won 8% of them on the Sunken Village (3%–20%) against 3% on the Sacked Fort
+(0%–13%), and was overrun in round 11.5 on average against 11.0. That's as
+hard as the Sacked Fort, give or take, with the fighting at closer quarters.
+The planner was written for open ground; a team of people using the hedges
+should do better than it does.
+
+### 35.5 Tests
+
+`maps/sunkenVillage.test.ts`: the quarter turn, ground and all; the team on the
+green, sunk below a rim with a ramp on each side; the warbands round the whole
+edge; a ready-made warband in its zone; nothing sealed off and every zone
+reaching the centre; no melee strike on the first turn; nobody in a warband's
+zone seeing the green; under half the Sacked Fort's sight in bow range; the
+hedge's gaps; `mapFor` and `fittingHoldOutMap`. `maps/holdOut.test.ts` holds
+both of Hold Out's own battlefields to what they share: the quarter turn, the
+team round the centre, the warbands round the whole edge, a ready-made
+warband on every side, nothing sealed off and no first-turn strike. `terrain.test.ts` and
+`lineOfSight.test.ts` hold the three terrains to what they play as.
+`coop.test.ts`: room for the last wave on every Hold Out battlefield, the battle
+created on the right map with its setup lines, and whole battles on it with and
+without fog.
+
+### 35.6 Art
+
+The village's terrain is drawn in `art-masters/realmarena/village.svg`, which
+`npm run ra-marks` renders. The hedge and the cottage wall are each a column
+three heights tall, like the walls sheet's brick column, so the 3D board skins
+a block with them (`BLOCK_SKIN`), side and top, as it does the brick. Lanes are
+three kinds of packed earth, flat. The 3D ground draws any flat terrain with art
+over the grass (lanes, and scorched ground as before), and draws flat terrain
+on raised ground as raised ground rather than as a block.
+
+### 35.7 Ideas for the next battlefields
+
+The ideas put up alongside the Sunken Village, kept for later. Each would be
+54 squares square, unchanged by a quarter turn, with the team in the middle.
+
+1. **Barrow Hill.** The team holds a burial mound raised in terraces, each
+   ringed by an earth bank a full height high. Archers on different terraces
+   can't see each other until one stands at a bank's edge. The summit is the
+   high ground but has nothing to hide behind. Mostly the existing art; it
+   needs earth banks that can be climbed only at cut steps, which the elevation
+   layer and stairs can already draw.
+2. **The Quarry.** The team holds the floor of a stone pit, with rock pillars
+   breaking it up, and the enemy comes down ramps cut into the cliffs. It is
+   the most dramatic and the most work: rock textures from an SVG master, and
+   cliff and pillar shapes in 3D. Beware an overlook: anyone on the cliff top
+   sees the whole pit floor, unless the pillars stand a full height above both
+   ends.
+3. **Old Forest.** The team holds a ruined shrine in a clearing in thick woods,
+   and the only sightlines are along a few cleared rides. It's the cheapest,
+   reusing trees, but it's flat: it adds nothing that uses heights.
+
+Open questions:
+
+1. ~~Does a hedge want to be seen over from a tower top, as a wall is?~~ Yes:
+   whoever stands level with its top or higher sees over it (§35.1).
+2. A version for a team of two, and a Hold Out battlefield for a team of four,
+   which co-op doesn't seat yet (§29).
+3. An achievement for winning on it, beside *Hold the Keep* (§30.4)?
+
+---
+
 ## Appendix: Working title
 
 "Realm Arena", chosen in round 4. The shared "Realm" ties it to Defender of the
@@ -4565,3 +4725,4 @@ Realm, its sibling in the same world.
 | 1.57 | Rules version 8 (command version 8) builds two pieces of §34: the Knight's and Stonewarden's Shield wall is a passive, giving anyone beside them, friend or foe, half cover; and a character raised on its owner's turn has 2 AP to spend. Battles created before it keep the activated shield wall and the old Raise. |
 | 1.58 | Benchmarking the planner. Open puzzles (§29.11): three it fails today, kept as `it.fails` — taking a likely knock-out over wounding a fresh enemy, stepping out of a crossfire, and stepping out of a Knight's reach. And the balance harness's `--team-planner <ref>` (§30.12), which has the team play an older planner against the checkout's warbands, so a change to the planner is measured as the warbands' alone; its first experiments — counting the team per head, and an Exposure that adds every shot up and lets a melee enemy walk — are in `realm-arena-balance.md`, and none was kept. Tests, tooling and documents only. |
 | 1.59 | Rules version 9 (command version 9) builds the rest of §34 with its proposed values: the Realm's new kits, the five new effects, their aims and the computer's use of them; battles created before it keep their catalogue. How the board plays it (§34.11): a Leap's arc and landing, a Shove's push and collision, a Beckon's pull, a Bouncing Arrow's bounce, Ice Ball's shard and frost, Thunder's lightning, a glow under everyone blessed or braced and a ring under the warded, and a badge for each new effect, all drawn in the effect and fx masters. |
+| 1.60 | The Sunken Village (§35), Hold Out's second battlefield, for a team of three: a sunken green ringed by hedges, lanes and roofless cottages that keep archers' sightlines short. Three new terrains: lanes, cottage walls, and hedges, which can be climbed through and burned away, and which nobody sees through unless one end stands as high as the hedge's top, as a tower does. The first map with an elevation layer, and ideas for the next battlefields. |

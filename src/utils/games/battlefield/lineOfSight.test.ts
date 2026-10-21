@@ -123,6 +123,34 @@ describe("canSee", () => {
         expect(canSee(field, at(field, 0, 0), at(field, 4, 0))).toBe(false);
     });
 
+    it("is blocked by a hedge for anyone below its top, though it's no higher than a low wall", () => {
+        const sight = (near: string, far: string) => {
+            const field = hillOf(["..h.."], [`${near}000${far}`]);
+            return canSee(field, at(field, 0, 0), at(field, 4, 0));
+        };
+        // The hedge's top is three quarters up: anyone lower sees nothing past it, from either end.
+        expect(sight("0", "0")).toBe(false);
+        expect(sight("2", "0")).toBe(false);
+        expect(sight("0", "2")).toBe(false);
+        // Level with its top or higher, either end looks over it.
+        expect(sight("3", "0")).toBe(true);
+        expect(sight("0", "3")).toBe(true);
+        const wall = fieldOf("..o..");
+        expect(canSee(wall, at(wall, 0, 0), at(wall, 4, 0))).toBe(true);
+    });
+
+    it("looks over a hedge from a tower top, as over a wall", () => {
+        const fort = fieldOf("^.h..");
+        expect(canSee(fort, at(fort, 0, 0), at(fort, 4, 0))).toBe(true);
+        expect(canSee(fort, at(fort, 1, 0), at(fort, 4, 0))).toBe(false);
+    });
+
+    it("is blocked by a hedge on a hill for anyone below its top", () => {
+        // Raised a height, the hedge's top is seven quarters up: the hill's own top beside it at four doesn't see over.
+        const hill = hillOf(["..h.."], ["44444"]);
+        expect(canSee(hill, at(hill, 0, 0), at(hill, 4, 0))).toBe(false);
+    });
+
     it("looks over a wall from a tower top", () => {
         const fort = fieldOf("^.#..");
         expect(canSee(fort, at(fort, 0, 0), at(fort, 4, 0))).toBe(true);

@@ -36,12 +36,14 @@ in it, run `npm run kb-atlas` (not `optimise-art`) and commit the
 `public/art/kingdombuilder/v2/` files and `src/games/KingdomBuilder/terrainAtlas.json`
 it writes.
 
-## Realm Arena's effect and item marks, and scorched ground
+## Realm Arena's effect and item marks, scorched ground and the village
 
-`realmarena/effects.svg`, `realmarena/items.svg` and `realmarena/scorched.svg`
-are drawn as code rather than exported, so their masters are the SVGs
-themselves: the served `public/art/realmarena/effects.png`, `items.png` and
-`scorched.png` are rendered from them, never saved by hand. After changing any
+`realmarena/effects.svg`, `realmarena/items.svg`, `realmarena/scorched.svg`,
+`realmarena/fx.svg` (the battle visuals) and `realmarena/village.svg` (the
+Sunken Village's hedge, cottage wall and lanes) are drawn as code rather than
+exported, so their masters are the SVGs themselves: the served
+`public/art/realmarena/effects.png`, `items.png`, `scorched.png`, `fx.png` and
+`village.png` are rendered from them, never saved by hand. After changing any
 of them, run `npm run ra-marks` (it renders every SVG in `realmarena/`) and
 commit the PNGs it writes. The sheets are a few KB, so `optimise-art` leaves
 them alone.

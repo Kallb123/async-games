@@ -44,7 +44,7 @@ export async function POST(request: NextRequest) {
     if (!coop) {
       return NextResponse.json({}, { status: 400, statusText: "A solo battle is fought against the computer" });
     }
-    // Solo is fought on the Ruined Fort (§29.2); the Sacked Fort is built for a team of two or three (§30.9).
+    // Solo is fought on the Ruined Fort (§29.2); Hold Out's own battlefields are built for a bigger team (§30.9, §35).
     if (coop.map) {
       return NextResponse.json({}, { status: 400, statusText: "A solo battle is fought on the Ruined Fort" });
     }

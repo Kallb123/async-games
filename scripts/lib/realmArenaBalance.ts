@@ -16,13 +16,15 @@
 import { nextAction, turnMemo } from "../../src/games/RealmArena/ai";
 import { DIFFICULTY_NAMES, BATTLE_SIZE_NAMES, FACTIONS, type BattleSize, type Difficulty, type FactionId } from "../../src/games/RealmArena/characters";
 import type { RealmArenaSettings } from "../../src/games/RealmArena/RealmArenaModels";
+import { battlefieldById, mapFor, type CoopMap } from "../../src/games/RealmArena/maps";
 import { battleRoundsOf } from "../../src/games/RealmArena/RealmArenaLogic";
 import { ACTION_POINTS, isStanding, isWarband, viewOf, waveArrives } from "../../src/games/RealmArena/rules";
 import { actBy, battleOf, endTurnBy, makeGame, musterAll, play } from "../../src/games/RealmArena/testFixtures";
 import { percentile as sortedPercentile } from "../../src/utils/performance";
 
 export type Mission = "holdOut" | "holdTheCentre";
-export type CoopMapChoice = "sackedFort" | "gate";
+/** Hold Out's own battlefields by name, or the gate fort for the team's size (§30.9). */
+export type CoopMapChoice = CoopMap | "gate";
 
 /** One kind of battle to fight over and over: what a host picks on the setup screen. */
 export interface BalanceScenario {
@@ -92,7 +94,7 @@ export function scenarioKey(s: BalanceScenario): string {
     const seats = s.players === 1 ? "1 player (Solo)" : `${s.players} players`;
     // A Realm team, as every scenario was before the team could choose, is left unsaid.
     const team = s.team === "realm" ? seats : `${seats} as ${factionName(s.team)}`;
-    const mission = s.mission === "holdOut" ? `Hold Out (${s.map === "sackedFort" ? "Sacked Fort" : "gate fort"})` : "Hold the Centre";
+    const mission = s.mission === "holdOut" ? `Hold Out (${s.map === "gate" ? "gate fort" : battlefieldById(mapFor(s.players, true, s.map)).name})` : "Hold the Centre";
     const extras = [
         s.difficulty !== "normal" ? DIFFICULTY_NAMES[s.difficulty] : undefined,
         s.size !== "normal" ? `${BATTLE_SIZE_NAMES[s.size]} battle` : undefined,
@@ -113,7 +115,7 @@ export function settingsOf(s: BalanceScenario): RealmArenaSettings {
         coop: {
             enemy: s.enemy,
             ...(s.mission === "holdOut" ? { mission: "holdOut" as const } : {}),
-            ...(s.mission === "holdOut" && s.map === "sackedFort" ? { map: "sackedFort" as const } : {}),
+            ...(s.mission === "holdOut" && s.map !== "gate" ? { map: s.map } : {}),
             ...(s.difficulty !== "normal" ? { difficulty: s.difficulty } : {}),
         },
     };

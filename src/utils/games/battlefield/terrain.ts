@@ -39,8 +39,10 @@ export interface Terrain {
      * how far it rises above the character (`coverOfRise`).
      */
     cover: Cover;
-    /** Whether it blocks sight whatever the heights, as trees do. Everything else blocks it by standing a full height above both ends (`lineOfSight.ts`). */
+    /** Whether it blocks sight whatever the heights, as trees do. Everything else blocks it by standing a full height above both ends, or above them at all if it `screens` (`lineOfSight.ts`). */
     blocksSight: boolean;
+    /** Too thick to see through, as a hedge is, though lower than a character: whoever stands level with its top or higher — on a tower, say — sees over it. */
+    screens?: true;
     /** A stair: a step onto or off it is never a climb, by as much as its own height (`pathfinding.ts`). */
     stairs?: true;
     /** Low cover, which a blast can clear away to scorched ground (`battlefieldWith`, realm-arena.md §22). Walls and trees never can. */
@@ -55,6 +57,7 @@ const WALL: Terrain = { name: "Wall", moveCost: Infinity, standable: false, heig
 
 const OPEN: Terrain = { name: "Open ground", moveCost: 1, standable: true, height: 0, cover: "none", blocksSight: false };
 const LOW_COVER: Omit<Terrain, "name" | "height"> = { moveCost: 1, standable: false, cover: "none", blocksSight: false, destructible: true };
+const LOW_WALL: Terrain = { name: "Low wall", ...LOW_COVER, height: 3 };
 
 /**
  * Every terrain, by the letter a map draws it with. Letters that play the same
@@ -65,17 +68,27 @@ const LOW_COVER: Omit<Terrain, "name" | "height"> = { moveCost: 1, standable: fa
  * cover the same way; where it has fallen to an ordinary wall, or gone, it
  * gives none. Scorched ground is what low cover leaves once it's blasted
  * away (§22): it plays exactly as open ground, and is only drawn differently.
+ *
+ * The Sunken Village (§35) brings three of its own. A lane is open ground
+ * worn to packed earth, and a cottage wall is a wall built of fieldstone:
+ * each plays exactly as the one it's drawn from. A hedge is the one new
+ * rule: climbed through and given cover by like a low wall, and burned or
+ * hacked away like one, but too thick to see through — for anyone standing
+ * below its top. A tower looks over a hedge as it does over a wall.
  */
 export const TERRAIN = {
     ".": OPEN,
     ",": { name: "Rubble", ...LOW_COVER, height: 2 },
-    "o": { name: "Low wall", ...LOW_COVER, height: 3 },
+    "o": LOW_WALL,
     "T": { name: "Trees", moveCost: Infinity, standable: false, height: 6, cover: "full", blocksSight: true },
     "#": WALL,
     "P": { ...WALL, name: "Parapet", height: PARAPET_HEIGHT },
     "s": { ...OPEN, name: "Tower stair", moveCost: 2, height: 3, stairs: true },
     "^": { ...OPEN, name: "Tower top", height: TOWER_HEIGHT },
     "_": { ...OPEN, name: "Scorched ground" },
+    "=": { ...OPEN, name: "Lane" },
+    "h": { ...LOW_WALL, name: "Hedge", screens: true },
+    "H": { ...WALL, name: "Cottage wall" },
 } as const satisfies Record<string, Terrain>;
 
 export type TerrainLetter = keyof typeof TERRAIN;
@@ -92,9 +105,13 @@ export function coverOfRise(rise: number): Cover {
     return rise >= FULL_HEIGHT ? "full" : rise >= HALF_HEIGHT ? "half" : "none";
 }
 
-/** Whether a square stands a full height above both of two others: a wall between them, to see past or cut a corner by. */
-export function towersOver(field: Battlefield, square: Square, a: Square, b: Square): boolean {
-    return field.tiles[square].elevation >= Math.max(field.tiles[a].elevation, field.tiles[b].elevation) + FULL_HEIGHT;
+/**
+ * Whether a square stands `by` above both of two others — a full height,
+ * unless told otherwise: a wall between them, to see past or cut a corner by.
+ * A hedge blocks sight standing above them at all (`Terrain.screens`).
+ */
+export function towersOver(field: Battlefield, square: Square, a: Square, b: Square, by = FULL_HEIGHT): boolean {
+    return field.tiles[square].elevation >= Math.max(field.tiles[a].elevation, field.tiles[b].elevation) + by;
 }
 
 /** The ground a square's terrain stands on, in quarters: its top, less what its terrain raises it. */

@@ -42,6 +42,12 @@ export const ART_SHEETS = {
      */
     scorched: { href: "/art/realmarena/scorched.png", width: 192, height: 64 },
     /**
+     * The Sunken Village's terrain (§35): a hedge's and a cottage wall's
+     * columns, then three kinds of lane along the second row. Rendered from
+     * `art-masters/realmarena/village.svg` by `npm run ra-marks`.
+     */
+    village: { href: "/art/realmarena/village.png", width: 320, height: 128 },
+    /**
      * The battle visuals (§26): what flies, a `MARK_PX` cell each in
      * `MISSILE_IDS` order, then a strike's slash; under them the bursts, two
      * cells wide. Rendered from `art-masters/realmarena/fx.svg` by
@@ -108,6 +114,12 @@ const LOW_WALLS = [2, 3].map(col => cell("walls", col, 4, 2));
 const RUBBLE = [5, 6, 7].map(col => cell("walls", col, 6, 2));
 /** Blackened earth, ash and a few chips of brick: low cover blasted away, lying flat on the ground. */
 const SCORCHED = [0, 1, 2].map(col => cell("scorched", col, 0));
+/** A hedge, three heights of it, its top the leaves it's clipped to: cut down to a hedge's height. */
+const HEDGE_COLUMN = cell("village", 0, 0, 2, 12);
+/** A cottage's limewashed fieldstone, three heights of it, capped with flat stones. */
+const COTTAGE_COLUMN = cell("village", 1, 0, 2, 12);
+/** Packed earth, lying flat: a village lane. */
+const LANES = [2, 3, 4].map(col => cell("village", col, 1));
 
 /** One sprite standing on a square: one of `sprites`, picked by the square, so a run of one terrain isn't one picture repeated. */
 export interface ArtLayer {
@@ -128,12 +140,13 @@ const TOWER = TERRAIN["^"].height;
 const STAIR = TERRAIN["s"].height;
 /** The parapet's battlements stand on brick a height below its top, so they rise from a tower's floor like the curtain wall's do from the ground. */
 const PARAPET_FOOT = TERRAIN["P"].height - FULL_HEIGHT;
+const HEDGE = TERRAIN["h"].height;
 
 /**
  * What each terrain is drawn with, bottom up, standing on its square's
  * ground. Open ground has nothing: the board lays grass over the whole map
- * first (`GRASS`). Scorched ground is drawn over that grass, a square at a
- * time, since it's only ever where low cover was (§22). Heights come from the
+ * first (`GRASS`). Scorched ground and lanes are drawn over that grass, a
+ * square at a time, since they're only ever here and there. Heights come from the
  * rules' own `TERRAIN`, so a tower drawn here is as tall as the tower the
  * rules play.
  */
@@ -150,6 +163,9 @@ export const TERRAIN_ART: Readonly<Record<TerrainLetter, readonly ArtLayer[]>> =
     "s": [{ sprites: [BRICK_COLUMN], at: 0, clip: STAIR }, { sprites: [MOSSY_ROCK], at: STAIR, clip: 0 }],
     "^": [{ sprites: [BRICK_COLUMN], at: 0, clip: TOWER }, { sprites: [MOSSY_ROCK], at: TOWER, clip: 0 }],
     "_": [{ sprites: SCORCHED, at: 0 }],
+    "=": [{ sprites: LANES, at: 0 }],
+    "h": [{ sprites: [HEDGE_COLUMN], at: 0, clip: HEDGE }],
+    "H": [{ sprites: [COTTAGE_COLUMN], at: 0, clip: FULL_HEIGHT }],
 };
 
 /**
@@ -157,7 +173,8 @@ export const TERRAIN_ART: Readonly<Record<TerrainLetter, readonly ArtLayer[]>> =
  * `TERRAIN_ART`: a plain face of brick for its sides — the brick column, three
  * heights of it — and the top it is capped with: paved with the same brick
  * (the column's own top is a hollow tower mouth) or, for the tower's stair and
- * top, the grassed rock they are floored with. Trees are
+ * top, the grassed rock they are floored with. The village's hedge and cottage
+ * wall are skinned from their own columns, which have tops of their own. Trees are
  * built from primitives, and open and scorched ground are the ground's.
  */
 export const BLOCK_SKIN: Readonly<Partial<Record<TerrainLetter, { side: Sprite; top?: Sprite }>>> = {
@@ -167,6 +184,8 @@ export const BLOCK_SKIN: Readonly<Partial<Record<TerrainLetter, { side: Sprite; 
     "P": { side: BRICK_COLUMN },
     "s": { side: BRICK_COLUMN, top: MOSSY_ROCK },
     "^": { side: BRICK_COLUMN, top: MOSSY_ROCK },
+    "h": { side: HEDGE_COLUMN, top: HEDGE_COLUMN },
+    "H": { side: COTTAGE_COLUMN, top: COTTAGE_COLUMN },
 };
 
 const LAYERS = Object.values(TERRAIN_ART).flat();

@@ -1,12 +1,15 @@
 // Seeing across a battlefield (docs/games/realm-arena.md §13.1, §25): one
 // square sees another when the straight line between their centres crosses
-// nothing that blocks sight. Trees always do. Anything else does when it
-// stands a full height above both ends — a wall between two characters on the
-// ground, but not between a tower top and the ground beyond the wall. Low
-// cover and characters never do. A figure may look down the side of full
-// cover directly beside it: an angled line may leave through that first
-// square, but the same cover further away still blocks sight. The walk is
-// exact integer arithmetic, so it always chooses the same squares.
+// nothing that blocks sight. Trees always do. A hedge does when its top
+// stands above both ends: from the ground it hides what's past it, though
+// it's no taller than a low wall, and from a tower it's looked over (§35.1).
+// Anything else does when it stands a full height above both ends — a wall
+// between two characters on the ground, but not between a tower top and the
+// ground beyond the wall. Low cover and characters never do. A figure may
+// look down the side of full cover directly beside it: an angled line may
+// leave through that first square, but the same cover further away still
+// blocks sight. The walk is exact integer arithmetic, so it always chooses
+// the same squares.
 
 import { coordsOf, isNeighbour, towersOver, type Battlefield, type Square } from "./terrain";
 
@@ -59,7 +62,10 @@ export function sightLine(field: Battlefield, from: Square, to: Square, within =
  * a single tree doesn't hide what's past its corner.
  */
 export function canSee(field: Battlefield, from: Square, to: Square): boolean {
-    const blocks = (square: Square) => field.tiles[square].terrain.blocksSight || towersOver(field, square, from, to);
+    const blocks = (square: Square) => {
+        const { terrain } = field.tiles[square];
+        return terrain.blocksSight || towersOver(field, square, from, to, terrain.screens ? 1 : undefined);
+    };
     const { crossed, grazed } = sightLine(field, from, to);
     const a = coordsOf(field, from), b = coordsOf(field, to);
     const besideAtAnAngle = (square: Square) => {

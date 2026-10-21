@@ -17,6 +17,7 @@ import { useStartSoloGame } from "@/utils/hooks/useStartSoloGame";
 import { GAME_META, gameCommandVersion, partySizeRange } from "@/utils/ui/games";
 import { readRematchFlag, readRematchPlayers, readRematchTurnTimer } from "@/utils/ui/rematch";
 import type { RealmArenaCoopInvite, RealmArenaInvitationRequest } from "@/games/RealmArena/RealmArenaModels";
+import { fittingHoldOutMap } from "@/games/RealmArena/maps/holdOut";
 import { factionRosterLine } from "@/games/RealmArena/roster";
 import { warbandSteps } from "@/games/RealmArena/rules";
 import { BATTLE_SIZE_NAMES, COOP_PLAYERS, DIFFICULTY_IDS, DIFFICULTY_NAMES, FACTION_IDS, FACTIONS, musterBudget, RA_SOLO_PARAM, RANDOM_ENEMY, warbandBudget, type BattleSize, type Difficulty, type FactionId } from "@/games/RealmArena/characters";
@@ -46,9 +47,10 @@ const MISSION_CHOICES: OptionChoice<Mission>[] = [
   { id: 'holdOut', label: 'Hold Out', description: 'Survive enemy waves, each bigger than the last, until the last round.' },
 ];
 
-// Where Hold Out is fought (§30.9): the fort built for it, or the line battle Hold the Centre is fought on.
+// Where Hold Out is fought (§30.9, §35): a battlefield built for it, or the line battle Hold the Centre is fought on.
 const BATTLEFIELD_CHOICES: OptionChoice<Battlefield>[] = [
   { id: 'sackedFort', label: 'Sacked Fort', description: 'Start in the ruined keep in the middle, with the enemy closing in, and landing its waves, all round the edges.' },
+  { id: 'sunkenVillage', label: 'Sunken Village', description: 'For three. Start on the sunken green, with the enemy closing in through hedges and roofless cottages that hide it until it is close.' },
   { id: 'line', label: 'Gate Fort', description: 'The Twin- or Three-Gate Fort, as in Hold the Centre: start along one edge, with the enemy opposite.' },
 ];
 
@@ -113,11 +115,14 @@ function NewGameRealmArenaForm() {
     invitedCount: players.length,
   });
   const { starting, start } = useStartSoloGame(INVITE_PATH);
+  // A battlefield built for another size of team isn't offered, and a pick of one the party has since outgrown falls back as the battle would.
+  const battlefieldChoices = BATTLEFIELD_CHOICES.filter(choice => choice.id === 'line' || fittingHoldOutMap(choice.id, partySize) === choice.id);
+  const pickedBattlefield = battlefield === 'line' ? battlefield : fittingHoldOutMap(battlefield, partySize) ?? 'line';
 
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     // Solo is fought on the Ruined Fort alone, whatever the hidden Battlefield picker last held.
-    const map = solo || battlefield === 'line' ? undefined : battlefield;
+    const map = solo || pickedBattlefield === 'line' ? undefined : pickedBattlefield;
     const data: RealmArenaInvitationRequest = {
       userList: solo ? [] : players,
       turnTimer,
@@ -176,7 +181,7 @@ function NewGameRealmArenaForm() {
       )}
       {/* Solo has the one battlefield, the Ruined Fort (§30.6). */}
       {coop && !solo && mission === 'holdOut' && (
-        <OptionChoiceSection label="Battlefield" value={battlefield} onChange={setBattlefield} choices={BATTLEFIELD_CHOICES} />
+        <OptionChoiceSection label="Battlefield" value={pickedBattlefield} onChange={setBattlefield} choices={battlefieldChoices} />
       )}
       {coop && (
         <OptionChoiceSection label="Difficulty" value={difficulty} onChange={setDifficulty} choices={difficultyChoices(mission, size)} />

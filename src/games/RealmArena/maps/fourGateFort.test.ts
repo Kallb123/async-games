@@ -1,13 +1,10 @@
 import { describe, expect, it } from "vitest";
 import { coordsOf, type Square } from "@/utils/games/battlefield/terrain";
 import { FOUR_GATE_FORT as FORT, FOUR_GATE_FORT_MAP } from "./fourGateFort";
-import { sealedOff, sorted, strandedSeats, towersOverCentre, walkToCentre } from "./testFixtures";
+import { quarterTurn as turned, sealedOff, sorted, strandedSeats, towersOverCentre, walkToCentre } from "./testFixtures";
 
 /** The same square with the map given a quarter turn clockwise. */
-const quarterTurn = (square: Square): Square => {
-    const { col, row } = coordsOf(FORT, square);
-    return col * FORT.width + (FORT.width - 1 - row);
-};
+const quarterTurn = (square: Square): Square => turned(FORT, square);
 
 describe("the Four-Gate Fort", () => {
     it("is 48 squares square, with a zone for each of four players (§13.1)", () => {

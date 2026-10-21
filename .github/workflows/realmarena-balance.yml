@@ -28,7 +28,7 @@ on:
         description: Missions (holdOut, holdTheCentre)
         default: 'holdOut'
       maps:
-        description: Hold Out battlefields (sackedFort, gate)
+        description: Hold Out battlefields (sackedFort, sunkenVillage, gate)
         default: 'sackedFort'
       difficulties:
         description: Difficulties (easy, normal, hard)
