@@ -3,12 +3,12 @@ import { canSee } from "@/utils/games/battlefield/lineOfSight";
 import { distance, HALF_HEIGHT, isNeighbour, TERRAIN, type Battlefield } from "@/utils/games/battlefield/terrain";
 import { mapFor } from ".";
 import { SACKED_FORT_THREE } from "./sackedFort";
-import { SUNKEN_VILLAGE_THREE as VILLAGE } from "./sunkenVillage";
+import { SUNKEN_VILLAGE_FOUR, SUNKEN_VILLAGE_THREE as VILLAGE } from "./sunkenVillage";
 import { inMiddle, quarterTurn, sorted, standable } from "./testFixtures";
 
 // The Sunken Village (§35): Hold Out's second battlefield, for a team of
-// three, over ground an archer can't see far across. What it shares with the
-// Sacked Fort is held in holdOut.test.ts; this is its own.
+// three or four, over ground an archer can't see far across. What it shares
+// with the Sacked Fort is held in holdOut.test.ts; this is its own.
 describe("the Sunken Village", () => {
     const size = VILLAGE.width;
     const team = 3;
@@ -53,9 +53,19 @@ describe("the Sunken Village", () => {
     });
 });
 
+describe("the Sunken Village for a team of four (§37)", () => {
+    it("is the same village, ground and all, with the team's four zones on the green, all of it half a height below the village", () => {
+        expect(SUNKEN_VILLAGE_FOUR.tiles).toEqual(VILLAGE.tiles);
+        for (const zone of SUNKEN_VILLAGE_FOUR.deployments.slice(0, 4)) {
+            expect(zone.every(square => inMiddle(SUNKEN_VILLAGE_FOUR, square) && SUNKEN_VILLAGE_FOUR.tiles[square].elevation === 0)).toBe(true);
+        }
+    });
+});
+
 describe("mapFor with the Sunken Village (§35)", () => {
-    it("puts a co-op team of three on it when the host picked it, a team of two on the Sacked Fort, and anyone else on their usual map", () => {
+    it("puts a co-op team of three or four on it when the host picked it, a team of two on the Sacked Fort, and anyone else on their usual map", () => {
         expect(mapFor(3, true, "sunkenVillage")).toBe("sunkenVillageThree");
+        expect(mapFor(4, true, "sunkenVillage")).toBe("sunkenVillageFour");
         expect(mapFor(2, true, "sunkenVillage")).toBe("sackedFortTwo");
         expect(mapFor(1, true, "sunkenVillage")).toBe("ruinedFort");
         expect(mapFor(3, false, "sunkenVillage")).toBe("ringFort");

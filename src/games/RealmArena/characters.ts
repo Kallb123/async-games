@@ -10,6 +10,7 @@
 // read the same table the commands do.
 
 import type { Cover } from "@/utils/games/battlefield/terrain";
+import { HOLD_OUT_MAPS, type CoopMap } from "./maps/holdOut";
 import { currentRuleset, rulesetOf, type RulesContext } from "./rulesets";
 
 // These aliases are for setup, profiles and tools without a game. Gameplay
@@ -450,17 +451,39 @@ export function enemyNameOf(enemy: FactionId | undefined, context?: RulesContext
 export const RANDOM_ENEMY = "random";
 
 /**
- * How many players a co-op team can be (§29.1): one battlefield for each
- * (§29.2). A team of one is solo (§30.6), on the Ruined Fort, which skips the
- * invite flow; a team the host invites is two or three.
+ * How many players a co-op team can be at most (§29.1): one battlefield for
+ * each (§29.2). A team of one is solo (§30.6), on the Ruined Fort, which skips
+ * the invite flow; a team the host invites is two to four — though what a
+ * setting seats is `coopTeamMax`: a team of four fits only Hold Out on a
+ * battlefield of its own (§37).
  */
-export const COOP_PLAYERS = { min: 1, max: 3 } as const;
+export const COOP_PLAYERS = { min: 1, max: 4 } as const;
+
+/** The biggest team the line battles seat: the Three-Gate Fort's (§29.2), and so Hold the Centre's. */
+export const LINE_COOP_MAX = 3;
+
+/** What of a co-op setting decides how many it seats: its mission (§30.3) and, for Hold Out, the battlefield picked (§30.9). */
+export interface CoopSeating {
+    mission?: string;
+    map?: CoopMap;
+}
+
+/**
+ * The biggest team a co-op setting seats (§29.1): three, unless it's Hold Out
+ * on a battlefield of its own built for more (§37) — the one place that says
+ * which team sizes fit which setting, for the setup screen, the invitation and
+ * the lobby alike.
+ */
+export function coopTeamMax({ mission, map }: CoopSeating): number {
+    const own = mission === "holdOut" && map ? Object.keys(HOLD_OUT_MAPS[map]).map(Number) : [];
+    return Math.max(LINE_COOP_MAX, ...own);
+}
 
 /** The rematch link's flag for a solo battle (§30.6), so "play again" comes back to Solo. */
 export const RA_SOLO_PARAM = "solo";
 
-/** Whether a party of this size can play co-op: a team its battlefields are built for. */
-export const fitsCoop = (players: number): boolean => players >= COOP_PLAYERS.min && players <= COOP_PLAYERS.max;
+/** Whether a party of this size can play this co-op setting: a team its battlefield is built for — or, with no setting given, any setting at all. */
+export const fitsCoop = (players: number, coop: CoopSeating = {}): boolean => players >= COOP_PLAYERS.min && players <= coopTeamMax(coop);
 
 /**
  * The party size a squad is mustered for (§13.6): the battle's own, or in

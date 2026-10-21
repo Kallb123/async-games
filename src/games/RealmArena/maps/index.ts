@@ -10,10 +10,10 @@ import { ruleValuesOf, type RulesContext } from "../rulesets";
 import { FOUR_GATE_FORT } from "./fourGateFort";
 import { RING_FORT } from "./ringFort";
 import { RUINED_FORT } from "./ruinedFort";
-import { SACKED_FORT_THREE, SACKED_FORT_TWO } from "./sackedFort";
-import { SUNKEN_VILLAGE_THREE } from "./sunkenVillage";
+import { SACKED_FORT_FOUR, SACKED_FORT_THREE, SACKED_FORT_TWO } from "./sackedFort";
+import { SUNKEN_VILLAGE_FOUR, SUNKEN_VILLAGE_THREE } from "./sunkenVillage";
 import { fittingHoldOutMap, HOLD_OUT_MAPS, type CoopMap } from "./holdOut";
-import { EVERY_EDGE_IN_THIRDS } from "./middleOut";
+import { EVERY_EDGE_IN_THIRDS, fourAround } from "./middleOut";
 import { THREE_GATE_FORT } from "./threeGateFort";
 import { TWIN_GATE_FORT } from "./twinGateFort";
 
@@ -25,7 +25,9 @@ export const REALM_ARENA_MAPS = {
     threeGateFort: THREE_GATE_FORT,
     sackedFortTwo: SACKED_FORT_TWO,
     sackedFortThree: SACKED_FORT_THREE,
+    sackedFortFour: SACKED_FORT_FOUR,
     sunkenVillageThree: SUNKEN_VILLAGE_THREE,
+    sunkenVillageFour: SUNKEN_VILLAGE_FOUR,
 } as const satisfies Record<string, Battlefield>;
 
 export type RealmArenaMapId = keyof typeof REALM_ARENA_MAPS;
@@ -51,6 +53,8 @@ export const DEPLOYMENT_NAMES: Readonly<Record<RealmArenaMapId, readonly string[
     sackedFortTwo: ["in the west of the keep", "in the east of the keep", "along the north and south edges", "along the east and west edges"],
     sackedFortThree: ["in the west of the keep", "in the middle of the keep", "in the east of the keep", ...EVERY_EDGE_IN_THIRDS],
     sunkenVillageThree: ["in the west of the green", "in the middle of the green", "in the east of the green", ...EVERY_EDGE_IN_THIRDS],
+    sackedFortFour: fourAround("keep"),
+    sunkenVillageFour: fourAround("green"),
 };
 
 /** The map a party of this size fights on (§19.1): the Ruined Fort for two, the Ring Fort for three, the Four-Gate Fort for four. */
@@ -63,9 +67,12 @@ export function mapForPlayers(playerCount: number): RealmArenaMapId {
  * co-op the line battle for the size of the team (§29.2) — the Ruined Fort for
  * one, the Twin-Gate Fort for two, the Three-Gate Fort for three — unless the
  * host picked one of Hold Out's own: the Sacked Fort (§30.9), built for a team
- * of two or three, or the Sunken Village (§35), built for three. A team the
- * pick isn't built for — a lobby started short — has the Sacked Fort if it
- * fits, and the line battle if not.
+ * of two, three or four, or the Sunken Village (§35), built for three or four.
+ * A team the pick isn't built for — a lobby started short — has the Sacked
+ * Fort if it fits, and the line battle if not. A team of four has no line
+ * battle, so one with no Hold Out battlefield of its own isn't a team any
+ * setting seats (`fitsCoop`): it falls through to the Three-Gate Fort, which
+ * `buildInitialRealmArenaState` then refuses for want of a zone.
  */
 export function mapFor(playerCount: number, coop: boolean, map?: CoopMap): RealmArenaMapId {
     if (!coop) return mapForPlayers(playerCount);

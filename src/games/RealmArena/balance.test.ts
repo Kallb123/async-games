@@ -713,10 +713,10 @@ describe("the team's armour against the Realm in Hold Out", () => {
     });
 });
 
-describe("Hold Out for two lasts 13 rounds", () => {
+describe("Hold Out lasts 13 rounds for a team of two, three or four", () => {
     const hold = { mission: "holdOut", rulesVersion: 7 };
 
-    it("is only two players' Hold Out under the rebalance: not Solo, a duel, Hold the Centre, or a battle from before it", () => {
+    it("is two players' Hold Out under the rebalance, and a team of three's or four's: not Solo, a duel, Hold the Centre, or a battle from before it", () => {
         expect(HOLD_OUT_PAIR_ROUNDS).toBe(13);
         expect(battleRounds(2, hold)).toBe(13);
         expect(battleRounds(2, { mission: "holdOut", rulesVersion: LEGACY })).toBe(15);
@@ -727,6 +727,10 @@ describe("Hold Out for two lasts 13 rounds", () => {
         expect(battleRounds(3, hold)).toBe(13);
         expect(battleRounds(3)).toBe(13);
         expect(battleRounds(4)).toBe(12);
+        // A team of four (§37) lasts a team of three's, whatever the rules it's under; a free-for-all of four keeps its 12.
+        expect(battleRounds(4, hold)).toBe(13);
+        expect(battleRounds(4, { mission: "holdOut" })).toBe(13);
+        expect(battleRounds(4, { rulesVersion: 7 })).toBe(12);
     });
 
     it("is what a game reads, whoever asks: its response, its ending, its waves", async () => {
@@ -736,6 +740,8 @@ describe("Hold Out for two lasts 13 rounds", () => {
         expect(length(["a", "b"], { ...holdOut, rulesVersion: LEGACY })).toBe(15);
         expect(length(["a"], holdOut)).toBe(15);
         expect(length(["a", "b", "c"], holdOut)).toBe(13);
+        expect(length(["a", "b", "c", "d"], { coop: { ...holdOut.coop, map: "sackedFort" } })).toBe(13);
+        expect(length(["a", "b", "c", "d"], { coop: { ...holdOut.coop, map: "sunkenVillage" } })).toBe(13);
         expect(length(["a", "b"], { coop: { enemy: "realm" } })).toBe(15);
         expect(length(["a", "b"], {})).toBe(15);
 

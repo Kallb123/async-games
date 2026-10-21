@@ -1,9 +1,9 @@
 # Realm Arena — Game Design Document
 
-**Status:** v1.61. The Realm troop overhaul (§34) is implemented for new
+**Status:** v1.62. The Realm troop overhaul (§34) is implemented for new
 battles in rules version 9, using §34.10's proposed defaults for playtesting,
-and sight with angles (§36) in rules version 10. Battles already created keep
-their original rules.
+sight with angles (§36) in rules version 10, and co-op for a team of four in
+Hold Out (§37). Battles already created keep their original rules.
 Earlier implementation
 notes and revision history describe the game before this overhaul wherever
 they conflict with §34.
@@ -33,8 +33,9 @@ achievements, difficulty and solo play (§30.6), one player against one
 warband.
 **Working title:** Realm Arena (see the appendix)
 **Genre:** Turn-based tactical squad battles, XCOM-style
-**Players:** 1–4: free-for-all or two teams of two, co-op for two or three,
-or solo against the computer
+**Players:** 1–4: free-for-all or two teams of two, co-op for two or three
+(four in Hold Out on the Sacked Fort or the Sunken Village, §37), or solo
+against the computer
 **Session shape:** one battle per match, four to six days (longer with more
 players), played a turn at a time in spare minutes
 **Setting:** the same fantasy world as Defender of the Realm (§10)
@@ -2300,7 +2301,8 @@ an action. No language model is involved, and nothing leaves the server.
 ### 29.1 What the players see
 
 - **The host chooses the mode.** The setup screen gains *Free-for-all* or
-  *Co-op against the computer*. Co-op is for two or three players. Solo (one
+  *Co-op against the computer*. Co-op is for two or three players, or four in
+  Hold Out on a battlefield seating them (§37). Solo (one
   player against the computer) comes after it (§30.6). There is one
   difficulty to start with; more come with §30.5.
 - **The host chooses whom they fight**: a faction, or *Random* (§29.3). The
@@ -2316,8 +2318,8 @@ an action. No language model is involved, and nothing leaves the server.
   has (§17.2). Every squad, a player's or a warband, musters 80 points: four
   characters, the three-player budget (§13.6). The battle lasts as long as a
   free-for-all of the same number of players (§13.8): 15 rounds for two, 13
-  for three. The warbands' turns run inside the players' (§29.4), so they add
-  no hand-offs.
+  for three — and in Hold Out 13 for a team of four too (§37). The warbands'
+  turns run inside the players' (§29.4), so they add no hand-offs.
 - **The team is one side.** Teammates are allies: they share their sight in
   fog, a Cleric heals and raises a teammate's character as its own, a shield
   wall covers them, and nobody's overwatch fires at a teammate. A fireball or
@@ -2803,7 +2805,7 @@ sure it is.
   free-for-all, beside `fog` (§27.1). On the invitation `enemy` is a faction
   id or `"random"`; on the battle it's always a faction id, Random drawn as
   the battle is created (§29.3). The setup route checks it — two or three
-  players, and a faction that exists or Random — like everything a request
+  players (four in Hold Out on its own battlefields, §37), and a faction that exists or Random — like everything a request
   sends. The players' seats are the
   map's first zones and the warbands' the rest, and `RealmArenaMuster` holds a
   co-op squad to 80 points, whatever the party's size.
@@ -2845,8 +2847,9 @@ sure it is.
   (`coopInviteOf`), and anything else is no co-op: the invitation's schema
   holds it to that, so a lobby's settings, which reach the model unread, are
   held to it too. The setup route refuses anything else sent for it, and a
-  team that isn't two or three. A lobby can still fill to four; four play a
-  free-for-all, and the setup log says so.
+  team that isn't two or three (§37 adds four for some settings). A lobby can
+  still fill to four; four play a free-for-all unless the setting seats four,
+  and the setup log says so.
 - On the battle it's `coop: { enemy, nextWarband }`, with Random drawn by
   `CreateGame` and stored as what it drew. The setup log names a faction the
   host picked and says only "an enemy drawn at random" for Random. A stored
@@ -2991,7 +2994,8 @@ sure it is.
 **What PR 5 settled:**
 
 - The setup screen's *Mode* is free-for-all or co-op, and co-op holds the
-  party to two or three while it's chosen — the invite list, the open seats
+  party to two or three (four for Hold Out on a battlefield of its own, §37)
+  while it's chosen — the invite list, the open seats
   and the party-size line read it — so a lobby can no longer fill to four for
   a co-op battle. Under it, *Enemy* lists every faction and Random, and hides
   itself while there's one; the host fights the Realm's Renegades until then.
@@ -3318,8 +3322,9 @@ surviving the waves as the first co-op mission of its own. This is it.
   share all still mean something, and the keep, walled and central, is where
   a team means to hold out anyway. The score doesn't decide the result.
 - **How long.** As long as Hold the Centre for the same team (§29.1): 15
-  rounds for two, 13 for three. The every-third-round spacing and the length
-  are the first numbers the playtest tunes.
+  rounds for two, 13 for three — a pair has since lasted 13 (§30.13), and a
+  team of four lasts 13 as well (§37). The every-third-round spacing and the
+  length are the first numbers the playtest tunes.
 
 **The computer hunts.** In Hold the Centre a warband's Objective is the keep
 (§29.7). In Hold Out it's the team: the walk to the nearest team character it
@@ -3557,7 +3562,7 @@ of one there).
   size, rather than solo being read off an empty invite list: a host who
   invited only themselves is refused as the party of one they are. A solo
   request must carry `coop`, invite nobody and name no battlefield — the
-  Sacked Fort is built for two or three — and is stored with the unlimited
+  Sacked Fort is built for a team of two to four — and is stored with the unlimited
   timer whatever it sent. Nobody is pushed an invitation.
 - **`turnEnded`** is the muster's and the End turn's outcome: `turnOver`
   with more than one seat, `timerRestarts` always. A free-for-all or a co-op
@@ -3622,7 +3627,8 @@ been through them once, and it's built not to be held:
 - **The keep**, 12 × 12 in the middle, is a ring of low walls — half cover,
   climbed over — with a broken wall pillar at each corner and four wide gaps.
   The team musters inside it, side by side across its middle: the west and
-  east halves for two, three zones of 4 × 6 for three. The keep's centre still
+  east halves for two, three zones of 4 × 6 for three, and for four a 6 × 4
+  zone in each quarter (§37). The keep's centre still
   scores as in any battle (§13.7), and the score still doesn't decide Hold Out.
 - **The curtain wall** round it has, on every side, a gate six squares wide
   and, either side of it, a breach in the open and one over rubble: five ways
@@ -3638,7 +3644,7 @@ into each other a quarter at a time (a pinwheel, so every edge square is in
 exactly one). For a team of two, one warband takes the north and south edges
 and the other the east and west; for three, every edge is cut in thirds and
 each warband takes one third of every edge — the second warband the thirds in
-the middle, facing every gate. So a warband is a zone in several parts, and
+the middle, facing every gate; for four, a rotation of three thirds each (§37). So a warband is a zone in several parts, and
 two things learned that:
 
 - **A deployment zone may be several areas** (`BattlefieldMap.deployments`
@@ -4498,7 +4504,7 @@ Village is Hold Out's second battlefield, built so that a shot has to be
 earned: **ground an archer can't see far across**, which pulls the fight in
 close. It keeps the Sacked Fort's shape, with the team in the middle and the
 warbands closing in, and landing their waves, from every edge. It's built for
-a team of three.
+a team of three, and later four (§37).
 
 ### 35.1 New terrain
 
@@ -4558,9 +4564,9 @@ from the middle outwards:
 ### 35.3 Picking it
 
 The setup's *Battlefield* under Hold Out (§30.9) offers the Sunken Village to
-a party of three, stored as `coop.map: "sunkenVillage"`; the battle's map is
-`sunkenVillageThree`, one id per size of team as the Sacked Fort's are, so a
-version for two can join it. A lobby can still start
+a party of three or four, stored as `coop.map: "sunkenVillage"`; the battle's map is
+`sunkenVillageThree` or `sunkenVillageFour` (§37), one id per size of team as
+the Sacked Fort's are, so a version for two can join them. A lobby can still start
 short of the party the host set up for, so a team the Sunken Village isn't
 built for fights on the Sacked Fort if it fits, and on the line battle if not.
 `fittingHoldOutMap` decides it, for `mapFor` and for the setup screen alike,
@@ -4644,8 +4650,8 @@ Open questions:
 
 1. ~~Does a hedge want to be seen over from a tower top, as a wall is?~~ Yes:
    whoever stands level with its top or higher sees over it (§35.1).
-2. A version for a team of two, and a Hold Out battlefield for a team of four,
-   which co-op doesn't seat yet (§29).
+2. A version for a team of two. (A team of four now plays here and on the
+   Sacked Fort, §37.)
 3. An achievement for winning on it, beside *Hold the Keep* (§30.4)?
 
 ## 36. Sight with angles (rules version 10)
@@ -4735,6 +4741,93 @@ hedge is no longer climbed through. Every map's fairness tests hold.
 `lineOfSight.test.ts` (both rules), `ruinedFort.test.ts` (the tower top) and
 `sight.test.ts` (which rule a battle plays by).
 
+## 37. Co-op for a team of four
+
+Co-op has seated one to three players (§29.1). Hold Out's own battlefields, the
+Sacked Fort (§30.9) and the Sunken Village (§35), are 54 squares square with
+room in the middle for more, so a team of **four** can now play Hold Out on
+either. **Hold the Centre and Hold Out on the gate forts stay at three**: the
+gate forts are line battles built for a team of up to three (§29.2), and there
+is no new one.
+
+### 37.1 Which settings seat four
+
+One rule, in one place: `coopTeamMax(setting)` in `characters.ts` is three,
+unless the setting is Hold Out on a battlefield of its own that has a version
+for four (`HOLD_OUT_MAPS` in `maps/holdOut.ts`), and `fitsCoop(players,
+setting)` asks it. The setup route, the lobby's `CreateGame`, and the setup
+screen all go through it:
+
+- The route refuses a co-op invitation for a party the setting doesn't seat,
+  with a message naming how many it does ("This co-op battle is for up to 3
+  players").
+- A lobby that fills to four for a setting that seats three plays a
+  free-for-all, as a lobby always could, and the setup log now says the right
+  number: "this co-op battle is for up to 3 players, so this is a free-for-all".
+- The setup screen's party is one to four while co-op is chosen. Once the party
+  is four it offers Hold Out alone (the mission falls to it, as a pick of a
+  battlefield built for another size of team falls back, §35.3) and no gate
+  fort. Each choice says how many it is for.
+- A lobby that starts short of four fights on the map for the team it has:
+  `fittingHoldOutMap` already did this (§35.3), and now has a version for four
+  in both maps. `mapFor` for four without a map of its own has none to give —
+  nothing reaches it, and the battle's creation would refuse it for want of a
+  zone (`buildInitialRealmArenaState`).
+
+### 37.2 The zones
+
+Both maps use the same zones (`FOUR_IN_THE_MIDDLE`, `maps/middleOut.ts`);
+`sackedFortFour` and `sunkenVillageFour` are the ids (permanent, like every
+map's), with the same ground as the version for three.
+
+**The team**: four zones of 6 × 4, one in each quarter of the middle, on rows
+23 to 30 so that none stands on the Sacked Fort's rubble in the keep's corners.
+The seats take them clockwise from the north west: north west
+(columns 21–26, rows 23–26), north east (27–32, 23–26), south east
+(27–32, 27–30), south west (21–26, 27–30). Together they hold the centre.
+They are not a quarter turn of each other (6 × 4 turns into 4 × 6), as the
+zones for two and three are not either; only the warbands' are.
+
+**The warbands**: every edge is cut in thirds, as it is for three
+(`edgeStrips(3)`), but four warbands can't each have one third of every edge
+and cover them all, so they rotate as a Latin square: **warband k takes part j
+of strip (k + j) mod 4, for j = 0, 1, 2**. Warband 0 has the first third of the
+north edge, the middle of the east and the last third of the south; warband 1
+the first third of the east, the middle of the south and the last third of the
+west; and so on round. Every one of the twelve thirds is somebody's exactly
+once, a warband reaches three edges, and a quarter turn carries each
+warband's zone onto the next one's, so no edge has the easier approach.
+`readyMadeMuster` already deals a squad round a zone of several areas, so it
+is unchanged (and no battle already fought musters differently). The setup log
+names each zone from the same rotation (`EDGE_THIRDS_ROTATING`).
+
+### 37.3 Thirteen rounds
+
+Hold Out for a team of four lasts **13 rounds**, with its waves at rounds 4, 7,
+10 and 13, the same as for two and three. A free-for-all of four keeps its 12
+(§13.8). `battleRounds` reads it as: Hold Out for exactly two is
+`HOLD_OUT_PAIR_ROUNDS` (§30.13), and for any bigger team a team of three's
+length. Nothing changes for two or three, and no rules or command version is
+needed: no four-player co-op battle existed to change. The squads are
+unchanged too: every co-op squad musters the three-player budget (§29.1), and
+each warband its difficulty's (§30.5).
+
+### 37.4 Measured and tested
+
+The planner's turns in whole battles of four, on both maps against every
+faction with and without fog (375 turns), averaged 140 ms and the slowest took
+640 ms, inside the same budgets (344 ms and 1.4 s) as a team of two or three.
+
+`maps/holdOut.test.ts` holds the four-player maps to everything the others
+share (the quarter turn, the team round the centre, the warbands round the whole
+edge once each from three sides, a ready-made warband on every side, nothing
+sealed off, no first-turn strike), and to the zones above and their names;
+`characters.test.ts` holds `coopTeamMax` and `fitsCoop`; `coop.test.ts` the
+creation of a battle for four, the free-for-all for four anywhere else, room
+for the last wave, and whole battles with and without fog, and a replay;
+`teamBlocks.test.ts` a block of four players; `balance.test.ts` the 13 rounds;
+`planner.pace.test.ts` the pace.
+
 ---
 
 ## Appendix: Working title
@@ -4819,3 +4912,4 @@ Realm, its sibling in the same world.
 | 1.59 | Rules version 9 (command version 9) builds the rest of §34 with its proposed values: the Realm's new kits, the five new effects, their aims and the computer's use of them; battles created before it keep their catalogue. How the board plays it (§34.11): a Leap's arc and landing, a Shove's push and collision, a Beckon's pull, a Bouncing Arrow's bounce, Ice Ball's shard and frost, Thunder's lightning, a glow under everyone blessed or braced and a ring under the warded, and a badge for each new effect, all drawn in the effect and fx masters. |
 | 1.60 | The Sunken Village (§35), Hold Out's second battlefield, for a team of three: a sunken green ringed by hedges, lanes and roofless cottages that keep archers' sightlines short. Three new terrains: lanes, cottage walls, and hedges, which can be climbed through and burned away, and which nobody sees through unless one end stands as high as the hedge's top, as a tower does. The first map with an elevation layer, and ideas for the next battlefields. |
 | 1.61 | Sight with angles (§36, rules and command version 10): sight runs from eye to eye, so what hides a character depends on the angle it's seen from. From higher ground, a wall still hides whoever is pressed close behind it, and the edge of a rise or a parapet hides the ground just below it. Hedges stand a full height, a wall that a blast clears. Battles created before it keep level sight and the low hedge. |
+| 1.62 | Co-op for a team of four, in Hold Out on the Sacked Fort or the Sunken Village only (§37): a zone in each quarter of the middle and the edge's thirds dealt to the four warbands as a Latin square, 13 rounds as for two and three. Hold the Centre and the gate forts stay at three, and `coopTeamMax` / `fitsCoop` say which settings seat which teams. No rules version: no four-player co-op battle existed. |

@@ -4,7 +4,7 @@ import { readGameSetupRequest, seatsFor } from '@/utils/api/gameSetupRequest';
 import { sendGameInvitePush } from '@/utils/firebase/invitePush';
 import { dbConnect } from '@/utils/mongodb/mongodb';
 import { battleSizeOf, coopInviteOf, RealmArenaInvitationModel, RealmArenaInvitationRequest } from '@/games/RealmArena/RealmArenaModels';
-import { COOP_PLAYERS, fitsCoop, playableFactionsOf } from '@/games/RealmArena/characters';
+import { coopTeamMax, fitsCoop, playableFactionsOf } from '@/games/RealmArena/characters';
 import { meta } from '@/games/RealmArena/meta';
 import { IInvitationDataDocument } from '@/utils/mongodb/InvitationData';
 import { partySizeErrorMessage } from '@/utils/ui/games';
@@ -56,9 +56,9 @@ export async function POST(request: NextRequest) {
     if (partySizeError) {
       return NextResponse.json({}, { status: 400, statusText: partySizeError });
     }
-    // A co-op team the host invites is two or three, which its battlefields are built for.
-    if (coop && !fitsCoop(invitees.length + 1)) {
-      return NextResponse.json({}, { status: 400, statusText: `Co-op is for up to ${COOP_PLAYERS.max} players` });
+    // A co-op team the host invites is as big as the setting's battlefield is built for: three, or four in Hold Out on its own.
+    if (coop && !fitsCoop(invitees.length + 1, coop)) {
+      return NextResponse.json({}, { status: 400, statusText: `This co-op battle is for up to ${coopTeamMax(coop)} players` });
     }
   }
   // The battle's size (§30.5): small or large when sent, normal when absent,

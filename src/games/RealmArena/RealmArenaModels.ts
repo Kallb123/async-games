@@ -12,7 +12,7 @@ import { rollOffTurnOrder } from "@/utils/games/rollOff";
 import { CURRENT_RULESET_VERSION } from "./rulesets";
 import { randomInt } from "@/utils/games/random";
 import { userToken } from "@/utils/games/history";
-import { BATTLE_SIZE_NAMES, CHARACTERS, COOP_PLAYERS, DIFFICULTY_NAMES, FACTION_IDS, factionById, FACTIONS, fitsCoop, isFactionId, playableFactionsOf, RANDOM_ENEMY, REALM_ONLY, UNKNOWN_ENEMY, type BattleSize, type CharacterId, type Difficulty, type FactionId } from "./characters";
+import { BATTLE_SIZE_NAMES, CHARACTERS, COOP_PLAYERS, coopTeamMax, DIFFICULTY_NAMES, FACTION_IDS, factionById, FACTIONS, fitsCoop, isFactionId, playableFactionsOf, RANDOM_ENEMY, REALM_ONLY, UNKNOWN_ENEMY, type BattleSize, type CharacterId, type Difficulty, type FactionId } from "./characters";
 import { addTally, NO_TALLY, xpOf, type MasterySnapshot, type Tally } from "./mastery";
 import { battlefieldById, COOP_MAPS, DEPLOYMENT_NAMES, mapFor, type CoopMap, type RealmArenaMapId } from "./maps";
 import { allied, ENEMY_SIDE, fighterById, fogGhost, isWarband, pickOf, squadSight, storedFighter, TEAM_SIDE, viewOf, warbandsFor, maxHpOf, actionPointsOf, type BattleEvent, type Fighter, type FogGhost, type MusterPick, type ToldEvent } from "./rules";
@@ -277,10 +277,11 @@ RealmArenaInvitationSchema.methods.CreateGame = async function(invite: IRealmAre
     // whose module reaches back to this one through the replay adapters, and
     // a static import would make the two load each other.
     const { masterySnapshotOf } = await import("./masteryRecord");
-    // Co-op only for a team its battlefields are built for: a lobby can fill
-    // to four, and four play a free-for-all whatever the invitation said.
+    // Co-op only for a team its battlefield is built for: a lobby can fill to
+    // four, and four play a free-for-all unless the host chose Hold Out on a
+    // battlefield seating four, whatever else the invitation said.
     const invited = coopInviteOf(this.coop);
-    const coop = fitsCoop(turnOrder.length) ? invited : undefined;
+    const coop = invited && fitsCoop(turnOrder.length, invited) ? invited : undefined;
     // Random is drawn here, on the server, once, and stored as the faction it
     // came out as (§29.3): a replay rebuilds the same enemy, and no client
     // chooses it.
@@ -297,7 +298,7 @@ RealmArenaInvitationSchema.methods.CreateGame = async function(invite: IRealmAre
     const zones = DEPLOYMENT_NAMES[specificGameState.map];
     history.push({ text: `Setup: ${coop?.mission === "holdOut" ? "Hold Out" : "Hold the Centre"} on the ${field.name}, over ${battleRoundsOf(specificGameState)} battle rounds` });
     if (invited && !coop) {
-        history.push({ text: `Setup: co-op is for up to ${COOP_PLAYERS.max} players, so this is a free-for-all` });
+        history.push({ text: `Setup: this co-op battle is for up to ${coopTeamMax(invited)} players, so this is a free-for-all` });
     }
     if (enemy) {
         // A random enemy isn't named: the team musters not knowing whom it will face (§29.3).

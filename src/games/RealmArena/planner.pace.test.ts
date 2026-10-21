@@ -4,7 +4,8 @@ import { FOUR_GATE_FORT } from "./maps/fourGateFort";
 import { act, endTurn, newFighter, readyMadeMuster, startTurn, viewOf, type BattleState } from "./rules";
 import { nextAction, turnMemo } from "./ai";
 import type { RealmArenaEndTurn } from "./RealmArenaLogic";
-import { battleOf, coopBattle, seedRolls, TEAMS, warbandsOf } from "./testFixtures";
+import { COOP_MAPS } from "./maps";
+import { battleOf, coopBattle, FOUR_TEAM, seedRolls, TEAMS, warbandsOf } from "./testFixtures";
 
 // docs/games/realm-arena.md §29.7, §29.11: the planner held to its time. A
 // pace file of its own (vitest.config.ts), run once every other file is done
@@ -88,6 +89,29 @@ describe("the computer in whole battles (§29.11)", () => {
         expect(Math.max(...times)).toBeLessThan(1_375);
     }, 165_000);
 
+    it("never breaks in Hold Out for a team of four, on the Sacked Fort and the Sunken Village, with and without fog, to the end within its time (§37)", async () => {
+        const warn = vi.spyOn(console, "warn");
+        const error = vi.spyOn(console, "error");
+        const times: number[] = [];
+        let seed = 1_300;
+        for (const map of COOP_MAPS) {
+            for (const enemy of FACTION_IDS) {
+                for (const fog of [false, true]) {
+                    seedRolls(seed++);
+                    const battle = await coopBattle(FOUR_TEAM, { fog, coop: { enemy, mission: "holdOut", map } });
+                    times.push(...battle.times);
+                    expect(battle.game.complete).toBe(true);
+                    expect(["teamwin", "teamloss"]).toContain(battle.game.endReason);
+                }
+            }
+        }
+        expect(warn).not.toHaveBeenCalled();
+        expect(error).not.toHaveBeenCalled();
+        // The same budget as any team's: the warband's turn that follows each player's is nearly all of it.
+        expect(times.reduce((total, ms) => total + ms, 0) / times.length).toBeLessThan(343.75);
+        expect(Math.max(...times)).toBeLessThan(1_375);
+    }, 330_000);
+
     it("never breaks at any difficulty or battle size, in either mission", async () => {
         const warn = vi.spyOn(console, "warn");
         const error = vi.spyOn(console, "error");
@@ -97,7 +121,7 @@ describe("the computer in whole battles (§29.11)", () => {
             for (const difficulty of ["easy", undefined, "hard"] as const) {
                 seedRolls(seed);
                 const mission = seed % 2 === 0 ? "holdOut" as const : undefined;
-                const battle = await coopBattle(TEAMS[seed % 2], { fog: seed % 3 === 0, size, coop: { enemy: "realm", mission, difficulty } });
+                const battle = await coopBattle(TEAMS[seed % TEAMS.length], { fog: seed % 3 === 0, size, coop: { enemy: "realm", mission, difficulty } });
                 seed++;
                 times.push(...battle.times);
                 expect(battle.game.complete).toBe(true);

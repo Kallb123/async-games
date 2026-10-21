@@ -4,6 +4,7 @@
 // before and after a change to the numbers, with the same seeds, and compare.
 //
 //   npm run ra-balance                                   # 100 of each: Solo, 2 and 3 players of the Realm, against every faction, Hold Out on the Sacked Fort
+//   npm run ra-balance -- --players 4 --maps sackedFort,sunkenVillage # a team of four: Hold Out on a battlefield of its own only
 //   npm run ra-balance -- --runs 300 --players 3 --enemies swarm --difficulties easy,normal,hard
 //   npm run ra-balance -- --teams realm,miners --enemies realm,swarm,miners # each team faction against each enemy
 //   npm run ra-balance -- --missions holdOut,holdTheCentre --maps gate --fog on,off
@@ -33,7 +34,7 @@ import { availableParallelism, tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { parseArgs } from "node:util";
-import { FACTION_IDS, type BattleSize, type Difficulty, type FactionId } from "../src/games/RealmArena/characters";
+import { COOP_PLAYERS, FACTION_IDS, fitsCoop, type BattleSize, type Difficulty, type FactionId } from "../src/games/RealmArena/characters";
 import { COOP_MAPS } from "../src/games/RealmArena/maps/holdOut";
 import {
     formatReport, scenarioKey, simulateBattle, summariseAll,
@@ -66,7 +67,7 @@ function jobsFrom(args: MatrixArgs): Job[] {
     if (!Number.isInteger(runs) || runs < 1) throw new Error("--runs must be a whole number of battles, at least 1");
     if (!Number.isInteger(firstSeed)) throw new Error("--seed must be a whole number");
     const players = list(args.players).map(Number);
-    if (players.some(count => !Number.isInteger(count) || count < 1 || count > 3)) throw new Error("--players must be team sizes from 1 to 3");
+    if (players.some(count => !Number.isInteger(count) || count < COOP_PLAYERS.min || count > COOP_PLAYERS.max)) throw new Error(`--players must be team sizes from ${COOP_PLAYERS.min} to ${COOP_PLAYERS.max}`);
     const teams = oneOf<FactionId>("teams", list(args.teams), FACTION_IDS);
     const enemies = oneOf<FactionId>("enemies", list(args.enemies), FACTION_IDS);
     const missions = oneOf<Mission>("missions", list(args.missions), ["holdOut", "holdTheCentre"]);
@@ -79,6 +80,10 @@ function jobsFrom(args: MatrixArgs): Job[] {
     for (const mission of missions) for (const map of mission === "holdOut" ? maps : ["gate" as const])
         for (const team of teams) for (const enemy of enemies) for (const count of players) for (const difficulty of difficulties) for (const size of sizes) for (const fog of fogs) {
             const scenario: BalanceScenario = { players: count, team, enemy, mission, map, difficulty, size, fog };
+            // A team of four fits only Hold Out on a battlefield of its own (§37), and refused here rather than fought as a free-for-all.
+            if (!fitsCoop(count, { mission, map: map === "gate" ? undefined : map })) {
+                throw new Error(`--players ${count} doesn't fit ${scenarioKey(scenario)}: a team of ${count} needs --missions holdOut with --maps sackedFort or sunkenVillage`);
+            }
             scenarios.set(scenarioKey(scenario), scenario);
         }
     return [...scenarios.values()].flatMap(scenario => Array.from({ length: runs }, (_, k) => ({ scenario, seed: firstSeed + k })));

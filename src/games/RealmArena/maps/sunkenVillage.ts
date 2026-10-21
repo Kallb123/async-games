@@ -1,7 +1,8 @@
 // The Sunken Village (docs/games/realm-arena.md §35): a battlefield for Hold
-// Out (§30.3) built for a team of three, 54 squares square — stored as
-// `sunkenVillageThree`, as the Sacked Fort is a map per size of team, so a
-// version for two can join it under an id of its own. The Sacked Fort's
+// Out (§30.3) built for a team of three or four, 54 squares square — stored
+// as `sunkenVillageThree` and `sunkenVillageFour`, as the Sacked Fort is a map
+// per size of team, so a version for two can join them under an id of its
+// own. The Sacked Fort's
 // shape — the team in the middle, the warbands closing in from every edge —
 // on ground an archer can't see far across.
 //
@@ -25,7 +26,7 @@
 // and a ramp at `1` where the path from each inn's back door comes down to it.
 
 import { buildBattlefield, type BattlefieldMap } from "@/utils/games/battlefield/terrain";
-import { MIDDLE_CENTRE, THREE_IN_THE_MIDDLE } from "./middleOut";
+import { FOUR_IN_THE_MIDDLE, MIDDLE_CENTRE, THREE_IN_THE_MIDDLE } from "./middleOut";
 
 const ROWS = [
     "..........................==..........................",
@@ -154,4 +155,18 @@ export const SUNKEN_VILLAGE_THREE_MAP: BattlefieldMap = {
     objectives: { centre: MIDDLE_CENTRE },
 };
 
+/**
+ * The team's zones one in each quarter of the green, round its centre, and
+ * the warbands' every edge in thirds, three edges to a warband, as on the
+ * Sacked Fort for four (§37).
+ */
+export const SUNKEN_VILLAGE_FOUR_MAP: BattlefieldMap = {
+    name: "Sunken Village",
+    rows: ROWS,
+    elevation: ELEVATION,
+    deployments: FOUR_IN_THE_MIDDLE,
+    objectives: { centre: MIDDLE_CENTRE },
+};
+
 export const SUNKEN_VILLAGE_THREE = buildBattlefield(SUNKEN_VILLAGE_THREE_MAP);
+export const SUNKEN_VILLAGE_FOUR = buildBattlefield(SUNKEN_VILLAGE_FOUR_MAP);

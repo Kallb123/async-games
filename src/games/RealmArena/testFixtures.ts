@@ -191,8 +191,11 @@ export async function playScriptedBattle(settings: RealmArenaSettings = {}, play
     return game;
 }
 
-/** The teams the co-op tests field: two players, and three. */
+/** The teams the co-op tests field on every battlefield: two players, and three. */
 export const TEAMS = [["a", "b"], ["a", "b", "c"]];
+
+/** A team of four, which only Hold Out on a battlefield of its own seats (§37): the Sacked Fort or the Sunken Village. */
+export const FOUR_TEAM = ["a", "b", "c", "d"];
 
 /** Every roll from here on drawn from a seed, so a battle plays the same each run (mulberry32). */
 export function seedRolls(seed: number): void {
