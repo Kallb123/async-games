@@ -41,6 +41,14 @@ export interface Terrain {
     cover: Cover;
     /** Whether it blocks sight whatever the heights, as trees do. Everything else blocks it by standing a full height above both ends (`lineOfSight.ts`). */
     blocksSight: boolean;
+    /**
+     * Too thick to see through, as a hedge is, though lower than a character:
+     * it blocks sight between two squares that both stand below its top,
+     * where anything else has to stand a full height above both
+     * (`lineOfSight.ts`). Whoever stands level with its top or higher — on a
+     * tower, say — sees over it.
+     */
+    screens?: true;
     /** A stair: a step onto or off it is never a climb, by as much as its own height (`pathfinding.ts`). */
     stairs?: true;
     /** Low cover, which a blast can clear away to scorched ground (`battlefieldWith`, realm-arena.md §22). Walls and trees never can. */
@@ -71,8 +79,8 @@ const LOW_WALL: Terrain = { name: "Low wall", ...LOW_COVER, height: 3 };
  * worn to packed earth, and a cottage wall is a wall built of fieldstone:
  * each plays exactly as the one it's drawn from. A hedge is the one new
  * rule: climbed through and given cover by like a low wall, and burned or
- * hacked away like one, but too thick to see through whatever the heights,
- * as trees are.
+ * hacked away like one, but too thick to see through — for anyone standing
+ * below its top. A tower looks over a hedge as it does over a wall.
  */
 export const TERRAIN = {
     ".": OPEN,
@@ -85,7 +93,7 @@ export const TERRAIN = {
     "^": { ...OPEN, name: "Tower top", height: TOWER_HEIGHT },
     "_": { ...OPEN, name: "Scorched ground" },
     "=": { ...OPEN, name: "Lane" },
-    "h": { ...LOW_WALL, name: "Hedge", blocksSight: true },
+    "h": { ...LOW_WALL, name: "Hedge", screens: true },
     "H": { ...WALL, name: "Cottage wall" },
 } as const satisfies Record<string, Terrain>;
 
@@ -103,7 +111,7 @@ export function coverOfRise(rise: number): Cover {
     return rise >= FULL_HEIGHT ? "full" : rise >= HALF_HEIGHT ? "half" : "none";
 }
 
-/** Whether a square stands a full height above both of two others: a wall between them, to see past or cut a corner by. */
+/** Whether a square stands a full height above both of two others: a wall between them, that a step can't cut the corner of. */
 export function towersOver(field: Battlefield, square: Square, a: Square, b: Square): boolean {
     return field.tiles[square].elevation >= Math.max(field.tiles[a].elevation, field.tiles[b].elevation) + FULL_HEIGHT;
 }

@@ -41,8 +41,8 @@ describe("TERRAIN", () => {
         const rules = ({ name: _, ...rest }: Terrain) => rest;
         expect(rules(TERRAIN["="])).toEqual(rules(TERRAIN["."]));
         expect(rules(TERRAIN["H"])).toEqual(rules(TERRAIN["#"]));
-        // A hedge is a low wall nobody can see through.
-        expect(rules(TERRAIN["h"])).toEqual({ ...rules(TERRAIN["o"]), blocksSight: true });
+        // A hedge is a low wall nobody below its top can see through.
+        expect(rules(TERRAIN["h"])).toEqual({ ...rules(TERRAIN["o"]), screens: true });
     });
 });
 

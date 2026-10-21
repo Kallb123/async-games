@@ -1707,8 +1707,9 @@ drawn.
   behind it against an archer on a tower who can see over it.
 - **Sight** is blocked by anything a full height above both characters:
   a wall between two characters on the ground, but not between a tower top
-  and the ground beyond the wall. Trees block it whatever the heights. Low
-  cover and characters never do.
+  and the ground beyond the wall. Trees block it whatever the heights. A
+  hedge blocks it for two characters both below its top (§35.1). Low cover
+  and characters never do.
 - **Climbing.** A step up or down of a quarter is an ordinary step. Half or
   three quarters is a climb, which costs 1 more movement point
   (`CLIMB_COST`). A full height or more can't be climbed, except onto or off
@@ -4506,11 +4507,23 @@ new rule:
 |---|---|---|
 | `=` | Lane | Open ground: packed earth, drawn as it. |
 | `H` | Cottage wall | A wall (`#`): limewashed fieldstone, with no battlements. |
-| `h` | Hedge | A low wall (`o`): climbed through for a climb's cost, never stood on, three quarters high so half cover by its height, and burned or hacked away by whatever blasts low cover (§22). The one difference: **nobody sees through a hedge**, whatever the heights, as nobody sees through trees. |
+| `h` | Hedge | A low wall (`o`): climbed through for a climb's cost, never stood on, three quarters high so half cover by its height, and burned or hacked away by whatever blasts low cover (§22). The one difference: **nobody below its top sees through a hedge**, though a low wall is seen over by anyone. |
 
 A hedge is cover that's cheap to get through but blocks sight: a warband can
-push through one to close in, and a fireball can burn a sightline open. A tower top doesn't see over one either. No battlefield with a
-tower has hedges yet, so §35.7 asks whether it should.
+push through one to close in, and a fireball can burn a sightline open.
+
+**Seen over from above.** Solid terrain blocks sight only when it stands a
+full height above both characters, since a character sees over anything
+shorter than itself; that is how a tower top looks over a wall (§25.2). A
+hedge is shorter than a character, so by that rule it would block nothing.
+Instead it blocks sight between two characters who both stand below its top,
+and nobody else: whoever stands level with its top or higher — on a tower top,
+a stair, a hill — looks over it, as over a wall, and so does whoever is
+looking up at them. Trees still block whatever the heights. The rule is the
+terrain's own (`screens`), read by `canSee`, so any map that puts hedges near
+high ground gets it. On the Sunken Village nobody stands that high: the
+village is half a height up and a hedge on it tops out a height and a quarter
+up.
 
 ### 35.2 The map
 
@@ -4624,8 +4637,8 @@ The ideas put up alongside the Sunken Village, kept for later. Each would be
 
 Open questions:
 
-1. Does a hedge want to be seen over from a tower top, as a wall is? Today it
-   isn't, as trees aren't.
+1. ~~Does a hedge want to be seen over from a tower top, as a wall is?~~ Yes:
+   whoever stands level with its top or higher sees over it (§35.1).
 2. A version for a team of two, and a Hold Out battlefield for a team of four,
    which co-op doesn't seat yet (§29).
 3. An achievement for winning on it, beside *Hold the Keep* (§30.4)?
@@ -4712,4 +4725,4 @@ Realm, its sibling in the same world.
 | 1.57 | Rules version 8 (command version 8) builds two pieces of §34: the Knight's and Stonewarden's Shield wall is a passive, giving anyone beside them, friend or foe, half cover; and a character raised on its owner's turn has 2 AP to spend. Battles created before it keep the activated shield wall and the old Raise. |
 | 1.58 | Benchmarking the planner. Open puzzles (§29.11): three it fails today, kept as `it.fails` — taking a likely knock-out over wounding a fresh enemy, stepping out of a crossfire, and stepping out of a Knight's reach. And the balance harness's `--team-planner <ref>` (§30.12), which has the team play an older planner against the checkout's warbands, so a change to the planner is measured as the warbands' alone; its first experiments — counting the team per head, and an Exposure that adds every shot up and lets a melee enemy walk — are in `realm-arena-balance.md`, and none was kept. Tests, tooling and documents only. |
 | 1.59 | Rules version 9 (command version 9) builds the rest of §34 with its proposed values: the Realm's new kits, the five new effects, their aims and the computer's use of them; battles created before it keep their catalogue. How the board plays it (§34.11): a Leap's arc and landing, a Shove's push and collision, a Beckon's pull, a Bouncing Arrow's bounce, Ice Ball's shard and frost, Thunder's lightning, a glow under everyone blessed or braced and a ring under the warded, and a badge for each new effect, all drawn in the effect and fx masters. |
-| 1.60 | The Sunken Village (§35), Hold Out's second battlefield, for a team of three: a sunken green ringed by hedges, lanes and roofless cottages that keep archers' sightlines short. Three new terrains: lanes, cottage walls, and hedges, which nobody sees through but which can be climbed through and burned away. The first map with an elevation layer, and ideas for the next battlefields. |
+| 1.60 | The Sunken Village (§35), Hold Out's second battlefield, for a team of three: a sunken green ringed by hedges, lanes and roofless cottages that keep archers' sightlines short. Three new terrains: lanes, cottage walls, and hedges, which can be climbed through and burned away, and which nobody sees through unless one end stands as high as the hedge's top, as a tower does. The first map with an elevation layer, and ideas for the next battlefields. |

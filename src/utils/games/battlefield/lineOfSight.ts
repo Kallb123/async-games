@@ -1,14 +1,16 @@
 // Seeing across a battlefield (docs/games/realm-arena.md §13.1, §25): one
 // square sees another when the straight line between their centres crosses
-// nothing that blocks sight. Trees always do. Anything else does when it
-// stands a full height above both ends — a wall between two characters on the
-// ground, but not between a tower top and the ground beyond the wall. Low
-// cover and characters never do. A figure may look down the side of full
+// nothing that blocks sight. Trees always do. A hedge does when its top
+// stands above both ends: from the ground it hides what's past it, though it's
+// no taller than a low wall, and from a tower it's looked over (§35.1).
+// Anything else does when it stands a full height above both ends — a wall
+// between two characters on the ground, but not between a tower top and the
+// ground beyond the wall. Low cover and characters never do. A figure may look down the side of full
 // cover directly beside it: an angled line may leave through that first
 // square, but the same cover further away still blocks sight. The walk is
 // exact integer arithmetic, so it always chooses the same squares.
 
-import { coordsOf, isNeighbour, towersOver, type Battlefield, type Square } from "./terrain";
+import { coordsOf, FULL_HEIGHT, isNeighbour, type Battlefield, type Square } from "./terrain";
 
 /** The squares a line between two squares' centres passes through, ends left out. */
 export interface SightLine {
@@ -59,7 +61,12 @@ export function sightLine(field: Battlefield, from: Square, to: Square, within =
  * a single tree doesn't hide what's past its corner.
  */
 export function canSee(field: Battlefield, from: Square, to: Square): boolean {
-    const blocks = (square: Square) => field.tiles[square].terrain.blocksSight || towersOver(field, square, from, to);
+    // How far a square has to stand above both ends to block: a full height, or for a hedge only above them at all.
+    const higher = Math.max(field.tiles[from].elevation, field.tiles[to].elevation);
+    const blocks = (square: Square) => {
+        const { terrain, elevation } = field.tiles[square];
+        return terrain.blocksSight || elevation - higher >= (terrain.screens ? 1 : FULL_HEIGHT);
+    };
     const { crossed, grazed } = sightLine(field, from, to);
     const a = coordsOf(field, from), b = coordsOf(field, to);
     const besideAtAnAngle = (square: Square) => {
