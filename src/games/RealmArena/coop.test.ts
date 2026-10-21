@@ -3,7 +3,7 @@ import { buildTimeline } from "@/utils/games/replay";
 import { buildAllEvents, buildEventFeed } from "@/utils/games/recap";
 import { stripRecordedRandomness } from "@/utils/apiModels/gameCommand";
 import { CHARACTERS, FACTION_IDS, FACTIONS, musterBudget, REALM, warbandBudget, type BattleSize, type Difficulty } from "./characters";
-import { battlefieldById, mapFor } from "./maps";
+import { battlefieldById, COOP_MAPS, mapFor } from "./maps";
 import {
     computeRealmArenaResultStats, coopInviteOf, formatRealmArenaCharts, formatRealmArenaResultStats, gameStateToModel, RealmArenaInvitationModel, stepOutcomeToModel, type IRealmArenaGameData, type RealmArenaSettings,
 } from "./RealmArenaModels";
@@ -198,7 +198,7 @@ describe("Hold Out's growing waves (§30.10)", () => {
 
     it("has room for its last wave's strength in every warband's zone, for every faction, size and difficulty", () => {
         for (const players of TEAMS) {
-            for (const map of [undefined, "sackedFort"] as const) {
+            for (const map of [undefined, ...COOP_MAPS]) {
                 const field = battlefieldById(mapFor(players.length, true, map));
                 for (const faction of FACTION_IDS) {
                     for (const size of ["small", "normal", "large"] as const) {
@@ -477,6 +477,18 @@ describe("a co-op battle's creation (§29.2, §29.3)", () => {
             expect(setup).toContain("Setup: Hold Out on the Sacked Fort");
             expect(setup).toContain("a warband for each of them closing in from the edges");
             expect(setup).toContain("deploys in the west of the keep");
+        }
+    });
+
+    it("puts a team of three on the Sunken Village when the host picked it, and a team of two on the Sacked Fort (§35)", async () => {
+        for (const [players, map, zone] of [[["a", "b", "c"], "sunkenVillageThree", "in the west of the green"], [["a", "b"], "sackedFortTwo", "in the west of the keep"]] as const) {
+            const invite = { turnTimer: 0, coop: { enemy: "realm", mission: "holdOut", map: "sunkenVillage" } };
+            const game = await createGame.call(invite, invite, [...players]);
+            expect(game.specificGameState.map).toBe(map);
+            const setup = game.gameState.history.map(entry => entry.text).join("\n");
+            expect(setup).toContain(`Setup: Hold Out on the ${battlefieldById(map).name}`);
+            expect(setup).toContain("a warband for each of them closing in from the edges");
+            expect(setup).toContain(`deploys ${zone}`);
         }
     });
 
@@ -863,6 +875,21 @@ describe("the computer in whole battles (§29.11)", () => {
                     ? /^(held out for all \d+ rounds|beat the last wave in round \d+)$/
                     : /^overrun in round \d+$/);
             }
+        }
+        expect(warn).not.toHaveBeenCalled();
+        expect(error).not.toHaveBeenCalled();
+    }, 120_000);
+
+    it("never breaks in Hold Out on the Sunken Village, with and without fog, to an ending it words (§35)", async () => {
+        const warn = vi.spyOn(console, "warn");
+        const error = vi.spyOn(console, "error");
+        let seed = 700;
+        for (const fog of [false, true]) {
+            seedRolls(seed++);
+            const { game } = await coopBattle(["a", "b", "c"], { fog, coop: { enemy: "realm", mission: "holdOut", map: "sunkenVillage" } });
+            expect(game.specificGameState.map).toBe("sunkenVillageThree");
+            expect(game.complete).toBe(true);
+            expect(["teamwin", "teamloss"]).toContain(game.endReason);
         }
         expect(warn).not.toHaveBeenCalled();
         expect(error).not.toHaveBeenCalled();

@@ -3,7 +3,8 @@
 // draws from (src/games/RealmArena/art.ts):
 //
 // - the ground is one texture over one plane: each square's grass diamond — and
-//   scorched ground where cover was blasted (§22) — unwarped from its sheet
+//   whatever flat terrain lies on it, a lane (§35) or scorched ground where
+//   cover was blasted (§22) — unwarped from its sheet
 //   into the square it covers, with the lines between squares over it;
 // - ground the map raises stands on a plinth, and the board's edge is a slab a
 //   full height thick, their tops and sides drawn with the ground's own picture
@@ -77,7 +78,7 @@ function unwarped(sheets: Sheets, sprite: Sprite, size: number, lift = 0): HTMLC
     return canvas;
 }
 
-/** The ground's texture: every square's grass, or what scorched ground lies there, and the lines between squares. */
+/** The ground's texture: every square's grass, any flat terrain lying on it (a lane, scorched ground), and the lines between squares. */
 function groundTexture(field: Battlefield, sheets: Sheets): CanvasTexture {
     const size = groundTexels(field);
     const canvas = document.createElement("canvas");
@@ -90,11 +91,13 @@ function groundTexture(field: Battlefield, sheets: Sheets): CanvasTexture {
         if (!cell) cells.set(sprite, cell = unwarped(sheets, sprite, size));
         return cell;
     };
-    const scorched = TERRAIN_ART._[0].sprites;
     for (let square = 0; square < field.tiles.length; square++) {
         const col = square % field.width, row = Math.floor(square / field.width);
         context.drawImage(cellOf(grassOf(col, row)), col * size, row * size);
-        if (terrainLetter(field, square) === "_") context.drawImage(cellOf(scorched[variantOf(square, scorched.length)]), col * size, row * size);
+        if (field.tiles[square].terrain.height > 0) continue;
+        for (const { sprites } of TERRAIN_ART[terrainLetter(field, square)]) {
+            context.drawImage(cellOf(sprites[variantOf(square, sprites.length)]), col * size, row * size);
+        }
     }
     // The grid, as faint as the isometric board's (`.ag-ra-grid`).
     context.strokeStyle = "rgba(0, 0, 0, 0.07)";
@@ -339,16 +342,16 @@ interface RaisedSquares {
 
 /**
  * The raised squares of `field` among `squares` — each a box from the ground up
- * to its top, or a tree — one instanced draw a terrain. Flat ground, and the
- * scorched ground cover leaves behind, is the ground's (`groundTexture`).
+ * to its top, or a tree — one instanced draw a terrain. Flat terrain — open
+ * ground, a lane, the scorched ground cover leaves behind — is the ground's
+ * (`groundTexture`), wherever the map raises it.
  * `options` is how the material a terrain is drawn with is made.
  */
 function raisedSquares(field: Battlefield, sheets: Sheets, squares: Iterable<Square>, options: SolidOptions = {}): RaisedSquares {
     const byLetter = new Map<TerrainLetter, Square[]>();
     for (const square of squares) {
-        if (field.tiles[square].elevation === 0 && field.tiles[square].terrain.height === 0) continue;
+        if (field.tiles[square].terrain.height === 0) continue;
         const letter = terrainLetter(field, square);
-        if (letter === "_" || letter === ".") continue;
         byLetter.set(letter, [...byLetter.get(letter) ?? [], square]);
     }
     const out: RaisedSquares = { meshes: [], solids: [], disposables: [] };

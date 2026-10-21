@@ -364,7 +364,7 @@ export interface RealmArenaSettings {
 
 /**
  * The battle before anyone has mustered: the map for the party's size (or
- * the Sacked Fort, if the host picked it for Hold Out, §30.9), no
+ * Hold Out's own battlefield, if the host picked one, §30.9, §35), no
  * squads, nobody scored, and each seat's ranks as `mastery` gave them when the
  * battle was created, with what the host chose (`settings`): fog of war
  * (§27), the battle's size (§30.5), and co-op against `enemy`'s warbands

@@ -82,6 +82,11 @@ export const WHATS_NEW: WhatsNewGroup[] = [
         icon: "✨",
         items: [
             {
+                title: "Realm Arena: a new Hold Out battlefield, the Sunken Village",
+                detail: "For a team of three: hold a village green sunk below hedges, lanes and roofless cottages that hide the enemy until it's close, so archers can't pick you off from across the map. Nobody sees through a hedge, but anyone can push through one, and a fireball burns it away.",
+                game: "realmarena",
+            },
+            {
                 title: "Quicker when you come back to the app",
                 detail: "Switching back to the app, or opening it from a notification, now renews your sign-in before your games refresh, so they no longer stall for a few seconds first — and a move you make the moment you're back goes through. Players' names show straight away too, even when you've been away a while.",
             },
@@ -124,10 +129,6 @@ export const WHATS_NEW: WhatsNewGroup[] = [
                 title: "Realm Arena: see the cover you're moving into, and why a shot's odds are what they are",
                 detail: "Line up a move and the square you'd end on shows a shield on each side that gives cover: a whole one for full cover, half a shield for half. And every target now has a ? beside its chance to hit, which breaks the number down: the weapon's own accuracy, then what cover, height, smoke, range and the rest add or take off.",
                 game: "realmarena",
-            },
-            {
-                title: "Home page and games load faster",
-                detail: "Going back to a game or to the home page now shows it straight away, from what you saw a moment ago, and brings it up to date underneath. A game also starts loading the moment you touch its card, before you let go. The server is quicker too, above all when you check back often: players' names and pictures are no longer looked up afresh every time, and the home page reads only what it shows rather than every game you've ever finished. A new name or picture can take up to five minutes to reach other players.",
             },
         ],
     },

@@ -31,6 +31,7 @@ current maps:
 | Ring / Four-Gate / Twin-Gate Fort | 48 × 48 = 2,304 | 188–288 |
 | Three-Gate Fort | 64 × 48 = 3,072 | 368 |
 | Sacked Fort (Hold Out) | 54 × 54 = 2,916 | 256 |
+| Sunken Village (Hold Out) | 54 × 54 = 2,916 | 2,772: the village stands half a height up, round its sunken green |
 
 - **Flat ground** is cheap. It's the slab, a grass `<pattern>`, one grid path and
   one merged path per shade (`isoRuns`), so a few dozen elements.

@@ -11,6 +11,23 @@ export const standable = (field: Battlefield): Square[] =>
 
 export const sorted = (squares: readonly Square[]): Square[] => [...squares].sort((a, b) => a - b);
 
+/** The same square with a square map turned a quarter, clockwise. */
+export function quarterTurn(field: Battlefield, square: Square): Square {
+    const { col, row } = coordsOf(field, square);
+    return col * field.width + field.width - 1 - row;
+}
+
+/** Whether a square is in the edge three squares deep: where a middle-out Hold Out battlefield's warbands muster (§30.9). */
+export function onEdge(field: Battlefield, square: Square): boolean {
+    const { col, row } = coordsOf(field, square);
+    return Math.min(col, row, field.width - 1 - col, field.height - 1 - row) < 3;
+}
+
+/** Whether a square is in the middle 12 × 12 of a 54-square map: a middle-out battlefield's keep or green (§30.9, §35). */
+export function inMiddle(field: Battlefield, square: Square): boolean {
+    return Object.values(coordsOf(field, square)).every(at => at > 20 && at < field.width - 21);
+}
+
 /** The seats with a deployment square that can't walk to the centre. */
 export function strandedSeats(field: Battlefield): number[] {
     return [...field.deployments.keys()].filter(seat => !walksFrom(field, field.deployments[seat], field.objectives.centre).every(Number.isFinite));

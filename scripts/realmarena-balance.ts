@@ -34,6 +34,7 @@ import { dirname, join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { parseArgs } from "node:util";
 import { FACTION_IDS, type BattleSize, type Difficulty, type FactionId } from "../src/games/RealmArena/characters";
+import { COOP_MAPS } from "../src/games/RealmArena/maps/holdOut";
 import {
     formatReport, scenarioKey, simulateBattle, summariseAll,
     type BalanceScenario, type BattleSample, type CoopMapChoice, type Mission, type Planner, type TeamPlanner,
@@ -69,7 +70,7 @@ function jobsFrom(args: MatrixArgs): Job[] {
     const teams = oneOf<FactionId>("teams", list(args.teams), FACTION_IDS);
     const enemies = oneOf<FactionId>("enemies", list(args.enemies), FACTION_IDS);
     const missions = oneOf<Mission>("missions", list(args.missions), ["holdOut", "holdTheCentre"]);
-    const maps = oneOf<CoopMapChoice>("maps", list(args.maps), ["sackedFort", "gate"]);
+    const maps = oneOf<CoopMapChoice>("maps", list(args.maps), [...COOP_MAPS, "gate"]);
     const difficulties = oneOf<Difficulty>("difficulties", list(args.difficulties), ["easy", "normal", "hard"]);
     const sizes = oneOf<BattleSize>("sizes", list(args.sizes), ["small", "normal", "large"]);
     const fogs = oneOf("fog", list(args.fog), ["off", "on"]).map(fog => fog === "on");

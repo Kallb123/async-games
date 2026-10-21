@@ -18,7 +18,8 @@
 // tower top and `P` the parapet round it (half cover for whoever is on the
 // tower), each at its own height (§25). The map is flat ground.
 
-import { buildBattlefield, type Area, type BattlefieldMap } from "@/utils/games/battlefield/terrain";
+import { buildBattlefield, type BattlefieldMap } from "@/utils/games/battlefield/terrain";
+import { edgeStrips, MIDDLE_CENTRE, TEAM_ROWS, THREE_IN_THE_MIDDLE } from "./middleOut";
 
 const ROWS = [
     "......................................................",
@@ -77,30 +78,8 @@ const ROWS = [
     "......................................................",
 ];
 
-/** The team's zones, inside the keep: the west and east halves for two, three across it for three. */
-const KEEP = { row: 24, height: 6 };
-/** The keep's middle, which still scores as any battle's centre does (§13.7). */
-const CENTRE: Area = { col: 24, row: 24, width: 6, height: 6 };
-
-/**
- * The edge, three squares deep, as four strips that turn into each other a
- * quarter at a time — north west to east, east north to south, south east to
- * west, west south to north — each cut into `parts` lengths, in that order.
- */
-function edges(parts: number): Area[][] {
-    const length = 51 / parts;
-    const along = Array.from({ length: parts }, (_, k) => k * length);
-    return [
-        along.map(from => ({ col: from, row: 0, width: length, height: 3 })),
-        along.map(from => ({ col: 51, row: from, width: 3, height: length })),
-        along.map(from => ({ col: 54 - from - length, row: 51, width: length, height: 3 })),
-        along.map(from => ({ col: 0, row: 54 - from - length, width: 3, height: length })),
-    ];
-}
-
-/** The edge whole, north, east, south and west, and in thirds. */
-const WHOLE = edges(1).map(([strip]) => strip);
-const THIRDS = edges(3);
+/** The edge whole, north, east, south and west. */
+const WHOLE = edgeStrips(1).map(([strip]) => strip);
 
 /**
  * For a team of two: one warband from the north and south edges, the other
@@ -111,29 +90,23 @@ export const SACKED_FORT_TWO_MAP: BattlefieldMap = {
     name: "Sacked Fort",
     rows: ROWS,
     deployments: [
-        { col: 21, ...KEEP, width: 6 },
-        { col: 27, ...KEEP, width: 6 },
+        { col: 21, ...TEAM_ROWS, width: 6 },
+        { col: 27, ...TEAM_ROWS, width: 6 },
         [WHOLE[0], WHOLE[2]],
         [WHOLE[1], WHOLE[3]],
     ],
-    objectives: { centre: CENTRE },
+    objectives: { centre: MIDDLE_CENTRE },
 };
 
 /**
- * For a team of three: every edge in thirds, and each warband a third of every
- * edge — the first the one at the start of each strip, the second the middle,
- * facing every gate, and the third the one at its end.
+ * For a team of three: three across the keep, and every edge in thirds, each
+ * warband a third of every edge, the second's facing every gate (`THREE_IN_THE_MIDDLE`).
  */
 export const SACKED_FORT_THREE_MAP: BattlefieldMap = {
     name: "Sacked Fort",
     rows: ROWS,
-    deployments: [
-        { col: 21, ...KEEP, width: 4 },
-        { col: 25, ...KEEP, width: 4 },
-        { col: 29, ...KEEP, width: 4 },
-        ...[0, 1, 2].map(k => THIRDS.map(side => side[k])),
-    ],
-    objectives: { centre: CENTRE },
+    deployments: THREE_IN_THE_MIDDLE,
+    objectives: { centre: MIDDLE_CENTRE },
 };
 
 export const SACKED_FORT_TWO = buildBattlefield(SACKED_FORT_TWO_MAP);

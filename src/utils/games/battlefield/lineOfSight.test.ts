@@ -123,6 +123,13 @@ describe("canSee", () => {
         expect(canSee(field, at(field, 0, 0), at(field, 4, 0))).toBe(false);
     });
 
+    it("is blocked by a hedge whatever the heights, though it's no higher than a low wall", () => {
+        const hedge = hillOf(["..h.."], ["80008"]);
+        expect(canSee(hedge, at(hedge, 0, 0), at(hedge, 4, 0))).toBe(false);
+        const wall = fieldOf("..o..");
+        expect(canSee(wall, at(wall, 0, 0), at(wall, 4, 0))).toBe(true);
+    });
+
     it("looks over a wall from a tower top", () => {
         const fort = fieldOf("^.#..");
         expect(canSee(fort, at(fort, 0, 0), at(fort, 4, 0))).toBe(true);

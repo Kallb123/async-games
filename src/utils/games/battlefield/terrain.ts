@@ -55,6 +55,7 @@ const WALL: Terrain = { name: "Wall", moveCost: Infinity, standable: false, heig
 
 const OPEN: Terrain = { name: "Open ground", moveCost: 1, standable: true, height: 0, cover: "none", blocksSight: false };
 const LOW_COVER: Omit<Terrain, "name" | "height"> = { moveCost: 1, standable: false, cover: "none", blocksSight: false, destructible: true };
+const LOW_WALL: Terrain = { name: "Low wall", ...LOW_COVER, height: 3 };
 
 /**
  * Every terrain, by the letter a map draws it with. Letters that play the same
@@ -65,17 +66,27 @@ const LOW_COVER: Omit<Terrain, "name" | "height"> = { moveCost: 1, standable: fa
  * cover the same way; where it has fallen to an ordinary wall, or gone, it
  * gives none. Scorched ground is what low cover leaves once it's blasted
  * away (§22): it plays exactly as open ground, and is only drawn differently.
+ *
+ * The Sunken Village (§35) brings three of its own. A lane is open ground
+ * worn to packed earth, and a cottage wall is a wall built of fieldstone:
+ * each plays exactly as the one it's drawn from. A hedge is the one new
+ * rule: climbed through and given cover by like a low wall, and burned or
+ * hacked away like one, but too thick to see through whatever the heights,
+ * as trees are.
  */
 export const TERRAIN = {
     ".": OPEN,
     ",": { name: "Rubble", ...LOW_COVER, height: 2 },
-    "o": { name: "Low wall", ...LOW_COVER, height: 3 },
+    "o": LOW_WALL,
     "T": { name: "Trees", moveCost: Infinity, standable: false, height: 6, cover: "full", blocksSight: true },
     "#": WALL,
     "P": { ...WALL, name: "Parapet", height: PARAPET_HEIGHT },
     "s": { ...OPEN, name: "Tower stair", moveCost: 2, height: 3, stairs: true },
     "^": { ...OPEN, name: "Tower top", height: TOWER_HEIGHT },
     "_": { ...OPEN, name: "Scorched ground" },
+    "=": { ...OPEN, name: "Lane" },
+    "h": { ...LOW_WALL, name: "Hedge", blocksSight: true },
+    "H": { ...WALL, name: "Cottage wall" },
 } as const satisfies Record<string, Terrain>;
 
 export type TerrainLetter = keyof typeof TERRAIN;
