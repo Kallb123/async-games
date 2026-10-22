@@ -322,8 +322,10 @@ export const ODDS_RISE = HP_BAR_RISE + HP_BAR_HEIGHT + ODDS_HEIGHT / 2 + 0.6;
 /** A cover shield standing on a square's edge: narrow enough to stay clear of the figure's disc and the HP bar. */
 export const SHIELD_WIDTH = 3.6;
 export const SHIELD_HEIGHT = 4.6;
-/** The path a lined-up move takes: how wide the line is (`.ag-ra-path`'s stroke, which the isometric board draws by — change both), and the radius of the dot where it ends. */
+/** The path a lined-up move takes: how wide the line is (`.ag-ra-path`'s stroke-width, which the isometric board draws by — change both), and the radius of the dot where it ends. */
 export const PATH_WIDTH = 1.2;
+/** A dash of the path and the gap after it (`.ag-ra-path`'s `stroke-dasharray`, which the isometric board draws by — change both), in board units. */
+export const PATH_DASH = [2, 1.2] as const;
 export const PATH_END_RADIUS = 2;
 /** The centre's name: its size and weight, and how far clear of the area's edge its baseline stands. */
 export const CENTRE_LABEL = { fontSize: 10, fontWeight: 800, gap: 4 } as const;

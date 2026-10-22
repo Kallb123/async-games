@@ -15,22 +15,56 @@ import { lerp3, onScreen, squareCentre, type BoardFrame, type CameraBasis, type 
 /** One straight run of a path, as a rectangle hung from its middle: how long it is across the frame, and the turn it takes (clockwise, in degrees) to lie along it. */
 export interface PathPiece { at: Vec3; length: number; rotate: number }
 
+/** A path drawn as pieces: the runs, and the round dots that join them and cap their ends. */
+export interface PathStroke { pieces: PathPiece[]; discs: Vec3[] }
+
 /**
- * The runs between each point of a path and the next, as the camera sees them.
- * A path is a line over the squares' tops, so a run up a step slopes up the
- * frame, and the pieces lie along it afresh as the view turns.
+ * A path's stroke, as the camera sees it. A path is a line over the squares'
+ * tops, so a run up a step slopes up the frame, and the pieces lie along it
+ * afresh as the view turns.
+ *
+ * Solid (no `dash`), it is a run between each point and the next, with a dot on
+ * every point to round the joints and the ends. Dashed, `dash` is a dash and a
+ * gap in board units across the frame, as the isometric board's `stroke-dasharray`
+ * gives them: the pattern runs on round the corners from the path's start, the
+ * way an SVG's does, and each dash is round-capped, with a dot at either end and
+ * one on any corner it turns.
  */
-export function pathPieces(points: readonly Vec3[], basis: CameraBasis): PathPiece[] {
-    const pieces: PathPiece[] = [];
+export function pathStroke(points: readonly Vec3[], basis: CameraBasis, dash?: readonly [number, number]): PathStroke {
+    const runs: { from: Vec3; to: Vec3; start: number; length: number; rotate: number }[] = [];
+    let total = 0;
     for (let i = 1; i < points.length; i++) {
         const a = toBoardUnits(onScreen(basis, points[i - 1])), b = toBoardUnits(onScreen(basis, points[i]));
         const dx = b.x - a.x, dy = b.y - a.y;
         const length = Math.hypot(dx, dy);
         if (length < 1e-6) continue;
         // Across the frame y is down, which is the way an SVG's `rotate` turns.
-        pieces.push({ at: lerp3(points[i - 1], points[i], 0.5), length, rotate: Math.atan2(dy, dx) * 180 / Math.PI });
+        runs.push({ from: points[i - 1], to: points[i], start: total, length, rotate: Math.atan2(dy, dx) * 180 / Math.PI });
+        total += length;
     }
-    return pieces;
+    if (!dash || runs.length === 0) {
+        return { pieces: runs.map(({ from, to, length, rotate }) => ({ at: lerp3(from, to, 0.5), length, rotate })), discs: [...points] };
+    }
+
+    const [lit, gap] = dash;
+    const pointAt = (distance: number): Vec3 => {
+        const run = runs.find(({ start, length }) => distance <= start + length) ?? runs[runs.length - 1];
+        return lerp3(run.from, run.to, (distance - run.start) / run.length);
+    };
+    const pieces: PathPiece[] = [], discs: Vec3[] = [];
+    for (let from = 0; from < total; from += lit + gap) {
+        const to = Math.min(from + lit, total);
+        discs.push(pointAt(from), pointAt(to));
+        for (const run of runs) {
+            const end = run.start + run.length;
+            const a = Math.max(from, run.start), b = Math.min(to, end);
+            if (b - a < 1e-6) continue;
+            pieces.push({ at: lerp3(run.from, run.to, ((a + b) / 2 - run.start) / run.length), length: b - a, rotate: run.rotate });
+            // A corner this dash runs round is joined with a dot, as a solid path's are.
+            if (to > end && end > from) discs.push(run.to);
+        }
+    }
+    return { pieces, discs };
 }
 
 /** The middle of each of `squares`' tops: a path's points. */
