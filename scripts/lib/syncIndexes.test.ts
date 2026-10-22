@@ -48,6 +48,33 @@ describe("syncModelIndexes", () => {
     });
 });
 
+describe("a model's preparation", () => {
+    it("runs after the collection and before the indexes, and is logged", async () => {
+        const { model, calls } = fakeModel("RateLimit");
+        const lines: string[] = [];
+        const { results } = await syncAllIndexes([model], {
+            log: line => lines.push(line),
+            preparations: { RateLimit: async () => { calls.push("prepare"); return "cleared 2 expired and 2 duplicated counters"; } },
+        });
+        expect(calls).toEqual(["createCollection", "prepare", "createIndexes"]);
+        expect(results[0]).toMatchObject({ prepared: "cleared 2 expired and 2 duplicated counters" });
+        expect(lines[0]).toContain("cleared 2 expired and 2 duplicated counters");
+    });
+
+    it("runs only for the model it is named for", async () => {
+        const { model, calls } = fakeModel("Thing");
+        await syncAllIndexes([model], { log: () => {}, preparations: { RateLimit: async () => "never" } });
+        expect(calls).toEqual(["createCollection", "createIndexes"]);
+    });
+
+    it("fails the model, and builds no index, when it throws", async () => {
+        const { model, calls } = fakeModel("RateLimit");
+        const { results } = await syncAllIndexes([model], { log: () => {}, preparations: { RateLimit: () => Promise.reject(new Error("not authorized")) } });
+        expect(calls).toEqual(["createCollection"]);
+        expect(results[0].error).toBe("not authorized");
+    });
+});
+
 describe("syncAllIndexes", () => {
     it("syncs every model, in the order given, and carries on past a failure", async () => {
         const a = fakeModel("A");

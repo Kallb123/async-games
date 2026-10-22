@@ -23,6 +23,7 @@ import { NO_AUTO_BUILD } from '@/utils/mongodb/connectionOptions';
 // Every model the app registers. A model that file doesn't import is a model
 // this never builds an index for: src/utils/mongodb/models.test.ts guards that.
 import { registeredModels } from '@/utils/mongodb/models';
+import { clearRateLimitsForIndexing } from '@/utils/mongodb/RateLimitData';
 import { syncAllIndexes } from './lib/syncIndexes';
 
 async function main() {
@@ -38,7 +39,7 @@ async function main() {
 
     const models = registeredModels();
     console.log(`Building collections and indexes for ${models.length} models.`);
-    const { results, ms } = await syncAllIndexes(models);
+    const { results, ms } = await syncAllIndexes(models, { preparations: { RateLimit: () => clearRateLimitsForIndexing() } });
 
     const failed = results.filter(result => result.error);
     console.log(`${results.length - failed.length} of ${results.length} models up to date in ${ms} ms.`);
