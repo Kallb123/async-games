@@ -217,6 +217,13 @@ export const MARKER_RADIUS = 0.8;
  */
 export const SHADOW_RADIUS = 0.5;
 export const SHADOW_ALPHA = 0.3;
+/**
+ * How much of a fallen body shows, lying where it fell: faded, so it reads as
+ * down rather than as a second figure. The isometric board sets it in CSS
+ * (`.ag-ra-figure--down`, kept in step by a test); the 3D board draws it by
+ * this, and a downed character's fallen figure fades in up to it.
+ */
+export const FALLEN_OPACITY = 0.75;
 /** The AP pips: a column of dots down the figure's right, clear of the disc and inside its square's width. */
 export const AP_PIP_RADIUS = 0.75;
 export const AP_PIP_STEP = 1.9;

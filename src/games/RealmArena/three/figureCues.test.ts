@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
-import { shoveAt, type Shove } from "@/games/RealmArena/ui";
+import { readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
+import { FALLEN_OPACITY, shoveAt, type Shove } from "@/games/RealmArena/ui";
 import { buildBattlefield } from "@/utils/games/battlefield/terrain";
 import { BOARD_UNIT } from "./billboards";
 import { fallingAt, groundMove, mayBeHidden, shoveOf } from "./figureCues";
@@ -21,9 +23,21 @@ describe("a downed character fading", () => {
     it("eases the standing figure out as the fallen one eases in, never leaving a gap to see through", () => {
         for (let ms = 1000; ms <= 1400; ms += 20) {
             const { standing, lying } = fallingAt(fall, undefined, ms, false);
-            expect(standing + lying!, `${ms}ms`).toBeGreaterThanOrEqual(1 - 1e-9);
+            // The fallen figure is only ever as strong as `FALLEN_OPACITY`: judged against that, the pair still leaves no gap.
+            expect(standing + lying! / FALLEN_OPACITY, `${ms}ms`).toBeGreaterThanOrEqual(1 - 1e-9);
         }
-        expect(fallingAt(fall, undefined, 1400, false)).toEqual({ standing: 0, lying: 1 });
+    });
+
+    it("ends with the fallen figure as faded as a body at rest, never brighter, so nothing pops when the action is over", () => {
+        expect(fallingAt(fall, undefined, 1400, false)).toEqual({ standing: 0, lying: FALLEN_OPACITY });
+        for (let ms = 1000; ms <= 1600; ms += 20) {
+            expect(fallingAt(fall, undefined, ms, false).lying!, `${ms}ms`).toBeLessThanOrEqual(FALLEN_OPACITY);
+        }
+    });
+
+    it("draws a body at rest as the isometric board's stylesheet does", () => {
+        const css = readFileSync(fileURLToPath(new URL("../../../app/ag-theme.css", import.meta.url)), "utf8");
+        expect(css).toMatch(new RegExp(`\\.ag-ra-figure--down \\{ opacity: ${FALLEN_OPACITY}; \\}`));
     });
 
     it("keeps the fallen figure unseen until the walk it was downed in reaches its square", () => {
@@ -33,7 +47,7 @@ describe("a downed character fading", () => {
 
     it("shows the fallen figure at once with reduced motion", () => {
         expect(fallingAt(fall, undefined, 999, true).lying).toBeNull();
-        expect(fallingAt(fall, undefined, 1000, true).lying).toBe(1);
+        expect(fallingAt(fall, undefined, 1000, true).lying).toBe(FALLEN_OPACITY);
     });
 });
 

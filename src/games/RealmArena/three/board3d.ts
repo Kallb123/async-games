@@ -19,7 +19,7 @@
 import { Color, Matrix4, OrthographicCamera, Scene, Vector3, WebGLRenderer, type ShaderMaterial } from "three";
 import type { CharacterId } from "@/games/RealmArena/characters";
 import { isStanding, type Fighter, type FogGhost, type MusterPick } from "@/games/RealmArena/rules";
-import { CLIMB_LEG, endOf, fadeOutAt, shakeAt, shovesOf, toldAt, toldOf, walkerAt, walkFacing, walkLift, type BattleCue, type FallCue, type Ring, type ScorchCue, type Shove, type Told, type WalkCue } from "@/games/RealmArena/ui";
+import { CLIMB_LEG, endOf, fadeOutAt, FALLEN_OPACITY, shakeAt, shovesOf, toldAt, toldOf, walkerAt, walkFacing, walkLift, type BattleCue, type FallCue, type Ring, type ScorchCue, type Shove, type Told, type WalkCue } from "@/games/RealmArena/ui";
 import { type Battlefield, type Facing, type Square } from "@/utils/games/battlefield/terrain";
 import { easeInOut } from "@/utils/ui/boardZoom";
 import type { Rect } from "@/utils/ui/mapLabels";
@@ -585,7 +585,7 @@ export class Board3D {
         const bars: BarSpec[] = [];
         const playing = ms === null ? null : this.playing;
         this.marks?.begin(this.look);
-        /** One figure of `character`, fully there or, with an `opacity` under 1, fading. */
+        /** One figure of `character`, fully there or, with an `opacity` under 1, faint: fading, or a body lying (`FALLEN_OPACITY`) as the isometric board draws it. */
         const lay = (character: CharacterId, at: Vec3, facing: Facing, fallen: boolean, tint: Color | null, opacity = 1) => {
             matrix.fromArray(figureMatrix(at, facing, fallen));
             if (opacity < 1) this.pools.place(models, character, "faint", matrix, tint, opacity);
@@ -649,7 +649,7 @@ export class Board3D {
                 continue;
             }
             const body = at.map((n, i) => n + knock[i]) as Vec3;
-            lay(fighter.character, body, facing, !standing, spec.tint);
+            lay(fighter.character, body, facing, !standing, spec.tint, standing ? 1 : FALLEN_OPACITY);
             // On the ground the figure stands on, not where it bobs or is knocked to.
             this.shadows.add(feet);
             // Standing figures only: a body on the ground is never the faint figure a wall hides.
