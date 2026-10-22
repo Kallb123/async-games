@@ -65,7 +65,7 @@ export const isAtSquare = (aim: Aim): aim is AtSquare => ACTION_AIMS[aim].at ===
  * or an item with an area, everyone beside the cover but the one swinging for a Demolish,
  * else that square alone.
  */
-function landing(state: BattleState, fighter: Fighter, aim: AtSquare, at: Square): Square[] {
+export function landing(state: BattleState, fighter: Fighter, aim: AtSquare, at: Square): Square[] {
     if (aim === "leap") return leapTargets(state, fighter, at).map(one => one.square);
     if (aim === "iceBall") return areaAround(state.field, at);
     if (aim === "demolish") return demolishArea(state.field, fighter.square, at);

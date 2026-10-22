@@ -3,9 +3,10 @@ import { at } from "@/utils/games/battlefield/testFixtures";
 import { buildBattlefield } from "@/utils/games/battlefield/terrain";
 import type { CharacterId } from "./characters";
 import { ABILITIES, ITEMS } from "./characters";
-import { ACTION_POINTS, newFighter, reachOf, shotOdds, weaponOf, type BattleState, type Fighter } from "./rules";
+import { rulesetFor } from "./rulesets";
+import { ACTION_POINTS, leapLanding, newFighter, reachOf, shotOdds, weaponOf, type BattleState, type Fighter } from "./rules";
 import { targetsOf } from "./tactics";
-import { afterMove, hpPreview, MOVE, reachAfter, tapFighter, tapSquare, targetOptions, type Draft, type TapContext } from "./useTurnDraft";
+import { afterMove, hpPreview, landing, MOVE, reachAfter, tapFighter, tapSquare, targetOptions, type Draft, type TapContext } from "./useTurnDraft";
 
 // The tap decisions behind lining up an action on the board (§17.3 PR 7):
 // what a tap on a square or a character does, for each aim.
@@ -199,6 +200,30 @@ describe("hpPreview", () => {
         const draft: Draft = { aim: "fireball", square: manAtArms.square, targets: [] };
         const area = [manAtArms.square, near.square, body.square];
         expect([...hpPreview(battle, mage, draft, area)]).toEqual([[manAtArms.id, -ABILITIES.fireball.damage], [near.id, -ABILITIES.fireball.damage]]);
+    });
+
+    it("lands a leap on each enemy beside the landing, and on nobody else", () => {
+        // Leap is a rules-v9 ability, so the fighters and the battle are made in v9.
+        const version = { rulesVersion: 9 };
+        const made = (id: number, owner: string, character: CharacterId, square: number, extra: Partial<Fighter> = {}): Fighter =>
+            ({ ...newFighter(id, owner, character, square, null, undefined, false, version), ap: ACTION_POINTS, ...extra });
+        const leaper = made(0, "a", "manAtArms", at(field, 4, 2)), mate = made(1, "a", "cleric", at(field, 6, 3));
+        const hit = made(2, "b", "knight", at(field, 5, 2)), hitToo = made(3, "b", "archer", at(field, 4, 3));
+        const fallen = made(4, "b", "scout", at(field, 2, 3), { hp: 0 }), distant = made(5, "b", "mage", at(field, 9, 4));
+        const leapBattle: BattleState = { field, fighters: [leaper, mate, hit, hitToo, fallen, distant], ...version };
+
+        const down = at(field, 5, 3);
+        expect(leapLanding(leapBattle, leaper, down)).toBe(true);
+        // The enemies beside it: not the leaper's own side next to it, nor the far.
+        const area = landing(leapBattle, leaper, "leap", down);
+        expect(area.sort()).toEqual([hit.square, hitToo.square].sort());
+        const draft: Draft = { aim: "leap", square: down, targets: [] };
+        const damage = rulesetFor(9).ABILITIES.leap!.damage!;
+        expect([...hpPreview(leapBattle, leaper, draft, area)].sort()).toEqual([[hit.id, -damage], [hitToo.id, -damage]]);
+        // A landing beside only a downed character previews no blow.
+        const beside = at(field, 2, 2);
+        expect(landing(leapBattle, leaper, "leap", beside)).toEqual([]);
+        expect(hpPreview(leapBattle, leaper, { ...draft, square: beside }, []).size).toBe(0);
     });
 
     it("gives back what a heal or a draught restores", () => {
