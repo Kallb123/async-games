@@ -111,6 +111,15 @@ every phase can be compared with the one before it.
   idle instance. Inside it, the name cache misses on almost every `entry`
   (about 245 ms). About one board poll in seven pays a 3.4 s session retry. CLS
   and INP are unchanged pending Phase 3.9 and 3.10.
+- [2026-10-22](./performance-checkpoints/2026-10-22.md): the first checkpoint
+  filtered by build (#936 on), about three days of it. It disproves the
+  2026-10-19 inference: the session confirmation takes 4 ms. The cold home
+  wait is the dashboard's `entry` call on a brand-new function instance (5.0 s:
+  2.55 s for the platform to start it, then 1.6 s of reads that take 20 ms
+  warm, likely queued behind Mongoose's start-up index work). Session retries
+  are gone, the dashboard's cached paint is 125 ms, intent prefetches are all
+  used, and board INP meets its target on the 3D board. It adds "Cold
+  instances" items 4 and 5.
 
 The admin report reads seven days by default, and a deploy leaves the old app in most of that. A checkpoint is therefore taken with **from build** set to the first build after the changes being measured (the report's build list shows each deploy's first-seen time), and the checkpoint records that build and the window in its header. The report's Markdown copy carries both. Every sample is stamped with its page's `NEXT_PUBLIC_BUILD_TIME`, and a server span is reported by the same page, so one `build` filter cleans every metric. A sample with no build (from before the stamp, or a very old cached client) is left out once `build` is set.
 
@@ -357,6 +366,7 @@ The 2026-10-19 checkpoint found two costs that sit outside the cold instance its
       - Compute the map's isometric geometry once per battlefield and turn of the view, not per render.
       - Leave anything that moves frame by frame on the `usePlayback` frame loop.
     - **Exit:** p75 INP at or under 200 ms on the board.
+    - **Likely met (2026-10-22 checkpoint, n=16):** 96 ms median and 136 ms p75, on the 3D board (`board/camera` presentation 44 ms). The SVG board whose paint cost drove the earlier figures is no longer what players see. Confirm on a larger sample before closing it.
 
 **Pros of code splitting:** smaller initial route chunks and less parse/hydration work. **Cons:** opening a deferred panel gains a delay and too many chunks add request overhead. Intent-prefetch deferred panels on hover/focus if needed.
 
