@@ -129,7 +129,8 @@ let warmUpLeadReported = false;
 
 function reportWarmUp() {
   const record = window.__agWarmUp;
-  if (!record || warmUpReported) return;
+  // No `done`: the script stopped before its fetch went out, so there is nothing to time.
+  if (!record?.done || warmUpReported) return;
   warmUpReported = true;
   // Taken now, as the ping belongs to the page it was sent from.
   const context = sampleContext('warm');

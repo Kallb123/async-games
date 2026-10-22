@@ -63,6 +63,13 @@ Vercel's build machines as well as its functions, and a build that can't reach
 the database fails rather than ships without its indexes. The E2E workflow runs
 the same script against its own database.
 
+So the Vercel project's **Build Command** setting must stay at its default. An
+override there replaces `vercel-build`, and the deploy would ship without
+building its indexes, with nothing to say so. The unique ones (the rate
+limiter's key, friendships, join codes, achievement unlocks) are what keep two
+racing writes from both inserting. A new database, local or not, gets them from
+`MONGODB_URI=… npm run db:indexes` before the app first writes to it.
+
 One consequence worth knowing: the `vercel.json` crons only fire on the
 production deployment, so nothing sweeps the dev database. Turn timers don't
 expire in dev unless you call the endpoint yourself:
