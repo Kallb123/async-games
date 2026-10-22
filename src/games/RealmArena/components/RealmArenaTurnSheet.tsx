@@ -407,8 +407,9 @@ function Detail({ draft, battle, name, ap, target }: DetailProps) {
         const caught = aim === 'leap' ? battle.fighters.filter(one => draft.hpChange.has(one.id))
             : battle.fighters.filter(one => isStanding(one) && area.has(one.square));
         const { damage = 0, effect } = (isAtSquare(aim) ? landsOf(fighter, aim, battle) : undefined) ?? {};
+        const nobody = aim === 'leap' ? 'No enemy is next to the landing.' : `Nobody is ${draft.area.length > 1 ? 'in the blast' : 'there'}.`;
         return hint(<>
-            {caught.length === 0 ? aim === 'leap' ? 'No enemy is next to the landing.' : `Nobody is ${draft.area.length > 1 ? 'in the blast' : 'there'}.` : landsOn(caught.map(one => name(one.id)).join(', '), damage, effect)}
+            {caught.length === 0 ? nobody : landsOn(caught.map(one => name(one.id)).join(', '), damage, effect)}
             {caught.some(one => allied(battle, one.owner, fighter.owner)) ? ' That includes your own.' : ''}
             {draft.blasts?.length ? ` Blasts away ${pluralize(draft.blasts.length, 'square')} of low cover.` : ''}
         </>);
