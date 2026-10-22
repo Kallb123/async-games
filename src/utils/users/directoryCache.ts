@@ -19,7 +19,7 @@
 // the unit test pins that a user carrying the rest leaves none of it behind —
 // here, and in the document the shared tier writes.
 
-import { forgetSharedUser } from '@/utils/users/sharedDirectory';
+import { forgetSharedUser, type ForgetReason } from '@/utils/users/sharedDirectory';
 
 /** The display fields of one player, already derived from their Clerk user. */
 export interface DirectoryRecord {
@@ -171,12 +171,12 @@ function trim() {
  * cache couldn't be told. If the shared tier can't be reached, other instances
  * keep their copy until it ages out, which is all they had before it existed.
  */
-export async function forgetCachedUser(userId: string, reason: 'changed' | 'deleted' = 'changed'): Promise<void> {
+export async function forgetCachedUser(userId: string, reason: ForgetReason = 'changed'): Promise<void> {
     entries.delete(userId);
     forgottenAt.delete(userId);
     forgottenAt.set(userId, forgets++);
     if (forgottenAt.size > DIRECTORY_MAX_ENTRIES) forgottenAt.delete(forgottenAt.keys().next().value!);
-    await forgetSharedUser(userId, reason === 'deleted');
+    await forgetSharedUser(userId, reason);
 }
 
 /** Test seam: start from an empty cache. */

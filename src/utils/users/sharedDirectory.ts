@@ -266,11 +266,14 @@ export async function writeSharedUsers(askedFor: string[], found: DirectoryRecor
  * for the id, "no such user", replaces it with a "known missing" marker, and
  * the retention bounds it regardless.)
  */
-export async function forgetSharedUser(userId: string, deleted: boolean): Promise<void> {
+/** Why a player is forgotten: how they are shown `changed` (a rename, a claim), or their account was `deleted`. */
+export type ForgetReason = 'changed' | 'deleted';
+
+export async function forgetSharedUser(userId: string, reason: ForgetReason): Promise<void> {
     if (!sharedDirectoryAvailable()) return;
     await withTimeout(async () => {
         await connect();
-        if (deleted) {
+        if (reason === 'deleted') {
             await PlayerDirectoryModel.deleteOne({ userId }).exec();
             return;
         }
