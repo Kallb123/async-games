@@ -82,6 +82,10 @@ export const WHATS_NEW: WhatsNewGroup[] = [
         icon: "✨",
         items: [
             {
+                title: "Faster to open the app",
+                detail: "Opening the app after a while away, or tapping a notification to jump into a game, now gets your games on screen sooner: the server starts waking up while you're still being signed in, rather than after.",
+            },
+            {
                 title: "Realm Arena: Hold Out for a team of four",
                 detail: "Four of you can now fight Hold Out together, on the Sacked Fort or the Sunken Village: a quarter of the middle each, four warbands closing in from the edges, and the same four waves over 13 rounds. Hold the Centre and the gate forts still seat up to three.",
                 game: "realmarena",
@@ -123,11 +127,6 @@ export const WHATS_NEW: WhatsNewGroup[] = [
             {
                 title: "Realm Arena is now in 3D",
                 detail: "The battlefield is now drawn as a real 3D board: walls and towers stand up off the ground, trees have trunks, and every character is a model that turns to face where it's going. Turn the view a quarter at a time, pinch to zoom, and everything else works as before. If your browser can't draw 3D, you get the old flat board.",
-                game: "realmarena",
-            },
-            {
-                title: "Realm Arena: choose your faction — the Realm, the Swarm or the Miners",
-                detail: "Each player now picks a faction as they muster, from those the host allows, and co-op can pit you against any of them. The Swarm fields more, cheaper and weaker beasts whose acid corrodes; the new Miners are dwarves out of the deep mines, each one tougher than the Realm's and a little dearer for it, so you field fewer of them. Miners hack through cover with their pickaxes, Stonewardens hold the line behind slabs of stone, Prospectors shoot steady crossbows, Runepriests heal and raise the fallen, and Sappers throw dynamite that blasts a 3×3 and the low cover in it. Miners of your own are tough enough that they don't wear Hold Out's armour against the Renegades.",
                 game: "realmarena",
             },
         ],

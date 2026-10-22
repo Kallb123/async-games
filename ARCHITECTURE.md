@@ -199,6 +199,26 @@ registers the discriminators with Mongoose. The discriminator key unions
 double as a **compile-time exhaustiveness check** — add a game to the union
 but forget to wire its model and TypeScript fails the build.
 
+### Indexes
+
+The app's connection builds no collection and no index: `dbConnect()` opens
+with Mongoose's `autoIndex` and `autoCreate` off
+(`src/utils/mongodb/connectionOptions.ts`). With them on, every model's
+`init()` fires a `createCollection` and a `createIndex` per index the moment a
+new serverless instance connects, and that burst queues the first request's own
+reads behind it. Indexes are built per deploy instead, by
+`npm run db:indexes` (`scripts/sync-indexes.ts`): the Vercel build runs it
+ahead of `next build` (the `vercel-build` script, so a build that can't reach
+the database doesn't ship), and the E2E workflow runs it against the e2e
+database. It only adds (it creates a missing collection and a missing index,
+and never calls `syncIndexes()` or drops anything), so removing or changing an
+index in a schema is a manual step against each database.
+
+The sync builds what Mongoose has registered once
+`src/utils/mongodb/models.ts` has loaded, so **a new model file gets one import
+line there** — `models.test.ts` fails if a file that makes a model is missing
+from it. A new index needs nothing more than its `schema.index(...)`.
+
 ### Mongoose discriminators
 
 Games and invitations share a base schema and specialise via Mongoose
@@ -555,14 +575,13 @@ Key properties:
   because the root `mongodb` package can end up a second copy that Mongoose's
   errors would never be `instanceof`. A row with a blank or non-string key is
   refused with a `TypeError` before anything is written.
-- **The index has to exist before the first write.** The repo relies on
-  Mongoose's `autoIndex`, and a `bulkWrite` doesn't wait for an index build: two
-  upserts of the same pair landing first would both insert, and the build would
-  then fail on the duplicate. So the model ships in a change that writes nothing,
-  and the first write ships after the index is confirmed in production.
-  `recordUnlocks` also awaits `AchievementUnlockModel.init()` before its first
-  write — Mongoose's cached promise, free after the first call — so an index
-  build that failed throws instead of writing without uniqueness.
+- **The index has to exist before the first write.** A `bulkWrite` doesn't wait
+  for an index build: two upserts of the same pair landing first would both
+  insert, and the build would then fail on the duplicate. The app builds no
+  index of its own (§5, "Indexes"), so the deploy builds it
+  (`npm run db:indexes`, ahead of `next build`), and a build where that fails
+  doesn't ship. The model still ships in a change that writes nothing, and the
+  first write ships after the index is confirmed in production.
 - **Deleted by user, and wiped by the dev reset.** `POST /api/user/delete`
   removes `{ userId }` — an unlock belongs to the player, not the table, so
   other players' unlocks from the same games stay theirs — and
@@ -1153,6 +1172,15 @@ game — is documented fully in
   nothing may carry a root `app/loading.tsx`: a loading file is a Suspense
   boundary, and one round a page this big is sent as skeleton plus a hidden block
   swapped in later (see `components/HomeLoading.tsx`).
+
+  A second inline script, `WarmUpScript`, rides in the same static HTML (and in
+  the shell every client game board is served in, `app/games/staticShell.ts`).
+  When the same cookie rule says signed in, it sends `HEAD /api/dashboard` (on
+  `/`) or `HEAD /api/game/<id>` (on a board, the id read from the path) while
+  Clerk is still loading, so the function instance and its Mongo connection are
+  starting before the page can ask for its data. The `HEAD` export of those two
+  routes (`utils/api/warmUp.ts`) answers 204 with no auth, read or body. See
+  `utils/warmUp.ts`.
 
   Deciding it in the browser *after Clerk loads* is what each used to avoid: `/`
   flashed the dashboard's skeletons at a visitor with no account before

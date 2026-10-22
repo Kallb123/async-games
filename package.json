@@ -8,6 +8,8 @@
   "scripts": {
     "dev": "next dev",
     "build": "next build",
+    "db:indexes": "tsx scripts/sync-indexes.ts",
+    "vercel-build": "npm run db:indexes && next build",
     "start": "next start",
     "lint": "eslint --max-warnings 0",
     "test": "vitest run",

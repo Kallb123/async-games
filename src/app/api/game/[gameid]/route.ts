@@ -3,7 +3,10 @@ import { NextRequest } from 'next/server';
 import { dbConnect } from '../../../../utils/mongodb/mongodb';
 import { readGameForViewer } from '@/utils/games/readGame';
 import { ServerTiming, timedJson } from '@/utils/api/serverTiming';
+import { warmUpResponse } from '@/utils/api/warmUp';
 export interface IGetGameParams { gameid: string }
+/** The board's warm-up ping: see `warmUpResponse`. It never looks at the id, so it can't say whether a game exists. */
+export const HEAD = warmUpResponse;
 const REFUSED = { 404: 'Game not found', 403: 'Not a player in this game' } as const;
 export async function GET(request: NextRequest, { params }: { params: Promise<IGetGameParams> }) {
   console.log(`GET ${request.nextUrl.pathname}`);

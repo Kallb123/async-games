@@ -119,6 +119,10 @@ out. A second copy is the signal to extract the first one.
   the player reaches for it (press, mouse hover, focus): every row on the
   dashboard or the rail that opens a board is one, so the prefetch is wired once
   and a new row of that kind uses it rather than a bare `<Link>`.
+  `WarmUpScript` is the inline script that wakes the function instance a
+  signed-in page is about to call, while Clerk is still loading: the home page
+  and the static game shell carry it, and a route that wants the ping adds a
+  `HEAD` export of `warmUpResponse` rather than a route of its own.
   `ReadOnlyPanel` is how a game screen shows a waiting player the panels they
   can look at but not act on — their hand, the face-up cards, the market — by
   making the turn sheet inert rather than growing a second read-only copy of it.
@@ -272,6 +276,13 @@ deployed, so nothing under `src/` may import from it.
 
 - Preserve existing data flows and API contracts when restyling — the UI
   overhaul is presentational and must not change request/response shapes.
+- **Indexes are built by the deploy, not the app.** The runtime connection has
+  Mongoose's `autoIndex` and `autoCreate` off, so a new `schema.index(...)`
+  reaches a database only through `npm run db:indexes` (the Vercel build and the
+  E2E workflow run it; `scripts/sync-indexes.ts`). It builds the models that
+  `src/utils/mongodb/models.ts` has imported, so a new model file gets one line
+  there (`models.test.ts` fails without it). It only adds: dropping or changing
+  an index is a manual step.
 - **Keep the "What's new" notes up to date.** The bottom of the home page
   lists what has changed recently, in three groups — new games, enhancements
   and bug fixes — from `src/utils/ui/whatsNew.ts`. Any change a player would

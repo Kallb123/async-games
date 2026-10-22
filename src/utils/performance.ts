@@ -64,13 +64,31 @@ export type PerformanceDataSource = typeof PERFORMANCE_DATA_SOURCES[number];
 export const SESSION_METRICS = ['session_confirm', 'session_confirm_timeout', 'session_resume', 'session_resume_timeout', 'session_renew', 'session_renew_timeout'] as const;
 export type SessionMetric = typeof SESSION_METRICS[number];
 
+/**
+ * The warm-up ping: a `HEAD` an inline script sends to the route a page will
+ * call next, while Clerk is still loading, so the platform's start of the
+ * function instance and its Mongo connection overlap Clerk instead of
+ * following it (`utils/warmUp.ts`).
+ *
+ * - `api_warm`: the ping, from sending it to its headers arriving (tagged
+ *   `warm`). Its `server_*` spans carry the same tag: `server_total`,
+ *   `server_mongo_connect`, and `server_instance_new` when the ping was the
+ *   first request its instance ever served.
+ * - `warm_ping_lead`: tagged `entry`, reported once on the screen's first data
+ *   fetch when a ping for that same route preceded it on this page load: how
+ *   many ms before the fetch the ping was sent. The count against `entry`'s is
+ *   the share of loads that were pinged.
+ */
+export const WARM_UP_METRICS = ['api_warm', 'warm_ping_lead'] as const;
+export type WarmUpMetric = typeof WARM_UP_METRICS[number];
+
 /** The metrics reported through `window.__agPerformanceMetric`, rather than from a journey or a fetch. */
 export type ClientMetric = DataCacheMetric | SessionMetric;
 /** What a `ClientMetric` may say about where it was taken: see `window.__agPerformanceMetric`. */
 export interface ClientMetricContext { pathname?: string; dataSource?: PerformanceDataSource }
 
 export const PERFORMANCE_METRIC_NAMES = [
-  'navigation', ...JOURNEY_MILESTONES, ...DATA_CACHE_METRICS, ...SESSION_METRICS, 'server_total', 'server_auth', 'server_mongo_connect', 'server_mongo_query', 'server_mongo_checkout', 'server_mongo_handshake', 'server_idle', 'server_instance_new', 'server_player_directory', 'server_names', 'server_unread_chat', 'server_kb_worlds', 'server_response_build', 'server_response', 'server_reactions', 'server_achievements', 'server_serialise', 'response_bytes', 'image_load', 'LCP', 'INP', 'CLS', 'FCP', 'TTFB',
+  'navigation', ...JOURNEY_MILESTONES, ...DATA_CACHE_METRICS, ...SESSION_METRICS, ...WARM_UP_METRICS, 'server_total', 'server_auth', 'server_mongo_connect', 'server_mongo_query', 'server_mongo_checkout', 'server_mongo_handshake', 'server_idle', 'server_instance_new', 'server_player_directory', 'server_names', 'server_unread_chat', 'server_kb_worlds', 'server_response_build', 'server_response', 'server_reactions', 'server_achievements', 'server_serialise', 'response_bytes', 'image_load', 'LCP', 'INP', 'CLS', 'FCP', 'TTFB',
   'TTFB_waiting', 'TTFB_cache', 'TTFB_dns', 'TTFB_connection', 'TTFB_request', 'sw_startup',
   'api_total', 'api_connect', 'api_network', 'api_download', 'session_retry',
   'CLS_largest_shift', 'LCP_load_delay', 'LCP_load', 'LCP_render_delay', 'INP_input_delay', 'INP_processing', 'INP_presentation',
@@ -98,8 +116,10 @@ export const performanceValueLimit = (name: string) => isByteMetric(name) ? 50_0
  * Which of a screen's own data fetches a sample came from: the `entry` fetch
  * that brought its first data, or a later `refresh` (a poll, a push, the tab
  * coming back). Entry is what a player waits on; refreshes are polling load.
+ * `warm` is not one of the screen's fetches but the warm-up ping sent ahead of
+ * the entry (see `WARM_UP_METRICS`), so its timings are split from it.
  */
-export const PERFORMANCE_REQUESTS = ['entry', 'refresh'] as const;
+export const PERFORMANCE_REQUESTS = ['entry', 'refresh', 'warm'] as const;
 export type PerformanceRequest = typeof PERFORMANCE_REQUESTS[number];
 
 /** The spans of a `Server-Timing` header that we report, as `server_<span>` metrics. Spans we don't know are left out. */

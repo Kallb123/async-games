@@ -336,8 +336,9 @@ downstream treats as identifying exactly one document, and nothing had ever
 enforced it.
 
 > **⚠️ Deploy note.** A unique index fails to build if the collection already
-> contains duplicates, and Mongoose logs that failure rather than raising it —
-> leaving the field unindexed, which is worse than a plain index. Before this
+> contains duplicates. Mongoose's own build logged that failure rather than
+> raising it, leaving the field unindexed, which is worse than a plain index;
+> the deploy-time `npm run db:indexes` now fails the build instead. Before this
 > ships, confirm both are clean:
 >
 > ```js

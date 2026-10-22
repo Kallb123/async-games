@@ -44,3 +44,22 @@ describe("game routes are static shells", () => {
             "These pages aren't 'use client', so their cached shell could carry one viewer's data to everyone").toEqual([]);
     });
 });
+
+// The one script the shell carries. The shell is cached and served to everyone,
+// so what it holds must be the same bytes for every viewer and every id: the
+// script reads the cookie and the path in the browser, and the server puts
+// neither in it.
+describe("the shell's warm-up script", () => {
+    it("is in the server's HTML, once, ahead of the page, and is the same text every time", async () => {
+        const { createElement } = await import("react");
+        const { renderToStaticMarkup } = await import("react-dom/server");
+        const { default: StaticShellLayout } = await import("@/app/games/staticShell");
+        const { WARM_UP_SCRIPT } = await import("@/utils/warmUp");
+        const html = () => renderToStaticMarkup(createElement(StaticShellLayout, null, createElement("main", null, "board")));
+        const rendered = html();
+        expect(rendered.match(/<script>/g)).toHaveLength(1);
+        expect(rendered.indexOf("<script>")).toBeLessThan(rendered.indexOf("<main>"));
+        expect(rendered).toContain(`<script>${WARM_UP_SCRIPT}</script>`);
+        expect(html()).toBe(rendered);
+    });
+});

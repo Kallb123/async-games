@@ -4,11 +4,12 @@ import { useSyncExternalStore } from "react";
 import { useUser } from "@clerk/nextjs";
 import Dashboard from "@/components/Dashboard";
 import Landing from "@/components/Landing";
+import WarmUpScript from "@/components/ui/WarmUpScript";
 import { SIGNED_IN_PRE_PAINT_SCRIPT, signedInHintFromCookieString } from "@/utils/users/clientUat";
+import { subscribeNever } from "@/utils/hooks/subscribeNever";
 
 // The cookie never changes under a mounted page in a way worth reacting to —
 // Clerk takes over the moment it loads — so there is nothing to subscribe to.
-const subscribeToNothing = () => () => {};
 const guessInBrowser = (): boolean | null => signedInHintFromCookieString(document.cookie);
 // The server has no cookie to read: the page is static, the same bytes for
 // everyone. `null` is "not known yet".
@@ -57,7 +58,7 @@ const guessOnServer = (): boolean | null => null;
  */
 export default function HomeScreen() {
   const { isLoaded, isSignedIn } = useUser();
-  const guess = useSyncExternalStore(subscribeToNothing, guessInBrowser, guessOnServer);
+  const guess = useSyncExternalStore(subscribeNever, guessInBrowser, guessOnServer);
 
   const signedIn = isLoaded ? !!isSignedIn : guess;
   // Both screens, each in a wrapper CSS can hide, until something has decided.
@@ -70,6 +71,10 @@ export default function HomeScreen() {
       {/* Only where the HTML came from the server: a client-side render has no
           use for it, and React warns about a script it can't run. */}
       {undecided && <script dangerouslySetInnerHTML={{ __html: SIGNED_IN_PRE_PAINT_SCRIPT }} />}
+      {/* Right after it, and by the same cookie rule: a signed-in visitor's
+          dashboard will ask `/api/dashboard` once Clerk has loaded, so wake
+          that route's function instance now. A signed-out one sends nothing. */}
+      <WarmUpScript />
       {/* Where Next lands a navigation back home. It scrolls to the top of the
           page's first element, skipping any with no box — and both wrappers
           below dissolve (`display: contents`), so it walked on to the next

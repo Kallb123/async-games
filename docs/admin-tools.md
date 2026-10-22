@@ -616,7 +616,10 @@ chat counts (`unread_chat`) and Kingdom Builder worlds (`kb_worlds`). The
 **Data** column splits a cache-enabled screen's journey by where its first data
 came from (`hit`, `prefetch`, `joined` or `miss`); the session's confirmation and
 renewals are timed as `session_confirm` and `session_renew`, each with a
-`_timeout` twin for one that ran to its deadline. See "How the client timings are
+`_timeout` twin for one that ran to its deadline. The warm-up ping a signed-in
+page sends while Clerk loads is `api_warm` and its server spans, under the `warm`
+request tag, and `warm_ping_lead` on the `entry` fetch says how far ahead of it
+the ping went. See "How the client timings are
 measured" in the loading performance plan for each.
 
 A document load's `TTFB` is also split into the phases the browser reports for

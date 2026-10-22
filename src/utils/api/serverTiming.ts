@@ -16,8 +16,11 @@ import { AsyncLocalStorage } from 'node:async_hooks';
 //   request. Wall-clock time, since a function frozen between requests may
 //   not count the freeze on a monotonic clock, and the freeze is the thing
 //   being measured.
+// - `warmed`: whether a warm-up ping (`noteWarmUp`) has been answered. Kept
+//   apart from `lastRequestAt` so a ping never uses up the first-request flag
+//   that the signed-in request after it reports.
 declare global {
-  var agServerTiming: { current: AsyncLocalStorage<ServerTiming>; bootedAt: number; lastRequestAt?: number } | undefined;
+  var agServerTiming: { current: AsyncLocalStorage<ServerTiming>; bootedAt: number; lastRequestAt?: number; warmed?: boolean } | undefined;
 }
 const instance = globalThis.agServerTiming ??= { current: new AsyncLocalStorage<ServerTiming>(), bootedAt: Date.now() };
 const current = instance.current;
@@ -55,6 +58,25 @@ export class ServerTiming {
       ? { name: 'instance_new', duration: Math.min(now - instance.bootedAt, TIME_LIMIT_MS) }
       : { name: 'idle', duration: Math.floor((now - instance.lastRequestAt) / MINUTE_MS) * MINUTE_MS });
     instance.lastRequestAt = now;
+  }
+
+  /**
+   * Notes, for the warm-up ping (an unauthenticated `HEAD`, see
+   * `api/warmUp.ts`), whether it is the first request of any kind this
+   * instance has served: if so it reports `instance_new`, how long since the
+   * instance booted. That is the one thing it says, and it says it only to the
+   * request that is first: no idle time, because that would time other
+   * players' requests for a caller nobody has signed in.
+   *
+   * It leaves `lastRequestAt` alone, so the signed-in request that follows
+   * still reports `instance_new` or `idle` as though the ping had not come: its
+   * age since boot, set against the ping's, says whether the ping got there
+   * first.
+   */
+  noteWarmUp() {
+    const first = instance.lastRequestAt === undefined && !instance.warmed;
+    instance.warmed = true;
+    if (first) this.entries.push({ name: 'instance_new', duration: Math.min(Date.now() - instance.bootedAt, TIME_LIMIT_MS) });
   }
 
   async time<T>(name: string, work: () => Promise<T>): Promise<T> {

@@ -64,7 +64,6 @@ function bulkWriteError({ upserted, failed }: { upserted: number[], failed: { in
 beforeEach(async () => {
     await resetApiRouteStubs();
     vi.mocked(AchievementUnlockModel.bulkWrite).mockClear();
-    vi.mocked(AchievementUnlockModel.init).mockClear();
 });
 
 // What keeps two racing passes to one row is the constraint, so the test that
@@ -141,23 +140,6 @@ describe('recordUnlocks', () => {
 
         expect(AchievementUnlockModel.bulkWrite).not.toHaveBeenCalled();
         expect(storedAchievementUnlocks()).toEqual([]);
-    });
-
-    it('waits for the unique index to be built before its first write', async () => {
-        await recordUnlocks([{ userId: ANN, achievementId: 'platform.first-win' }], NOW);
-
-        expect(AchievementUnlockModel.init).toHaveBeenCalledTimes(1);
-        expect(vi.mocked(AchievementUnlockModel.init).mock.invocationCallOrder[0])
-            .toBeLessThan(vi.mocked(AchievementUnlockModel.bulkWrite).mock.invocationCallOrder[0]);
-    });
-
-    it('writes nothing when the index could not be built, rather than write without uniqueness', async () => {
-        const failure = new Error('index build failed');
-        vi.mocked(AchievementUnlockModel.init).mockRejectedValueOnce(failure);
-
-        await expect(recordUnlocks([{ userId: ANN, achievementId: 'platform.first-win' }], NOW)).rejects.toBe(failure);
-
-        expect(AchievementUnlockModel.bulkWrite).not.toHaveBeenCalled();
     });
 
     it('sends one unordered upsert per row, setting everything but the key only on insert', async () => {

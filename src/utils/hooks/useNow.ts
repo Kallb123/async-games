@@ -1,4 +1,5 @@
 import { useSyncExternalStore } from "react";
+import { subscribeNever } from "./subscribeNever";
 
 // One shared ticker drives every clock reading on screen, so they all advance on
 // the same beat instead of each owning a timer.
@@ -29,8 +30,6 @@ const minuteSnapshot = (): number | null => Math.floor(Date.now() / 60000) * 600
 // paints, so there is no honest "now" to render with until hydration.
 const noSnapshot = (): number | null => null;
 
-// Nothing left to count, so it doesn't join the ticker.
-const subscribeNever = () => () => {};
 
 /**
  * The current time in epoch ms, re-read once a second, or null before hydration.

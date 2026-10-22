@@ -15,6 +15,7 @@ import { RaceCarsGameDataModel, RaceCarsInvitationModel } from '@/games/RaceCars
 import { RealmArenaGameDataModel, RealmArenaInvitationModel } from '@/games/RealmArena/RealmArenaModels';
 import { InvitationModel } from './InvitationData';
 import { recordSpanTime } from '@/utils/api/serverTiming';
+import { RUNTIME_CONNECT_OPTIONS } from './connectionOptions';
 
 // Add new game discriminator keys here whenever a new game is introduced.
 // (KingdomBuilderInvitation is deliberately absent from INVITATION_MODELS, so
@@ -48,16 +49,7 @@ export async function dbConnect() {
     return cached.conn;
   }
   if (!cached.promise) {
-    const opts = {
-      bufferCommands: false,
-      // A request fires its reads in parallel (dashboard, board), and on a new
-      // instance each needs a fresh handshake; the driver default lets only two
-      // handshake at once. No minPoolSize: connect() doesn't wait for it, and
-      // the driver holds it against every replica-set member, so it would
-      // only keep idle sockets open on the secondaries we never read from.
-      maxConnecting: 3,
-    };
-    cached.promise = mongoose.connect(MONGODB_URI, opts).then((mongoose) => {
+    cached.promise = mongoose.connect(MONGODB_URI, RUNTIME_CONNECT_OPTIONS).then((mongoose) => {
       // The request's `mongo_query` span holds both the wait for a connection
       // and the command on it. These split them out, so a slow first query on
       // an instance that sat idle can be told apart from a slow query:

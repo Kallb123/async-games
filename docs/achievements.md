@@ -884,16 +884,17 @@ A plain `insertMany`, or catching the error with `isDuplicateKeyError`
 (`duplicateKey.ts`, which only looks at the top-level code), would swallow the
 answer to "which rows are new".
 
-**The unique index has to exist before the first write.** The repo relies on
-Mongoose's `autoIndex`, and a `bulkWrite` doesn't wait for an index build. If
-two upserts of the same pair land before the index exists, both insert, the
-build fails on the duplicate, and uniqueness is gone for good. The PR split
-closes that window: PR 2 loads the model with nothing to write, and PR 3
-checks the index exists in production before the catalogue ships (§13).
-`recordUnlocks` also awaits `AchievementUnlockModel.init()` before its first
-write, so a build that failed throws there instead of the write going ahead
-without uniqueness; the promise is cached, so it costs nothing after the first
-call.
+**The unique index has to exist before the first write.** A `bulkWrite` doesn't
+wait for an index build. If two upserts of the same pair land before the index
+exists, both insert, the build fails on the duplicate, and uniqueness is gone
+for good. The app's own connection builds no index (Mongoose's `autoIndex` and
+`autoCreate` are off: `src/utils/mongodb/connectionOptions.ts`), so the index is
+built by the deploy instead: `npm run db:indexes` runs ahead of `next build` in
+the Vercel build, and a build where it fails doesn't ship. The code that writes
+here therefore never serves without the index, which is stricter than a build
+Mongoose started when the first instance booted. The PR split (§13) still has
+PR 2 load the model with nothing to write and PR 3 check that the index exists
+in production before the catalogue ships.
 
 ### 5.3 Reading it: stored ∪ met
 
@@ -1403,7 +1404,7 @@ read. That's the design working, not a gap in it. It also covers a surrender:
 | `recordGameResult` fails | Career judging is skipped for this game and catches up at the player's next game (§4.3). Match judging doesn't depend on it, so it still runs. |
 | A game with no `turnEnd` or `end` achievements of its own | Its game end is still judged for career achievements, the platform's included, because `judgeGameEnd` has its own "anything to judge?" (§4.3). |
 | Two judging passes race (overlapping turn ends, or two games finishing at once) | Both upsert and one inserts. Only its unlock is celebrated and pushed, and neither throws (§5.2). |
-| The first writes arrive before the unique index exists | Uniqueness could be lost for good (§5.2). The PR split prevents it, and PR 3 checks for the index before the catalogue ships. |
+| The first writes arrive before the unique index exists | Uniqueness could be lost for good (§5.2). The deploy builds the index ahead of the code that writes (`npm run db:indexes` in the Vercel build), and PR 3 checks for it before the catalogue ships. |
 | A turn is ended by the cron, or by `POST /api/game/taketurn` | That turn end isn't judged. A state that persists is caught at the next turn end the command route sees, or on the final state (§4.2). |
 | A game whose turns end with `timerRestarts` and never `turnOver` (Fires Out's solitaire crew) | It's judged on either flag, so it's judged as it goes like any other (§4.2). |
 | A state is reached and then undone | It never reaches a turn end, so it's never judged (§4.1). |
@@ -1751,7 +1752,8 @@ still empty.
 9. **`Check the unlock index before anything writes`.** This is a checklist
    step in the PR description, not a code commit, but it gates the next one.
    Confirm that `{ userId: 1, achievementId: 1 }` exists in production. PR 2's
-   deploy will have built it; if it hasn't, build it now (§5.2).
+   deploy's index sync will have built it; if it hasn't, run
+   `npm run db:indexes` against production now (§5.2).
 10. **`The first achievements`.** `PLATFORM_ACHIEVEMENTS`, and the two games
     from the original request:
     - **Dice Cities**: as in §3.4, plus one more match achievement. Its null

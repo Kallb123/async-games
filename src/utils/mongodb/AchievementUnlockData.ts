@@ -49,12 +49,14 @@ export var AchievementUnlockSchema = new Schema<IAchievementUnlockDataDocument>(
 // ({ userId: { $in: playerIds }, gameId } — deliberately not a bare { gameId },
 // which no index would serve).
 //
-// It has to exist before the first write. The repo relies on Mongoose's
-// autoIndex, and a bulkWrite doesn't wait for an index build: if two upserts of
-// the same pair landed first, both would insert, the build would then fail on
-// the duplicate, and uniqueness would be gone for good. So nothing writes here
-// until a deploy that only loads this model has built it (docs/achievements.md
-// §5.2 and §13).
+// The unique index is the only thing that makes two racing passes leave one
+// row, and a bulkWrite doesn't wait for an index build: if two upserts of the
+// same pair landed before it existed, both would insert, the build would then
+// fail on the duplicate, and uniqueness would be gone for good. The app's own
+// connection builds no index (connectionOptions.ts); `npm run db:indexes`
+// builds this one ahead of `next build` on every deploy, and a build where that
+// fails doesn't ship, so the code that writes here never serves without it
+// (docs/achievements.md §5.2 and §13).
 AchievementUnlockSchema.index({ userId: 1, achievementId: 1 }, { unique: true });
 export var AchievementUnlockModel = models.AchievementUnlock || model<IAchievementUnlockDataDocument, IAchievementUnlockDataModel>('AchievementUnlock', AchievementUnlockSchema);
 
@@ -117,14 +119,6 @@ export async function recordUnlocks(unlocks: UnlockToRecord[], unlockedAt: strin
             throw new TypeError(`recordUnlocks was given a malformed unlock at index ${index}`);
         }
     });
-
-    // The unique index is the only thing that makes two racing passes leave one
-    // row, and a bulkWrite doesn't wait for autoIndex to finish building it (see
-    // the note on the schema). `init()` hands back Mongoose's cached promise, so
-    // this costs nothing after the first call — and if the build failed it
-    // throws, here, instead of the write going ahead without uniqueness
-    // (docs/achievements.md §5.2).
-    await AchievementUnlockModel.init();
 
     let upsertedIds: Record<number, unknown>;
     try {
