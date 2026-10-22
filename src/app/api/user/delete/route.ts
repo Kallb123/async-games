@@ -97,7 +97,9 @@ export async function POST(request: NextRequest) {
     await AchievementUnlockModel.deleteMany({ userId }).exec();
 
     await (await clerkClient()).users.deleteUser(userId);
-    forgetCachedUser(userId);
+    // Also removes the shared copy of their name and picture: it is their data,
+    // and the account it describes is gone.
+    await forgetCachedUser(userId, 'deleted');
 
     return NextResponse.json({ success: true });
 }

@@ -5,12 +5,21 @@
 // Server-only, like clerk.ts, which is its one reader: a module-level Map is
 // per process and, on a client, would be shared by nothing.
 //
+// This is the first of two tiers. It is per process, so on a new serverless
+// instance (nearly every first request of a screen) it is empty; the second
+// tier, sharedDirectory.ts, keeps the same records in the database for every
+// instance to read. What follows is about this one, and the tier behind it
+// holds exactly the same thing under the same rule.
+//
 // What it holds is a *display record* — the three things a name, a tag and a
 // picture are drawn from — and never the Clerk `User` it came from. A user
 // carries private metadata (device tokens, preferences, unlock flags), email
 // addresses and more, none of which a name lookup has any use for, so none of
 // it is kept: the record type below is the whole of what can be stored, and
-// the unit test pins that a user carrying the rest leaves none of it behind.
+// the unit test pins that a user carrying the rest leaves none of it behind —
+// here, and in the document the shared tier writes.
+
+import { forgetSharedUser } from '@/utils/users/sharedDirectory';
 
 /** The display fields of one player, already derived from their Clerk user. */
 export interface DirectoryRecord {
@@ -46,7 +55,9 @@ export const DIRECTORY_MAX_AGE_MS = 15 * 60 * 1000;
  * because a deleted account stays on every finished game it played, and
  * without it each of those would send the whole lookup back to Clerk on every
  * request, which is the cost this cache exists to remove. Short because an id
- * that missed a moment ago may only have been Clerk catching up.
+ * that missed a moment ago may only have been Clerk catching up. (The shared
+ * tier believes the same thing for a day, for the reason given beside
+ * `SHARED_KNOWN_MISSING_MS`.)
  */
 export const DIRECTORY_MISS_TTL_MS = 30 * 1000;
 
@@ -122,6 +133,25 @@ export function rememberUsers(askedFor: string[], found: DirectoryRecord[], star
             ? { record, staleAt: now + DIRECTORY_TTL_MS, expiresAt: now + DIRECTORY_MAX_AGE_MS }
             : { record, staleAt: now + DIRECTORY_MISS_TTL_MS, expiresAt: now + DIRECTORY_MISS_TTL_MS });
     }
+    trim();
+}
+
+/**
+ * Remembers records the shared tier served, each as old as Clerk's answer for
+ * it was rather than as of now: a copy that was four minutes old when it was
+ * read is believed for one more, not five. One forgotten since the read
+ * `started` is not kept, as in `rememberUsers`: the row read may have been
+ * written before the change.
+ */
+export function rememberSharedUsers(shared: { record: DirectoryRecord; fetchedAt: number }[], started: number) {
+    for (const { record, fetchedAt } of shared) {
+        if ((forgottenAt.get(record.id) ?? -1) >= started) continue;
+        touch(record.id, { record, staleAt: fetchedAt + DIRECTORY_TTL_MS, expiresAt: fetchedAt + DIRECTORY_MAX_AGE_MS });
+    }
+    trim();
+}
+
+function trim() {
     while (entries.size > DIRECTORY_MAX_ENTRIES) {
         const oldest = entries.keys().next();
         if (oldest.done) break;
@@ -130,15 +160,23 @@ export function rememberUsers(askedFor: string[], found: DirectoryRecord[], star
 }
 
 /**
- * Drops one player's entry, for the routes that change how they are shown
- * (a rename, a claim, a deletion) to call once their write has landed. It
- * reaches only this process: another instance keeps its copy until the TTL.
+ * Drops one player from both tiers, for the routes that change how they are
+ * shown (a rename, a claim, a deletion) to await once their write has landed.
+ * Memory is dropped at once and for this process only; the shared tier is what
+ * reaches the other instances, so a change shows everywhere on the next lookup
+ * rather than after the TTL. `'deleted'` also removes the shared row, which is
+ * a person's data, rather than leaving an invalidation marker.
+ *
+ * Never rejects: the caller's write has landed and must not fail because the
+ * cache couldn't be told. If the shared tier can't be reached, other instances
+ * keep their copy until it ages out, which is all they had before it existed.
  */
-export function forgetCachedUser(userId: string) {
+export async function forgetCachedUser(userId: string, reason: 'changed' | 'deleted' = 'changed'): Promise<void> {
     entries.delete(userId);
     forgottenAt.delete(userId);
     forgottenAt.set(userId, forgets++);
     if (forgottenAt.size > DIRECTORY_MAX_ENTRIES) forgottenAt.delete(forgottenAt.keys().next().value!);
+    await forgetSharedUser(userId, reason === 'deleted');
 }
 
 /** Test seam: start from an empty cache. */

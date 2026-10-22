@@ -10,7 +10,10 @@ vi.mock('@clerk/nextjs/server', () => ({
     }),
 }));
 
+// The shared player directory a deleted guest is removed from lives in the
+// database; a Map stands in for it (utils/testing/playerDirectoryStore.ts).
 // Safe as a plain import: vitest hoists the vi.mock above it.
+import { directoryRows, installPlayerDirectoryStore } from '@/utils/testing/playerDirectoryStore';
 import { createGuest, deleteGuest, isGuestPlaceholderEmail, unclaimedGuestsOf } from './guest';
 import { isGuestPlaceholderUsername } from '@/utils/ui/players';
 
@@ -90,12 +93,21 @@ describe('createGuest', () => {
 describe('deleteGuest', () => {
     beforeEach(() => {
         deleteUser.mockReset();
+        installPlayerDirectoryStore();
     });
 
     it('deletes the Clerk user by id', async () => {
         await deleteGuest('user_guest_1');
 
         expect(deleteUser).toHaveBeenCalledWith('user_guest_1');
+    });
+
+    it('removes the guest from the shared player directory, not just marks them', async () => {
+        directoryRows.set('user_guest_1', { userId: 'user_guest_1', name: 'Dave', handle: null, imageUrl: null, fetchedAt: new Date(), expiresAt: new Date() });
+
+        await deleteGuest('user_guest_1');
+
+        expect(directoryRows.has('user_guest_1')).toBe(false);
     });
 });
 

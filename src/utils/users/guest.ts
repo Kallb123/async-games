@@ -121,7 +121,7 @@ export async function createGuest(displayName: string): Promise<GuestTicket> {
 export async function deleteGuest(userId: string): Promise<void> {
     const client = await clerkClient();
     await client.users.deleteUser(userId);
-    forgetCachedUser(userId);
+    await forgetCachedUser(userId, 'deleted');
 }
 
 export interface UnclaimedGuests {

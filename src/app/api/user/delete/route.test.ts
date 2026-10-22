@@ -23,12 +23,16 @@ import { ReactionModel } from '@/utils/mongodb/ReactionData';
 import { ChatMessageModel } from '@/utils/mongodb/ChatMessageData';
 import { ChatReadModel } from '@/utils/mongodb/ChatReadData';
 import { AchievementUnlockModel } from '@/utils/mongodb/AchievementUnlockData';
+import { directoryRows, installPlayerDirectoryStore } from '@/utils/testing/playerDirectoryStore';
 import { POST } from './route';
 
 const query = (value: unknown) => ({ exec: async () => value }) as never;
 
 beforeEach(() => {
     vi.restoreAllMocks();
+    // The shared player directory, which holds their name and picture for the
+    // other players' screens: a Map here, not a database.
+    installPlayerDirectoryStore();
     vi.spyOn(GameDataModel, 'find').mockReturnValue(query([{ gameId: 'game_1' }]));
     for (const model of [GameDataModel, GameResultModel, InvitationModel, FriendshipModel, ReactionModel, ChatMessageModel, ChatReadModel, AchievementUnlockModel]) {
         vi.spyOn(model, 'deleteMany').mockReturnValue(query({}));
@@ -52,6 +56,18 @@ describe('POST /api/user/delete', () => {
         expect(messages).toHaveBeenCalledWith({ senderId: 'user_ann' });
         expect(reads).toHaveBeenCalledWith({ userId: 'user_ann' });
         expect(deleteUser).toHaveBeenCalledWith('user_ann');
+    });
+
+    it('erases the player\'s row in the shared player directory, which is their name and picture', async () => {
+        directoryRows.set('user_ann', { userId: 'user_ann', name: 'Ann', handle: 'ann', imageUrl: 'https://img/ann.png', fetchedAt: new Date(), expiresAt: new Date() });
+        directoryRows.set('user_bob', { userId: 'user_bob', name: 'Bob', handle: 'bob', imageUrl: null, fetchedAt: new Date(), expiresAt: new Date() });
+
+        const response = await POST(new NextRequest('http://localhost/api/user/delete', { method: 'POST' }));
+
+        expect(response.status).toBe(200);
+        // Gone, not marked: nothing of theirs is left in the collection.
+        expect(directoryRows.has('user_ann')).toBe(false);
+        expect(directoryRows.has('user_bob')).toBe(true);
     });
 
     it('erases the player\'s achievement unlocks by user alone, not by game', async () => {
