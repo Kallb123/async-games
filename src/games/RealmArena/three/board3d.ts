@@ -641,7 +641,8 @@ export class Board3D {
                     lay(fighter.character, fell.map((n, i) => n + knock[i]) as Vec3, spec.facing, false, spec.tint, falling.standing);
                     bars.push({ feet: fell, ...barLevels(drawn, drawn, undefined, undefined), tint: spec.tint, fade: falling.standing });
                 }
-                if (falling.lying !== null && falling.lying > 0) lay(fighter.character, at, spec.facing, true, spec.tint, falling.lying);
+                // Up to the opacity a body at rest is drawn at, so nothing pops when the action is over.
+                if (falling.lying !== null && falling.lying > 0) lay(fighter.character, at, spec.facing, true, spec.tint, falling.lying * FALLEN_OPACITY);
                 // One shadow under both, there while either is: it is on the ground where it fell, and stays put.
                 this.shadows.add(feet, Math.max(falling.standing, falling.lying ?? 0));
                 this.placed.push({ id: fighter.id, feet: at, standing: false });

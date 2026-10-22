@@ -6,12 +6,12 @@
 // lunging along the ground, and whether a figure stands where something in
 // front of it hides it. Pure: no three.js objects, so it's tested without a GPU.
 
-import { fadeInAt, fadeOutAt, FALLEN_OPACITY, shoveAt, type Shove, type Timed } from "@/games/RealmArena/ui";
+import { fadeInAt, fadeOutAt, shoveAt, type Shove, type Timed } from "@/games/RealmArena/ui";
 import type { Battlefield } from "@/utils/games/battlefield/terrain";
 import { fromBoardUnits, toBoardUnits } from "./billboards";
 import { onScreen, QUARTER, squareCentre, type CameraBasis, type Vec3 } from "./iso3d";
 
-/** How much of each of a downed character's two figures is there: how much of the one still standing as the action found it, and of the one lying where it fell (null while that one isn't drawn at all). The fallen figure's is its opacity, which tops out at `FALLEN_OPACITY`, as a body at rest is drawn. */
+/** How much of each of a downed character's two figures is there: how much of the one still standing as the action found it, and of the one lying where it fell (null while that one isn't drawn at all). */
 export interface Falling {
     standing: number;
     lying: number | null;
@@ -23,14 +23,11 @@ export interface Falling {
  * until then, eases in quicker (`fadeInAt`), so the two never leave a gap to
  * see through. The fallen figure appears at the blow, or when the walk the
  * character was downed partway through has reached the square it fell on
- * (`arrives`), whichever is later. With `still` it appears at once. The
- * fallen figure eases in to `FALLEN_OPACITY`, not to 1, so it is already as
- * faded as the body at rest the moment the action ends.
+ * (`arrives`), whichever is later. With `still` it appears at once.
  */
 export function fallingAt(fall: Timed, arrives: number | undefined, ms: number, still: boolean): Falling {
     const appears = { start: Math.max(arrives ?? 0, fall.start), length: fall.length };
-    const lying = still ? (ms < appears.start ? null : 1) : fadeInAt(appears, ms);
-    return { standing: fadeOutAt(fall, ms), lying: lying === null ? null : lying * FALLEN_OPACITY };
+    return { standing: fadeOutAt(fall, ms), lying: still ? (ms < appears.start ? null : 1) : fadeInAt(appears, ms) };
 }
 
 /**
