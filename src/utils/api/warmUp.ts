@@ -1,5 +1,6 @@
 import { dbConnect } from '@/utils/mongodb/mongodb';
 import { ServerTiming } from '@/utils/api/serverTiming';
+import { withTimeout } from '@/utils/withTimeout';
 
 /**
  * How long the ping waits for the database before answering without it. A
@@ -8,19 +9,6 @@ import { ServerTiming } from '@/utils/api/serverTiming';
  * for the 30 seconds the driver would try.
  */
 const CONNECT_BOUND_MS = 4000;
-
-/** Resolves when the database is connected or `ms` have passed, whichever is first; rejects only if the connection fails before then. */
-async function connectWithin(ms: number): Promise<void> {
-    let timer: ReturnType<typeof setTimeout> | undefined;
-    try {
-        await Promise.race([
-            dbConnect().then(() => undefined),
-            new Promise<void>(resolve => { timer = setTimeout(resolve, ms); }),
-        ]);
-    } finally {
-        clearTimeout(timer);
-    }
-}
 
 /**
  * The answer to the warm-up ping: the `HEAD` export of the routes a page is
@@ -55,11 +43,9 @@ async function connectWithin(ms: number): Promise<void> {
 export async function warmUpResponse(): Promise<Response> {
     const timing = new ServerTiming();
     timing.noteWarmUp();
-    try {
-        await timing.time('mongo_connect', () => connectWithin(CONNECT_BOUND_MS));
-    } catch {
-        // See above: the player's own request will meet the same failure and handle it.
-    }
+    // A failure or a slow database is logged and answered all the same: the
+    // player's own request will meet it and handle it (see above).
+    await timing.time('mongo_connect', () => withTimeout(async () => { await dbConnect(); }, CONNECT_BOUND_MS, undefined, 'Warm-up connect'));
     return new Response(null, {
         status: 204,
         headers: { 'Cache-Control': 'no-store', 'Server-Timing': timing.header() },

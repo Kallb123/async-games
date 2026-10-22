@@ -26,7 +26,10 @@ const DASHBOARD_API = '/api/dashboard';
 const GAME_PATH = /^\/games\/(?!result\/)[a-z]+\/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\/?$/;
 const GAME_API = '/api/game/';
 
-/** The API route a page at `pathname` will call first, or null for a page that has none worth waking (or a path that isn't one). */
+/**
+ * The API route a page at `pathname` will call first, or null for a page that has none worth waking (or a path that isn't one).
+ * The rule `WARM_UP_SCRIPT` carries as text, in TypeScript: the tests run both against the same paths, so the two can't drift.
+ */
 export function warmUpPath(pathname: string): string | null {
     if (pathname === DASHBOARD_PATH) return DASHBOARD_API;
     const id = GAME_PATH.exec(pathname)?.[1];

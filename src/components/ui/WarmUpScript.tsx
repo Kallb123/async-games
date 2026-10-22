@@ -2,9 +2,8 @@
 
 import { useSyncExternalStore } from "react";
 import { WARM_UP_SCRIPT } from "@/utils/warmUp";
+import { subscribeNever } from "@/utils/hooks/subscribeNever";
 
-// Nothing changes under a mounted page, so there is nothing to subscribe to.
-const subscribeToNothing = () => () => {};
 // The HTML the server sent (and the hydration of it) is the one place the
 // script is wanted; a render in the browser is not.
 const inServerHtml = () => true;
@@ -28,6 +27,6 @@ const inBrowserRender = () => false;
  * (the rule in `app/games/staticShell.ts`).
  */
 export default function WarmUpScript() {
-    const render = useSyncExternalStore(subscribeToNothing, inBrowserRender, inServerHtml);
+    const render = useSyncExternalStore(subscribeNever, inBrowserRender, inServerHtml);
     return render ? <script dangerouslySetInnerHTML={{ __html: WARM_UP_SCRIPT }} /> : null;
 }
