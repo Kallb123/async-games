@@ -221,6 +221,7 @@ export function ttfbPhaseMetrics(attribution: TtfbAttributionInput): MetricValue
 export const PERFORMANCE_REGIONS = [
   'rail', 'topbar', 'board', 'camera', 'hand', 'build-row', 'log', 'chat', 'dashboard', 'landing',
   'section', 'list-row', 'skeleton', 'avatar', 'thumb', 'banner', 'offer', 'disclosure',
+  'column', 'cta', 'footer',
 ] as const;
 export type PerformanceRegion = typeof PERFORMANCE_REGIONS[number];
 const regionNames = new Set<string>(PERFORMANCE_REGIONS);

@@ -47,7 +47,7 @@ function NotificationFooterNotice() {
     }
 
     return (
-        <div className="ag-footer">
+        <div className="ag-footer" data-perf-region="footer">
             <div className="ag-callout ag-stack ag-footer-notice" role="status">
                 <div className="ag-footer-notice-title">Turn alerts can’t reach this device</div>
                 <div>{NOTIFICATION_MISS_LINE}</div>

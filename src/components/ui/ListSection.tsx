@@ -18,6 +18,8 @@ interface ListSectionProps {
     skeletonRows?: number;
     /** What the skeleton rows lead with — match the real rows they stand in for. */
     skeletonIcon?: SkeletonRowIcon;
+    /** Lines of text in the real rows — see `SkeletonRow`. */
+    skeletonLines?: 1 | 2;
     /** Control rendered on the right of the section heading. */
     action?: React.ReactNode;
     /** Rendered between the heading and the list (e.g. an inline form). */
@@ -43,6 +45,7 @@ export default function ListSection({
     isRefreshing = false,
     skeletonRows = 2,
     skeletonIcon = "avatar",
+    skeletonLines = 2,
     action,
     beforeList,
     empty,
@@ -57,7 +60,7 @@ export default function ListSection({
     // just becomes it, and only the surplus on either side grows or collapses.
     const rows = useAnimatedList(children, {
         isLoading,
-        placeholder: { node: <SkeletonRow icon={skeletonIcon} />, count: skeletonRows },
+        placeholder: { node: <SkeletonRow icon={skeletonIcon} lines={skeletonLines} />, count: skeletonRows },
     });
     const rowCount = Children.toArray(children).length;
     const isEmpty = !isLoading && rowCount === 0;

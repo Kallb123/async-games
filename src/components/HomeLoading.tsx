@@ -1,7 +1,7 @@
 import AppRail from "@/components/ui/AppRail";
+import DeskColumn from "@/components/ui/DeskColumn";
 import Section from "@/components/ui/Section";
 import Skeleton, { SkeletonRow, SkeletonTurnCard } from "@/components/ui/Skeleton";
-import WhatsNew from "@/components/ui/WhatsNew";
 
 /**
  * What Next shows instantly on a navigation to a route that has to be built
@@ -21,12 +21,12 @@ import WhatsNew from "@/components/ui/WhatsNew";
  * only if it is built per request.
  *
  * Shaped after `Dashboard`, the most common destination, so the handover
- * doesn't jump: the same `.ag-desk` shell and all four of its regions, so a
- * wide window lays this out exactly where the real screen will be, the same
- * `AppRail` (with no games to switch between yet), the "your move" hero and a
- * turn card, then
- * the same run of list sections in the same order — real labels, the same
- * `skeletonIcon` each list already shows itself while loading (`ListSection`'s
+ * doesn't jump: the same `.ag-desk` shell and the two regions `Dashboard` shows
+ * while it loads, so a wide window lays this out exactly where the real screen
+ * will be, the same `AppRail` (with no games to switch between yet), the "your
+ * move" hero and a turn card, then the same run of list sections in the same
+ * order — real labels, the same `skeletonIcon` and `skeletonLines` each list
+ * already shows itself while loading (`ListSection`'s
  * own `isLoading` skeleton), just rendered here a beat earlier. Still the right
  * first frame for `Landing`: skeletons and section labels, nothing a signed-out
  * visitor could mistake for real content. The rail is the one live thing here
@@ -37,16 +37,16 @@ import WhatsNew from "@/components/ui/WhatsNew";
  * The rail's loading bar is already sweeping, as `Dashboard`'s is until its
  * first response lands, so the handover doesn't blink it off and on.
  *
- * `WhatsNew` is rendered for real rather than skeletoned, as the rail is: it
- * waits on no request, so there is nothing for a placeholder to stand in for,
- * and it holds open the region the grid puts under the queue.
+ * There is no `WhatsNew` here, as there is none on `Dashboard` until its lists
+ * have loaded: the release notes are the last thing on the page, and rendered
+ * under skeletons they would be moved by whatever the lists turned out to hold.
  */
 export default function HomeLoading() {
     return (
         <main className="ag-desk">
             <AppRail busy />
 
-            <div className="ag-desk-col ag-desk-col--main">
+            <DeskColumn area="main" loading>
                 <div className="ag-hero" aria-hidden>
                     <Skeleton width="55%" height={28} />
                     <Skeleton width="75%" height={16} style={{ marginTop: 10 }} />
@@ -69,9 +69,9 @@ export default function HomeLoading() {
                         <SkeletonRow icon="dot" />
                     </div>
                 </Section>
-            </div>
+            </DeskColumn>
 
-            <div className="ag-desk-col ag-desk-col--side">
+            <DeskColumn area="side" loading>
                 <Section label="Awaiting response" isLoading>
                     <div className="ag-list">
                         <SkeletonRow icon="dot" />
@@ -80,17 +80,13 @@ export default function HomeLoading() {
                 </Section>
                 <Section label="Finished" isLoading>
                     <div className="ag-list">
-                        <SkeletonRow icon="dot" />
-                        <SkeletonRow icon="dot" />
-                        <SkeletonRow icon="dot" />
-                        <SkeletonRow icon="dot" />
+                        <SkeletonRow icon="dot" lines={1} />
+                        <SkeletonRow icon="dot" lines={1} />
+                        <SkeletonRow icon="dot" lines={1} />
+                        <SkeletonRow icon="dot" lines={1} />
                     </div>
                 </Section>
-            </div>
-
-            <div className="ag-desk-col ag-desk-col--notes">
-                <WhatsNew />
-            </div>
+            </DeskColumn>
         </main>
     );
 }
