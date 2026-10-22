@@ -403,10 +403,12 @@ function Detail({ draft, battle, name, ap, target }: DetailProps) {
         const thrown = aim === 'throw' ? itemOf(fighter, battle) : undefined;
         if (thrown?.hitPenalty) return hint('Smoke over the 3×3 until your next turn. It hurts nobody.');
         const area = new Set(draft.area);
-        const caught = battle.fighters.filter(one => isStanding(one) && area.has(one.square) && (aim !== 'leap' || !allied(battle, fighter.owner, one.owner)));
+        // A Leap's splash is a ring of squares, but it only hurts the enemies in it: those the HP preview already holds.
+        const caught = aim === 'leap' ? battle.fighters.filter(one => draft.hpChange.has(one.id))
+            : battle.fighters.filter(one => isStanding(one) && area.has(one.square));
         const { damage = 0, effect } = (isAtSquare(aim) ? landsOf(fighter, aim, battle) : undefined) ?? {};
         return hint(<>
-            {caught.length === 0 ? `Nobody is ${draft.area.length > 1 ? 'in the blast' : 'there'}.` : landsOn(caught.map(one => name(one.id)).join(', '), damage, effect)}
+            {caught.length === 0 ? aim === 'leap' ? 'No enemy is next to the landing.' : `Nobody is ${draft.area.length > 1 ? 'in the blast' : 'there'}.` : landsOn(caught.map(one => name(one.id)).join(', '), damage, effect)}
             {caught.some(one => allied(battle, one.owner, fighter.owner)) ? ' That includes your own.' : ''}
             {draft.blasts?.length ? ` Blasts away ${pluralize(draft.blasts.length, 'square')} of low cover.` : ''}
         </>);
