@@ -38,6 +38,7 @@ import '@/utils/mongodb/mongodb';
 import { GameDataModel } from '@/utils/mongodb/GameData';
 import { InvitationModel } from '@/utils/mongodb/InvitationData';
 import { GameResultModel } from '@/utils/mongodb/GameResultData';
+import { NO_AUTO_BUILD } from '@/utils/mongodb/connectionOptions';
 import { lookupStarted, rememberUsers } from '@/utils/users/directoryCache';
 import { buildDashboard } from '@/utils/dashboard';
 import { readGameForViewer } from '@/utils/games/readGame';
@@ -70,7 +71,7 @@ async function main() {
     const writes: string[] = [];
     let step: string | undefined;
 
-    await mongoose.connect(uri, { bufferCommands: false, monitorCommands: true, autoIndex: false, autoCreate: false });
+    await mongoose.connect(uri, { bufferCommands: false, monitorCommands: true, ...NO_AUTO_BUILD });
     mongoose.connection.getClient().on('commandStarted', (event: CommandStartedEvent) => {
         if (READS.has(event.commandName) && !writesOut(event.command)) {
             if (step) captured.push({ step, name: event.commandName, collection: String(event.command[event.commandName]), command: explainableCommand(event.command) });

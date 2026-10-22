@@ -31,6 +31,14 @@ jobs:
           cache: 'npm'
       - run: npm ci --prefer-offline --no-audit --fund=false
 
+      # The app builds no index of its own (src/utils/mongodb/connectionOptions.ts),
+      # so a pull request that adds one needs it built in the e2e database
+      # before the app starts. Adds only; never drops.
+      - name: Build the e2e database's indexes
+        run: npm run db:indexes
+        env:
+          MONGODB_URI: ${{ secrets.E2E_MONGODB_URI }}
+
       - name: Install Playwright browsers
         run: npx playwright install --with-deps chromium
 

@@ -142,10 +142,6 @@ export async function resetApiRouteStubs() {
     vi.spyOn(chatReadData.ChatReadModel, 'findOneAndUpdate').mockImplementation(findOneAndUpdateChatReadFromStore as typeof chatReadData.ChatReadModel.findOneAndUpdate);
     vi.spyOn(achievementUnlockData.AchievementUnlockModel, 'find').mockImplementation(findAchievementUnlocksFromStore as unknown as typeof achievementUnlockData.AchievementUnlockModel.find);
     vi.spyOn(achievementUnlockData.AchievementUnlockModel, 'bulkWrite').mockImplementation(bulkWriteAchievementUnlocksToStore as unknown as typeof achievementUnlockData.AchievementUnlockModel.bulkWrite);
-    // recordUnlocks waits for the unique index before its first write, and
-    // with no connection that promise never settles — the real one is waiting
-    // for a database these tests don't have.
-    vi.spyOn(achievementUnlockData.AchievementUnlockModel, 'init').mockResolvedValue(undefined as never);
     vi.spyOn(gifCatalogueData.GifCatalogueModel, 'findOne').mockImplementation(findOneGifCatalogueFromStore as typeof gifCatalogueData.GifCatalogueModel.findOne);
     vi.spyOn(gifCatalogueData.GifCatalogueModel, 'findOneAndUpdate').mockImplementation(findOneAndUpdateGifCatalogueFromStore as typeof gifCatalogueData.GifCatalogueModel.findOneAndUpdate);
     vi.spyOn(gifCatalogueData.GifCatalogueModel, 'bulkWrite').mockImplementation(bulkWriteGifCatalogueToStore as unknown as typeof gifCatalogueData.GifCatalogueModel.bulkWrite);

@@ -52,6 +52,17 @@ Nothing in `src/` is instance- or database-aware. `dbConnect()`
 path in the URI: a second database on the same free Atlas cluster is enough, no
 second cluster needed.
 
+The build reads `MONGODB_URI` too. The app's own connection builds no
+collection or index (`src/utils/mongodb/connectionOptions.ts`), so the Vercel
+build (`vercel-build` in `package.json`) runs `npm run db:indexes` ahead of
+`next build`, against whichever database that deployment's `MONGODB_URI` names:
+production's build indexes production, a preview's indexes the dev database. It
+only adds, so a preview of a branch that adds an index gives the dev database
+that index and nothing is dropped. The Atlas network access list has to admit
+Vercel's build machines as well as its functions, and a build that can't reach
+the database fails rather than ships without its indexes. The E2E workflow runs
+the same script against its own database.
+
 One consequence worth knowing: the `vercel.json` crons only fire on the
 production deployment, so nothing sweeps the dev database. Turn timers don't
 expire in dev unless you call the endpoint yourself:
