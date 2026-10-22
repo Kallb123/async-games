@@ -1,4 +1,5 @@
-import type { ReactNode } from "react";
+import { createElement, Fragment, type ReactNode } from "react";
+import WarmUpScript from "@/components/ui/WarmUpScript";
 
 /**
  * The server half of a game route, shared by every `games/<game>/[id]` folder:
@@ -25,9 +26,18 @@ import type { ReactNode } from "react";
  * only through the API, after the client has signed in. Reading any of those
  * also quietly turns the route dynamic again, which the build output
  * (`ƒ` against `●`) will show.
+ *
+ * The one thing the shell does carry is `WarmUpScript`: the same fixed text for
+ * every viewer and every id, which reads the cookie and `location.pathname` in
+ * the browser, so a signed-in viewer's request for the board's data can wake
+ * its function instance while Clerk is still loading (`utils/warmUp.ts`). Only
+ * the client game boards are served in this shell, and the id it reads comes
+ * from the path, never from the server.
  */
 export default function StaticShellLayout({ children }: { children: ReactNode }) {
-    return children;
+    // `createElement` because this file stays `.ts`: the layouts and the docs
+    // name it by that path.
+    return createElement(Fragment, null, createElement(WarmUpScript), children);
 }
 
 export function generateStaticParams(): [] {

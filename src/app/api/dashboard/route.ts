@@ -3,6 +3,10 @@ import { NextRequest } from 'next/server';
 import { dbConnect } from '@/utils/mongodb/mongodb';
 import { buildDashboard } from '@/utils/dashboard';
 import { ServerTiming, timedJson } from '@/utils/api/serverTiming';
+import { warmUpResponse } from '@/utils/api/warmUp';
+
+/** The page's warm-up ping, sent while Clerk loads so this route's function instance is up by the time `GET` is asked: see `warmUpResponse`. Nothing of the dashboard is read. */
+export const HEAD = warmUpResponse;
 
 export async function GET(request: NextRequest) {
     console.log(`GET ${request.nextUrl.pathname}`);

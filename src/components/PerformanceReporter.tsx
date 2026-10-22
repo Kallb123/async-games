@@ -6,6 +6,7 @@ import { onCLS, onFCP, onINP, onLCP, onTTFB } from 'web-vitals/attribution';
 import { apiEntryMatcher } from '@/utils/apiResourceEntries';
 import type { SessionFetchTiming } from '@/utils/hooks/fetchWithSessionRetry';
 import { sessionMetric } from '@/utils/hooks/useAuthGuard';
+import { warmUpLead, warmUpMetrics } from '@/utils/warmUp';
 import { apiFetchMetrics, loadJourney, nextJourney, performanceRegion, safeRoute, serverTimingMetrics, vitalPhaseMetrics, type ClientMetric, type ClientMetricContext, type Journey, type JourneyMilestone, type PerformanceMetricInput, type PerformanceMetricName, type PerformanceRequest, type VitalAttributionInput } from '@/utils/performance';
 
 declare global {
@@ -116,9 +117,40 @@ function report(name: PerformanceMetricName, value: number) {
 // Pairs each fetch with the browser's record of it, whichever arrives first.
 const apiEntries = apiEntryMatcher<PerformanceResourceTiming>();
 
+// The warm-up ping (`utils/warmUp.ts`) was sent by an inline script before this
+// code existed, so it is picked up here, once the reporter starts: it left its
+// start, and a promise for its answer, on `window`. Its own timings come from
+// that record rather than from the browser's resource entry, which an
+// observer is handed only when the response is complete and which the entry
+// matcher above could pair with the wrong request. Both are once per page, so
+// React running the effect twice in development reports them once.
+let warmUpReported = false;
+let warmUpLeadReported = false;
+
+function reportWarmUp() {
+  const record = window.__agWarmUp;
+  if (!record || warmUpReported) return;
+  warmUpReported = true;
+  // Taken now, as the ping belongs to the page it was sent from.
+  const context = sampleContext('warm');
+  void record.done.then(() => {
+    for (const metric of warmUpMetrics(record)) enqueue({ ...context, ...metric });
+  });
+}
+
+/** The first `entry` fetch of the route the ping was for says how long the ping had been out before it: see `WARM_UP_METRICS`. */
+function reportWarmUpLead(url: string, startedAt: number, request: PerformanceRequest) {
+  if (request !== 'entry' || warmUpLeadReported) return;
+  const lead = warmUpLead(window.__agWarmUp, url, startedAt);
+  if (lead === undefined) return;
+  warmUpLeadReported = true;
+  enqueue(sample('warm_ping_lead', lead, request));
+}
+
 function reportFetch({ url, response, timing, request }: PerformanceFetch) {
   const spans = serverTimingMetrics(response.headers.get('server-timing'));
   for (const span of spans) enqueue(sample(span.name, span.value, request));
+  reportWarmUpLead(url, timing.startedAt, request);
   if (timing.retryMs !== undefined) enqueue(sample('session_retry', timing.retryMs, request));
   const renewal = timing.renewal && sessionMetric('renew', timing.renewal);
   if (renewal) enqueue(sample(renewal.name, renewal.value, request));
@@ -186,6 +218,7 @@ export default function PerformanceReporter() {
     window.__agPerformanceMetric = recordClientMetric;
     window.__agPerformanceFetch = reportFetch;
     currentJourney();
+    reportWarmUp();
     // Any tap or key press may be the one that navigates: post-mutation
     // transitions (create, join, start) call `router.push` from a button
     // rather than being `<a href>`, so a link-only listener would miss them.

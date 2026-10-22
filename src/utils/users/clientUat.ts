@@ -9,8 +9,9 @@
 // @clerk/shared).
 //
 // Browser-safe on purpose (no `next/headers`): the server's hint
-// (`signedInHint.ts`), the home page's client read and the inline script that
-// runs before it paints all apply the one rule below.
+// (`signedInHint.ts`), the home page's client read and the inline scripts that
+// run before it paints (the signed-in attribute, the warm-up ping) all apply the
+// one rule below.
 const CLIENT_UAT = "__client_uat";
 
 /** The cookies that can carry Clerk's client-updated-at stamp, whatever the suffix. */
@@ -43,13 +44,22 @@ export const signedInHintFromCookieString = (cookies: string): boolean => signed
 export const SIGNED_IN_ATTRIBUTE = "data-ag-signed-in";
 
 /**
- * `signedInHintFromCookieString` as source for an inline `<script>`, which sets
+ * `signedInHintFromCookieString` as source for an inline `<script>`: an
+ * expression, true when `document.cookie` says someone is signed in. Plain ES5,
+ * and it can throw (a browser that won't hand over its cookies), so whatever
+ * wraps it supplies the try/catch. It is the one copy of the cookie rule that
+ * browser scripts run: the pre-paint script below and the warm-up ping
+ * (`utils/warmUp.ts`) are both built from it, and `clientUat.test.ts` holds
+ * both to the same answers as `signedInHintFrom`.
+ */
+export const SIGNED_IN_TEST_SOURCE = `document.cookie.split(";").some(function(p){var a=p.indexOf("=");if(a<0)return false;var n=p.slice(0,a).trim(),v=p.slice(a+1).trim();return(n==="${CLIENT_UAT}"||n.indexOf("${CLIENT_UAT}_")===0)&&v!==""&&v!=="0"})`;
+
+/**
+ * `SIGNED_IN_TEST_SOURCE` as a whole inline `<script>`, which sets
  * `SIGNED_IN_ATTRIBUTE="1"` on `<html>` when it holds. The home page is served
  * as the same static HTML to everyone, both screens in it; this runs before
  * either paints so CSS can show the right one (`ag-home-screen` in
- * `ag-theme.css`) without waiting for React. Plain ES5 and wrapped in a
- * try/catch, because it runs on every cold open of `/` and must never be the
- * thing that breaks it. `clientUat.test.ts` holds it to the same answers as
- * `signedInHintFrom`.
+ * `ag-theme.css`) without waiting for React. Wrapped in a try/catch, because it
+ * runs on every cold open of `/` and must never be the thing that breaks it.
  */
-export const SIGNED_IN_PRE_PAINT_SCRIPT = `try{document.cookie.split(";").some(function(p){var a=p.indexOf("=");if(a<0)return false;var n=p.slice(0,a).trim(),v=p.slice(a+1).trim();return(n==="${CLIENT_UAT}"||n.indexOf("${CLIENT_UAT}_")===0)&&v!==""&&v!=="0"})&&document.documentElement.setAttribute("${SIGNED_IN_ATTRIBUTE}","1")}catch(e){}`;
+export const SIGNED_IN_PRE_PAINT_SCRIPT = `try{${SIGNED_IN_TEST_SOURCE}&&document.documentElement.setAttribute("${SIGNED_IN_ATTRIBUTE}","1")}catch(e){}`;

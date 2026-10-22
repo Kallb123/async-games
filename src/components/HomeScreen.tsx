@@ -4,6 +4,7 @@ import { useSyncExternalStore } from "react";
 import { useUser } from "@clerk/nextjs";
 import Dashboard from "@/components/Dashboard";
 import Landing from "@/components/Landing";
+import WarmUpScript from "@/components/ui/WarmUpScript";
 import { SIGNED_IN_PRE_PAINT_SCRIPT, signedInHintFromCookieString } from "@/utils/users/clientUat";
 
 // The cookie never changes under a mounted page in a way worth reacting to —
@@ -70,6 +71,10 @@ export default function HomeScreen() {
       {/* Only where the HTML came from the server: a client-side render has no
           use for it, and React warns about a script it can't run. */}
       {undecided && <script dangerouslySetInnerHTML={{ __html: SIGNED_IN_PRE_PAINT_SCRIPT }} />}
+      {/* Right after it, and by the same cookie rule: a signed-in visitor's
+          dashboard will ask `/api/dashboard` once Clerk has loaded, so wake
+          that route's function instance now. A signed-out one sends nothing. */}
+      <WarmUpScript />
       {/* Where Next lands a navigation back home. It scrolls to the top of the
           page's first element, skipping any with no box — and both wrappers
           below dissolve (`display: contents`), so it walked on to the next

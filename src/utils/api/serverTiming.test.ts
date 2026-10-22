@@ -39,6 +39,37 @@ describe('ServerTiming', () => {
     expect(first.header()).toContain('instance_new');
   });
 
+  it('says a warm-up ping is new only if it is the first request of any kind, and leaves the first-request flag to the signed-in request after it', async () => {
+    const { ServerTiming } = await load();
+    vi.advanceTimersByTime(25);
+    const ping = new ServerTiming();
+    ping.noteWarmUp();
+    expect(ping.header()).toMatch(/^instance_new;dur=25\.0, total;dur=/);
+
+    vi.advanceTimersByTime(1500);
+    const secondPing = new ServerTiming();
+    secondPing.noteWarmUp();
+    expect(secondPing.header()).not.toMatch(/idle|instance_new/);
+
+    // The real request still finds the instance new, and says how old it is.
+    const entry = new ServerTiming();
+    entry.noteInstance();
+    expect(entry.header()).toMatch(/^instance_new;dur=1525\.0, total;dur=/);
+  });
+
+  it('does not call a ping new on an instance a signed-in request has already used, and never reports idle time', async () => {
+    const { ServerTiming } = await load();
+    new ServerTiming().noteInstance();
+    vi.advanceTimersByTime(20 * 60_000);
+    const ping = new ServerTiming();
+    ping.noteWarmUp();
+    expect(ping.header()).not.toMatch(/idle|instance_new/);
+    // And it did not reset the clock the next signed-in request reads.
+    const next = new ServerTiming();
+    next.noteInstance();
+    expect(next.header()).toContain('idle;dur=1200000.0');
+  });
+
   it('clamps a long-lived instance to the beacon’s cap rather than sending a value it would drop', async () => {
     const { ServerTiming } = await load();
     vi.advanceTimersByTime(10 * 60_000);
