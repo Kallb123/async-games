@@ -171,11 +171,13 @@ function reportVital(name: PerformanceMetricName, value: number, region?: string
 }
 
 /** A vital's total, then its phases, each placed in the region of the element it names. */
-function reportAttributedVital(metric: VitalAttributionInput & { value: number }, node: Node | null | undefined) {
+function reportAttributedVital(metric: VitalAttributionInput & { value: number }, region: string | undefined) {
   reportVital(metric.name, metric.value);
-  const region = performanceRegion(node);
   for (const phase of vitalPhaseMetrics(metric)) reportVital(phase.name, phase.value, region);
 }
+
+/** Marks an INP target as the region `registerVitals` asked for, not web-vitals' own selector. */
+const INP_REGION = 'region:';
 
 // The vitals cannot be unregistered, so they are registered once per page
 // rather than once per mount (React runs effects twice in development).
@@ -186,9 +188,18 @@ function registerVitals() {
   // The document's first byte names no element, so its phases carry no region.
   onTTFB(metric => reportAttributedVital(metric, undefined));
   onFCP(metric => reportVital(metric.name, metric.value));
-  onLCP(metric => reportAttributedVital(metric, metric.attribution.lcpEntry?.element));
-  onCLS(metric => reportAttributedVital(metric, metric.attribution.largestShiftSource?.node));
-  onINP(metric => reportAttributedVital(metric, metric.attribution.interactionTargetElement));
+  onLCP(metric => reportAttributedVital(metric, performanceRegion(metric.attribution.lcpEntry?.element)));
+  onCLS(metric => reportAttributedVital(metric, performanceRegion(metric.attribution.largestShiftSource?.node)));
+  // INP names the tapped element only as a string, so it is asked to name it by
+  // its region. The prefix tells that apart from the CSS selector it falls back
+  // to when the element is already gone, which is never sent.
+  onINP(
+    metric => {
+      const target = metric.attribution.interactionTarget;
+      reportAttributedVital(metric, target?.startsWith(INP_REGION) ? target.slice(INP_REGION.length) || undefined : undefined);
+    },
+    { generateTarget: node => INP_REGION + (performanceRegion(node) ?? '') },
+  );
 }
 
 function recordClientMetric(name: ClientMetric, value: number, { pathname, dataSource }: ClientMetricContext = {}) {

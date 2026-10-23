@@ -195,8 +195,11 @@ export interface TtfbAttributionInput {
   dnsDuration: number;
   connectionDuration: number;
   requestDuration: number;
-  navigationEntry?: Pick<PerformanceNavigationTiming, 'workerStart' | 'fetchStart'>;
+  /** A soft navigation's entry, which `web-vitals` reports only when asked to, has no worker timings. */
+  navigationEntry?: NavigationTimes | PerformanceEntry;
 }
+
+type NavigationTimes = Pick<PerformanceNavigationTiming, 'workerStart' | 'fetchStart'>;
 
 /**
  * Where a document's TTFB went, as separate metrics beside the `TTFB` total:
@@ -220,14 +223,15 @@ export interface TtfbAttributionInput {
  */
 export function ttfbPhaseMetrics(attribution: TtfbAttributionInput): MetricValue[] {
   const { navigationEntry } = attribution;
+  const navigation = navigationEntry && 'workerStart' in navigationEntry ? navigationEntry as NavigationTimes : undefined;
   return finitePhases([
     { name: 'TTFB_waiting', value: attribution.waitingDuration },
     { name: 'TTFB_cache', value: attribution.cacheDuration },
     { name: 'TTFB_dns', value: attribution.dnsDuration },
     { name: 'TTFB_connection', value: attribution.connectionDuration },
     { name: 'TTFB_request', value: attribution.requestDuration },
-    { name: 'sw_startup', value: navigationEntry && navigationEntry.workerStart > 0
-      ? Math.max(0, navigationEntry.fetchStart - navigationEntry.workerStart) : undefined },
+    { name: 'sw_startup', value: navigation && navigation.workerStart > 0
+      ? Math.max(0, navigation.fetchStart - navigation.workerStart) : undefined },
   ]);
 }
 

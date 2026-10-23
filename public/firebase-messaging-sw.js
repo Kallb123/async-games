@@ -3,8 +3,8 @@
 // majors behind the page's is a wire format nobody tested together — and the
 // compat bundles are the ones to use here, because a classic service worker
 // (no `type: 'module'`) cannot import the modular build.
-importScripts('https://www.gstatic.com/firebasejs/12.12.1/firebase-app-compat.js');
-importScripts('https://www.gstatic.com/firebasejs/12.12.1/firebase-messaging-compat.js');
+importScripts('https://www.gstatic.com/firebasejs/13.1.0/firebase-app-compat.js');
+importScripts('https://www.gstatic.com/firebasejs/13.1.0/firebase-messaging-compat.js');
 
 // Your web app's Firebase configuration
 const firebaseConfig = {

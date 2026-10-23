@@ -32,6 +32,6 @@ import '@/games/KingdomBuilder/KingdomBuilderInvitation';
  * alike — in registration order, which puts a base model ahead of its
  * discriminators.
  */
-export function registeredModels(): Model<any>[] {
+export function registeredModels(): Model<any, any, any, any>[] {
   return mongoose.modelNames().map(name => mongoose.model(name));
 }
