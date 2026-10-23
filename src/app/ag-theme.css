@@ -5467,6 +5467,10 @@ html:has(.ag-pull) { overscroll-behavior-y: contain; }
 .ag-ra-odds { pointer-events: none; }
 .ag-ra-odds rect { fill: color-mix(in oklch, var(--ra-night) 88%, transparent); stroke: var(--ag-gold); stroke-width: 0.3; }
 .ag-ra-odds text { font: 800 3.1px var(--ag-font); fill: var(--ag-gold); text-anchor: middle; dominant-baseline: central; }
+/* A target the shot would flank: the badge inverted, gold with the night's ink, and the word over the chance. */
+.ag-ra-odds--flank rect { fill: var(--ag-gold); }
+.ag-ra-odds--flank text { fill: var(--ra-night); }
+.ag-ra-odds--flank .ag-ra-odds-flank { font-size: 2.4px; }
 /* The cover a lined-up move's destination gives, a shield on each side that covers:
    an outline with a full fill for full cover, and a left half for half. */
 .ag-ra-cover { pointer-events: none; }
@@ -5726,6 +5730,8 @@ html:has(.ag-pull) { overscroll-behavior-y: contain; }
 .ag-board-frame .ag-ra-targets-row .ag-ra-crosshair { width: 10px; height: 10px; opacity: 0.7; }
 .ag-ra-targets-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
 .ag-ra-targets-row b { font-weight: 800; color: var(--ag-gold); }
+/* The word on a target the shot would flank (an `.ag-tag`), in the inverted colours of its badge on the board. */
+.ag-ra-targets-flank { margin-left: 0; background: var(--ag-gold); color: var(--ra-night); }
 
 /* ---- The home page, before anything has decided which screen it is ----
    `/` is one static page for everyone (`app/page.tsx`), so its HTML holds both

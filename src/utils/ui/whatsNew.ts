@@ -82,6 +82,11 @@ export const WHATS_NEW: WhatsNewGroup[] = [
         icon: "✨",
         items: [
             {
+                title: "Realm Arena shows when you're flanking",
+                detail: "A target your shot would find with no cover now wears a gold Flank badge over its chance, before you shoot and while you line up a move, and the damage it takes reads Flanked, so you can see where the extra damage comes from.",
+                game: "realmarena",
+            },
+            {
                 title: "Faster to open the app",
                 detail: "Opening the app after a while away, or tapping a notification to jump into a game, now gets your games on screen sooner: the server starts waking up while you're still being signed in, rather than after.",
             },
@@ -122,11 +127,6 @@ export const WHATS_NEW: WhatsNewGroup[] = [
             {
                 title: "Realm Arena: take turns in blocks against the computer",
                 detail: "A co-op battle can now have all of you take your turns one after another and then every warband take theirs, instead of a warband after each of you. It's a switch on the setup screen, off by default, so battles already under way play as before.",
-                game: "realmarena",
-            },
-            {
-                title: "Realm Arena is now in 3D",
-                detail: "The battlefield is now drawn as a real 3D board: walls and towers stand up off the ground, trees have trunks, and every character is a model that turns to face where it's going. Turn the view a quarter at a time, pinch to zoom, and everything else works as before. If your browser can't draw 3D, you get the old flat board.",
                 game: "realmarena",
             },
         ],

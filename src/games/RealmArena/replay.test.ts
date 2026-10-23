@@ -142,8 +142,8 @@ describe("Realm Arena replay", () => {
         expect(events.some(event => event.kind === "shot")).toBe(true);
         for (const event of events) {
             const { kind, ...rest } = event;
-            // A draught's or a Purify's `via`, and a strike's `missed`, are the optional fields.
-            expect(Object.keys(rest).filter(key => key !== "via" && key !== "missed" && key !== "damages").sort()).toEqual(fields[kind]);
+            // A draught's or a Purify's `via`, a strike's `missed` and a shot's `flanked` are the optional fields.
+            expect(Object.keys(rest).filter(key => key !== "via" && key !== "missed" && key !== "damages" && key !== "flanked").sort()).toEqual(fields[kind]);
         }
     });
 

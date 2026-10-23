@@ -21,7 +21,7 @@ import { CHARACTER_ART, facingCell, ITEM_ART, SMOKE_ART, spriteBox, TERRAIN_ART,
 import { CHARACTERS, ITEMS, type CharacterId, type ItemId } from '@/games/RealmArena/characters';
 import { CENTRE, isStanding, isWarband, maxHpOf, smokeSquares, type BattleState, type Fighter, type FogGhost, type MusterPick, type ToldEvent } from '@/games/RealmArena/rules';
 import type { AttackOption } from '@/games/RealmArena/tactics';
-import { AP_PIP_OFFSET, AP_PIP_RADIUS, AP_PIP_STEP, apPips, areaRect, BOARD_ZOOM, CENTRE_LABEL, EFFECT_MARK_OFFSET, EFFECT_MARK_SIZE, EFFECT_MARK_STEP, FIGURE_RADIUS, FIGURE_RISE, figureRectAt, fxPointsAt, HP_BAR_HEIGHT, HP_BAR_RISE, HP_BAR_WIDTH, ITEM_MARK_OFFSET, ITEM_MARK_SIZE, MARKER_RADIUS, ODDS_HEIGHT, ODDS_RISE, ODDS_WIDTH, PATH_END_RADIUS, RING_RADIUS, ringOf, shadedSquares, SHADOW_ALPHA, SHADOW_RADIUS, shieldPath, SMOKE_SIZE, type GroundShade, type Marker, type ShadeKind, type Ring, type BattleCue, type BoardFollow, type FallCue, type FxPoints, type ScorchCue, type Shove, type Timed, type WalkCue, effectsOn, facingOf, fadeInAt, fadeOutAt, fighterStatus, endOf, hpFraction, legLengthOn, progressOf, shakeAt, shakesOf, shovesOf, shoveAt, terrainLetter, toldAt, toldOf, walkerAt, walkCameraAt, walkFacing, legPoint, walkLift, walkSquares, type Told, type WalkMotion } from '@/games/RealmArena/ui';
+import { AP_PIP_OFFSET, AP_PIP_RADIUS, AP_PIP_STEP, apPips, areaRect, BOARD_ZOOM, CENTRE_LABEL, EFFECT_MARK_OFFSET, EFFECT_MARK_SIZE, EFFECT_MARK_STEP, FIGURE_RADIUS, FIGURE_RISE, figureRectAt, fxPointsAt, HP_BAR_HEIGHT, HP_BAR_RISE, HP_BAR_WIDTH, ITEM_MARK_OFFSET, ITEM_MARK_SIZE, MARKER_RADIUS, ODDS_FLANK_DROP, ODDS_FLANK_EXTRA, ODDS_FLANK_WORD, ODDS_HEIGHT, ODDS_RISE, ODDS_WIDTH, PATH_END_RADIUS, RING_RADIUS, ringOf, shadedSquares, SHADOW_ALPHA, SHADOW_RADIUS, shieldPath, SMOKE_SIZE, type GroundShade, type Marker, type ShadeKind, type Ring, type BattleCue, type BoardFollow, type FallCue, type FxPoints, type ScorchCue, type Shove, type Timed, type WalkCue, effectsOn, facingOf, fadeInAt, fadeOutAt, fighterStatus, endOf, hpFraction, legLengthOn, progressOf, shakeAt, shakesOf, shovesOf, shoveAt, terrainLetter, toldAt, toldOf, walkerAt, walkCameraAt, walkFacing, legPoint, walkLift, walkSquares, type Told, type WalkMotion } from '@/games/RealmArena/ui';
 
 /** How deep the ground is drawn under the map's front edges, in quarters. */
 const SLAB_DEPTH = 3;
@@ -34,8 +34,8 @@ const SLAB_DEPTH = 3;
 // in board units, against a square `2 * ISO_HALF_WIDTH` across.
 /** How far below its disc's middle a figure is looked for, to tell whether something in front hides it: most of the way to the disc's foot. */
 const FOOT_PROBE = FIGURE_RADIUS * 0.6;
-/** Room over the back of the map for a figure standing there, and the odds above it. */
-const HEADROOM = ODDS_RISE + ODDS_HEIGHT / 2 + 1;
+/** Room over the back of the map for a figure standing there, and the odds above it, a flanked target's taller badge included. */
+const HEADROOM = ODDS_RISE + ODDS_HEIGHT / 2 + ODDS_FLANK_EXTRA + 1;
 /** How the battlefield is laid out on the board, at whichever turn it's viewed from. */
 const VIEW = { base: SLAB_DEPTH, headroom: HEADROOM, minAspect: MIN_ASPECT };
 
@@ -511,12 +511,15 @@ function ApPips({ x, y, fighter }: { x: number; y: number; fighter: Fighter }) {
     ));
 }
 
-/** A target's chance to hit, as a badge over its figure. */
-function Odds({ view, square, chance }: { view: IsoView; square: Square; chance: number }) {
+/** A target's chance to hit, as a badge over its figure; a flanked target's says so over the chance, in the inverted badge. */
+function Odds({ view, square, chance, flanked }: { view: IsoView; square: Square; chance: number; flanked: boolean }) {
     const { x, y } = isoCentre(view, square);
+    const extra = flanked ? ODDS_FLANK_EXTRA : 0;
+    const top = y - ODDS_RISE - ODDS_HEIGHT / 2 - extra;
     return (
-        <g className="ag-ra-odds">
-            <rect x={x - ODDS_WIDTH / 2} y={y - ODDS_RISE - ODDS_HEIGHT / 2} width={ODDS_WIDTH} height={ODDS_HEIGHT} rx={ODDS_HEIGHT / 2} />
+        <g className={`ag-ra-odds${flanked ? ' ag-ra-odds--flank' : ''}`}>
+            <rect x={x - ODDS_WIDTH / 2} y={top} width={ODDS_WIDTH} height={ODDS_HEIGHT + extra} rx={ODDS_HEIGHT / 2} />
+            {flanked && <text className="ag-ra-odds-flank" x={x} y={top + ODDS_FLANK_DROP}>{ODDS_FLANK_WORD}</text>}
             <text x={x} y={y - ODDS_RISE}>{chance}%</text>
         </g>
     );
@@ -1149,7 +1152,7 @@ export default function RealmArenaBoard({ field, fighters, fogGhosts = [], unsee
 
                             {/* Over every figure, so a neighbour never hides one. */}
                             {coverAt != null && <CoverShields view={view} field={field} square={coverAt} />}
-                            {odds?.map(({ target, chance }) => <Odds key={target.id} view={view} square={target.square} chance={chance} />)}
+                            {odds?.map(({ target, chance, flanked }) => <Odds key={target.id} view={view} square={target.square} chance={chance} flanked={flanked} />)}
 
                             {/* The centre's name sits just clear of its dashed edge,
                                 big enough to read fitted to a phone. */}
