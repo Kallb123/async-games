@@ -219,7 +219,7 @@ export default function RealmArenaBoard3D({ field, fighters, fogGhosts = [], uns
         const centreSquares = showCentre ? field.objectives[CENTRE] ?? [] : [];
         board?.setPreviews({
             path: aiming?.path ?? null,
-            odds: odds?.map(({ target, chance }) => ({ square: target.square, chance })) ?? [],
+            odds: odds?.map(({ target, chance, flanked }) => ({ square: target.square, chance, flanked })) ?? [],
             coverAt: coverAt ?? null,
             centre: centreSquares.length > 0 ? areaRect(field, centreSquares) : null,
         });

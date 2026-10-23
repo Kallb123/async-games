@@ -11,7 +11,7 @@ import Stat from '@/components/ui/Stat';
 import { EFFECTS, type AbilityId, type Affliction } from '@/games/RealmArena/characters';
 import { ITEM_ART } from '@/games/RealmArena/art';
 import { ATTACK_AP, HUNKER_AP, REACTION_COST, bankedAp, abilitiesOf, allied, check, damageTo, fighterById, hasEffect, healedEffects, isStanding, itemOf, maxHpOf, shotEffect, shotOdds, smokeSquares, strikeChance, weaponOf, type Action, type BattleState, type Fighter, type OddsBreakdown } from '@/games/RealmArena/rules';
-import { abilityWait, AREA_BLAST, oddsLines, whoseName } from '@/games/RealmArena/ui';
+import { abilityWait, AREA_BLAST, FLANKED_WORD, ODDS_FLANK_WORD, oddsLines, whoseName } from '@/games/RealmArena/ui';
 import { rangeSquares, shotOf, targetsOf, type TargetKind } from '@/games/RealmArena/tactics';
 import { ABILITY_MARK, CHARACTER_MARK, weaponLine, weaponMark } from '@/games/RealmArena/roster';
 import { healingHp, INSTANT_KINDS, isAtSquare, landsOf, type Aim, type InstantKind, type TurnDraft } from '@/games/RealmArena/useTurnDraft';
@@ -309,6 +309,8 @@ function TargetList({ draft, battle, name, disabled, onFocus }: TargetListProps)
                 />
             )}
             {draft.options.map(({ target, chance, odds }) => {
+                // A shot at a target in the open says so, as the badge on the board does.
+                const flank = odds?.flanked ? ` · ${ODDS_FLANK_WORD.toLowerCase()}` : '';
                 const aimed = draft.targets.includes(target.id);
                 const pick = () => {
                     draft.pick(target.id);
@@ -320,7 +322,7 @@ function TargetList({ draft, battle, name, disabled, onFocus }: TargetListProps)
                         icon={CHARACTER_MARK[target.character]}
                         name={capitalise(name(target.id))}
                         cost={`${target.hp}/${maxHpOf(target, battle)} HP`}
-                        tag={chance !== undefined ? `${chance}% to hit` : aimed ? 'Aiming' : 'Pick'}
+                        tag={chance !== undefined ? `${chance}% to hit${flank}` : aimed ? 'Aiming' : 'Pick'}
                         disabled={disabled}
                         active={aimed}
                         onClick={pick}
@@ -456,7 +458,7 @@ function Detail({ draft, battle, name, ap, target }: DetailProps) {
                 <Stat value={odds.grazeChance > 0 ? `${odds.damage} / ${odds.grazeDamage}` : odds.damage} label="Damage" />
             </div>
             {aim === "shootDodge" && hint(ABILITIES.shootDodge!.description)}
-            {hint(`${health} · ${odds.flanked ? 'flanked, +1 damage' : `${odds.cover} cover`}${hasEffect(target, 'hunkered') ? ', hunkered down' : ''}${smokeSquares(battle).has(target.square) ? ', in smoke' : ''}${odds.farCover ? ', cover doubled at range' : ''}${effect ? ` · a hit leaves them ${EFFECTS[effect]!.state}` : ''}`)}
+            {hint(`${health} · ${odds.flanked ? `${FLANKED_WORD.toLowerCase()}, +${ruleValuesOf(battle).FLANK_BONUS} damage` : `${odds.cover} cover`}${hasEffect(target, 'hunkered') ? ', hunkered down' : ''}${smokeSquares(battle).has(target.square) ? ', in smoke' : ''}${odds.farCover ? ', cover doubled at range' : ''}${effect ? ` · a hit leaves them ${EFFECTS[effect]!.state}` : ''}`)}
         </>
     );
 }

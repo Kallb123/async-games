@@ -310,7 +310,8 @@ export type BattleEvent =
     | { kind: "moved"; fighter: number; path: Square[]; sneaking: boolean; via?: AbilityId }
     | { kind: "ability"; fighter: number; ability: AbilityId }
     /** `via` names the ability a shot was, for those that name it (`NAMED_SHOTS`). */
-    | { kind: "shot"; fighter: number; target: number; chance: number; roll: number; result: ShotResult; damage: number; reaction: boolean; via?: AbilityId }
+    /** `flanked` is set when the target had no cover against the shot and it did damage, a hit or a graze carrying `FLANK_BONUS` more (§13.3). A miss never has it: it would hint at which side an unseen shooter stands. A battle recorded before it was told never has it either. */
+    | { kind: "shot"; fighter: number; target: number; chance: number; roll: number; result: ShotResult; damage: number; reaction: boolean; via?: AbilityId; flanked?: true }
     /**
      * A melee strike. In a battle under `BALANCE_VERSION` it rolled (`chance`
      * and `roll`) and may have `missed`, doing no damage; before it, it always
@@ -736,6 +737,8 @@ export interface OddsBreakdown {
     chance: number;
     /** Percent to graze on top of the chance to hit: a shot's only, a strike has no graze. */
     grazeChance?: number;
+    /** Whether the target has no cover against the shot, so it carries `FLANK_BONUS` more damage: a shot's only, a strike never flanks. */
+    flanked?: boolean;
 }
 
 const clampPercent = (percent: number) => Math.min(ROLL_SIDES, Math.max(0, percent));
@@ -781,6 +784,7 @@ export function strikeChance(state: Pick<BattleState, "rulesVersion">, target: F
 /** A shot's chance worked out once: its breakdown, the graze band above it, and the cover it was read against. */
 interface ShotBreakdown extends OddsBreakdown {
     grazeChance: number;
+    flanked: boolean;
     cover: Cover;
     far: boolean;
     hunkered: boolean;
@@ -811,7 +815,7 @@ function shotBreakdown(state: BattleState, attacker: Fighter, target: Fighter, w
     const breakdown = breakdownOf(weapon.accuracy, factors.filter(factor => factor.amount !== 0));
     // Grazes are the rolls that miss by `GRAZE_BAND` or less, counted from the
     // raw chance: a shot at −10% can't so much as graze.
-    return { ...breakdown, grazeChance: clampPercent(breakdown.raw + GRAZE_BAND) - breakdown.chance, cover, far, hunkered };
+    return { ...breakdown, grazeChance: clampPercent(breakdown.raw + GRAZE_BAND) - breakdown.chance, flanked: cover === "none", cover, far, hunkered };
 }
 
 /**
@@ -836,8 +840,7 @@ export function shotOdds(state: BattleState, attacker: Fighter, target: Fighter,
     const weapon = weaponOf(state, attacker);
     if (weapon.kind !== "ranged") return undefined;
     if (!inRange(state.field, attacker.square, target.square, weapon.range)) return undefined;
-    const { chance, grazeChance, cover, far, hunkered } = shotBreakdown(state, attacker, target, weapon, kind);
-    const flanked = cover === "none";
+    const { chance, grazeChance, cover, far, hunkered, flanked } = shotBreakdown(state, attacker, target, weapon, kind);
     const ability = kind === "attack" || kind === "overwatch" ? undefined : rulesetOf(state).ABILITIES[kind]!;
     const struck = (ability?.damage ?? weapon.damage) + (flanked ? FLANK_BONUS : 0);
     const via = ability ? "ability" : "weapon";
@@ -1498,7 +1501,7 @@ function resolver(state: BattleState, roll: Roll) {
         const rolled = roll();
         const result = shotResult(odds, rolled);
         const damage = result === "hit" ? odds.damage : result === "graze" ? odds.grazeDamage : 0;
-        events.push({ kind: "shot", fighter: by.id, target: target.id, chance: odds.chance, roll: rolled, result, damage, reaction: kind === "overwatch", ...(NAMED_SHOTS.has(kind) ? { via: kind as AbilityId } : {}) });
+        events.push({ kind: "shot", fighter: by.id, target: target.id, chance: odds.chance, roll: rolled, result, damage, reaction: kind === "overwatch", ...(NAMED_SHOTS.has(kind) ? { via: kind as AbilityId } : {}), ...(odds.flanked && damage > 0 ? { flanked: true as const } : {}) });
         if (damage > 0) wound(by, target, damage);
         if (result === "hit" && effect) afflict(by, target, effect);
         return result;

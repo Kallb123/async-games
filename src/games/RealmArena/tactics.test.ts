@@ -121,6 +121,18 @@ describe("attackOptions", () => {
         ]);
     });
 
+    it("says which shots would flank a target with no cover, and never a strike", () => {
+        const archer = ready(0, "a", "archer", at(WALLED, 0, 0));
+        const covered = ready(1, "b", "knight", at(WALLED, 5, 0));
+        const open = ready(2, "b", "mage", at(WALLED, 9, 4));
+        const flanks = (...args: Parameters<typeof attackOptions>) => attackOptions(...args).map(({ target, flanked }) => [target.id, flanked]);
+        expect(flanks({ field: WALLED, fighters: [archer, covered, open] }, archer)).toEqual([[2, true], [1, false]]);
+        // From the far side of the wall it covers nothing, so a move there lines up a flanking shot.
+        expect(flanks({ field: WALLED, fighters: [archer, covered] }, archer, at(WALLED, 9, 0))).toEqual([[1, true]]);
+        const knight = ready(3, "a", "knight", at(WALLED, 8, 4));
+        expect(flanks({ field: WALLED, fighters: [knight, open] }, knight)).toEqual([[2, false]]);
+    });
+
     it("reads from the square a lined-up move would end on", () => {
         const archer = ready(0, "a", "archer", at(WALLED, 0, 0));
         const covered = ready(1, "b", "knight", at(WALLED, 5, 0));

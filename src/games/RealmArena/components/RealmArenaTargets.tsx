@@ -2,7 +2,7 @@
 import React from 'react';
 import { ruleValuesOf, type RulesContext } from '../rulesets';
 import { type Fighter } from '@/games/RealmArena/rules';
-import { whoseName } from '@/games/RealmArena/ui';
+import { ODDS_FLANK_WORD, whoseName } from '@/games/RealmArena/ui';
 import type { ReachAfter } from '@/games/RealmArena/useTurnDraft';
 import { capitalise, pluralize } from '@/utils/ui/text';
 import RealmArenaCrosshair from './RealmArenaCrosshair';
@@ -38,10 +38,11 @@ export default function RealmArenaTargets({ reach: { options, previewing, ap }, 
                 <RealmArenaCrosshair />
                 {options.length === 0 ? `No targets ${where}` : `${pluralize(options.length, 'target')} ${where}${short}`}
             </div>
-            {options.slice(0, SHOWN).map(({ target, chance }) => (
+            {options.slice(0, SHOWN).map(({ target, chance, flanked }) => (
                 <div key={target.id} className="ag-ra-targets-row">
                     <RealmArenaCrosshair />
                     <span className="ag-ra-targets-name">{capitalise(whoseName(fighters, target.id, viewerId, nameFor, context))}</span>
+                    {flanked && <span className="ag-tag ag-ra-targets-flank">{ODDS_FLANK_WORD}</span>}
                     <b>{chance}%</b>
                 </div>
             ))}
