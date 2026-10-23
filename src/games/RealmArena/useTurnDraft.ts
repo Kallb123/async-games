@@ -4,7 +4,7 @@ import { useResettingState } from "@/utils/hooks/useResettingState";
 import { pathTo, type Reach } from "@/utils/games/battlefield/pathfinding";
 import type { Square } from "@/utils/games/battlefield/terrain";
 import { type Ability, type Item } from "./characters";
-import { allied, blastedBy, beckonPath, shovePath, leapTargets, dodgeReach, check, demolishArea, fighterById, areaAround, isStanding, itemOf, oddsBreakdown, reachOf, damageTo, shotOdds, type Action, type BattleState, type Check, type Fighter, type OddsBreakdown } from "./rules";
+import { allied, blastedBy, beckonPath, shovePath, leapSplash, leapTargets, dodgeReach, check, demolishArea, fighterById, areaAround, isStanding, itemOf, oddsBreakdown, reachOf, damageTo, shotOdds, type Action, type BattleState, type Check, type Fighter, type OddsBreakdown } from "./rules";
 import { ACTION_AIMS, attackOptions, rangeKindOf, rangeSquares, reactionPreviews, rollsToHit, shotOf, targetKindOf, targetsOf, type AttackOption } from "./tactics";
 import { reachShading } from "./ui";
 
@@ -63,10 +63,11 @@ export const isAtSquare = (aim: Aim): aim is AtSquare => ACTION_AIMS[aim].at ===
 /**
  * Every square what's aimed at `at` lands on: the 3×3 for a fireball, dynamite
  * or an item with an area, everyone beside the cover but the one swinging for a Demolish,
- * else that square alone.
+ * the ring a Leap's landing splashes (less what a wall shelters, and not the
+ * landing itself), else that square alone.
  */
-function landing(state: BattleState, fighter: Fighter, aim: AtSquare, at: Square): Square[] {
-    if (aim === "leap") return leapTargets(state, fighter, at).map(one => one.square);
+export function landing(state: BattleState, fighter: Fighter, aim: AtSquare, at: Square): Square[] {
+    if (aim === "leap") return leapSplash(state.field, at);
     if (aim === "iceBall") return areaAround(state.field, at);
     if (aim === "demolish") return demolishArea(state.field, fighter.square, at);
     return aim === "throw" ? (itemOf(fighter, state)?.area ? areaAround(state.field, at) : [at]) : rulesetOf(state).ABILITIES[aim]!.blasts === "area" ? areaAround(state.field, at) : [at];
@@ -103,14 +104,17 @@ export function healingHp(aim: Aim, context?: RulesContext): number | undefined 
 /**
  * What a lined-up action would do to the HP of each character it touches, by
  * id: less a shot's damage at its odds on a hit, a strike's, or what a
- * fireball, a throw or a Demolish lands on everyone standing in `area`; more
+ * fireball, a throw or a Demolish lands on everyone standing in `area` (a
+ * Leap, on the enemies in its splash only); more
  * what a heal or a draught gives back. What the board flashes on their HP
  * bars, which never run past empty or full.
  */
-export function hpPreview(battle: BattleState, fighter: Fighter, { aim, targets }: Draft, area: readonly Square[] | null): ReadonlyMap<number, number> {
+export function hpPreview(battle: BattleState, fighter: Fighter, { aim, square, targets }: Draft, area: readonly Square[] | null): ReadonlyMap<number, number> {
     if (area && isAtSquare(aim)) {
         const damage = landsOf(fighter, aim, battle)?.damage ?? 0;
-        const caught = damage > 0 ? battle.fighters.filter(one => isStanding(one) && area.includes(one.square)) : [];
+        // A Leap splashes a ring of squares but only hurts the enemies standing in it.
+        const standing = aim === "leap" && square !== null ? leapTargets(battle, fighter, square) : battle.fighters.filter(one => isStanding(one) && area.includes(one.square));
+        const caught = damage > 0 ? standing : [];
         return new Map(caught.map(one => [one.id, -damageTo(battle, fighter, one, damage, aim === "throw" ? "item" : "ability")]));
     }
     const heals = healingHp(aim, battle);

@@ -1086,8 +1086,15 @@ export function leapLanding(state: BattleState, actor: Fighter, at: unknown): at
         && !state.fighters.some(one => isStanding(one) && one.square === at);
 }
 
+/** Every square a Leap landing on `at` splashes: the squares next to it that it sees (`nextTo`), so a wall or a sight line still shelters whoever stands behind it. */
+export function leapSplash(field: Battlefield, at: Square): Square[] {
+    return areaAround(field, at).filter(square => square !== at && nextTo(field, at, square));
+}
+
+/** Who a Leap landing on `at` hits: every enemy of `actor` standing in its splash. */
 export function leapTargets(state: BattleState, actor: Fighter, at: Square): Fighter[] {
-    return state.fighters.filter(one => isStanding(one) && !allied(state, one.owner, actor.owner) && nextTo(state.field, at, one.square));
+    const splash = new Set(leapSplash(state.field, at));
+    return state.fighters.filter(one => isStanding(one) && !allied(state, one.owner, actor.owner) && splash.has(one.square));
 }
 
 /** Trim an ability's walking route to a square a character can finish on. */

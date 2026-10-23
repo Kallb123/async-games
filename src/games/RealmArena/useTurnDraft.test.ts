@@ -3,9 +3,10 @@ import { at } from "@/utils/games/battlefield/testFixtures";
 import { buildBattlefield } from "@/utils/games/battlefield/terrain";
 import type { CharacterId } from "./characters";
 import { ABILITIES, ITEMS } from "./characters";
-import { ACTION_POINTS, newFighter, reachOf, shotOdds, weaponOf, type BattleState, type Fighter } from "./rules";
+import { rulesetFor } from "./rulesets";
+import { ACTION_POINTS, leapLanding, leapSplash, newFighter, reachOf, shotOdds, weaponOf, type BattleState, type Fighter } from "./rules";
 import { targetsOf } from "./tactics";
-import { afterMove, hpPreview, MOVE, reachAfter, tapFighter, tapSquare, targetOptions, type Draft, type TapContext } from "./useTurnDraft";
+import { afterMove, hpPreview, landing, MOVE, reachAfter, tapFighter, tapSquare, targetOptions, type Draft, type TapContext } from "./useTurnDraft";
 
 // The tap decisions behind lining up an action on the board (§17.3 PR 7):
 // what a tap on a square or a character does, for each aim.
@@ -199,6 +200,36 @@ describe("hpPreview", () => {
         const draft: Draft = { aim: "fireball", square: manAtArms.square, targets: [] };
         const area = [manAtArms.square, near.square, body.square];
         expect([...hpPreview(battle, mage, draft, area)]).toEqual([[manAtArms.id, -ABILITIES.fireball.damage], [near.id, -ABILITIES.fireball.damage]]);
+    });
+
+    it("splashes a leap's whole ring, less what a pinch of walls shelters, but hurts only the enemies in it", () => {
+        // Leap is a rules-v9 ability, so the fighters and the battle are made in v9.
+        const version = { rulesVersion: 9 };
+        const walled = buildBattlefield({ name: "Pinched", rows: ["..........", "..........", "....#.....", "...#......", ".........."], deployments: [], objectives: {} });
+        const made = (id: number, owner: string, character: CharacterId, square: number, extra: Partial<Fighter> = {}): Fighter =>
+            ({ ...newFighter(id, owner, character, square, null, undefined, false, version), ap: ACTION_POINTS, ...extra });
+        // The leaper starts beside its landing (a one-square leap), with a mate and a downed enemy there too.
+        const leaper = made(0, "a", "manAtArms", at(walled, 2, 2)), mate = made(1, "a", "cleric", at(walled, 2, 3));
+        const hit = made(2, "b", "knight", at(walled, 3, 1)), hitToo = made(3, "b", "archer", at(walled, 4, 1));
+        const fallen = made(4, "b", "scout", at(walled, 2, 1), { hp: 0 }), sheltered = made(5, "b", "mage", at(walled, 4, 3));
+        const leapBattle: BattleState = { field: walled, fighters: [leaper, mate, hit, hitToo, fallen, sheltered], ...version };
+
+        const down = at(walled, 3, 2);
+        expect(leapLanding(leapBattle, leaper, down)).toBe(true);
+        // The ring is what's shaded: every square it reaches, the sheltered corner and the landing not among them.
+        const area = landing(leapBattle, leaper, "leap", down);
+        expect(area).toEqual(leapSplash(walled, down));
+        expect(area).toContain(leaper.square);
+        expect(area).not.toContain(sheltered.square);
+        expect(area).not.toContain(down);
+        // The damage is the enemies' alone: not the mate or the leaper in the ring, nor the fallen or the sheltered.
+        const draft: Draft = { aim: "leap", square: down, targets: [] };
+        const damage = rulesetFor(9).ABILITIES.leap!.damage!;
+        expect([...hpPreview(leapBattle, leaper, draft, area)].sort()).toEqual([[hit.id, -damage], [hitToo.id, -damage]]);
+        // A landing with no enemy beside it still shades its ring, and previews no blow.
+        const quiet = at(walled, 8, 1), ring = landing(leapBattle, leaper, "leap", quiet);
+        expect(ring).toHaveLength(8);
+        expect(hpPreview(leapBattle, leaper, { ...draft, square: quiet }, ring).size).toBe(0);
     });
 
     it("gives back what a heal or a draught restores", () => {

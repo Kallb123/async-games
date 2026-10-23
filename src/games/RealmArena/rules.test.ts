@@ -4,7 +4,7 @@ import { battlefieldWith, buildBattlefield, TERRAIN, type Battlefield } from "@/
 import { ABILITIES, CHARACTERS, ITEMS, kitOf, musterBudget, OPTIONS, REALM, THROW_RANGE, type CharacterId, type ItemId, type OptionId } from "./characters";
 import { RUINED_FORT } from "./maps/ruinedFort";
 import {
-    abilitiesOf, ACTION_POINTS, act, MELEE_ACCURACY, afflicted, areaAround, blastedBy, blastedIn, centreHolders, centrePoints, check, endTurn, fixedRolls, isBattleOver, moveAp, movementOf, musterPoints, musterRefusal,
+    abilitiesOf, ACTION_POINTS, act, MELEE_ACCURACY, afflicted, areaAround, blastedBy, blastedIn, centreHolders, centrePoints, check, endTurn, fixedRolls, isBattleOver, leapSplash, leapTargets, moveAp, movementOf, musterPoints, musterRefusal,
     newFighter, oddsBreakdown, pickOf, purified, reachOf, reactionsTo, readyMadeMuster, shotOdds, shotResult, smokeSquares, squadHp, standings, strikeChance, startTurn, storedFighter, watchedSquares, weaponOf,
     type Action, type BattleState, type Fighter, type MusterPick,
 } from "./rules";
@@ -1533,5 +1533,36 @@ describe("rules version 8: a passive shield wall, and a raise with AP to spend",
         const cleric = fighter(1, "a", "cleric", at(field, 1, 1));
         const own = fighter(2, "a", "knight", at(field, 2, 2), { hp: 0, ap: 0 });
         expect(run({ field, fighters: [cleric, own], ...V7 }, "a", { kind: "raise", fighter: 1, target: 2 }).byId(2)).toMatchObject({ hp: 6, ap: 0 });
+    });
+});
+
+describe("a Leap's splash", () => {
+    const open = fieldOf();
+    // Two walls pinch the diagonal from (3, 2) to (4, 3) shut: nothing sees through that corner.
+    const pinched = fieldOf(["..........", "..........", "....#.....", "...#......", ".........."]);
+    const squares = (field: Battlefield, cells: [number, number][]) => cells.map(([col, row]) => at(field, col, row)).sort((a, b) => a - b);
+
+    it("reaches the eight squares around the landing, never the landing itself", () => {
+        const ring = squares(open, [[2, 1], [3, 1], [4, 1], [2, 2], [4, 2], [2, 3], [3, 3], [4, 3]]);
+        expect(leapSplash(open, at(open, 3, 2)).sort((a, b) => a - b)).toEqual(ring);
+    });
+
+    it("keeps to the board's edge", () => {
+        expect(leapSplash(open, at(open, 0, 0)).sort((a, b) => a - b)).toEqual(squares(open, [[1, 0], [0, 1], [1, 1]]));
+    });
+
+    it("leaves out a square the landing can't see, where a pinch of walls shelters it", () => {
+        const splash = leapSplash(pinched, at(pinched, 3, 2));
+        expect(splash).not.toContain(at(pinched, 4, 3));
+        expect(splash).toContain(at(pinched, 2, 3));
+        expect(splash).toHaveLength(7);
+    });
+
+    it("hits the standing enemies in the splash: not allies, the downed, the sheltered or the far", () => {
+        const leaper = fighter(0, "a", "manAtArms", at(pinched, 1, 2)), mate = fighter(1, "a", "archer", at(pinched, 2, 2));
+        const hit = fighter(2, "b", "knight", at(pinched, 2, 1)), sheltered = fighter(3, "b", "mage", at(pinched, 4, 3));
+        const fallen = fighter(4, "b", "scout", at(pinched, 3, 1), { hp: 0 }), far = fighter(5, "b", "archer", at(pinched, 8, 4));
+        const state: BattleState = { field: pinched, fighters: [leaper, mate, hit, sheltered, fallen, far] };
+        expect(leapTargets(state, leaper, at(pinched, 3, 2)).map(one => one.id)).toEqual([hit.id]);
     });
 });
