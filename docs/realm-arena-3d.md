@@ -177,7 +177,8 @@ the sheet.
 
 How figures come and go in an action is the figures' own (`figurePools.ts`):
 one downed stands as it was until the blow lands and then fades, while its
-fallen figure fades in; one struck is knocked and one striking lunges, its bar,
+fallen figure fades in, up to the 75% a body at rest is drawn at (`FALLEN_OPACITY`,
+as on the isometric board); one struck is knocked and one striking lunges, its bar,
 marks and ring staying put; cover blasted away stands on its scorched ground
 until the burst fades, then fades itself. A standing figure that something in
 front hides is drawn again through it at half strength in its owner's colour,

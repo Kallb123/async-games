@@ -5,14 +5,14 @@ import { CENTRE_LABEL, figureRectAt } from "@/games/RealmArena/ui";
 import type { Rect } from "@/utils/ui/mapLabels";
 import { azimuthOf, boardFrame, cameraBasis, onScreen, QUARTER, squareCentre, type Vec3 } from "./iso3d";
 import { BOARD_UNIT, toBoardUnits } from "./billboards";
-import { areaMiddle, areaRise, centreLabel, pathPieces, pathPoints, shieldsAt } from "./previewGeometry";
+import { areaMiddle, areaRise, centreLabel, pathPoints, pathStroke, shieldsAt } from "./previewGeometry";
 
 const basis = cameraBasis(azimuthOf(0));
 
-describe("pathPieces", () => {
+describe("pathStroke", () => {
     it("is a run for each step between points, hung from its middle", () => {
         const points: Vec3[] = [[0.5, 0, 0.5], [1.5, 0, 0.5], [1.5, 0, 1.5]];
-        const pieces = pathPieces(points, basis);
+        const pieces = pathStroke(points, basis).pieces;
         expect(pieces).toHaveLength(2);
         expect(pieces[0].at).toEqual([1, 0, 0.5]);
         expect(pieces[1].at).toEqual([1.5, 0, 1]);
@@ -20,36 +20,93 @@ describe("pathPieces", () => {
 
     it("measures a run across the frame, in board units: a square's side is half a diagonal", () => {
         // A square along a column runs 10 board units across and 5 down the frame (the diamond is 20 wide, 10 tall).
-        const [piece] = pathPieces([[0.5, 0, 0.5], [1.5, 0, 0.5]], basis);
+        const [piece] = pathStroke([[0.5, 0, 0.5], [1.5, 0, 0.5]], basis).pieces;
         expect(piece.length).toBeCloseTo(Math.hypot(10, 5), 6);
         expect(piece.rotate).toBeCloseTo(Math.atan2(5, 10) * 180 / Math.PI, 6);
     });
 
     it("lies a run down a row the other way, down to the left", () => {
-        const [piece] = pathPieces([[0.5, 0, 0.5], [0.5, 0, 1.5]], basis);
+        const [piece] = pathStroke([[0.5, 0, 0.5], [0.5, 0, 1.5]], basis).pieces;
         expect(piece.rotate).toBeCloseTo(180 - Math.atan2(5, 10) * 180 / Math.PI, 6);
     });
 
     it("slopes a run up a step up the frame", () => {
         const field = hillOf(["...", "..."], ["000", "400"]);
         const points = pathPoints(field, [at(field, 0, 1), at(field, 1, 1)]);
-        const [piece] = pathPieces(points, basis);
-        const flat = pathPieces([[0.5, 0, 1.5], [1.5, 0, 1.5]], basis)[0];
+        const [piece] = pathStroke(points, basis).pieces;
+        const flat = pathStroke([[0.5, 0, 1.5], [1.5, 0, 1.5]], basis).pieces[0];
         expect(points[0][1]).toBeCloseTo(4 * QUARTER);
         // Down a step, towards the viewer's right: the frame's y is up, so the clockwise turn is the steeper the further it falls.
         expect(piece.rotate).not.toBeCloseTo(flat.rotate, 3);
     });
 
     it("skips a run that goes nowhere", () => {
-        expect(pathPieces([[1, 0, 1], [1, 0, 1]], basis)).toEqual([]);
-        expect(pathPieces([[1, 0, 1]], basis)).toEqual([]);
+        expect(pathStroke([[1, 0, 1], [1, 0, 1]], basis).pieces).toEqual([]);
+        expect(pathStroke([[1, 0, 1]], basis).pieces).toEqual([]);
     });
 
     it("keeps its length through a turn of the view", () => {
         const points: Vec3[] = [[0.5, 0, 0.5], [1.5, 0, 0.5]];
         for (const rotation of [1, 2, 3]) {
-            expect(pathPieces(points, cameraBasis(azimuthOf(rotation)))[0].length).toBeCloseTo(Math.hypot(10, 5), 6);
+            expect(pathStroke(points, cameraBasis(azimuthOf(rotation))).pieces[0].length).toBeCloseTo(Math.hypot(10, 5), 6);
         }
+    });
+
+    it("puts a dot on every point of a solid path, to round its joints and ends", () => {
+        const points: Vec3[] = [[0.5, 0, 0.5], [1.5, 0, 0.5], [1.5, 0, 1.5]];
+        expect(pathStroke(points, basis).discs).toEqual(points);
+    });
+
+    describe("dashed", () => {
+        // A square's side is hypot(10, 5) = 11.18 across the frame; a dash of 2 and a gap of 1.2, as `.ag-ra-path`'s dasharray.
+        const side = Math.hypot(10, 5), dash = [2, 1.2] as const;
+        const straight: Vec3[] = [[0.5, 0, 0.5], [1.5, 0, 0.5]];
+        const bent: Vec3[] = [[0.5, 0, 0.5], [1.5, 0, 0.5], [1.5, 0, 1.5]];
+
+        it("cuts a run into dashes with a gap between, the last cut short at the path's end", () => {
+            const { pieces } = pathStroke(straight, basis, dash);
+            expect(pieces.map(piece => piece.length)).toEqual([2, 2, 2, expect.closeTo(side - 9.6, 6)]);
+            // Each starts a period (3.2) on from the last: the middles of the dashes are 3.2 apart along the run.
+            const middle = (i: number) => pieces[i].at[0] - 0.5;
+            expect(middle(0)).toBeCloseTo(1 / side);
+            expect(middle(1) - middle(0)).toBeCloseTo(3.2 / side);
+            expect(middle(2) - middle(1)).toBeCloseTo(3.2 / side);
+        });
+
+        it("starts on a dash, so the path leaves its first square lit", () => {
+            const { pieces } = pathStroke(straight, basis, dash);
+            expect(pieces[0].at[0] - 0.5).toBeCloseTo(1 / side);
+        });
+
+        it("caps each dash with a dot at either end", () => {
+            const { discs } = pathStroke(straight, basis, dash);
+            expect(discs).toHaveLength(8);
+            expect(discs[0][0]).toBeCloseTo(0.5);
+            expect(discs[1][0] - 0.5).toBeCloseTo(2 / side);
+            expect(discs[7][0]).toBeCloseTo(1.5);
+        });
+
+        it("runs the pattern on round a corner, a dash that turns it lying along both runs with a dot on the corner", () => {
+            const { pieces, discs } = pathStroke(bent, basis, dash);
+            // The fourth dash (9.6 to 11.6) runs past the corner at 11.18.
+            const turning = pieces.filter(piece => Math.abs(piece.length - (side - 9.6)) < 1e-6 || Math.abs(piece.length - (11.6 - side)) < 1e-6);
+            expect(turning).toHaveLength(2);
+            expect(turning[0].rotate).not.toBeCloseTo(turning[1].rotate, 3);
+            expect(discs).toContainEqual([1.5, 0, 0.5]);
+            // The rest of the second run carries on from where the pattern left off, not from a fresh dash.
+            const second = pieces.filter(piece => piece.at[2] > 0.5 && piece.at[0] === 1.5);
+            expect(second[0].length).toBeCloseTo(11.6 - side);
+        });
+
+        it("covers no more of the path than its dashes do", () => {
+            const covered = (stroke: ReturnType<typeof pathStroke>) => stroke.pieces.reduce((sum, piece) => sum + piece.length, 0);
+            expect(covered(pathStroke(bent, basis, dash))).toBeLessThan(covered(pathStroke(bent, basis)));
+            expect(covered(pathStroke(bent, basis, dash))).toBeCloseTo(7 * 2, 6);
+        });
+
+        it("leaves only a dot for a path that goes nowhere", () => {
+            expect(pathStroke([[1, 0, 1], [1, 0, 1]], basis, dash)).toEqual({ pieces: [], discs: [[1, 0, 1], [1, 0, 1]] });
+        });
     });
 });
 

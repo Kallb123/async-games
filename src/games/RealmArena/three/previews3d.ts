@@ -11,13 +11,13 @@
 // centre's name keeps off them) and as the view turns (a path's runs lie along
 // the frame the camera sees), and not otherwise.
 
-import { CENTRE_LABEL, ODDS_HEIGHT, ODDS_RISE, ODDS_WIDTH, PATH_END_RADIUS, PATH_WIDTH, SHIELD_HEIGHT, SHIELD_WIDTH, shieldPath } from "@/games/RealmArena/ui";
+import { CENTRE_LABEL, ODDS_HEIGHT, ODDS_RISE, ODDS_WIDTH, PATH_DASH, PATH_END_RADIUS, PATH_WIDTH, SHIELD_HEIGHT, SHIELD_WIDTH, shieldPath } from "@/games/RealmArena/ui";
 import type { Battlefield, Square } from "@/utils/games/battlefield/terrain";
 import type { Rect } from "@/utils/ui/mapLabels";
 import { Billboards, CanvasAtlas, type BillboardAxes } from "./billboards";
 import { DISC_BOX, discRect, drawText, layStable, rgba, solidRect, textWidth, whenFontReady, type BoardLook, type TextStyle } from "./canvasShapes";
 import { boardFrame, squareCentre, topOf, type CameraBasis } from "./iso3d";
-import { areaMiddle, centreLabel, pathPieces, pathPoints, shieldsAt } from "./previewGeometry";
+import { areaMiddle, centreLabel, pathPoints, pathStroke, shieldsAt } from "./previewGeometry";
 
 /** What's previewed: all of it comes from the board's props, and none of it is the board's to decide. */
 export interface PreviewSpec {
@@ -123,16 +123,17 @@ export class Previews3D {
         this.billboards.add({ at: areaMiddle(centre), x: placed.x, y: placed.y - (baseline - height / 2), width, height, rect });
     }
 
-    /** The line a move takes, over the squares' tops, round-jointed, with the dot where it ends. */
+    /** The line a move takes, over the squares' tops, dashed and round-capped as the isometric board strokes it, with the dot where it ends. */
     private layPath(field: Battlefield, basis: CameraBasis, look: BoardLook): void {
         const { path } = this.spec;
         if (!path || path.length === 0) return;
         const points = pathPoints(field, path);
         const solid = solidRect(this.atlas), disc = discRect(this.atlas);
-        for (const { at, length, rotate } of pathPieces(points, basis)) {
+        const { pieces, discs } = pathStroke(points, basis, PATH_DASH);
+        for (const { at, length, rotate } of pieces) {
             this.billboards.add({ at, width: length, height: PATH_WIDTH, rect: solid, rotate, colour: look.onDark });
         }
-        for (const at of points) this.billboards.add({ at, width: PATH_WIDTH * DISC_BOX, rect: disc, colour: look.onDark });
+        for (const at of discs) this.billboards.add({ at, width: PATH_WIDTH * DISC_BOX, rect: disc, colour: look.onDark });
         this.billboards.add({ at: points[points.length - 1], width: 2 * PATH_END_RADIUS * DISC_BOX, rect: disc, colour: look.onDark });
     }
 

@@ -5419,7 +5419,7 @@ html:has(.ag-pull) { overscroll-behavior-y: contain; }
    see-through, and would catch taps meant for the square behind it. */
 .ag-ra-figure { pointer-events: none; }
 .ag-ra-figure-hit { fill: transparent; }
-.ag-ra-figure--down { opacity: 0.75; }
+.ag-ra-figure--down { opacity: 0.75; } /* as strong as ui.ts's FALLEN_OPACITY, which the 3D board draws by */
 /* A standing character hidden behind something in front of it, drawn again
    over it, faint, in its owner's colour, and tappable like the figure. */
 .ag-ra-ghost { opacity: 0.5; }
