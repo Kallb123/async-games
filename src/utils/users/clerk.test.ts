@@ -7,6 +7,14 @@ vi.mock('@clerk/nextjs/server', () => ({
     clerkClient: async () => ({ users: { getUserList } }),
 }));
 
+// The directory's shared tier is the database's, which no test here has.
+vi.mock('./sharedDirectory', () => ({
+    sharedDirectoryAvailable: () => false,
+    readSharedUsers: async () => ({ found: new Map(), missing: new Set() }),
+    writeSharedUsers: async () => undefined,
+    forgetSharedUser: async () => undefined,
+}));
+
 // Safe as a plain import: vitest hoists the vi.mock above it, so ./clerk
 // never pulls in the real Clerk client.
 import { usersById, usersByUsername, userIdListToUsernameList } from './clerk';

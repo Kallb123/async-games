@@ -9,6 +9,7 @@ import mongoose, { type Model } from 'mongoose';
 import './mongodb';
 import './ReactionData';
 import './RateLimitData';
+import './PlayerDirectoryData';
 import './PerformanceMetricData';
 import './GifCatalogueData';
 import './ChatMessageData';

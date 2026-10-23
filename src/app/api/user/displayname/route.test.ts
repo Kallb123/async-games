@@ -9,6 +9,7 @@ import { POST } from './route';
 import { ANN, jsonPost, metadataWrites, resetApiRouteStubs, signIn } from '@/utils/testing/apiRoute';
 import { DISPLAY_NAME_RULE, MAX_DISPLAY_NAME_LENGTH } from '@/utils/users/displayName';
 import { consumeRateLimit } from '@/utils/rateLimit';
+import { directoryRows, directoryStore, installPlayerDirectoryStore } from '@/utils/testing/playerDirectoryStore';
 
 const post = (displayName: unknown) => POST(jsonPost('/api/user/displayname', { displayName }));
 
@@ -21,6 +22,8 @@ const GUEST = {
 
 beforeEach(async () => {
     await resetApiRouteStubs();
+    // The shared player directory a rename invalidates: a Map, not a database.
+    installPlayerDirectoryStore();
 });
 
 describe('POST /api/user/displayname', () => {
@@ -36,6 +39,25 @@ describe('POST /api/user/displayname', () => {
         expect(metadataWrites).toEqual([
             { userId: ANN.id, publicMetadata: { displayName: 'Dave the Destroyer' } },
         ]);
+    });
+
+    it('invalidates the copy of their name every instance reads, so the rename shows everywhere at once', async () => {
+        signIn(ANN);
+        directoryRows.set(ANN.id, { userId: ANN.id, name: 'Ann', handle: 'ann', imageUrl: null, fetchedAt: new Date(), expiresAt: new Date(Date.now() + 1e9) });
+
+        expect((await post('Dave')).status).toBe(200);
+
+        const row = directoryRows.get(ANN.id)!;
+        expect(row.name).toBeUndefined();
+        expect(row.invalidatedAt).toBeInstanceOf(Date);
+    });
+
+    it('still answers when the shared directory cannot be reached', async () => {
+        vi.spyOn(console, 'error').mockImplementation(() => {});
+        directoryStore.writes = 'fail';
+        signIn(ANN);
+
+        expect((await post('Dave')).status).toBe(200);
     });
 
     it('trims what it stores', async () => {

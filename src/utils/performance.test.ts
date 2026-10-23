@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { globSync, readFileSync } from 'node:fs';
-import { apiFetchMetrics, DATA_CACHE_METRICS, INTENT_WINDOW_MS, isPerformanceRegion, loadJourney, nextJourney, PERFORMANCE_METRIC_NAMES, PERFORMANCE_REGIONS, performanceRegion, performanceValueLimit, safeRoute, serverTimingMetrics, ttfbPhaseMetrics, vitalPhaseMetrics, type RegionElement } from './performance';
+import { apiFetchMetrics, DATA_CACHE_METRICS, INTENT_WINDOW_MS, isCountMetric, isPerformanceRegion, loadJourney, nextJourney, PERFORMANCE_METRIC_NAMES, PERFORMANCE_REGIONS, performanceRegion, performanceValueLimit, safeRoute, serverTimingMetrics, ttfbPhaseMetrics, vitalPhaseMetrics, type RegionElement } from './performance';
 
 describe('safeRoute', () => {
   it.each([
@@ -77,8 +77,37 @@ describe('serverTimingMetrics', () => {
       { name: 'server_mongo_query', value: 37 },
       { name: 'server_names', value: 12 },
       { name: 'server_total', value: 270.2 },
+      { name: 'server_names_miss', value: 0 },
       { name: 'server_serialise', value: 0.1 },
     ]);
+  });
+
+  it('reads the shared and missed name counts out of the names_cache entry', () => {
+    const header = 'names;dur=18.0, names_store;dur=16.0, total;dur=40.0, names_cache;desc="hit=1 miss=0 stale=1 shared=3"';
+    expect(serverTimingMetrics(header)).toEqual([
+      { name: 'server_names', value: 18 },
+      { name: 'server_names_store', value: 16 },
+      { name: 'server_total', value: 40 },
+      { name: 'server_names_shared', value: 3 },
+      { name: 'server_names_miss', value: 0 },
+    ]);
+  });
+
+  it('reports a count of 0 as a sample, and only the counts the entry carries', () => {
+    expect(serverTimingMetrics('names_cache;desc="hit=2 miss=4 stale=0 shared=0"')).toEqual([
+      { name: 'server_names_shared', value: 0 },
+      { name: 'server_names_miss', value: 4 },
+    ]);
+    // An older server's entry has no shared count.
+    expect(serverTimingMetrics('names_cache;desc="hit=2 miss=1 stale=0"')).toEqual([{ name: 'server_names_miss', value: 1 }]);
+    expect(serverTimingMetrics('names_cache;desc="garbled"')).toEqual([]);
+  });
+
+  it('counts the name counts as names the beacon accepts, and not as times', () => {
+    expect(PERFORMANCE_METRIC_NAMES).toEqual(expect.arrayContaining(['server_names_store', 'server_names_shared', 'server_names_miss']));
+    expect(isCountMetric('server_names_shared')).toBe(true);
+    expect(isCountMetric('server_names')).toBe(false);
+    expect(isCountMetric('server_names_store')).toBe(false);
   });
 
   it('reports nothing for a response without the header', () => {

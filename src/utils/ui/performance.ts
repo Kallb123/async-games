@@ -1,11 +1,12 @@
 import type { AdminPerformanceResponse, PerformanceSummary } from '@/app/api/admin/performance/route';
-import { isByteMetric, isShiftMetric } from '@/utils/performance';
+import { isByteMetric, isCountMetric, isShiftMetric } from '@/utils/performance';
 
 const HOUR_MS = 60 * 60 * 1000;
 const DAY_MS = 24 * HOUR_MS;
 
-/** One timing in the unit its metric is measured in: CLS is unitless, byte counts read as KB, the rest are ms. */
+/** One timing in the unit its metric is measured in: CLS is unitless, a count of ids is a bare number, byte counts read as KB, the rest are ms. */
 export const formatPerformanceValue = (name: string, n: number) => isShiftMetric(name) ? n.toFixed(3)
+  : isCountMetric(name) ? `${Math.round(n)}`
   : isByteMetric(name) ? `${Math.round(n / 1024)} KB` : `${Math.round(n)} ms`;
 
 /** Escapes the characters that would break a Markdown table cell. */

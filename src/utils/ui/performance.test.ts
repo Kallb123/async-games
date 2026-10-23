@@ -49,6 +49,12 @@ describe('formatPerformanceValue', () => {
         expect(formatPerformanceValue('transfer-bytes', 2048)).toBe('2 KB');
         expect(formatPerformanceValue('response_bytes', 18_432)).toBe('18 KB');
     });
+
+    it('reads a count of names as a bare number, not as milliseconds', () => {
+        expect(formatPerformanceValue('server_names_shared', 3)).toBe('3');
+        expect(formatPerformanceValue('server_names_miss', 0)).toBe('0');
+        expect(formatPerformanceValue('server_names_store', 16.4)).toBe('16 ms');
+    });
 });
 
 describe('formatWindowLength', () => {
