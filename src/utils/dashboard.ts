@@ -31,7 +31,7 @@ const COMPLETED_GAME_PROJECTION = {
  * sort together, so a limited read stops early rather than sorting them all.
  */
 export function completedGameResults(userId: string, limit?: number): Promise<IGameResultDataDocument[]> {
-    const query = GameResultModel.find({ playerIds: userId }, COMPLETED_GAME_PROJECTION).sort({ endedAt: -1 });
+    const query = GameResultModel.find<IGameResultDataDocument>({ playerIds: userId }, COMPLETED_GAME_PROJECTION).sort({ endedAt: -1 });
     return (limit ? query.limit(limit) : query).exec();
 }
 
@@ -157,10 +157,10 @@ export async function buildDashboard(userId: string, time: TimeSpan = untimed): 
     // Projected to what a summary row reads (see GAME_SUMMARY_PROJECTION):
     // not the move history, not any game's own state. The filter may name
     // fields the projection leaves out.
-    const gamesRead = GameDataModel.find(
+    const gamesRead = GameDataModel.find<IGameDataDocument>(
         { userIdList: userId, complete: false, 'gameState.droppedPlayers': { $ne: userId } },
         GAME_SUMMARY_PROJECTION,
-    ).exec() as Promise<IGameDataDocument[]>;
+    ).exec();
 
     // The chat count needs only the game list, not the invitations, the
     // finished games or the names, so it starts the moment the games are in
