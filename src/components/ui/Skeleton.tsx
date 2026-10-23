@@ -41,15 +41,27 @@ const ROW_ICON: Record<SkeletonRowIcon, { size: number; radius: number | string 
     none: null,
 };
 
-/** One placeholder row shaped like `.ag-list-row` (a leading icon + two text lines). */
-export function SkeletonRow({ icon = "avatar" }: { icon?: SkeletonRowIcon }) {
+/**
+ * One placeholder row shaped like `.ag-list-row` (a leading icon + text lines).
+ *
+ * `lines` is how many lines of text the real rows have: two by default, one for
+ * a list whose rows are a single line (the finished games), which stand a good
+ * ten pixels shorter than two-line rows and so would otherwise be a list's
+ * worth of height to correct when the real rows arrive.
+ */
+export function SkeletonRow({ icon = "avatar", lines = 2 }: { icon?: SkeletonRowIcon; lines?: 1 | 2 }) {
     const box = ROW_ICON[icon];
     return (
         <div className="ag-list-row" aria-hidden data-perf-region="skeleton">
             {box && <Skeleton width={box.size} height={box.size} radius={box.radius} style={{ flex: "none" }} />}
             <div className="ag-list-row-main">
-                <Skeleton width="55%" height={12} />
-                <Skeleton width="35%" height={10} style={{ marginTop: 6 }} />
+                {lines === 1
+                    // 18px: the 13px/1.35 line a one-line row sets its text in.
+                    ? <Skeleton width="55%" height={12} style={{ margin: "3px 0" }} />
+                    : <>
+                        <Skeleton width="55%" height={12} />
+                        <Skeleton width="35%" height={10} style={{ marginTop: 6 }} />
+                    </>}
             </div>
         </div>
     );

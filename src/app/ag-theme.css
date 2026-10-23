@@ -1407,6 +1407,14 @@ a.ag-list-row, a.ag-list-row-main {
     --ag-stack-gap: 6px;
 }
 .ag-footer-notice-title { font-weight: 800; }
+/* The notification warning is the root layout's, after the screen, and it can
+   turn up as soon as Clerk has loaded — before the home page's lists have. Left
+   standing, it is the one thing under the skeletons that the lists' real height
+   then moves, and the players it is for (everyone who hasn't turned
+   notifications on) are most of them. So it waits, like the release notes: the
+   first answer replaces the loading columns (`DeskColumn`) and the footer
+   arrives under them, at the end of a page that has stopped changing shape. */
+.ag-app:has(.ag-desk-col--loading) > .ag-footer { display: none; }
 
 .ag-divider { height: 1px; background: var(--ag-line); margin: 22px 20px 0; border: none; }
 

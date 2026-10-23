@@ -32,15 +32,20 @@ const TIME_LIMIT_MS = 120_000;
 export type TimeSpan = <T>(name: string, work: () => Promise<T>) => Promise<T>;
 export const untimed: TimeSpan = (_name, work) => work();
 
-/** One player-name lookup: `stale` of its `hits` were served past their believed life and refreshed after. */
-interface NameLookup { duration: number; hits: number; misses: number; stale?: number }
+/**
+ * One player-name lookup: `hits` were served from memory and `shared` from the
+ * database the instances share, `stale` of those two past their believed life
+ * and refreshed after, and `misses` waited on Clerk. `store` is how long the
+ * database read took, and is absent when none was made.
+ */
+interface NameLookup { duration: number; hits: number; misses: number; stale?: number; shared?: number; store?: number }
 
 export class ServerTiming {
   private readonly started = performance.now();
   private readonly entries: { name: string; duration: number }[] = [];
   // Work reported from below rather than wrapped in `time()`, summed per name.
   private readonly totals = new Map<string, number>();
-  private nameCounts: { hits: number; misses: number; stale: number } | null = null;
+  private nameCounts: { hits: number; misses: number; stale: number; shared: number } | null = null;
 
   /**
    * Notes how long the instance sat unused before this request (`idle`), or,
@@ -87,25 +92,33 @@ export class ServerTiming {
   add(name: string, duration: number) {
     this.totals.set(name, (this.totals.get(name) ?? 0) + duration);
   }
-  /** Adds one player-name lookup: how long it took, how many ids it served from memory (some of them stale, refreshed after) or fetched. */
-  addNameLookup({ duration, hits, misses, stale = 0 }: NameLookup) {
+  /**
+   * Adds one player-name lookup: how long it took, how many ids it served from
+   * memory or the shared database (some of them stale, refreshed after) or
+   * fetched from Clerk, and how long its read of the database took.
+   */
+  addNameLookup({ duration, hits, misses, stale = 0, shared = 0, store }: NameLookup) {
     this.add('names', duration);
-    const counts = this.nameCounts ??= { hits: 0, misses: 0, stale: 0 };
-    counts.hits += hits; counts.misses += misses; counts.stale += stale;
+    if (store !== undefined) this.add('names_store', store);
+    const counts = this.nameCounts ??= { hits: 0, misses: 0, stale: 0, shared: 0 };
+    counts.hits += hits; counts.misses += misses; counts.stale += stale; counts.shared += shared;
   }
   header(): string {
     // `names` is nested inside whichever span the lookup ran in (`response` on
     // a game, `player_directory` on the dashboard), not taken out of it, so
     // those keep meaning what they did before and `names` reads as their
-    // Clerk share. Lookups running side by side add up, so it can exceed the
-    // span they overlap in. The hit/miss counts are a `desc` rather than a
-    // `dur`, and counts only: never the ids or names behind them. The Mongo
+    // Clerk share, and `names_store` is the part of `names` spent reading the
+    // shared directory from the database, nested inside it in turn. Lookups
+    // running side by side add up, so both can exceed the span they overlap
+    // in. The hit/miss/stale/shared counts are a `desc` rather than a `dur`
+    // (the client reads `shared` and `miss` back out of it, see
+    // `serverTimingMetrics`), and counts only: never the ids or names behind them. The Mongo
     // pool's spans (see `dbConnect`) are summed and nested the same way.
     const counts = this.nameCounts;
     const all = [...this.entries, ...[...this.totals].map(([name, duration]) => ({ name, duration })),
       { name: 'total', duration: performance.now() - this.started }];
     const spans = all.map(({ name, duration }) => `${name};dur=${duration.toFixed(1)}`);
-    if (counts) spans.push(`names_cache;desc="hit=${counts.hits} miss=${counts.misses} stale=${counts.stale}"`);
+    if (counts) spans.push(`names_cache;desc="hit=${counts.hits} miss=${counts.misses} stale=${counts.stale} shared=${counts.shared}"`);
     return spans.join(', ');
   }
 }

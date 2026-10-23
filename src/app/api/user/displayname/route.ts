@@ -94,8 +94,9 @@ export async function POST(request: NextRequest) {
         publicMetadata: { displayName: next || null },
     });
     // The server's memory of how other players see this one (directoryCache)
-    // would otherwise keep the old name for up to its TTL, on this instance.
-    forgetCachedUser(userId);
+    // would otherwise keep the old name for up to its TTL, on this instance,
+    // and the copy every other instance reads (sharedDirectory) for longer.
+    await forgetCachedUser(userId);
 
     return NextResponse.json({ displayName: next });
 }

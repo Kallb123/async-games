@@ -609,9 +609,12 @@ JSON serialisation, plus how long the instance sat idle before the request or th
 is the instance's first; the client records those spans beside the
 journey. `names` is the time spent resolving player names (the Clerk directory
 lookup), nested inside the span it ran in — `response` on a game,
-`player_directory` on the dashboard — rather than taken out of it, and a
-`names_cache` entry carries the directory cache's hit, miss and stale counts as a
-`desc` (visible in devtools, not recorded). The dashboard also times its unread
+`player_directory` on the dashboard — rather than taken out of it, and
+`names_store` is the part of it spent reading the database the instances share
+(the directory's second tier, after memory). A `names_cache` entry carries the
+directory cache's hit, miss, stale and shared counts as a `desc`; the report
+records two of them as counts rather than times, `names_shared` (served from the
+shared database) and `names_miss` (waited on Clerk). The dashboard also times its unread
 chat counts (`unread_chat`) and Kingdom Builder worlds (`kb_worlds`). The
 **Data** column splits a cache-enabled screen's journey by where its first data
 came from (`hit`, `prefetch`, `joined` or `miss`); the session's confirmation and

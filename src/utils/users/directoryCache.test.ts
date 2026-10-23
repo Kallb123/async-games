@@ -5,6 +5,17 @@ vi.mock('@clerk/nextjs/server', () => ({
     clerkClient: async () => ({ users: { getUserList } }),
 }));
 
+// This file is the memory tier on its own: the shared tier behind it is
+// stood in for by one that never holds anything, so what it pins is what memory
+// does when nothing else can answer. sharedDirectory.test.ts is the tiers
+// together.
+vi.mock('./sharedDirectory', () => ({
+    sharedDirectoryAvailable: () => false,
+    readSharedUsers: async () => ({ found: new Map(), missing: new Set() }),
+    writeSharedUsers: async () => undefined,
+    forgetSharedUser: async () => undefined,
+}));
+
 import {
     buildUserDirectory, userIdListToImageMap, userIdListToNamesAndMap, userIdListToUntaggedNameList,
     userIdListToUsernameList, usersById,
@@ -125,6 +136,9 @@ describe('the player directory cache', () => {
         }));
 
         const waited = userIdListToUsernameList(['user_1', 'user_2']);
+        // Once that lookup is out (it reads the shared tier first), with the
+        // stale id along in it, a request landing meanwhile leaves the id to it.
+        await vi.waitFor(() => expect(getUserList).toHaveBeenCalledTimes(2));
         await userIdListToUsernameList(['user_1']);
         expect(askedFor().slice(1)).toEqual([['user_2', 'user_1']]);
         answers.forEach(answer => answer());
@@ -231,7 +245,7 @@ describe('the player directory cache', () => {
         await userIdListToUsernameList(['user_1']);
 
         clerkUsers = [person('user_1', 'Anne', 'ann')];
-        forgetCachedUser('user_1');
+        await forgetCachedUser('user_1');
 
         expect(await userIdListToUsernameList(['user_1'])).toEqual(['Anne']);
     });
@@ -246,7 +260,7 @@ describe('the player directory cache', () => {
         await vi.waitFor(() => expect(getUserList).toHaveBeenCalled());
 
         clerkUsers = [person('user_1', 'Anne', 'ann')];
-        forgetCachedUser('user_1');
+        await forgetCachedUser('user_1');
         answer();
 
         expect(await inFlight).toEqual(['Ann']);
@@ -404,7 +418,7 @@ describe('reporting to the request', () => {
 
         const header = timing.header();
         expect(header).toMatch(/names;dur=[0-9.]+/);
-        expect(header).toContain('names_cache;desc="hit=1 miss=2 stale=0"');
+        expect(header).toContain('names_cache;desc="hit=1 miss=2 stale=0 shared=0"');
         // Counts and timings only: no id and no name ever reaches the header.
         expect(header).not.toMatch(/user_|Ann|Bob/);
     });

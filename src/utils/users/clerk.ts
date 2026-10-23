@@ -3,7 +3,8 @@ import { after } from "next/server";
 import { chosenName, isGuest, publicHandle, readableName, UNKNOWN_PLAYER_NAME } from "@/utils/ui/players";
 import { profileImageUrl } from "@/utils/ui/avatar";
 import { recordNameLookup } from "@/utils/api/serverTiming";
-import { cachedUser, DirectoryRecord, lookupStarted, rememberUsers } from "@/utils/users/directoryCache";
+import { cachedUser, DIRECTORY_TTL_MS, DirectoryRecord, lookupStarted, rememberSharedUsers, rememberUsers } from "@/utils/users/directoryCache";
+import { readSharedUsers, sharedDirectoryAvailable, writeSharedUsers } from "@/utils/users/sharedDirectory";
 import { sameName } from "@/utils/users/sameName";
 import { withTimeout } from "@/utils/withTimeout";
 import { MIN_USERNAME_LENGTH, slugifyUsername } from "@/utils/users/username";
@@ -182,15 +183,23 @@ function toDirectoryRecord(user: User): DirectoryRecord {
 // is something to give up *to* (see directoryRecords).
 const CLERK_DIRECTORY_BUDGET_MS = 1500;
 
-// The records for the ids Clerk knows, from memory where it may be served and
-// from the one Clerk round trip `usersById` makes for the rest. An id Clerk
-// doesn't return is simply absent, exactly as it is from `usersById`'s answer.
+// The records for the ids Clerk knows, from the first tier that can answer
+// each: memory (directoryCache), then the database every instance shares
+// (sharedDirectory), then the one Clerk round trip `usersById` makes for the
+// rest. An id Clerk doesn't return is simply absent, exactly as it is from
+// `usersById`'s answer.
 //
 // An entry past its believed life but not its served one (`stale`, see
-// DIRECTORY_MAX_AGE_MS) is answered from memory at once and refreshed after the
-// response, so nobody waits on Clerk for a name they saw a few minutes ago.
-// When some id has to be waited on anyway, the stale ones ride along in that
-// same call instead.
+// DIRECTORY_MAX_AGE_MS in memory, SHARED_DIRECTORY_MAX_AGE_MS in the database)
+// is answered at once and refreshed after the response, so nobody waits on
+// Clerk for a name they saw a few minutes ago. When some id has to be waited on
+// anyway, the stale ones ride along in that same call instead.
+//
+// The database is asked once, for the ids memory holds nothing servable for
+// (absent, or past even its stale life), in a single query. The ids memory
+// holds stale are answered from memory and not sent there: a request whose
+// names are all in memory, fresh or stale, never waits on the database either.
+// What it finds fills memory, so this instance does not ask again.
 //
 // If Clerk fails, or hasn't answered within CLERK_DIRECTORY_BUDGET_MS, every id
 // that missed is answered from whatever the cache still holds of it, expired or
@@ -198,31 +207,58 @@ const CLERK_DIRECTORY_BUDGET_MS = 1500;
 // nothing held at all has no such answer, so then it waits on Clerk and takes
 // its failure, as it always did: the deadline never turns a slow answer into
 // an error. A lookup given up on still lands in the cache when it does answer.
+// A database that fails or is slow is never an error and costs at most its own
+// budget (sharedDirectory): its ids go to Clerk like any other miss.
 async function directoryRecords(userIds: string[]): Promise<Map<string, DirectoryRecord>> {
     const wanted = [...new Set(userIds)];
     if (wanted.length === 0) return new Map();
 
     const start = performance.now();
     const records = new Map<string, DirectoryRecord>();
-    const missing: string[] = [];
-    // Every stale id served, and those of them no refresh is out for yet.
-    let servedStale = 0;
-    const stale: string[] = [];
+    // How many ids memory answered (`fresh` or `stale`), and those it could not.
+    let fromMemory = 0;
+    const unheld: string[] = [];
+    // Every stale id served, from either tier.
+    const servedStale: string[] = [];
     for (const id of wanted) {
         const held = cachedUser(id);
         if (held && held.state !== 'expired') {
+            fromMemory++;
             if (held.record) records.set(id, held.record);
-            if (held.state === 'stale') {
-                servedStale++;
-                // One refresh per id: a stale id already being refreshed is left to it.
-                if (!refreshing.has(id)) stale.push(id);
-            }
+            if (held.state === 'stale') servedStale.push(id);
         } else {
-            missing.push(id);
+            unheld.push(id);
         }
     }
-    const hits = wanted.length - missing.length;
 
+    // The shared tier, for what memory had nothing to serve.
+    let fromShared = 0;
+    let missing = unheld;
+    let storeMs: number | undefined;
+    if (unheld.length > 0) {
+        const started = lookupStarted();
+        const { found, missing: knownMissing, tookMs } = await readSharedUsers(unheld);
+        storeMs = tookMs;
+        const now = Date.now();
+        for (const { record, fetchedAt } of found.values()) {
+            records.set(record.id, record);
+            fromShared++;
+            if (now - fetchedAt >= DIRECTORY_TTL_MS) servedStale.push(record.id);
+        }
+        rememberSharedUsers([...found.values()], started);
+        // An account the database knows Clerk has no user for is answered as
+        // Clerk would: absent. Memory keeps only its short miss for it, so this
+        // process's behaviour is as it always was.
+        const gone = unheld.filter(id => knownMissing.has(id) && !found.has(id));
+        rememberUsers(gone, [], started);
+        fromShared += gone.length;
+        missing = unheld.filter(id => !found.has(id) && !knownMissing.has(id));
+    }
+
+    // One refresh per id: a stale id already being refreshed is left to it. Worked
+    // out here, with nothing awaited between it and the mark that claims the
+    // ids below, so two requests can't both find an id unclaimed.
+    const stale = servedStale.filter(id => !refreshing.has(id));
     if (missing.length > 0) {
         const asked = [...missing, ...stale];
         const lookup = lookUpRecords(asked);
@@ -237,18 +273,38 @@ async function directoryRecords(userIds: string[]): Promise<Map<string, Director
         refreshAfterResponse(stale);
     }
 
-    recordNameLookup({ duration: performance.now() - start, hits, misses: missing.length, stale: servedStale });
+    recordNameLookup({
+        duration: performance.now() - start, hits: fromMemory, misses: missing.length, stale: servedStale.length,
+        shared: fromShared, store: storeMs,
+    });
     return records;
 }
 
-// One Clerk round trip for `ids`, its answer kept in the cache.
+// One Clerk round trip for `ids`, its answer kept in memory and, after the
+// response, in the shared directory. The shared write is told when the lookup
+// began so that a rename landing meanwhile is not written over (see
+// writeSharedUsers); it runs wherever this runs, so a refresh that is itself
+// after the response writes at once.
 function lookUpRecords(ids: string[]): Promise<DirectoryRecord[]> {
     const started = lookupStarted();
+    const startedAt = new Date();
     return usersById(ids).then(users => {
         const found = users.map(toDirectoryRecord);
         rememberUsers(ids, found, started);
+        const answeredAt = new Date();
+        if (sharedDirectoryAvailable()) afterResponse(() => writeSharedUsers(ids, found, startedAt, answeredAt));
         return found;
     });
+}
+
+// Runs `work` once the response has gone (`after`), or at once where there is
+// no response to wait for (a test, a script, work already after one).
+function afterResponse(work: () => Promise<unknown>) {
+    try {
+        after(work);
+    } catch {
+        void work();
+    }
 }
 
 // The stale ids a refresh is already out for, so a burst of requests inside
@@ -270,8 +326,7 @@ function markRefreshing(ids: string[], lookup: () => Promise<unknown>): Promise<
 }
 
 // Refreshes stale entries, none already being refreshed, once the response
-// has gone (`after`), or at once where there is no response to wait for (a
-// test, a script). A failure only leaves them stale: they are served until
+// has gone. A failure only leaves them stale: they are served until
 // they expire, then waited on.
 function refreshAfterResponse(ids: string[]) {
     // Marked now rather than when `after` runs, so the requests between this
@@ -279,14 +334,9 @@ function refreshAfterResponse(ids: string[]) {
     let done!: () => void;
     const refreshed = new Promise<void>(resolve => { done = resolve; });
     void markRefreshing(ids, () => refreshed);
-    const refresh = () => lookUpRecords(ids)
+    afterResponse(() => lookUpRecords(ids)
         .catch(error => console.error(`Refreshing ${ids.length} cached player name(s) failed; serving them until they expire`, error))
-        .finally(done);
-    try {
-        after(refresh);
-    } catch {
-        void refresh();
-    }
+        .finally(done));
 }
 
 // What the cache still holds for every one of these ids, fresh or not — or null

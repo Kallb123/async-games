@@ -89,7 +89,7 @@ export async function POST(request: NextRequest) {
         }
         await client.users.updateUser(userId, { password, username });
         // The handle just changed, which is half of how others see them.
-        forgetCachedUser(userId);
+        await forgetCachedUser(userId);
     } catch (error) {
         console.error('Failed to claim guest account', error);
         return NextResponse.json(
@@ -106,7 +106,7 @@ export async function POST(request: NextRequest) {
     // Again, now the guest flag is gone: it decides whether the handle shows
     // at all (publicHandle), and a lookup between the two writes would have
     // cached the new handle as hidden.
-    forgetCachedUser(userId);
+    await forgetCachedUser(userId);
 
     await dbConnect();
     // A game counts once every player is a registered account
