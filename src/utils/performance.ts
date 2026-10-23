@@ -87,8 +87,23 @@ export type ClientMetric = DataCacheMetric | SessionMetric;
 /** What a `ClientMetric` may say about where it was taken: see `window.__agPerformanceMetric`. */
 export interface ClientMetricContext { pathname?: string; dataSource?: PerformanceDataSource }
 
+/**
+ * How many of a request's player names each tier answered, read back out of
+ * the `names_cache` entry's `desc` (a count, not a time, and the only ones
+ * reported that way): `server_names_shared` came from the database the
+ * instances share, `server_names_miss` waited on Clerk. With `server_names`
+ * and `server_names_store` they say where the names of an `entry` went: a
+ * request whose names all came from memory or the shared directory has a
+ * `server_names_miss` of 0, and its `server_names` is about its
+ * `server_names_store`.
+ */
+export const NAME_COUNT_METRICS = ['server_names_shared', 'server_names_miss'] as const;
+
+/** A metric that counts ids rather than timing anything. */
+export const isCountMetric = (name: string) => (NAME_COUNT_METRICS as readonly string[]).includes(name);
+
 export const PERFORMANCE_METRIC_NAMES = [
-  'navigation', ...JOURNEY_MILESTONES, ...DATA_CACHE_METRICS, ...SESSION_METRICS, ...WARM_UP_METRICS, 'server_total', 'server_auth', 'server_mongo_connect', 'server_mongo_query', 'server_mongo_checkout', 'server_mongo_handshake', 'server_idle', 'server_instance_new', 'server_player_directory', 'server_names', 'server_unread_chat', 'server_kb_worlds', 'server_response_build', 'server_response', 'server_reactions', 'server_achievements', 'server_serialise', 'response_bytes', 'image_load', 'LCP', 'INP', 'CLS', 'FCP', 'TTFB',
+  'navigation', ...JOURNEY_MILESTONES, ...DATA_CACHE_METRICS, ...SESSION_METRICS, ...WARM_UP_METRICS, 'server_total', 'server_auth', 'server_mongo_connect', 'server_mongo_query', 'server_mongo_checkout', 'server_mongo_handshake', 'server_idle', 'server_instance_new', 'server_player_directory', 'server_names', 'server_names_store', ...NAME_COUNT_METRICS, 'server_unread_chat', 'server_kb_worlds', 'server_response_build', 'server_response', 'server_reactions', 'server_achievements', 'server_serialise', 'response_bytes', 'image_load', 'LCP', 'INP', 'CLS', 'FCP', 'TTFB',
   'TTFB_waiting', 'TTFB_cache', 'TTFB_dns', 'TTFB_connection', 'TTFB_request', 'sw_startup',
   'api_total', 'api_connect', 'api_network', 'api_download', 'session_retry',
   'CLS_largest_shift', 'LCP_load_delay', 'LCP_load', 'LCP_render_delay', 'INP_input_delay', 'INP_processing', 'INP_presentation',
@@ -125,10 +140,21 @@ export type PerformanceRequest = typeof PERFORMANCE_REQUESTS[number];
 /** The spans of a `Server-Timing` header that we report, as `server_<span>` metrics. Spans we don't know are left out. */
 export function serverTimingMetrics(header: string | null): MetricValue[] {
   return (header ?? '').split(',').flatMap(span => {
+    const counts = /^\s*names_cache;desc="([^"]*)"/.exec(span);
+    if (counts) return nameCountMetrics(counts[1]);
     const match = /^\s*([a-z_]+);dur=([0-9.]+)/.exec(span);
     const name = match && `server_${match[1]}`;
     return name && (PERFORMANCE_METRIC_NAMES as readonly string[]).includes(name)
       ? [{ name: name as PerformanceMetricName, value: Number(match[2]) }] : [];
+  });
+}
+
+/** The `shared=` and `miss=` counts of a `names_cache` entry's `desc` ("hit=1 miss=0 stale=0 shared=3"); one that lacks a count (an older server) reports nothing for it. */
+function nameCountMetrics(desc: string): MetricValue[] {
+  const counts = new Map([...desc.matchAll(/([a-z]+)=([0-9]+)/g)].map(([, key, value]) => [key, Number(value)]));
+  return NAME_COUNT_METRICS.flatMap(name => {
+    const value = counts.get(name.replace('server_names_', ''));
+    return value === undefined ? [] : [{ name, value }];
   });
 }
 
@@ -221,6 +247,7 @@ export function ttfbPhaseMetrics(attribution: TtfbAttributionInput): MetricValue
 export const PERFORMANCE_REGIONS = [
   'rail', 'topbar', 'board', 'camera', 'hand', 'build-row', 'log', 'chat', 'dashboard', 'landing',
   'section', 'list-row', 'skeleton', 'avatar', 'thumb', 'banner', 'offer', 'disclosure',
+  'column', 'cta', 'footer',
 ] as const;
 export type PerformanceRegion = typeof PERFORMANCE_REGIONS[number];
 const regionNames = new Set<string>(PERFORMANCE_REGIONS);

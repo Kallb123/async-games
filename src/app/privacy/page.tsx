@@ -63,6 +63,15 @@ export default function Privacy() {
                 your friend connections and pending friend requests.
             </p>
 
+            <p>
+                To show you to the people you play with without asking our
+                authentication provider every time, we also keep a short-lived copy of
+                the details they see: your display name, your username if you have
+                one, and the link to your profile picture. It is refreshed from your
+                account whenever someone looks you up, replaced at once when you
+                change your name, and erased when you delete your account.
+            </p>
+
             <h3>Notification data</h3>
             <p>
                 If you turn on push notifications, we store a notification token for
@@ -114,7 +123,7 @@ export default function Privacy() {
             </p>
             <ul>
                 <li><strong>Clerk</strong> — authentication and account storage. Holds your account details, your notification tokens and your notification preferences.</li>
-                <li><strong>MongoDB Atlas</strong> — the database holding games, invitations, results, reactions and friendships.</li>
+                <li><strong>MongoDB Atlas</strong> — the database holding games, invitations, results, reactions, friendships and the short-lived copy of your display details described above.</li>
                 <li><strong>Vercel</strong> — hosting, content delivery, the API that serves the app, and the server logs described above.</li>
                 <li><strong>Google Firebase Cloud Messaging</strong> — delivering push notifications. Firebase receives the notification token for the device being notified and the contents of the notification (for example &ldquo;It&apos;s your turn in Dice Cities&rdquo;). The push service worker in your browser also loads the Firebase messaging library from Google&apos;s CDN (gstatic.com), which means Google sees a request from your browser when the app registers for push.</li>
                 <li><strong>Your device&apos;s push service</strong> — Firebase hands notifications to Apple, Google, Mozilla or Microsoft&apos;s push infrastructure depending on the browser and device you use, so the message can reach you.</li>
@@ -150,6 +159,7 @@ export default function Privacy() {
             <ul>
                 <li>Account data is kept while your account exists, and is deleted when you delete it.</li>
                 <li>Games, results and reactions are kept while your account exists, so your history and statistics stay intact. They involve other players too, so while your account is open a finished game remains visible to them.</li>
+                <li>The copy of your display name, username and picture link is removed if nobody looks you up for 30 days, as soon as you change your name, and as soon as you delete your account, which leaves nothing but your account ID in it for an hour.</li>
                 <li>Notification tokens are removed as soon as they stop working, or when you remove the device.</li>
                 <li>Server logs are kept only briefly, for debugging and security.</li>
             </ul>
@@ -166,6 +176,7 @@ export default function Privacy() {
                 <li>the invitations you have sent and the ones you have received;</li>
                 <li>the results and statistics of your games, and the reactions you left or received;</li>
                 <li>your friend connections and any pending friend requests;</li>
+                <li>the copy of your display name, username and picture link we keep to show you to other players;</li>
                 <li>your account with Clerk — your email address, username and sign-in details — together with your notification tokens and notification preferences, which are held there.</li>
             </ul>
             <p>

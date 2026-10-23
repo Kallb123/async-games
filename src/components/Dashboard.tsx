@@ -8,6 +8,7 @@ import TheirTurnList from "@/components/TheirTurnList";
 import MyCompleteList from "@/components/MyCompleteList";
 import { useDashboard } from "@/utils/hooks/useDashboard";
 import AppRail from "@/components/ui/AppRail";
+import DeskColumn from "@/components/ui/DeskColumn";
 import WhatsNew from "@/components/ui/WhatsNew";
 import PullToRefresh from "@/components/ui/PullToRefresh";
 import Link from "next/link";
@@ -37,6 +38,12 @@ import { DASHBOARD_COMPLETED_LIMIT } from "@/utils/apiModels/GameDataApi";
  * phone has always shown — which is why the split is made where it is, with
  * nothing needing to be reordered to get there.
  *
+ * The first response *replaces* the skeleton columns rather than reshaping them
+ * (`DeskColumn`), and the release notes wait for it: that is what keeps this
+ * screen's layout shift near nothing however many rows a player turns out to
+ * have. Anything new that is put on this screen, below the lists, either
+ * belongs in one of those columns or waits for the lists too.
+ *
  * `.ag-desk` itself dissolves at that breakpoint (`display: contents`) so the
  * grid can also place the notification footer, which the root layout renders
  * beside this screen rather than inside it. Keep `components/HomeLoading.tsx` in step with
@@ -65,18 +72,18 @@ export default function Dashboard() {
                 header, not a shimmer over each list. */}
             <AppRail busy={isLoading || isRefreshing} myTurn={dashboard.myTurn} theirTurn={dashboard.theirTurn} worlds={dashboard.worlds} />
 
-            <div className="ag-desk-col ag-desk-col--main">
+            <DeskColumn area="main" loading={isLoading}>
                 <MyTurnList games={dashboard.myTurn} isLoading={isLoading} />
                 <IncomingInviteList invites={dashboard.incoming} isLoading={isLoading} onChanged={refresh} />
                 <TheirTurnList games={dashboard.theirTurn} isLoading={isLoading} />
                 <KingdomBuilderWorldList worlds={dashboard.worlds} isLoading={isLoading} />
-            </div>
+            </DeskColumn>
 
-            <aside className="ag-desk-col ag-desk-col--side">
+            <DeskColumn area="side" loading={isLoading}>
                 <OutgoingInviteList invites={dashboard.outgoing} isLoading={isLoading} onChanged={refresh} />
                 <MyCompleteList games={dashboard.completed} isLoading={isLoading} limit={DASHBOARD_COMPLETED_LIMIT} />
 
-                <div className="ag-section ag-btn-row" style={{ marginTop: 8 }}>
+                <div className="ag-section ag-btn-row" style={{ marginTop: 8 }} data-perf-region="cta">
                     <Link href="/newgame" aria-label="New game" className="ag-cta ag-cta--dark">
                         <div className="ag-cta-main">
                             <div className="ag-cta-title">New game</div>
@@ -90,16 +97,22 @@ export default function Dashboard() {
                         </div>
                     </Link>
                 </div>
-            </aside>
+            </DeskColumn>
 
             {/* Last on a phone, exactly where it has always been — and on a
                 wide screen under the queue rather than in the panel, because
                 the panel is things to act on and this is reading matter. Its
                 own region so the grid can put it there without it having to
-                move in the running order a phone sees. */}
-            <div className="ag-desk-col ag-desk-col--notes">
-                <WhatsNew />
-            </div>
+                move in the running order a phone sees. It waits for the lists: it
+                is static, so nothing is lost by it arriving with them, and
+                coming in last at the foot of the page it is the one thing that
+                needs no place held for it while they load — rendered earlier
+                it would be shunted by whatever they turned out to hold. */}
+            {!isLoading && (
+                <DeskColumn area="notes">
+                    <WhatsNew />
+                </DeskColumn>
+            )}
         </main>
     );
 }

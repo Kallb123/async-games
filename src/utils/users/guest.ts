@@ -3,6 +3,7 @@ import { randomUUID } from "crypto";
 import { readableName } from "@/utils/ui/players";
 import { mintSignInToken } from "@/utils/users/signInTokens";
 import { forgetCachedUser } from "@/utils/users/directoryCache";
+import { invalidateSharedUser } from "@/utils/users/sharedDirectory";
 
 // A ticket is minted and handed to the client to consume immediately
 // (`signIn.create({ strategy: 'ticket', ticket })`), not stored anywhere —
@@ -119,9 +120,16 @@ export async function createGuest(displayName: string): Promise<GuestTicket> {
 // the billable ghost §3's sweeper exists to clean up, just early and for no
 // reason.
 export async function deleteGuest(userId: string): Promise<void> {
+    // Strict, and before the Clerk user goes: the shared player directory may
+    // hold their name, and a deletion that fails to remove it must fail and be
+    // tried again. Every caller already copes with a throw (the sweep and the
+    // dev button isolate each guest and leave the account for the next run, and
+    // a seat race lost seconds after minting finds no row to remove, so it only
+    // fails with the database itself).
+    await invalidateSharedUser(userId);
     const client = await clerkClient();
     await client.users.deleteUser(userId);
-    forgetCachedUser(userId);
+    await forgetCachedUser(userId, 'deleted');
 }
 
 export interface UnclaimedGuests {
