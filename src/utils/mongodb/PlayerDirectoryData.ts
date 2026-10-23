@@ -15,14 +15,17 @@ import { Schema, model, models } from "mongoose";
 //
 // - `fetchedAt`: when Clerk last answered for this player, which is how old the
 //   copy is. The reader decides what each age is good for.
-// - `invalidatedAt`: set by a rename or a claim, with the display fields
+// - `invalidatedAt`: set by a rename, a claim or an account deletion, with the display fields
 //   removed. A row with no `name` is a miss for reading; the timestamp stays so
 //   a Clerk lookup that began before the change can't write its answer (from
 //   before the change) back over it.
-// - `missingAt`: when Clerk last said it has no user for this id (a deleted
-//   account, in practice a swept guest still named on finished games). Such a
-//   row holds no display field at all, and is believed for a day, so a cold
-//   instance doesn't ask Clerk again for an account that is gone.
+// - `missingAt`, `missingConfirmedAt`: when Clerk first, and then again at
+//   least a minute later, said it has no user for this id (a deleted account,
+//   in practice a swept guest still named on finished games). Such a row holds
+//   no display field at all. It is believed, for a day from the second answer,
+//   so a cold instance doesn't ask Clerk again for an account that is gone; one
+//   answer alone is not believed, in case Clerk was only catching up with a
+//   user just created.
 // - `expiresAt`: when the TTL index reaps the row. `fetchedAt` plus the
 //   retention for a copy, so a player nobody looks up any more is not kept for
 //   ever; an hour ahead for an invalidation marker, which has no use once any
@@ -38,6 +41,7 @@ export interface IPlayerDirectoryData {
     fetchedAt?: Date;
     invalidatedAt?: Date;
     missingAt?: Date;
+    missingConfirmedAt?: Date;
     expiresAt: Date;
 }
 
@@ -52,6 +56,7 @@ const PlayerDirectorySchema = new Schema<IPlayerDirectoryData>({
     fetchedAt: Date,
     invalidatedAt: Date,
     missingAt: Date,
+    missingConfirmedAt: Date,
     expiresAt: { type: Date, required: true },
 });
 // Reaped by the TTL monitor once `expiresAt` has passed, with no cron of its

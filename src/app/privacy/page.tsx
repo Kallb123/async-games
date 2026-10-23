@@ -69,7 +69,7 @@ export default function Privacy() {
                 the details they see: your display name, your username if you have
                 one, and the link to your profile picture. It is refreshed from your
                 account whenever someone looks you up, replaced at once when you
-                change your name, and deleted when you delete your account.
+                change your name, and erased when you delete your account.
             </p>
 
             <h3>Notification data</h3>
@@ -159,7 +159,7 @@ export default function Privacy() {
             <ul>
                 <li>Account data is kept while your account exists, and is deleted when you delete it.</li>
                 <li>Games, results and reactions are kept while your account exists, so your history and statistics stay intact. They involve other players too, so while your account is open a finished game remains visible to them.</li>
-                <li>The copy of your display name, username and picture link is removed if nobody looks you up for 30 days, as soon as you change your name, and when you delete your account.</li>
+                <li>The copy of your display name, username and picture link is removed if nobody looks you up for 30 days, as soon as you change your name, and as soon as you delete your account, which leaves nothing but your account ID in it for an hour.</li>
                 <li>Notification tokens are removed as soon as they stop working, or when you remove the device.</li>
                 <li>Server logs are kept only briefly, for debugging and security.</li>
             </ul>

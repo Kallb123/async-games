@@ -24,7 +24,7 @@ import { __resetSharedDirectoryForTests } from '@/utils/users/sharedDirectory';
 export type StoredDirectoryRow = Record<string, unknown> & { userId: string };
 
 /** The fields a row may ever carry: anything else turning up in one fails the test that looks. */
-export const DIRECTORY_ROW_FIELDS = ['userId', 'name', 'handle', 'imageUrl', 'fetchedAt', 'invalidatedAt', 'missingAt', 'expiresAt'] as const;
+export const DIRECTORY_ROW_FIELDS = ['userId', 'name', 'handle', 'imageUrl', 'fetchedAt', 'invalidatedAt', 'missingAt', 'missingConfirmedAt', 'expiresAt'] as const;
 
 /** The collection's rows by player. Seed it directly; read it back to see what was stored. */
 export const directoryRows = new Map<string, StoredDirectoryRow>();
@@ -50,16 +50,26 @@ function gate(mode: 'ok' | 'fail' | 'hang'): Promise<void> {
     return Promise.resolve();
 }
 
-/** Whether the guard an upsert's filter carries lets it write over `row`. */
-function guardAllows(filter: Record<string, unknown>, row: StoredDirectoryRow | undefined): boolean {
-    const { userId, $or, ...rest } = filter;
-    if (typeof userId !== 'string' || Object.keys(rest).length > 0) throw new Error(`unsupported update filter ${JSON.stringify(filter)}`);
-    if (!$or) return true;
-    const branches = $or as { invalidatedAt: { $exists: false } | { $lt: Date } }[];
-    const before = branches.find(branch => '$lt' in branch.invalidatedAt) as { invalidatedAt: { $lt: Date } } | undefined;
-    if (branches.length !== 2 || !before) throw new Error(`unsupported guard ${JSON.stringify($or)}`);
-    const invalidatedAt = row?.invalidatedAt;
-    return invalidatedAt === undefined || (invalidatedAt as Date).getTime() < before.invalidatedAt.$lt.getTime();
+type Condition = unknown;
+
+/** Whether `row`'s field meets one condition of a filter: equality, `$exists`, `$lt`, `$lte`. Anything else throws. */
+function meets(value: unknown, condition: Condition): boolean {
+    if (condition === null || typeof condition !== 'object' || condition instanceof Date) return value === condition;
+    return Object.entries(condition as Record<string, unknown>).every(([operator, operand]) => {
+        if (operator === '$exists') return (value !== undefined) === operand;
+        if (operator === '$lt') return value instanceof Date && value.getTime() < (operand as Date).getTime();
+        if (operator === '$lte') return value instanceof Date && value.getTime() <= (operand as Date).getTime();
+        throw new Error(`unsupported operator ${operator}`);
+    });
+}
+
+/** Whether `row` (undefined for no row) matches an update filter: a `userId`, field conditions, and an optional `$or`. */
+function matches(filter: Record<string, unknown>, row: StoredDirectoryRow | undefined): boolean {
+    return Object.entries(filter).every(([field, condition]) => {
+        if (field === 'userId') return true;
+        if (field === '$or') return (condition as Record<string, unknown>[]).some(branch => matches(branch, row));
+        return meets(row?.[field], condition);
+    });
 }
 
 function apply(row: StoredDirectoryRow, update: { $set?: Record<string, unknown>; $unset?: Record<string, unknown> }) {
@@ -87,7 +97,7 @@ export function installPlayerDirectoryStore() {
                 return filter.userId.$in.flatMap(id => {
                     const row = directoryRows.get(id);
                     // The projection: nothing but the display fields and the age.
-                    return row ? [{ userId: row.userId, name: row.name, handle: row.handle, imageUrl: row.imageUrl, fetchedAt: row.fetchedAt, missingAt: row.missingAt }] : [];
+                    return row ? [{ userId: row.userId, name: row.name, handle: row.handle, imageUrl: row.imageUrl, fetchedAt: row.fetchedAt, invalidatedAt: row.invalidatedAt, missingConfirmedAt: row.missingConfirmedAt }] : [];
                 });
             },
         };
@@ -102,9 +112,15 @@ export function installPlayerDirectoryStore() {
             if (operation.updateOne) {
                 const { filter, update, upsert } = operation.updateOne;
                 const row = directoryRows.get(filter.userId);
-                if (!guardAllows(filter, row)) { conflict = true; continue; }
-                if (row) apply(row, update);
-                else if (upsert) { const created: StoredDirectoryRow = { userId: filter.userId }; apply(created, update); directoryRows.set(filter.userId, created); }
+                if (row && matches(filter, row)) apply(row, update);
+                // A filter that misses a row that exists is, for an upsert, an
+                // insert the unique index refuses.
+                else if (row && upsert) conflict = true;
+                else if (!row && upsert && matches(filter, undefined)) {
+                    const created: StoredDirectoryRow = { userId: filter.userId };
+                    apply(created, update);
+                    directoryRows.set(filter.userId, created);
+                }
             } else throw new Error(`unsupported bulk operation ${JSON.stringify(operation)}`);
         }
         if (conflict) throw duplicateKey();

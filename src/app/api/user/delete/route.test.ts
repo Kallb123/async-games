@@ -23,7 +23,7 @@ import { ReactionModel } from '@/utils/mongodb/ReactionData';
 import { ChatMessageModel } from '@/utils/mongodb/ChatMessageData';
 import { ChatReadModel } from '@/utils/mongodb/ChatReadData';
 import { AchievementUnlockModel } from '@/utils/mongodb/AchievementUnlockData';
-import { directoryRows, installPlayerDirectoryStore } from '@/utils/testing/playerDirectoryStore';
+import { directoryRows, directoryStore, installPlayerDirectoryStore } from '@/utils/testing/playerDirectoryStore';
 import { POST } from './route';
 
 const query = (value: unknown) => ({ exec: async () => value }) as never;
@@ -65,9 +65,21 @@ describe('POST /api/user/delete', () => {
         const response = await POST(new NextRequest('http://localhost/api/user/delete', { method: 'POST' }));
 
         expect(response.status).toBe(200);
-        // Gone, not marked: nothing of theirs is left in the collection.
-        expect(directoryRows.has('user_ann')).toBe(false);
-        expect(directoryRows.has('user_bob')).toBe(true);
+        // Wiped: only an invalidation marker, with no display field, is left
+        // for a lookup that was already out to find and be refused by.
+        expect(Object.keys(directoryRows.get('user_ann')!).sort()).toEqual(['expiresAt', 'invalidatedAt', 'userId']);
+        expect(directoryRows.get('user_bob')?.name).toBe('Bob');
+    });
+
+    it('fails, before the Clerk user is deleted, when the shared row cannot be wiped, so a retry can finish it', async () => {
+        directoryRows.set('user_ann', { userId: 'user_ann', name: 'Ann', handle: 'ann', imageUrl: null, fetchedAt: new Date(), expiresAt: new Date() });
+        directoryStore.writes = 'fail';
+        deleteUser.mockClear();
+
+        await expect(POST(new NextRequest('http://localhost/api/user/delete', { method: 'POST' }))).rejects.toThrow();
+
+        expect(deleteUser).not.toHaveBeenCalled();
+        expect(directoryRows.get('user_ann')?.name).toBe('Ann');
     });
 
     it('erases the player\'s achievement unlocks by user alone, not by game', async () => {

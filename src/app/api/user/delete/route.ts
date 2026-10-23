@@ -10,6 +10,7 @@ import { ChatMessageModel } from '@/utils/mongodb/ChatMessageData';
 import { ChatReadModel } from '@/utils/mongodb/ChatReadData';
 import { AchievementUnlockModel } from '@/utils/mongodb/AchievementUnlockData';
 import { forgetCachedUser } from '@/utils/users/directoryCache';
+import { invalidateSharedUser } from '@/utils/users/sharedDirectory';
 
 // Deletes the signed-in player's account: everything of theirs in Mongo, then
 // the Clerk user itself. Clerk holds the account details, the registered device
@@ -96,9 +97,17 @@ export async function POST(request: NextRequest) {
     // same race recordGameResult already has here (docs/achievements.md §5.4).
     await AchievementUnlockModel.deleteMany({ userId }).exec();
 
+    // The shared copy of their name and picture (the player directory other
+    // players' screens read) is theirs too. Wiped here with the rest, and
+    // strictly: a database that can't be written fails the request, like the
+    // deletes above, instead of reporting a deletion that left it behind. It
+    // leaves an invalidation marker with no personal data, which also refuses a
+    // lookup that was already out for them and would write the name back. And
+    // before the Clerk user goes, so a failure can be retried whole.
+    await invalidateSharedUser(userId);
+
     await (await clerkClient()).users.deleteUser(userId);
-    // Also removes the shared copy of their name and picture: it is their data,
-    // and the account it describes is gone.
+    // Memory, here and for a lookup that began before the marker above.
     await forgetCachedUser(userId, 'deleted');
 
     return NextResponse.json({ success: true });

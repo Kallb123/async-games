@@ -13,7 +13,7 @@ vi.mock('@clerk/nextjs/server', () => ({
 // The shared player directory a deleted guest is removed from lives in the
 // database; a Map stands in for it (utils/testing/playerDirectoryStore.ts).
 // Safe as a plain import: vitest hoists the vi.mock above it.
-import { directoryRows, installPlayerDirectoryStore } from '@/utils/testing/playerDirectoryStore';
+import { directoryRows, directoryStore, installPlayerDirectoryStore } from '@/utils/testing/playerDirectoryStore';
 import { createGuest, deleteGuest, isGuestPlaceholderEmail, unclaimedGuestsOf } from './guest';
 import { isGuestPlaceholderUsername } from '@/utils/ui/players';
 
@@ -102,12 +102,20 @@ describe('deleteGuest', () => {
         expect(deleteUser).toHaveBeenCalledWith('user_guest_1');
     });
 
-    it('removes the guest from the shared player directory, not just marks them', async () => {
+    it('wipes the guest from the shared player directory, leaving only an invalidation marker', async () => {
         directoryRows.set('user_guest_1', { userId: 'user_guest_1', name: 'Dave', handle: null, imageUrl: null, fetchedAt: new Date(), expiresAt: new Date() });
 
         await deleteGuest('user_guest_1');
 
-        expect(directoryRows.has('user_guest_1')).toBe(false);
+        expect(Object.keys(directoryRows.get('user_guest_1')!).sort()).toEqual(['expiresAt', 'invalidatedAt', 'userId']);
+    });
+
+    it('fails, leaving the Clerk user, when the shared directory cannot be wiped, so the sweep tries again', async () => {
+        directoryStore.writes = 'fail';
+
+        await expect(deleteGuest('user_guest_1')).rejects.toThrow();
+
+        expect(deleteUser).not.toHaveBeenCalled();
     });
 });
 

@@ -164,19 +164,32 @@ function trim() {
  * shown (a rename, a claim, a deletion) to await once their write has landed.
  * Memory is dropped at once and for this process only; the shared tier is what
  * reaches the other instances, so a change shows everywhere on the next lookup
- * rather than after the TTL. `'deleted'` also removes the shared row, which is
- * a person's data, rather than leaving an invalidation marker.
+ * rather than after the TTL. `'deleted'` is for an account that has gone.
+ *
+ * Memory is dropped again after the shared tier has been written, because a
+ * request on this instance that arrives during that wait reads the shared row
+ * that has not yet been invalidated, and would otherwise leave it in memory as
+ * fresh. The second drop also bumps the counter, so a lookup that began in the
+ * wait is not kept either (see `forgottenAt`).
  *
  * Never rejects: the caller's write has landed and must not fail because the
  * cache couldn't be told. If the shared tier can't be reached, other instances
  * keep their copy until it ages out, which is all they had before it existed.
  */
 export async function forgetCachedUser(userId: string, reason: ForgetReason = 'changed'): Promise<void> {
+    dropFromMemory(userId);
+    try {
+        await forgetSharedUser(userId, reason);
+    } finally {
+        dropFromMemory(userId);
+    }
+}
+
+function dropFromMemory(userId: string) {
     entries.delete(userId);
     forgottenAt.delete(userId);
     forgottenAt.set(userId, forgets++);
     if (forgottenAt.size > DIRECTORY_MAX_ENTRIES) forgottenAt.delete(forgottenAt.keys().next().value!);
-    await forgetSharedUser(userId, reason);
 }
 
 /** Test seam: start from an empty cache. */

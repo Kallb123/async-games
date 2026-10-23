@@ -10,8 +10,9 @@ import {
     __heldDirectoryEntriesForTests, __resetDirectoryCacheForTests, DIRECTORY_MISS_TTL_MS, DIRECTORY_TTL_MS, forgetCachedUser,
 } from './directoryCache';
 import {
-    __resetSharedDirectoryForTests, SHARED_BACKOFF_MS, SHARED_KNOWN_MISSING_MS, SHARED_DIRECTORY_MAX_AGE_MS, SHARED_DIRECTORY_RETENTION_MS, SHARED_READ_BUDGET_MS,
+    __resetSharedDirectoryForTests, SHARED_BACKOFF_MS, SHARED_KNOWN_MISSING_MS, SHARED_MISSING_CONFIRM_GAP_MS, SHARED_DIRECTORY_MAX_AGE_MS, SHARED_DIRECTORY_RETENTION_MS, SHARED_READ_BUDGET_MS, invalidateSharedUser,
 } from './sharedDirectory';
+import { PlayerDirectoryModel } from '@/utils/mongodb/PlayerDirectoryData';
 import { ServerTiming } from '@/utils/api/serverTiming';
 import { DIRECTORY_ROW_FIELDS, directoryRows, directoryStore, installPlayerDirectoryStore } from '@/utils/testing/playerDirectoryStore';
 
@@ -183,7 +184,7 @@ describe('the shared directory behind memory', () => {
         expect(getUserList).not.toHaveBeenCalled();
     });
 
-    it('replaces the copy of an account Clerk no longer knows with a marker that holds no display field', async () => {
+    it('replaces the copy of an account Clerk no longer knows with an unconfirmed marker that holds no display field', async () => {
         seed('user_gone', 'Ghost', SHARED_DIRECTORY_MAX_AGE_MS + 1000);
         seed('user_1', 'Ann', MINUTE, 'ann');
         clerkUsers = [person('user_1', 'Ann', 'ann')];
@@ -192,6 +193,7 @@ describe('the shared directory behind memory', () => {
 
         await vi.waitFor(() => expect(directoryRows.get('user_gone')?.missingAt).toBeInstanceOf(Date));
         const marker = directoryRows.get('user_gone')!;
+        // One answer is not believed: no confirmation yet.
         expect(Object.keys(marker).sort()).toEqual(['expiresAt', 'missingAt', 'userId']);
         expect((marker.expiresAt as Date).getTime() - (marker.missingAt as Date).getTime()).toBe(SHARED_KNOWN_MISSING_MS);
         expect(directoryRows.get('user_1')?.name).toBe('Ann');
@@ -208,7 +210,16 @@ describe('the shared directory behind memory', () => {
 });
 
 describe('an account Clerk has no user for', () => {
+    /** A marker Clerk's second "no user" confirmed `age` ago. */
     const mark = (id: string, age: number) => {
+        const missingConfirmedAt = new Date(Date.now() - age);
+        directoryRows.set(id, {
+            userId: id, missingAt: new Date(missingConfirmedAt.getTime() - 5 * MINUTE), missingConfirmedAt,
+            expiresAt: new Date(missingConfirmedAt.getTime() + SHARED_KNOWN_MISSING_MS),
+        });
+    };
+    /** The first answer only. */
+    const markUnconfirmed = (id: string, age: number) => {
         const missingAt = new Date(Date.now() - age);
         directoryRows.set(id, { userId: id, missingAt, expiresAt: new Date(missingAt.getTime() + SHARED_KNOWN_MISSING_MS) });
     };
@@ -233,6 +244,47 @@ describe('an account Clerk has no user for', () => {
         expect(await userIdListToUsernameList(['user_gone'])).toEqual(['Unknown player']);
 
         expect(directoryStore.queries).toHaveLength(2);
+        expect(getUserList).not.toHaveBeenCalled();
+    });
+
+    it('is not believed on one answer: an unconfirmed marker reads as absent, so Clerk is asked', async () => {
+        markUnconfirmed('user_new', 10 * MINUTE);
+        clerkUsers = [person('user_new', 'Dave', 'dave')];
+
+        // A guest just minted, which a lagging Clerk didn't know on the first look.
+        expect(await userIdListToUsernameList(['user_new'])).toEqual(['Dave']);
+
+        expect(askedFor()).toEqual([['user_new']]);
+        // Found, so the marker is gone.
+        await vi.waitFor(() => expect(directoryRows.get('user_new')).toMatchObject({ name: 'Dave' }));
+        expect(directoryRows.get('user_new')?.missingAt).toBeUndefined();
+    });
+
+    it('is confirmed by a second answer at least a minute after the first, and then believed for a day', async () => {
+        await userIdListToUsernameList(['user_gone']);
+        await vi.waitFor(() => expect(directoryRows.get('user_gone')?.missingAt).toBeInstanceOf(Date));
+        expect(directoryRows.get('user_gone')?.missingConfirmedAt).toBeUndefined();
+
+        // Another answer inside the minute confirms nothing...
+        await vi.advanceTimersByTimeAsync(SHARED_MISSING_CONFIRM_GAP_MS - 5000);
+        coldInstance();
+        await userIdListToUsernameList(['user_gone']);
+        await vi.waitFor(() => expect(directoryStore.bulkWrites).toBe(2));
+        expect(directoryRows.get('user_gone')?.missingConfirmedAt).toBeUndefined();
+
+        // ...one after it does.
+        await vi.advanceTimersByTimeAsync(6000);
+        coldInstance();
+        await userIdListToUsernameList(['user_gone']);
+        await vi.waitFor(() => expect(directoryRows.get('user_gone')?.missingConfirmedAt).toBeInstanceOf(Date));
+        const marker = directoryRows.get('user_gone')!;
+        expect(Object.keys(marker).sort()).toEqual(['expiresAt', 'missingAt', 'missingConfirmedAt', 'userId']);
+        expect((marker.expiresAt as Date).getTime() - (marker.missingConfirmedAt as Date).getTime()).toBe(SHARED_KNOWN_MISSING_MS);
+
+        // Believed from then on: a cold instance asks Clerk nothing.
+        getUserList.mockClear();
+        coldInstance();
+        expect(await userIdListToUsernameList(['user_gone'])).toEqual(['Unknown player']);
         expect(getUserList).not.toHaveBeenCalled();
     });
 
@@ -325,18 +377,43 @@ describe('what the shared directory stores', () => {
         }
     });
 
-    it('is nothing at all for a deleted account', async () => {
+    it('is nothing but the id and an invalidation marker for a deleted account', async () => {
         clerkUsers = [person('user_1', 'Ann', 'ann')];
         await userIdListToUsernameList(['user_1']);
         await vi.waitFor(() => expect(directoryRows.has('user_1')).toBe(true));
 
         await forgetCachedUser('user_1', 'deleted');
 
-        expect(directoryRows.has('user_1')).toBe(false);
+        expect(Object.keys(directoryRows.get('user_1')!).sort()).toEqual(['expiresAt', 'invalidatedAt', 'userId']);
         // A cold instance now has nothing to serve for them, and asks Clerk.
         coldInstance();
         await userIdListToUsernameList(['user_1']);
         expect(getUserList).toHaveBeenCalledTimes(2);
+    });
+
+    it('refuses the answer of a lookup that was already out for an account when it was deleted', async () => {
+        let answer!: () => void;
+        getUserList.mockImplementationOnce(() => new Promise(resolve => {
+            answer = () => resolve({ data: [person('user_1', 'Ann', 'ann')] });
+        }));
+        const inFlight = userIdListToUsernameList(['user_1']);
+        await vi.waitFor(() => expect(getUserList).toHaveBeenCalled());
+        await vi.advanceTimersByTimeAsync(5000);
+
+        await forgetCachedUser('user_1', 'deleted');
+        answer();
+        await inFlight;
+        await vi.waitFor(() => expect(directoryStore.bulkWrites).toBe(1));
+
+        // Nobody looks the id up again once their games are gone: the name must
+        // not have been written back.
+        expect(directoryRows.get('user_1')?.name).toBeUndefined();
+    });
+
+    it('fails an invalidation that is asked to be strict when the database cannot be written', async () => {
+        directoryStore.writes = 'fail';
+
+        await expect(invalidateSharedUser('user_1')).rejects.toThrow('the database is down');
     });
 
     it('leaves a player who stops being looked up to the TTL index', async () => {
@@ -422,6 +499,25 @@ describe('changing a player', () => {
         expect(directoryRows.get('user_new')?.name).toBeUndefined();
     });
 
+    it('does not leave a row read during the invalidation in memory as fresh', async () => {
+        seed('user_1', 'Ann', MINUTE, 'ann');
+        // The invalidation write is held, as a slow database would hold it.
+        let release!: () => void;
+        const { PlayerDirectoryModel } = await import('@/utils/mongodb/PlayerDirectoryData');
+        vi.spyOn(PlayerDirectoryModel, 'updateOne').mockReturnValue({
+            exec: () => new Promise(resolve => { release = () => resolve({}); }),
+        } as never);
+
+        const forgotten = forgetCachedUser('user_1');
+        await vi.waitFor(() => expect(release).toBeTypeOf('function'));
+        // A request on this instance meanwhile reads the row that is not yet invalidated.
+        expect(await userIdListToUsernameList(['user_1'])).toEqual(['Ann']);
+        release();
+        await forgotten;
+
+        expect(__heldDirectoryEntriesForTests()).toEqual([]);
+    });
+
     it('retries an invalidation that lost a race to create the row', async () => {
         const { PlayerDirectoryModel } = await import('@/utils/mongodb/PlayerDirectoryData');
         const exec = vi.fn()
@@ -443,6 +539,28 @@ describe('changing a player', () => {
         await expect(forgetCachedUser('user_1', 'deleted')).resolves.toBeUndefined();
 
         expect(__heldDirectoryEntriesForTests()).toEqual([]);
+    });
+});
+
+describe('rows duplicated by a database without the unique index', () => {
+    const rowsFor = (...rows: Record<string, unknown>[]) => vi.spyOn(PlayerDirectoryModel, 'find').mockReturnValue({
+        lean() { return this; },
+        exec: async () => rows,
+    } as never);
+    const copy = (name: string, age: number) => ({ userId: 'user_1', name, handle: null, imageUrl: null, fetchedAt: new Date(Date.now() - age) });
+
+    it('prefers the newest copy', async () => {
+        rowsFor(copy('Old', 3 * MINUTE), copy('Newest', MINUTE), copy('Older', 2 * MINUTE));
+
+        expect(await userIdListToUsernameList(['user_1'])).toEqual(['Newest']);
+        expect(getUserList).not.toHaveBeenCalled();
+    });
+
+    it('serves no copy that an invalidation row is newer than', async () => {
+        clerkUsers = [person('user_1', 'Anne', 'ann')];
+        rowsFor(copy('Ann', 3 * MINUTE), { userId: 'user_1', invalidatedAt: new Date(Date.now() - MINUTE) });
+
+        expect(await userIdListToUsernameList(['user_1'])).toEqual(['Anne']);
     });
 });
 
