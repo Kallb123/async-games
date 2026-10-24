@@ -11,7 +11,7 @@
 // centre's name keeps off them) and as the view turns (a path's runs lie along
 // the frame the camera sees), and not otherwise.
 
-import { CENTRE_LABEL, ODDS_HEIGHT, ODDS_RISE, ODDS_WIDTH, PATH_DASH, PATH_END_RADIUS, PATH_WIDTH, SHIELD_HEIGHT, SHIELD_WIDTH, shieldPath } from "@/games/RealmArena/ui";
+import { CENTRE_LABEL, ODDS_FLANK_DROP, ODDS_FLANK_EXTRA, ODDS_FLANK_WORD, ODDS_HEIGHT, ODDS_RISE, ODDS_WIDTH, PATH_DASH, PATH_END_RADIUS, PATH_WIDTH, SHIELD_HEIGHT, SHIELD_WIDTH, shieldPath } from "@/games/RealmArena/ui";
 import type { Battlefield, Square } from "@/utils/games/battlefield/terrain";
 import type { Rect } from "@/utils/ui/mapLabels";
 import { Billboards, CanvasAtlas, type BillboardAxes } from "./billboards";
@@ -23,8 +23,8 @@ import { areaMiddle, centreLabel, pathPoints, pathStroke, shieldsAt } from "./pr
 export interface PreviewSpec {
     /** The squares a lined-up move takes, in order. */
     path: readonly Square[] | null;
-    /** The chance to hit each target in reach. */
-    odds: readonly { square: Square; chance: number }[];
+    /** The chance to hit each target in reach, and whether the shot would flank it. */
+    odds: readonly { square: Square; chance: number; flanked: boolean }[];
     /** The square a lined-up move ends on, whose cover is shown. */
     coverAt: Square | null;
     /** The centre's area, in squares, when it is drawn with its name. */
@@ -36,6 +36,8 @@ export const NO_PREVIEWS: PreviewSpec = { path: null, odds: [], coverAt: null, c
 // The strokes the isometric board's CSS gives each (`.ag-ra-odds`, `.ag-ra-cover-*`), in board units.
 const ODDS_STROKE = 0.3;
 const ODDS_FONT = { weight: 800, size: 3.1 };
+/** The word a flanked target's badge carries over its chance (`.ag-ra-odds-flank`). */
+const ODDS_FLANK_FONT = { weight: 800, size: 2.4 };
 const SHIELD_STROKE = 0.4;
 /** The dark ground of an odds pill (`--ra-night` at 88%), and of a shield (80%). */
 const ODDS_GROUND = 0.88;
@@ -161,27 +163,33 @@ export class Previews3D {
         }
     }
 
-    /** The chance to hit, a pill over each target, above its HP bar. */
+    /** The chance to hit, a pill over each target, above its HP bar: a flanked target's is inverted and taller, with `ODDS_FLANK_WORD` over the chance. */
     private layOdds(field: Battlefield, look: BoardLook): void {
         if (!this.typeset) return;
         const style: TextStyle = { family: look.font, ...ODDS_FONT };
-        const width = ODDS_WIDTH + ODDS_STROKE, height = ODDS_HEIGHT + ODDS_STROKE;
-        for (const { square, chance } of this.spec.odds) {
-            const rect = this.atlas.rect(`${this.looks}:odds:${chance}`, width, height, context => this.drawPill(context, `${chance}%`, width, height, style, look));
-            this.billboards.add({ at: squareCentre(field, square), y: -ODDS_RISE, width, height, rect });
+        const width = ODDS_WIDTH + ODDS_STROKE;
+        for (const { square, chance, flanked } of this.spec.odds) {
+            const extra = flanked ? ODDS_FLANK_EXTRA : 0;
+            const height = ODDS_HEIGHT + extra + ODDS_STROKE;
+            const rect = this.atlas.rect(`${this.looks}:odds:${chance}:${flanked}`, width, height, context => this.drawPill(context, `${chance}%`, flanked, width, height, style, look));
+            // Hung from the middle of the plain pill; the flank line grows the box upward, so its middle rises by half of it.
+            this.billboards.add({ at: squareCentre(field, square), y: -ODDS_RISE - extra / 2, width, height, rect });
         }
     }
 
-    private drawPill(context: CanvasRenderingContext2D, text: string, width: number, height: number, style: TextStyle, look: BoardLook): void {
+    private drawPill(context: CanvasRenderingContext2D, text: string, flanked: boolean, width: number, height: number, style: TextStyle, look: BoardLook): void {
         const inset = ODDS_STROKE / 2;
         context.beginPath();
         context.roundRect(inset, inset, width - 2 * inset, height - 2 * inset, ODDS_HEIGHT / 2);
-        context.fillStyle = rgba(look.night, ODDS_GROUND);
+        context.fillStyle = flanked ? rgba(look.gold) : rgba(look.night, ODDS_GROUND);
         context.fill();
         context.strokeStyle = rgba(look.gold);
         context.lineWidth = ODDS_STROKE;
         context.stroke();
-        drawText(context, text, width / 2, height / 2, style, rgba(look.gold), { baseline: "middle" });
+        const ink = rgba(flanked ? look.night : look.gold);
+        // The chance stands in the bottom `ODDS_HEIGHT` of the box, as a plain pill's does.
+        drawText(context, text, width / 2, height - (ODDS_HEIGHT + ODDS_STROKE) / 2, style, ink, { baseline: "middle" });
+        if (flanked) drawText(context, ODDS_FLANK_WORD, width / 2, ODDS_STROKE / 2 + ODDS_FLANK_DROP, { family: look.font, ...ODDS_FLANK_FONT }, ink, { baseline: "middle" });
     }
 
     dispose(): void {

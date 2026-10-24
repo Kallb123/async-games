@@ -1,6 +1,6 @@
 # Realm Arena — Game Design Document
 
-**Status:** v1.62. The Realm troop overhaul (§34) is implemented for new
+**Status:** v1.63. The Realm troop overhaul (§34) is implemented for new
 battles in rules version 9, using §34.10's proposed defaults for playtesting,
 sight with angles (§36) in rules version 10, and co-op for a team of four in
 Hold Out (§37). Battles already created keep their original rules.
@@ -1027,7 +1027,8 @@ recap, a guide and a tutorial.
     where it would go on watch with it.
   - The battlefield runs edge to edge, with no frame round it.
   - Each enemy in reach wears its chance to hit, previewed from the end of a
-    lined-up move.
+    lined-up move, and Flank, the badge inverted to gold, where the shot would
+    find no cover; the list of targets says so too.
 - **PR 8, replay and recap.**
   - A recap row is the line the log already wrote.
   - The feed tells everything one character did in a turn as one row: its
@@ -1810,7 +1811,8 @@ is kept apart, in [`../isometric-animations.md`](../isometric-animations.md).
   | Event | Text |
   |---|---|
   | A hit | **−3**, in the danger colour |
-  | A graze | **−2** with "Graze" under it, in amber |
+  | A flanked hit | **−4** with "Flanked" under it, in the same colour |
+  | A graze | **−2** with "Graze" under it, in amber; "Graze · flanked" when the target had no cover |
   | A miss | **Miss**, muted |
   | A strike | **−4** |
   | Burning, as a turn begins | **−1** with the burning mark |
@@ -2169,6 +2171,8 @@ place — moving — what a player can be held to knowing.
 - **Accepted: a shot's odds.** A shot from out of sight at one of the
   viewer's characters is told with its chance to hit, as the sheet showed it
   before the move: a hint at the cover between them, not a square. A shot
+  that did damage also says whether it found the target without cover. That
+  is still a hint at the cover, not a square, and a miss never says so. A shot
   between two squads the viewer can't see isn't told at all.
 - **Accepted: a shield wall out of sight.** A Knight's Bulwark covers any
   character beside it, friend or enemy, whether or not the shooter sees the
@@ -4913,3 +4917,4 @@ Realm, its sibling in the same world.
 | 1.60 | The Sunken Village (§35), Hold Out's second battlefield, for a team of three: a sunken green ringed by hedges, lanes and roofless cottages that keep archers' sightlines short. Three new terrains: lanes, cottage walls, and hedges, which can be climbed through and burned away, and which nobody sees through unless one end stands as high as the hedge's top, as a tower does. The first map with an elevation layer, and ideas for the next battlefields. |
 | 1.61 | Sight with angles (§36, rules and command version 10): sight runs from eye to eye, so what hides a character depends on the angle it's seen from. From higher ground, a wall still hides whoever is pressed close behind it, and the edge of a rise or a parapet hides the ground just below it. Hedges stand a full height, a wall that a blast clears. Battles created before it keep level sight and the low hedge. |
 | 1.62 | Co-op for a team of four, in Hold Out on the Sacked Fort or the Sunken Village only (§37): a zone in each quarter of the middle and the edge's thirds dealt to the four warbands as a Latin square, 13 rounds as for two and three. Hold the Centre and the gate forts stay at three, and `coopTeamMax` / `fitsCoop` say which settings seat which teams. No rules version: no four-player co-op battle existed. |
+| 1.63 | The flank badge: a target a shot would find with no cover wears Flank on its odds badge (gold, inverted) on both boards, in the list of targets and in the turn sheet, and the damage a flanked shot did is labelled Flanked (§26.1). Shot events carry `flanked?: true` when a shot that did damage found no cover, so older recorded battles read as before. Presentation only: no rules or command version changes. |

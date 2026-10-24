@@ -47,6 +47,15 @@ describe("hitting (§13.3)", () => {
     const odds = (target: Fighter, from: Fighter = archer, others: Fighter[] = [], kind?: "attack" | "aimedShot" | "overwatch", onField = field) =>
         shotOdds({ field: onField, fighters: [from, target, ...others] }, from, target, kind);
 
+    it("marks a shot's breakdown flanked where there's no cover, and a strike's never", () => {
+        const open = fighter(2, "b", "knight", at(field, 5, 3));
+        const covered = fighter(3, "b", "knight", at(field, 5, 2));
+        expect(oddsBreakdown({ field, fighters: [archer, open, covered] }, archer, open)).toMatchObject({ flanked: true });
+        expect(oddsBreakdown({ field, fighters: [archer, open, covered] }, archer, covered)).toMatchObject({ flanked: false });
+        const knight = fighter(4, "a", "knight", at(field, 4, 3));
+        expect(oddsBreakdown({ field, fighters: [knight, open] }, knight, open).flanked).toBeUndefined();
+    });
+
     it("takes 20 off for half cover, and flanking adds 1 damage where there's none", () => {
         expect(odds(fighter(2, "b", "knight", at(field, 5, 2)))).toMatchObject({ chance: 60, cover: "half", flanked: false, damage: 3, grazeDamage: 2 });
         expect(odds(fighter(2, "b", "knight", at(field, 5, 3)))).toMatchObject({ chance: 80, cover: "none", flanked: true, damage: 4, grazeDamage: 2 });
@@ -317,11 +326,20 @@ describe("act", () => {
         expect(() => act({ field, fighters: [fighter(1, "a", "knight", 0)] }, "b", { kind: "hunker", fighter: 1 }, noRolls)).toThrow("That isn't one of your characters");
     });
 
+    it("tells a shot it flanked only when it did damage, so a miss gives away nothing about the cover", () => {
+        const field = fieldOf();
+        const state: BattleState = { field, fighters: [fighter(1, "a", "archer", at(field, 0, 0)), fighter(2, "b", "knight", at(field, 5, 0))] };
+        const shot = (roll: number) => run(state, "a", { kind: "attack", fighter: 1, target: 2 }, [roll]).events[0];
+        expect(shot(10)).toMatchObject({ result: "hit", flanked: true });
+        expect(shot(99)).toMatchObject({ result: "miss" });
+        expect(shot(99)).not.toHaveProperty("flanked");
+    });
+
     it("rolls a shot, and a graze does half damage, rounded up", () => {
         const field = fieldOf();
         const state: BattleState = { field, fighters: [fighter(1, "a", "archer", at(field, 0, 0)), fighter(2, "b", "knight", at(field, 5, 0))] };
         const graze = run(state, "a", { kind: "attack", fighter: 1, target: 2 }, [85]);
-        expect(graze.events).toEqual([{ kind: "shot", fighter: 1, target: 2, chance: 80, roll: 85, result: "graze", damage: 2, reaction: false }]);
+        expect(graze.events).toEqual([{ kind: "shot", fighter: 1, target: 2, chance: 80, roll: 85, result: "graze", damage: 2, reaction: false, flanked: true }]);
         expect(graze.byId(2).hp).toBe(10);
         expect(graze.byId(1).ap).toBe(2);
         expect(run(state, "a", { kind: "attack", fighter: 1, target: 2 }, [95]).byId(2).hp).toBe(12);
@@ -388,7 +406,7 @@ describe("reactions (§13.4)", () => {
         const { byId, events } = run({ field, fighters: [archer, mover] }, "a", { kind: "move", fighter: 2, path }, [1]);
         expect(events).toEqual([
             { kind: "moved", fighter: 2, path: path.slice(0, 2), sneaking: false },
-            { kind: "shot", fighter: 1, target: 2, chance: 65, roll: 1, result: "hit", damage: 4, reaction: true },
+            { kind: "shot", fighter: 1, target: 2, chance: 65, roll: 1, result: "hit", damage: 4, reaction: true, flanked: true },
             { kind: "moved", fighter: 2, path: path.slice(1), sneaking: false },
         ]);
         expect(byId(1).banked).toBe(2);

@@ -416,6 +416,12 @@ describe("fighterName and whoseName", () => {
 describe("eventLines", () => {
     const fighters = [ready(0, "a", "archer", 0), ready(1, "b", "knight", 1, { hp: 0 })];
 
+    it("tells a flanked hit as one", () => {
+        const events: BattleEvent[] = [{ kind: "shot", fighter: 0, target: 1, chance: 80, roll: 12, result: "hit", damage: 5, reaction: false, flanked: true }];
+        const [line] = eventLines(events, fighters, "a", nameFor);
+        expect(line.sentence).toBe("Your Archer hit Bob's Knight for 5, flanked");
+    });
+
     it("tells a move once, however reactions broke it up, and each shot with its roll", () => {
         const events: BattleEvent[] = [
             { kind: "moved", fighter: 0, path: [0, 1], sneaking: false },
@@ -508,6 +514,17 @@ describe("battleCues", () => {
     /** Each piece of hit text as "who@square value/label at start", to read the order by. */
     const told = (cues: BattleCue[]) => only(cues, "text")
         .map(cue => `${cue.fighter}@${cue.square} ${cue.value}${cue.label ? `/${cue.label}` : ""} ${cue.start}`);
+
+    it("labels a flanked shot's damage \"Flanked\", keeps its tone, and says nothing for a miss", () => {
+        const shot = (result: "hit" | "graze" | "miss", flanked?: true): ToldEvent => ({ kind: "shot", fighter: 1, target: 0, chance: 60, result, damage: result === "miss" ? 0 : 3, reaction: false, ...(flanked ? { flanked } : {}) });
+        const cuesFor = (event: ToldEvent) => only(battleCues(FIELD, [event], before), "text").map(({ value, label, tone }) => ({ value, label, tone }));
+        expect(cuesFor(shot("hit", true))).toEqual([{ value: "\u22123", label: "Flanked", tone: "hit" }]);
+        expect(cuesFor(shot("graze", true))).toEqual([{ value: "\u22123", label: "Graze \u00b7 flanked", tone: "graze" }]);
+        expect(cuesFor(shot("miss", true))).toEqual([{ value: "Miss", label: undefined, tone: "miss" }]);
+        // An open-field shot with no flank in it keeps the labels it always had.
+        expect(cuesFor(shot("hit"))).toEqual([{ value: "\u22123", label: undefined, tone: "hit" }]);
+        expect(cuesFor(shot("graze"))[0].label).toBe("Graze");
+    });
 
     it("flies a move's overwatch shots one after another, each to where the mover had got to, its text rising as it lands", () => {
         const cues = battleCues(FIELD, [

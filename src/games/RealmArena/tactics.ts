@@ -181,6 +181,8 @@ export interface AttackOption {
     target: Fighter;
     /** Percent to hit, 0–100. */
     chance: number;
+    /** Whether a shot at it has no cover to meet, and so does `FLANK_BONUS` more damage: never a strike. */
+    flanked: boolean;
 }
 
 /**
@@ -193,7 +195,10 @@ export function attackOptions(state: BattleState, fighter: Fighter, square: Squa
     const { battle, moved } = standingAt(state, { ...fighter, ap: actionPointsOf(fighter, state) }, square);
     return targetsOf(battle, fighter.owner, moved, "attack").flatMap(id => {
         const target = fighterById(battle, id);
-        return target ? [{ target, chance: hitChance(battle, moved, target) }] : [];
+        if (!target) return [];
+        // One sum for both: the chance and whether it flanks come out of the same breakdown.
+        const { chance, flanked = false } = oddsBreakdown(battle, moved, target);
+        return [{ target, chance, flanked }];
     }).sort((a, b) => b.chance - a.chance);
 }
 

@@ -319,6 +319,17 @@ export function shadedSquares({ unseen, smoke, aiming, placing, sealed }: {
 export const ODDS_WIDTH = 10.5;
 export const ODDS_HEIGHT = 4;
 export const ODDS_RISE = HP_BAR_RISE + HP_BAR_HEIGHT + ODDS_HEIGHT / 2 + 0.6;
+/**
+ * A flanked target's badge is the same pill with `ODDS_FLANK_WORD` set in a
+ * line of its own over the chance: that much taller, grown upward so the
+ * chance stays where every badge's chance is, above the HP bar.
+ */
+export const ODDS_FLANK_WORD = "Flank";
+/** What the damage a flanked shot did is labelled, and the word its caption ends on. */
+export const FLANKED_WORD = "Flanked";
+export const ODDS_FLANK_EXTRA = 2.8;
+/** How far below a flanked badge's top the middle of its word stands. */
+export const ODDS_FLANK_DROP = 2.0;
 /** A cover shield standing on a square's edge: narrow enough to stay clear of the figure's disc and the HP bar. */
 export const SHIELD_WIDTH = 3.6;
 export const SHIELD_HEIGHT = 4.6;
@@ -839,7 +850,7 @@ export function eventLines(events: readonly ToldEvent[], fighters: readonly Figh
                     title,
                     sub: `${who} at ${name(event.target)} · ${event.chance}% to hit`,
                     ...rollOf(event),
-                    sentence: `${who} ${verb} ${name(event.target)}${event.result === "miss" ? "" : ` for ${event.damage}`}`,
+                    sentence: `${who} ${verb} ${name(event.target)}${event.result === "miss" ? "" : ` for ${event.damage}${event.flanked ? `, ${FLANKED_WORD.toLowerCase()}` : ""}`}`,
                 }];
             }
             case "struck": {
@@ -960,7 +971,7 @@ export interface TextCue extends Timed {
     square: Square;
     /** The big text: "−3", "+4", "Miss", "Down", an effect's name on its own, or what a character is doing: "Overwatch". */
     value: string;
-    /** The small text under it: "Graze", or the effect it put on. */
+    /** The small text under it: "Graze", "Flanked", or the effect it put on. */
     label?: string;
     /** The effect whose mark stands beside it: burning's, as it does its damage, or a stance's as it takes it. */
     mark?: EffectId;
@@ -1352,6 +1363,18 @@ function largestFit(floor: number, ceiling: number, fits: (ms: number) => boolea
     return low;
 }
 
+/**
+ * The small text under a shot's damage: "Graze" on a graze, "Flanked" when the
+ * target had no cover and the shot did the more for it, both on a graze that
+ * was. A miss did no damage to have flanked, so it says neither. A hit keeps
+ * its own tone: green is the heal's.
+ */
+function shotLabel(event: Extract<ToldEvent, { kind: "shot" }>): { label?: string } {
+    if (event.result === "miss") return {};
+    if (event.result === "graze") return { label: event.flanked ? `Graze · ${FLANKED_WORD.toLowerCase()}` : "Graze" };
+    return event.flanked ? { label: FLANKED_WORD } : {};
+}
+
 /** Each thing an action did, timed at `pace`, before its text is laned or any of it is shortened to fit. */
 function timeline(field: Battlefield, events: readonly ToldEvent[], before: readonly Fighter[], after: readonly Fighter[], options: BattleCueOptions, pace: Pace): BattleCue[] {
     const { ABILITIES, EFFECTS, ITEMS } = rulesetOf(options);
@@ -1472,7 +1495,7 @@ function timeline(field: Battlefield, events: readonly ToldEvent[], before: read
                 if (event.reaction) say(event.fighter, land - flight, OVERWATCH_WORD);
                 fly(event.fighter, to, missile, event.result, land, flight, SHOT_AFTER_MS);
                 text(event.target, land, event.result === "miss" ? "Miss" : minus(event.damage), event.result,
-                    { hpChange: event.result === "miss" ? 0 : -event.damage, ...(event.result === "graze" ? { label: "Graze" } : {}), from: at.get(event.fighter) });
+                    { hpChange: event.result === "miss" ? 0 : -event.damage, ...shotLabel(event), from: at.get(event.fighter) });
                 break;
             }
             case "struck": {
