@@ -19,9 +19,12 @@ import { useCallback } from 'react';
  * back to the live game — which drops the variable and gives the space straight
  * back.
  */
-/** The height tokens `ag-theme.css` declares for this. Named rather than left
- *  as `string` so a typo is a type error, not a variable nothing reads. */
-type HeightVar = '--ag-banner-height' | '--ag-review-dock-height' | '--ag-actions-dock-height';
+/** The height tokens `ag-theme.css` declares for this, listed once so what
+ *  publishes them (`useHeightVar`) and what adds them up (`useViewportRoom`)
+ *  can't drift apart. Named rather than left as `string` so a typo is a type
+ *  error, not a variable nothing reads. */
+export const HEIGHT_VARS = ['--ag-banner-height', '--ag-review-dock-height', '--ag-actions-dock-height'] as const;
+type HeightVar = typeof HEIGHT_VARS[number];
 
 export function useHeightVar(cssVar: HeightVar) {
     return useCallback((node: HTMLElement | null) => {

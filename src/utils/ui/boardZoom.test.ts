@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { centredScroll, drawnView, exactZoom, FIT_WIDTH, focusZoom, glideFrame, pinchOffset, viewRegion, wheelZoomFactor, zoomLevels } from './boardZoom';
+import { canExpand, centredScroll, drawnView, EXPAND_FOOT_PX, EXPAND_TOP_PX, EXPAND_WORTH, expandedHeight, expandedLevels, expandFloor, exactZoom, FIT_WIDTH, focusZoom, glideFrame, pinchOffset, viewRegion, wheelZoomFactor, zoomLevels } from './boardZoom';
 
 describe('zoomLevels', () => {
     it("steps fit, the board's own width, then twice it", () => {
@@ -297,5 +297,68 @@ describe('viewRegion', () => {
         const end = shown(1);
         expect(end.x).toBeCloseTo(200, 6);
         expect(end.width).toBeCloseTo(100, 6);
+    });
+});
+
+describe('expandedHeight', () => {
+    it('takes the bar above and the strip below off what is available', () => {
+        expect(expandedHeight(800, 250, 640)).toBe(800 - EXPAND_TOP_PX - EXPAND_FOOT_PX);
+    });
+
+    it("never goes past the board's own height at its deepest zoom", () => {
+        expect(expandedHeight(2000, 250, 480)).toBe(1200);
+    });
+
+    it('is nothing rather than negative on a screen with no room', () => {
+        expect(expandedHeight(100, 250, 640)).toBe(0);
+    });
+});
+
+describe('expanding a board', () => {
+    const levels = zoomLevels(240, 640);
+
+    it('is worth offering to a phone-width board on a tall screen', () => {
+        expect(canExpand(expandedHeight(800, 250, 640), 250)).toBe(true);
+    });
+
+    it('is not worth offering when the board is already as tall as the screen', () => {
+        expect(canExpand(expandedHeight(800, 620, 640), 620)).toBe(false);
+    });
+
+    it('is worth offering from exactly the worthwhile ratio up', () => {
+        expect(canExpand(250 * EXPAND_WORTH, 250)).toBe(true);
+        expect(canExpand(250 * EXPAND_WORTH - 1, 250)).toBe(false);
+    });
+
+    it('is never offered for a board that has not been measured', () => {
+        expect(canExpand(600, null)).toBe(false);
+        expect(canExpand(600, 0)).toBe(false);
+    });
+
+    it('floors at the zoom that fills the pane', () => {
+        expect(expandFloor(500, 250, 640)).toBe(200);
+    });
+
+    it('never floors below fit, nor above the deepest step', () => {
+        expect(expandFloor(200, 250, 640)).toBe(FIT_WIDTH);
+        expect(expandFloor(5000, 250, 640)).toBe(640);
+    });
+
+    it('floors at fit on a degenerate size rather than dividing by zero', () => {
+        expect(expandFloor(500, 0, 640)).toBe(FIT_WIDTH);
+        expect(expandFloor(0, 250, 640)).toBe(FIT_WIDTH);
+    });
+
+    it('swaps fit for the floor in the pill\'s steps and keeps the deeper ones', () => {
+        expect(expandedLevels(levels, 200)).toEqual([200, 240, 640]);
+        expect(expandedLevels(levels, 300)).toEqual([300, 640]);
+    });
+
+    it("drops a step that is within a point of the floor", () => {
+        expect(expandedLevels(levels, 239.5)).toEqual([239.5, 640]);
+    });
+
+    it('is a single stop once the floor reaches the deepest step', () => {
+        expect(expandedLevels(levels, 640)).toEqual([640]);
     });
 });

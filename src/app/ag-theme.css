@@ -1880,6 +1880,45 @@ a.ag-list-row, a.ag-list-row-main {
 /* The same pill as a tappable control in the opposite corner (BoardZoom's
    zoom toggle), rather than a second dark-pill style. */
 .ag-board-tag--action { top: 12px; right: 12px; bottom: auto; left: auto; border: none; cursor: pointer; }
+/* BoardZoom's expand / shrink button: the same pill, as a 32px circle in the
+   bottom-right corner, where nothing else of the board's is pinned. The icon is
+   scoped under the frame to win over `.ag-board-frame svg`, which sizes the
+   board itself, and strokes in `currentColor`, so a game's own colour for
+   `.ag-board-tag` (brass, crimson, oxblood) dresses it with no rule here. */
+.ag-board-expand {
+    top: auto;
+    right: 12px;
+    bottom: 12px;
+    left: auto;
+    display: grid;
+    place-items: center;
+    width: 32px;
+    height: 32px;
+    padding: 0;
+}
+.ag-board-frame .ag-board-expand svg {
+    width: 14px;
+    height: 14px;
+    border-radius: 0;
+    fill: none;
+    stroke: currentColor;
+    stroke-width: 1.8;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+}
+/* The bottom-left of a frame is where a board prints what it wants the player
+   to do (`boardTag`, a placement prompt), and the bottom-right is now the
+   button's: a long one would run underneath it. Held clear of it and cut with
+   an ellipsis rather than wrapped, which a pill can't do. The clearance is the
+   button (32px), its 12px margin, and the same again between. It is named once,
+   on the frames that draw the button, for the rules here and Realm Arena's
+   below to read, and a board without it keeps its width. */
+.ag-board-frame:has(.ag-board-expand) { --ag-board-expand-clear: 68px; }
+.ag-board-frame:has(.ag-board-expand) > .ag-board-tag:not(.ag-board-tag--action) {
+    max-width: calc(100% - var(--ag-board-expand-clear));
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
 .ag-board-overlay {
     position: absolute;
     inset: 6px;
@@ -5335,7 +5374,7 @@ html:has(.ag-pull) { overscroll-behavior-y: contain; }
     /* Scrolled to as a review starts playing (`scrollIntoView`): its top lands
        just under the sticky top bar (62px) rather than behind it. The pinned
        review dock is at the foot, and the board fits the screen above it. */
-    scroll-margin-top: 72px;
+    scroll-margin-top: 72px; /* the same bar clearance as `EXPAND_TOP_PX` in boardZoom.ts */
     background: radial-gradient(circle at 50% 30%, var(--ra-night-2), var(--ra-night));
 }
 /* The battlefield floats on the night, edge to edge: an isometric map is a
@@ -5730,6 +5769,14 @@ html:has(.ag-pull) { overscroll-behavior-y: contain; }
 .ag-board-frame .ag-ra-targets-row .ag-ra-crosshair { width: 10px; height: 10px; opacity: 0.7; }
 .ag-ra-targets-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
 .ag-ra-targets-row b { font-weight: 800; color: var(--ag-gold); }
+/* Where BoardZoom draws its expand button in the frame's bottom-right corner
+   (`--ag-board-expand-clear`, in the board section above), the card is held
+   clear of it, and the caption, which spans the foot of the frame centred, has
+   the button's corner taken out of it: the clearance less the 12px gutter it
+   already leaves on its right. (The turn pill sits in the top corner, out of
+   the button's way.) */
+.ag-board-frame:has(.ag-board-expand) .ag-ra-targets { max-width: calc(100% - var(--ag-board-expand-clear)); }
+.ag-board-frame:has(.ag-board-expand) .ag-ra-caption { right: calc(var(--ag-board-expand-clear) - 12px); }
 /* The word on a target the shot would flank (an `.ag-tag`), in the inverted colours of its badge on the board. */
 .ag-ra-targets-flank { margin-left: 0; background: var(--ag-gold); color: var(--ra-night); }
 

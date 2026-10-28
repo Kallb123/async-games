@@ -1,7 +1,8 @@
 'use client'
 import React, { createContext, useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import { centredScroll, drawnView, easeInOut, exactZoom, FIT_WIDTH, FOCUS_MARGIN_PX, focusZoom, GLIDE_LEAD, GLIDE_MS, glideFrame, pinchOffset, wheelZoomFactor, zoomLevels, type ZoomView } from '@/utils/ui/boardZoom';
+import { canExpand, centredScroll, drawnView, easeInOut, EXPAND_TOP_PX, expandedHeight, expandedLevels, expandFloor, exactZoom, FIT_WIDTH, FOCUS_MARGIN_PX, focusZoom, GLIDE_LEAD, GLIDE_MS, glideFrame, pinchOffset, wheelZoomFactor, zoomLevels, type ZoomView } from '@/utils/ui/boardZoom';
 import { prefersReducedMotion } from '@/utils/hooks/usePrefersReducedMotion';
+import { useViewportRoom } from '@/utils/hooks/useViewportRoom';
 import type { Rect } from '@/utils/ui/mapLabels';
 import { BoardViewContext, ViewFeed } from '@/components/ui/boardView';
 
@@ -440,15 +441,42 @@ function watchSize(pane: HTMLDivElement, content: HTMLDivElement, measure: () =>
  * empty spacer of that size is what scrolls, and the child is pinned to the
  * pane, told what part of the board is in it (`useBoardView`) however that
  * came about, and draws exactly that.
+ *
+ * A fifth control is the round expand / shrink button in the frame's
+ * bottom-right corner: it grows the pane to most of the screen's height and
+ * zooms the board to fill it, which a phone-width map, a short strip with the
+ * screen empty round it, is worth. It is only offered where that helps — a
+ * phone feature without a breakpoint — and the helpers in boardZoom.ts hold
+ * the detail (`expandedHeight`, `canExpand`, `expandFloor`).
  */
 export default function BoardZoom({ zoomWidth, maxWidth, viewBox, focus, onFocused, pivot, camera = false, children }: BoardZoomProps) {
     const levels = useMemo(() => zoomLevels(zoomWidth, maxWidth), [zoomWidth, maxWidth]);
     const max = levels[levels.length - 1];
 
-    const [zoom, setZoom] = useState(FIT_WIDTH);
+    // The zoom the player has chosen; `zoom` below is what is drawn, which an
+    // expanded pane may hold deeper.
+    const [chosenZoom, setZoom] = useState(FIT_WIDTH);
     // The height the board comes to when fitted to the column — what the
     // frame holds on to once it's zoomed, so the page doesn't grow with it.
     const [fitHeight, setFitHeight] = useState<number | null>(null);
+    const [expanded, setExpanded] = useState(false);
+    // Set by the expand button for the layout effect to scroll the page to the pane.
+    const revealRef = useRef(false);
+    // What an expanded pane may be, from the screen it is on: its height less
+    // the fixed docks the app publishes for the space they cover.
+    const room = useViewportRoom();
+    const roomy = fitHeight ? expandedHeight(room, fitHeight, max) : 0;
+    // Derived rather than reset: a window that outgrows an expansion closes it
+    // here, and `expanded` is left to take effect again if it shrinks back.
+    const offerExpand = levels.length > 1 && canExpand(roomy, fitHeight);
+    const isExpanded = expanded && offerExpand;
+    // Fit, unless expanded: then the zoom that fills the taller pane. Nothing is
+    // ever drawn below it, so a screen that has since grown can't leave the
+    // pane half empty under a board chosen at the old floor.
+    const floor = isExpanded && fitHeight ? expandFloor(roomy, fitHeight, max) : FIT_WIDTH;
+    const zoom = Math.max(chosenZoom, floor);
+    // The pill's steps: the board's own, or with the floor for fit while expanded.
+    const ladder = isExpanded ? expandedLevels(levels, floor) : levels;
     const paneRef = useRef<HTMLDivElement>(null);
     const contentRef = useRef<HTMLDivElement>(null);
     // Whether it's a camera is fixed for the component's life: a camera is told
@@ -493,7 +521,10 @@ export default function BoardZoom({ zoomWidth, maxWidth, viewBox, focus, onFocus
     // or a focus arriving mid-gesture — ends that pinch here: the board it was
     // transforming has just been laid out afresh underneath it. (Everything
     // that changes the zoom settles a glide in flight first, so none is left
-    // to settle here.)
+    // to settle here.) Expanding runs it too, since the pane changes size
+    // whether or not the zoom does — a board already deeper than the floor —
+    // and with nothing recorded it only hands the camera the pane as it is;
+    // it's also where the page is scrolled up to the pane, now it has grown.
     useLayoutEffect(() => {
         zoomRef.current = zoom;
         pinchRef.current = null;
@@ -505,6 +536,10 @@ export default function BoardZoom({ zoomWidth, maxWidth, viewBox, focus, onFocus
         const scrollTo = scrollToRef.current;
         scrollToRef.current = null;
         surface.release();
+        if (revealRef.current) {
+            revealRef.current = false;
+            pane.scrollIntoView({ block: 'start', behavior: prefersReducedMotion() ? 'auto' : 'smooth' });
+        }
         const focusTarget = focusTargetRef.current;
         if (focusTarget) {
             focusTargetRef.current = null;
@@ -521,7 +556,7 @@ export default function BoardZoom({ zoomWidth, maxWidth, viewBox, focus, onFocus
         }
         // The board has the width the pane was given, wherever it's scrolled to.
         surface.scrolled();
-    }, [zoom, surfaceOf]);
+    }, [zoom, isExpanded, surfaceOf]);
 
     // The fitted height follows the column's width and the board's own shape,
     // so it's remeasured whenever either might have changed. The board's
@@ -618,9 +653,10 @@ export default function BoardZoom({ zoomWidth, maxWidth, viewBox, focus, onFocus
         letGo();
         takenRef.current = false;
         const inset = focus.inset ?? 0;
-        const level = focus.exact
+        // Never below the floor, which only an expanded pane has above fit.
+        const level = Math.max(floor, focus.exact
             ? exactZoom(focus.rect, viewBox, { width: pane.clientWidth, height: pane.clientHeight }, FOCUS_MARGIN_PX, max, inset)
-            : focusZoom(levels, focus.rect.width, viewBox.width, pane.clientWidth, FOCUS_MARGIN_PX);
+            : focusZoom(levels, focus.rect.width, viewBox.width, pane.clientWidth, FOCUS_MARGIN_PX));
         const { key } = focus;
         const target: FocusTarget = {
             ...focusCentre(focus.rect, viewBox),
@@ -669,7 +705,8 @@ export default function BoardZoom({ zoomWidth, maxWidth, viewBox, focus, onFocus
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [pivot?.key]);
 
-    const next = levels.find(level => level > zoom + 1) ?? FIT_WIDTH;
+    const expandLabel = isExpanded ? 'Shrink map' : 'Expand map';
+    const next = ladder.find(level => level > zoom + 1) ?? ladder[0];
     const stepZoom = () => {
         const pane = paneRef.current;
         if (!pane) { setZoom(next); return; }
@@ -687,11 +724,32 @@ export default function BoardZoom({ zoomWidth, maxWidth, viewBox, focus, onFocus
         setZoom(next);
     };
 
+    // Grow the pane to the screen, or put it back. What is in the middle of the
+    // pane now is put in the middle of the pane it becomes, however tall that is.
+    const toggleExpanded = () => {
+        const pane = paneRef.current;
+        if (!pane || !fitHeight) return;
+        takenRef.current = true;
+        letGo();
+        // The zoom drawn is never below the floor, so nothing is set here but
+        // whether it is expanded: the floor comes or goes, and the zoom the
+        // player chose is what is drawn again once it has gone.
+        if (isExpanded) {
+            anchorRef.current = { ...anchorAt(pane, pane.clientWidth / 2, pane.clientHeight / 2), vy: fitHeight / 2 };
+            setExpanded(false);
+        } else {
+            anchorRef.current = { ...anchorAt(pane, pane.clientWidth / 2, pane.clientHeight / 2), vy: roomy / 2 };
+            revealRef.current = true;
+            setExpanded(true);
+        }
+    };
+
     useEffect(() => {
         const surface = surfaceOf();
         if (!surface || levels.length === 1) return;
         const { pane } = surface;
-        const clamp = (value: number) => Math.min(max, Math.max(FIT_WIDTH, value));
+        // The floor, which is fit but for an expanded pane.
+        const clamp = (value: number) => Math.min(max, Math.max(floor, value));
 
         const onTouchStart = (event: TouchEvent) => {
             // A finger on the board ends a glide where it was heading, so a
@@ -770,7 +828,7 @@ export default function BoardZoom({ zoomWidth, maxWidth, viewBox, focus, onFocus
             if (pinchRef.current) return;
             const rect = pane.getBoundingClientRect();
             anchorRef.current = anchorAt(pane, event.clientX - rect.left, event.clientY - rect.top);
-            setZoom(zoomLevel => clamp(zoomLevel * wheelZoomFactor(event.deltaY, event.deltaMode)));
+            setZoom(zoomLevel => clamp(Math.max(zoomLevel, floor) * wheelZoomFactor(event.deltaY, event.deltaMode)));
         };
 
         pane.addEventListener('touchstart', onTouchStart, { passive: true });
@@ -785,16 +843,34 @@ export default function BoardZoom({ zoomWidth, maxWidth, viewBox, focus, onFocus
             pane.removeEventListener('touchcancel', endPinch);
             pane.removeEventListener('wheel', onWheel);
         };
-    }, [levels.length, max, letGo, surfaceOf]);
+    }, [levels.length, max, floor, letGo, surfaceOf]);
 
     return (
         <>
             {/* A stepper, not a toggle, so the label is the whole story: it
                 names what the next press does and there is no `aria-pressed`
                 that would read the same for two different zoom levels. */}
-            {levels.length > 1 && (
+            {ladder.length > 1 && (
                 <button type="button" className="ag-board-tag ag-board-tag--action" onClick={stepZoom}>
-                    {next === FIT_WIDTH ? '➖ Fit map' : next === levels[1] ? '➕ Zoom in' : '➕ Zoom more'}
+                    {next === ladder[0] ? '➖ Fit map' : next === ladder[1] ? '➕ Zoom in' : '➕ Zoom more'}
+                </button>
+            )}
+            {/* The same: the label is the whole story. Round, in the corner
+                under the pill's, and drawn in `currentColor` so a game's
+                dressing of `.ag-board-tag` colours it too. */}
+            {offerExpand && (
+                <button
+                    type="button"
+                    className="ag-board-tag ag-board-tag--action ag-board-expand"
+                    onClick={toggleExpanded}
+                    aria-label={expandLabel}
+                    title={expandLabel}
+                >
+                    <svg viewBox="0 0 16 16" aria-hidden="true">
+                        {isExpanded
+                            ? <path d="M9.5 2v4.5H14M6.5 14V9.5H2M9.5 6.5l5-5M6.5 9.5l-5 5" />
+                            : <path d="M10 2h4v4M6 14H2v-4M14 2 9.5 6.5M2 14l4.5-4.5" />}
+                    </svg>
                 </button>
             )}
             <div
@@ -805,7 +881,10 @@ export default function BoardZoom({ zoomWidth, maxWidth, viewBox, focus, onFocus
                     '--ag-board-zoom': `${zoom}%`,
                     // Fitted, the board is its own height; zoomed, the frame
                     // keeps that height and the board scrolls inside it.
-                    height: zoom > FIT_WIDTH && fitHeight ? fitHeight : undefined,
+                    // Expanded, the pane is the screen's, and the page is scrolled
+                    // to put it just under the game's top bar.
+                    height: isExpanded ? roomy : zoom > FIT_WIDTH && fitHeight ? fitHeight : undefined,
+                    scrollMarginTop: isExpanded ? EXPAND_TOP_PX : undefined,
                 } as React.CSSProperties}
             >
                 <div ref={contentRef} className={feed ? 'ag-board-zoom-content ag-board-zoom-content--camera' : 'ag-board-zoom-content'}>
