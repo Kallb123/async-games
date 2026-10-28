@@ -70,6 +70,12 @@ void main() {
     float across = vFacesUp > 0.5 ? length(placed[2].xyz) : along;
     float u = instanceSkin.x > 0.5 ? 1.0 - uv.x : uv.x;
     vUv = vFacesUp > 0.5 ? vec2(uv.x * length(placed[0].xyz), uv.y * across) + instanceSkin.z : vec2(u * along + instanceSkin.z, 1.0 - (1.0 - position.y) * stood / MAPPED_ROWS - instanceSkin.y / MAPPED_ROWS);
+#ifdef MAPPED_WIDTH
+    // Laid on where it stands instead, so a run of pieces is one stretch of masonry with no seam between them: a top by the ground's own x and z; a side along the way it faces, MAPPED_WIDTH a repeat, and shifted by how far out it faces so walls side by side aren't the same, and up by its height.
+    vec3 world = (placed * vec4(position, 1.0)).xyz;
+    vec2 facing = length(vNormal.xz) > 0.01 ? normalize(vNormal.xz) : vec2(1.0, 0.0);
+    vUv = vFacesUp > 0.5 ? world.xz : vec2((dot(world.xz, vec2(facing.y, -facing.x)) + 0.618 * dot(world.xz, facing)) / MAPPED_WIDTH, world.y / MAPPED_ROWS);
+#endif
     vFoot = position.y * stood;
 #endif
 #ifdef TEXTURED
@@ -149,9 +155,11 @@ export interface SolidOptions {
      * Coloured by textures as well as by each vertex's colour (multiplied): a
      * unit box's sides by `side`, which repeats every `rows` world units up, and
      * its top by `top`, both laid on at the world's scale. The geometry needs its
-     * `uv`, and each instance an `instanceSkin` (flip, drop and slide).
+     * `uv`, and each instance an `instanceSkin` (flip, drop and slide). With
+     * `width`, they're laid on by where each face stands in the world rather
+     * than by the piece's own skin, the side repeating every `width` along.
      */
-    mapped?: { side: Texture; top: Texture; rows: number };
+    mapped?: { side: Texture; top: Texture; rows: number; width?: number };
     /** Coloured by an sRGB texture as well (multiplied), laid on by the geometry's own `uv`: the ground's picture on its raised squares (`groundFaces`). */
     textured?: Texture;
 }
@@ -171,6 +179,7 @@ export function solidMaterial({ opacity = 1, perInstance = false, behind = false
             ...(perInstance && { INSTANCE_OPACITY: "" }),
             ...(behind && { BEHIND: BEHIND_BIAS.toFixed(3) }),
             ...(mapped && { MAPPED: "", MAPPED_ROWS: mapped.rows.toFixed(4) }),
+            ...(mapped?.width && { MAPPED_WIDTH: mapped.width.toFixed(4) }),
             ...(textured && { TEXTURED: "" }),
             ...(outline && { OUTLINE: OUTLINE_WIDTH.toFixed(4), OUTLINE_SHADE: OUTLINE_COLOUR }),
         },

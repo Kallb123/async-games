@@ -82,6 +82,11 @@ export const WHATS_NEW: WhatsNewGroup[] = [
         icon: "✨",
         items: [
             {
+                title: "Realm Arena's castle walls look like stone",
+                detail: "On the 3D battlefield, walls, towers and rubble are now built of neat courses of cut stone, sharp even zoomed right in, and wall tops are paved with flagstones — no more smeared brick or dark seams between squares.",
+                game: "realmarena",
+            },
+            {
                 title: "Realm Arena shows when you're flanking",
                 detail: "A target your shot would find with no cover now wears a gold Flank badge over its chance, before you shoot and while you line up a move, and the damage it takes reads Flanked, so you can see where the extra damage comes from.",
                 game: "realmarena",
@@ -122,11 +127,6 @@ export const WHATS_NEW: WhatsNewGroup[] = [
             {
                 title: "Realm Arena's scoreboard shows your allies' full squad and HP",
                 detail: "Allies share vision, so their squads no longer say ‘in sight’ in fog of war. In co-op, tap the scoreboard to see how much HP each allied squad has left out of its full total, including your own.",
-                game: "realmarena",
-            },
-            {
-                title: "Realm Arena: take turns in blocks against the computer",
-                detail: "A co-op battle can now have all of you take your turns one after another and then every warband take theirs, instead of a warband after each of you. It's a switch on the setup screen, off by default, so battles already under way play as before.",
                 game: "realmarena",
             },
         ],

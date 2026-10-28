@@ -5,7 +5,9 @@
 // broken wall is a handful of chunks of different heights, each turned a little,
 // and a wall or parapet is a box with a merlon or two along each edge that
 // borders lower ground. Every piece carries its own skin (a flip, a drop and a
-// slide across the brick texture) so a run of squares isn't one picture repeated.
+// slide across the side texture) so a run of squares isn't one picture repeated
+// — the hedge's and the cottage's: the castle's stone is laid on by where it
+// stands instead, and has no seam to hide (`stoneTexture`).
 
 import { variantOf } from "@/games/RealmArena/art";
 import { terrainLetter } from "@/games/RealmArena/ui";

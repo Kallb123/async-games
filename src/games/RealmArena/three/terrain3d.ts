@@ -10,8 +10,10 @@
 //   full height thick, their tops and sides drawn with the ground's own picture
 //   and their sides shaded by the way they face (`groundFaces`);
 // - every raised square is a box from its ground up to its top, one instanced
-//   draw a terrain, its sides skinned with the brick and its top with the
-//   flagstone (or grassed rock) cut from the same sheets (`blockTextures`);
+//   draw a terrain, its sides skinned and its top capped (`blockTextures`):
+//   the castle's walls with courses of cut stone and flagstones drawn in its
+//   brick's colours (`stoneTexture`), a tower's top with the grassed rock, and
+//   the village's hedge and cottage with their own art, cut from the sheets;
 // - trees are a trunk and two cones, one instanced draw for every tree;
 // - an overlay with a texel a square carries what's shaded on the ground — on
 //   the top of a raised square too: deployment zones, fog (§27), smoke, a
@@ -29,6 +31,7 @@ import { piecesOf, pieceCorner } from "./blockPieces";
 import { groundFaces } from "./groundFaces";
 import { QUARTER } from "./iso3d";
 import { solidMaterial, type SolidOptions } from "./solidMaterial";
+import { coursesOf, stoneCanvas } from "./stoneTexture";
 
 /** The sheets, loaded: what the ground is unwarped from and the terrain's colours are sampled from. */
 export type Sheets = Readonly<Record<ArtSheet, HTMLImageElement>>;
@@ -122,17 +125,21 @@ function sampled(sheets: Sheets, sprite: Sprite, top = false): Color {
     const canvas = document.createElement("canvas");
     canvas.width = sprite.width;
     canvas.height = sprite.height;
-    const context = canvas.getContext("2d", { willReadFrequently: true })!;
-    context.drawImage(sheets[sprite.sheet], sprite.x, sprite.y, sprite.width, sprite.height, 0, 0, sprite.width, sprite.height);
-    const { data } = context.getImageData(0, 0, sprite.width, sprite.height);
+    canvas.getContext("2d")!.drawImage(sheets[sprite.sheet], sprite.x, sprite.y, sprite.width, sprite.height, 0, 0, sprite.width, sprite.height);
+    return averaged(canvas, top ? TILE_PX / 4 : Infinity);
+}
+
+/** The average colour of what's drawn on a canvas, as sRGB 0–1: from its first row with anything on it, for `rows` rows. */
+function averaged(canvas: HTMLCanvasElement, rows = Infinity): Color {
+    const { width, height } = canvas;
+    const { data } = canvas.getContext("2d", { willReadFrequently: true })!.getImageData(0, 0, width, height);
     const opaque = (i: number) => data[i + 3] >= 200;
     let first = 0;
-    while (first < sprite.height && !Array.from({ length: sprite.width }, (_, x) => opaque((first * sprite.width + x) * 4)).some(Boolean)) first++;
-    const [from, to] = top ? [first, first + TILE_PX / 4] : [first, sprite.height];
+    while (first < height && !Array.from({ length: width }, (_, x) => opaque((first * width + x) * 4)).some(Boolean)) first++;
     let r = 0, g = 0, b = 0, n = 0;
-    for (let y = from; y < Math.min(to, sprite.height); y++) {
-        for (let x = 0; x < sprite.width; x++) {
-            const i = (y * sprite.width + x) * 4;
+    for (let y = first; y < Math.min(first + rows, height); y++) {
+        for (let x = 0; x < width; x++) {
+            const i = (y * width + x) * 4;
             if (!opaque(i)) continue;
             r += data[i]; g += data[i + 1]; b += data[i + 2]; n++;
         }
@@ -144,7 +151,7 @@ function sampled(sheets: Sheets, sprite: Sprite, top = false): Color {
 const CROWN_LIFT = 1.3;
 /** The same for a block's brick, which the art draws darker still, in shade, and a flat colour can't make up (the texture's detail is what's left to see). */
 const UNSHADED = 2.3;
-/** The same for a top paved with that brick, cut from a face the art draws in shade. A top the art draws itself (a tower's grassed rock) is already lit full on, and isn't lifted: it would burn out yellow. */
+/** The same for the flagstones a wall is paved with (`stoneTextures`), drawn in that brick's colour: a top is lit full on, and lifted as far as a side would burn out yellow. A top the art draws itself (a tower's grassed rock) is already lit full on, and isn't lifted at all. */
 const PAVED_LIFT = 2;
 
 /** A tree's crown colour, from its sprite: the art's own shading is in it, so it is lifted back towards the lit face's. */
@@ -155,6 +162,14 @@ function crownColour(sheets: Sheets): Color {
 
 /** How many texels wide a block's side and top textures are. */
 const SKIN_TEXELS = 64;
+/** The same for the castle's stone, which is drawn and so can be as sharp as close up needs. */
+const STONE_TEXELS = 256;
+/** How many squares along the castle's stone runs before it repeats: laid on where it stands, a run of wall is one stretch of it. */
+const STONE_WIDTH = 2;
+/** How long a stone of a wall's courses is, and a flagstone of its top, in world units; and how many rows of flagstones a square is paved with. */
+const ASHLAR: readonly [number, number] = [0.28, 0.58];
+const FLAGSTONE: readonly [number, number] = [0.26, 0.55];
+const FLAGSTONE_ROWS = 3;
 /** The pixels a quarter of height stands on a sheet: a full height is the cube's 32. */
 const QUARTER_PX = 8;
 
@@ -163,7 +178,7 @@ const QUARTER_PX = 8;
  * as a parallelogram running up to the right, `rise` quarters tall, and this
  * stands it upright. Its texture repeats every `rise` quarters of height.
  */
-function sideTexture(sheets: Sheets, sprite: Sprite): CanvasTexture {
+function sideCanvas(sheets: Sheets, sprite: Sprite): HTMLCanvasElement {
     const rise = sprite.rise ?? 0;
     const facePx = rise * QUARTER_PX;
     const canvas = document.createElement("canvas");
@@ -174,21 +189,12 @@ function sideTexture(sheets: Sheets, sprite: Sprite): CanvasTexture {
     const [sx, sy] = [canvas.width / (TILE_PX / 2), canvas.height / facePx];
     context.setTransform(sx, 0.5 * sy, 0, sy, -canvas.width, (facePx - sprite.height - TILE_PX / 4) * sy);
     context.drawImage(sheets[sprite.sheet], sprite.x, sprite.y, sprite.width, sprite.height, 0, 0, sprite.width, sprite.height);
-    return repeating(new CanvasTexture(canvas));
+    return canvas;
 }
 
 /** A block sprite's top face, unwarped to the square it caps. */
 function topTexture(sheets: Sheets, sprite: Sprite): CanvasTexture {
     return repeating(new CanvasTexture(unwarped(sheets, sprite, SKIN_TEXELS, (sprite.rise ?? 0) * QUARTER_PX)));
-}
-
-/** A top paved with a face's brick: a square cut from the middle of the face, which has no hollow tower mouth in it. */
-function pavedTexture(side: CanvasTexture): CanvasTexture {
-    const face = side.image as HTMLCanvasElement;
-    const canvas = document.createElement("canvas");
-    canvas.width = canvas.height = SKIN_TEXELS;
-    canvas.getContext("2d")!.drawImage(face, 0, (face.height - SKIN_TEXELS) / 2, SKIN_TEXELS, SKIN_TEXELS, 0, 0, SKIN_TEXELS, SKIN_TEXELS);
-    return repeating(new CanvasTexture(canvas));
 }
 
 /** In the colours as written, as the solid shader works in, and mipmapped. */
@@ -199,28 +205,53 @@ function repeating(texture: CanvasTexture): CanvasTexture {
     return texture;
 }
 
-/** A block's skin: its sides and top, and how tall the side's picture is in the world's units. */
+/** A block's skin: its sides and top, how tall (and for the castle's stone, how wide) the side's picture is in the world's units, and how much each is lifted (`UNSHADED`). */
 interface BlockTextures {
-    /** The top is the art's own, lit full on in it, rather than paved with the side's shaded brick. */
-    drawn: boolean;
     side: Texture;
     top: Texture;
     rows: number;
+    width?: number;
+    lift: { side: number; top: number };
 }
 
 /** Every texture built for a set of sheets, kept as long as they are: a board builds its cover over and over from the same few. */
-const skins = new WeakMap<Sheets, { sides: Map<Sprite, Texture>; tops: Map<Sprite, Texture> }>();
+const skins = new WeakMap<Sheets, { sides: Map<Sprite, Texture>; tops: Map<Sprite, Texture>; stone: Map<Sprite, { side: Texture; paved: Texture }> }>();
+
+/**
+ * The castle's stone, side and paving (stoneTexture.ts): in the colour the
+ * sheet's brick face comes to once it's lifted, so the stone is drawn as lit
+ * as the brick was and needs no lift of its own.
+ */
+function stoneTextures(sheets: Sheets, sprite: Sprite): { side: Texture; paved: Texture } {
+    const brick = averaged(sideCanvas(sheets, sprite));
+    const lifted = (k: number) => new Color(Math.min(1, brick.r * k), Math.min(1, brick.g * k), Math.min(1, brick.b * k));
+    const courses = sprite.rise ?? 0;
+    return {
+        side: repeating(new CanvasTexture(stoneCanvas(coursesOf(courses, QUARTER, ASHLAR, STONE_WIDTH, 1), STONE_WIDTH, courses * QUARTER, STONE_TEXELS, lifted(UNSHADED)))),
+        paved: repeating(new CanvasTexture(stoneCanvas(coursesOf(FLAGSTONE_ROWS, 1 / FLAGSTONE_ROWS, FLAGSTONE, 1, 2), 1, 1, STONE_TEXELS, lifted(PAVED_LIFT)))),
+    };
+}
 
 /** The textures a raised terrain is skinned with, or none for one with no skin (a tree). */
 function blockTextures(sheets: Sheets, letter: TerrainLetter): BlockTextures | undefined {
     const skin = BLOCK_SKIN[letter];
     if (!skin) return undefined;
-    let made = skins.get(sheets);
-    if (!made) skins.set(sheets, made = { sides: new Map(), tops: new Map() });
-    let side = made.sides.get(skin.side), top = made.tops.get(skin.top ?? skin.side);
-    if (!side) made.sides.set(skin.side, side = sideTexture(sheets, skin.side));
-    if (!top) made.tops.set(skin.top ?? skin.side, top = skin.top ? topTexture(sheets, skin.top) : pavedTexture(side as CanvasTexture));
-    return { drawn: !!skin.top, side, top, rows: (skin.side.rise ?? 0) * QUARTER };
+    const made = skins.get(sheets) ?? { sides: new Map(), tops: new Map(), stone: new Map() };
+    skins.set(sheets, made);
+    const rows = (skin.side.rise ?? 0) * QUARTER;
+    const capped = (sprite: Sprite) => {
+        let top = made.tops.get(sprite);
+        if (!top) made.tops.set(sprite, top = topTexture(sheets, sprite));
+        return top;
+    };
+    if ("masonry" in skin) {
+        let stone = made.stone.get(skin.side);
+        if (!stone) made.stone.set(skin.side, stone = stoneTextures(sheets, skin.side));
+        return { side: stone.side, top: skin.top ? capped(skin.top) : stone.paved, rows, width: STONE_WIDTH, lift: { side: 1, top: 1 } };
+    }
+    let side = made.sides.get(skin.side);
+    if (!side) made.sides.set(skin.side, side = repeating(new CanvasTexture(sideCanvas(sheets, skin.side))));
+    return { side, top: capped(skin.top), rows, lift: { side: UNSHADED, top: 1 } };
 }
 
 /** Every vertex `colour`, its top face `top`, and no flags: a solid the solid shader draws as it is. Its `uv` stays for a solid with a skin to lay over the colour. */
@@ -360,8 +391,8 @@ function raisedSquares(field: Battlefield, sheets: Sheets, squares: Iterable<Squ
     for (const [letter, onLetter] of byLetter) {
         const tree = letter === "T";
         const skin = blockTextures(sheets, letter);
-        // A skin brings the colour the art is drawn in: its sides are lifted as a crown is, its top is lit full on.
-        const side = new Color(UNSHADED, UNSHADED, UNSHADED), top = skin?.drawn ? new Color(1, 1, 1) : new Color(PAVED_LIFT, PAVED_LIFT, PAVED_LIFT);
+        // A skin brings the colour the art is drawn in, lifted as a crown is where the art draws it in shade.
+        const side = new Color().setScalar(skin?.lift.side ?? UNSHADED), top = new Color().setScalar(skin?.lift.top ?? 1);
         const geometry = tree ? treeGeometry(crownColour(sheets)) : coloured(new BoxGeometry(1, 1, 1).translate(0.5, 0.5, 0.5), side, top, !!skin);
         const solid = solidMaterial({ ...options, mapped: skin });
         // A tree is one instance a square; any other terrain is a few boxes a square (`piecesOf`).
