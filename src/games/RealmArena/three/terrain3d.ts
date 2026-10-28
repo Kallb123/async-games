@@ -31,7 +31,7 @@ import { piecesOf, pieceCorner } from "./blockPieces";
 import { groundFaces } from "./groundFaces";
 import { QUARTER } from "./iso3d";
 import { solidMaterial, type SolidOptions } from "./solidMaterial";
-import { coursesOf, stoneCanvas } from "./stoneTexture";
+import { stoneCanvas } from "./stoneTexture";
 
 /** The sheets, loaded: what the ground is unwarped from and the terrain's colours are sampled from. */
 export type Sheets = Readonly<Record<ArtSheet, HTMLImageElement>>;
@@ -205,13 +205,13 @@ function repeating(texture: CanvasTexture): CanvasTexture {
     return texture;
 }
 
-/** A block's skin: its sides and top, how tall (and for the castle's stone, how wide) the side's picture is in the world's units, and how much each is lifted (`UNSHADED`). */
+/** A block's skin: its sides and top, how tall (and for the castle's stone, how wide) the side's picture is in the world's units, and how much its sides are lifted (`UNSHADED`): a top is drawn as lit as it's seen. */
 interface BlockTextures {
     side: Texture;
     top: Texture;
     rows: number;
     width?: number;
-    lift: { side: number; top: number };
+    lift: number;
 }
 
 /** Every texture built for a set of sheets, kept as long as they are: a board builds its cover over and over from the same few. */
@@ -227,8 +227,9 @@ function stoneTextures(sheets: Sheets, sprite: Sprite): { side: Texture; paved: 
     const lifted = (k: number) => new Color(Math.min(1, brick.r * k), Math.min(1, brick.g * k), Math.min(1, brick.b * k));
     const courses = sprite.rise ?? 0;
     return {
-        side: repeating(new CanvasTexture(stoneCanvas(coursesOf(courses, QUARTER, ASHLAR, STONE_WIDTH, 1), STONE_WIDTH, courses * QUARTER, STONE_TEXELS, lifted(UNSHADED)))),
-        paved: repeating(new CanvasTexture(stoneCanvas(coursesOf(FLAGSTONE_ROWS, 1 / FLAGSTONE_ROWS, FLAGSTONE, 1, 2), 1, 1, STONE_TEXELS, lifted(PAVED_LIFT)))),
+        side: repeating(new CanvasTexture(stoneCanvas(courses, QUARTER, ASHLAR, STONE_WIDTH, 1, STONE_TEXELS, lifted(UNSHADED)))),
+        // A square of paving a repeat, so a top's flagstones meet its neighbour's.
+        paved: repeating(new CanvasTexture(stoneCanvas(FLAGSTONE_ROWS, 1 / FLAGSTONE_ROWS, FLAGSTONE, 1, 2, STONE_TEXELS, lifted(PAVED_LIFT)))),
     };
 }
 
@@ -247,11 +248,11 @@ function blockTextures(sheets: Sheets, letter: TerrainLetter): BlockTextures | u
     if ("masonry" in skin) {
         let stone = made.stone.get(skin.side);
         if (!stone) made.stone.set(skin.side, stone = stoneTextures(sheets, skin.side));
-        return { side: stone.side, top: skin.top ? capped(skin.top) : stone.paved, rows, width: STONE_WIDTH, lift: { side: 1, top: 1 } };
+        return { side: stone.side, top: skin.top ? capped(skin.top) : stone.paved, rows, width: STONE_WIDTH, lift: 1 };
     }
     let side = made.sides.get(skin.side);
     if (!side) made.sides.set(skin.side, side = repeating(new CanvasTexture(sideCanvas(sheets, skin.side))));
-    return { side, top: capped(skin.top), rows, lift: { side: UNSHADED, top: 1 } };
+    return { side, top: capped(skin.top), rows, lift: UNSHADED };
 }
 
 /** Every vertex `colour`, its top face `top`, and no flags: a solid the solid shader draws as it is. Its `uv` stays for a solid with a skin to lay over the colour. */
@@ -391,8 +392,8 @@ function raisedSquares(field: Battlefield, sheets: Sheets, squares: Iterable<Squ
     for (const [letter, onLetter] of byLetter) {
         const tree = letter === "T";
         const skin = blockTextures(sheets, letter);
-        // A skin brings the colour the art is drawn in, lifted as a crown is where the art draws it in shade.
-        const side = new Color().setScalar(skin?.lift.side ?? UNSHADED), top = new Color().setScalar(skin?.lift.top ?? 1);
+        // A skin brings the colour the art is drawn in, its sides lifted as a crown is where the art draws them in shade.
+        const side = new Color().setScalar(skin?.lift ?? UNSHADED), top = new Color(1, 1, 1);
         const geometry = tree ? treeGeometry(crownColour(sheets)) : coloured(new BoxGeometry(1, 1, 1).translate(0.5, 0.5, 0.5), side, top, !!skin);
         const solid = solidMaterial({ ...options, mapped: skin });
         // A tree is one instance a square; any other terrain is a few boxes a square (`piecesOf`).

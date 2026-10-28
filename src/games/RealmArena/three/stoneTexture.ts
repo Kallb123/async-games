@@ -61,13 +61,15 @@ const css = (colour: Color, k: number, hue = 0) =>
     `rgb(${[colour.r * (1 + hue), colour.g, colour.b * (1 - hue)].map(c => Math.round(255 * Math.min(1, Math.max(0, c * k)))).join(",")})`;
 
 /**
- * `stones` painted onto a canvas `texels` to a world unit, `width` × `height`
- * world units, in `colour` (sRGB 0–1, as lit): dark mortar between them, each
+ * `courses` laid (`coursesOf`) and painted onto a canvas `texels` to a world
+ * unit, in `colour` (sRGB 0–1, as lit): dark mortar between the stones, each
  * stone a shade of its own with a light top edge and a shadowed foot, a little
  * weathered, and a fine grain over the whole. Repeats side to side and top to
  * bottom as the layout does.
  */
-export function stoneCanvas(stones: readonly Stone[], width: number, height: number, texels: number, colour: Color): HTMLCanvasElement {
+export function stoneCanvas(courses: number, courseHeight: number, lengths: readonly [number, number], width: number, seed: number, texels: number, colour: Color): HTMLCanvasElement {
+    const stones = coursesOf(courses, courseHeight, lengths, width, seed);
+    const height = courses * courseHeight;
     const canvas = document.createElement("canvas");
     canvas.width = Math.round(width * texels);
     canvas.height = Math.round(height * texels);

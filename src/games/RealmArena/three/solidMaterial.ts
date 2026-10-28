@@ -63,18 +63,19 @@ void main() {
 #endif
     vFlags = flags;
 #ifdef MAPPED
-    // A unit box stood to a size: the texture is laid on at the world's scale, so a narrow chunk shows a part of the brick and not all of it squeezed in. Its side's v runs down from the top by the world height (MAPPED_ROWS of it a repeat of the texture). Each instance is shifted by its own skin (a flip, a drop, a slide across) so a run of squares isn't one picture repeated.
     float stood = length(placed[1].xyz);
     vFacesUp = step(0.5, normal.y);
+#ifdef MAPPED_WIDTH
+    // Laid on where it stands, so a run of pieces is one stretch of masonry with no seam between them: a top by the ground's own x and z; a side along the way it faces, MAPPED_WIDTH a repeat, and shifted by how far out it faces so walls side by side aren't the same, and up by its height.
+    vec3 world = (placed * vec4(position, 1.0)).xyz;
+    vec2 facing = length(vNormal.xz) > 0.01 ? normalize(vNormal.xz) : vec2(1.0, 0.0);
+    vUv = vFacesUp > 0.5 ? world.xz : vec2((dot(world.xz, vec2(facing.y, -facing.x)) + 0.618 * dot(world.xz, facing)) / MAPPED_WIDTH, world.y / MAPPED_ROWS);
+#else
+    // A unit box stood to a size: the texture is laid on at the world's scale, so a narrow chunk shows a part of the brick and not all of it squeezed in. Its side's v runs down from the top by the world height (MAPPED_ROWS of it a repeat of the texture). Each instance is shifted by its own skin (a flip, a drop, a slide across) so a run of squares isn't one picture repeated.
     float along = abs(normal.x) > 0.5 ? length(placed[2].xyz) : length(placed[0].xyz);
     float across = vFacesUp > 0.5 ? length(placed[2].xyz) : along;
     float u = instanceSkin.x > 0.5 ? 1.0 - uv.x : uv.x;
     vUv = vFacesUp > 0.5 ? vec2(uv.x * length(placed[0].xyz), uv.y * across) + instanceSkin.z : vec2(u * along + instanceSkin.z, 1.0 - (1.0 - position.y) * stood / MAPPED_ROWS - instanceSkin.y / MAPPED_ROWS);
-#ifdef MAPPED_WIDTH
-    // Laid on where it stands instead, so a run of pieces is one stretch of masonry with no seam between them: a top by the ground's own x and z; a side along the way it faces, MAPPED_WIDTH a repeat, and shifted by how far out it faces so walls side by side aren't the same, and up by its height.
-    vec3 world = (placed * vec4(position, 1.0)).xyz;
-    vec2 facing = length(vNormal.xz) > 0.01 ? normalize(vNormal.xz) : vec2(1.0, 0.0);
-    vUv = vFacesUp > 0.5 ? world.xz : vec2((dot(world.xz, vec2(facing.y, -facing.x)) + 0.618 * dot(world.xz, facing)) / MAPPED_WIDTH, world.y / MAPPED_ROWS);
 #endif
     vFoot = position.y * stood;
 #endif
@@ -156,8 +157,8 @@ export interface SolidOptions {
      * unit box's sides by `side`, which repeats every `rows` world units up, and
      * its top by `top`, both laid on at the world's scale. The geometry needs its
      * `uv`, and each instance an `instanceSkin` (flip, drop and slide). With
-     * `width`, they're laid on by where each face stands in the world rather
-     * than by the piece's own skin, the side repeating every `width` along.
+     * `width`, they're laid on by where each face stands in the world instead,
+     * the side repeating every `width` along, and the skin goes unread.
      */
     mapped?: { side: Texture; top: Texture; rows: number; width?: number };
     /** Coloured by an sRGB texture as well (multiplied), laid on by the geometry's own `uv`: the ground's picture on its raised squares (`groundFaces`). */

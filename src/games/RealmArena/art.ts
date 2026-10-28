@@ -175,11 +175,12 @@ export const TERRAIN_ART: Readonly<Record<TerrainLetter, readonly ArtLayer[]>> =
  * rubble, a tower and its stair — is `masonry`: courses of cut stone drawn in
  * the colours of the brick column's face (three/stoneTexture.ts) rather than
  * unwarped from the sheet, whose brick is too few pixels a course to stand
- * being stood upright and looked at close, with a top paved in flagstones or,
- * for the tower's stair and top, the grassed rock they are floored with. The
- * village's hedge and cottage wall are skinned from their own columns on its
- * sheet, side and top. Trees are built from primitives, and open and scorched
- * ground are the ground's.
+ * being stood upright and looked at close. Its `side` is only where that colour
+ * is sampled from, and how many courses run before they repeat. Its top is
+ * paved with flagstones or, for the tower's stair and top, the grassed rock
+ * they are floored with. The village's hedge and cottage wall are skinned from
+ * their own columns on its sheet, side and top. Trees are built from
+ * primitives, and open and scorched ground are the ground's.
  */
 export const BLOCK_SKIN: Readonly<Partial<Record<TerrainLetter, { side: Sprite; top: Sprite } | { side: Sprite; top?: Sprite; masonry: true }>>> = {
     ",": { side: BRICK_COLUMN, masonry: true },
