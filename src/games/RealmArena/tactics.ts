@@ -188,11 +188,12 @@ export interface AttackOption {
 /**
  * Every enemy a character's main weapon could hit from a square — where it
  * stands, or where a previewed move would take it — likeliest first. Who is
- * in reach is the server's own `check`, read as if it had the AP to attack:
- * what's in reach is a matter of where it stands, not what it has left.
+ * in reach is the server's own `check`, read as if it had the AP to attack and
+ * no attack used yet this turn: what's in reach is a matter of where it
+ * stands, not what it has left or what the turn's quota has already spent.
  */
 export function attackOptions(state: BattleState, fighter: Fighter, square: Square = fighter.square): AttackOption[] {
-    const { battle, moved } = standingAt(state, { ...fighter, ap: actionPointsOf(fighter, state) }, square);
+    const { battle, moved } = standingAt(state, { ...fighter, ap: actionPointsOf(fighter, state), attacksThisTurn: 0 }, square);
     return targetsOf(battle, fighter.owner, moved, "attack").flatMap(id => {
         const target = fighterById(battle, id);
         if (!target) return [];

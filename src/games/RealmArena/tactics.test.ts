@@ -3,6 +3,7 @@ import { buildBattlefield } from "@/utils/games/battlefield/terrain";
 import { at } from "@/utils/games/battlefield/testFixtures";
 import { ABILITIES, type CharacterId } from "./characters";
 import { ACTION_POINTS, check, newFighter, type Action, type Fighter } from "./rules";
+import { CURRENT_RULESET_VERSION, ruleValuesOf } from "./rulesets";
 import { ACTION_AIMS, attackOptions, rangeSquares, reactionPreviews, shotOf, targetsOf } from "./tactics";
 
 /** Squares as "col,row", sorted, to read a test's expectations by. */
@@ -146,6 +147,25 @@ describe("attackOptions", () => {
         const battle = { field: WALLED, fighters: [knight, near, far] };
         expect(options(battle, knight)).toEqual([{ target: 1, chance: 100 }]);
         expect(options(battle, knight, at(WALLED, 2, 3))).toEqual([{ target: 1, chance: 100 }, { target: 2, chance: 100 }]);
+    });
+
+    it("ignores the turn's attack quota, so a character that has used it still shows who is in reach", () => {
+        // Rules before release 9 have no quota; between turns a shooter under one has none left, and `check` alone refuses every shot.
+        const rulesVersion = CURRENT_RULESET_VERSION;
+        const limit = ruleValuesOf({ rulesVersion }).MAX_ATTACKS_PER_TURN;
+        expect(limit).not.toBeNull();
+        const fighters = (extra: Partial<Fighter>) => [
+            ready(0, "a", "archer", at(WALLED, 0, 0), extra),
+            ready(1, "b", "knight", at(WALLED, 5, 0)),
+            ready(2, "b", "mage", at(WALLED, 9, 4)),
+        ];
+        const fresh = { field: WALLED, rulesVersion, fighters: fighters({}) };
+        const spent = { field: WALLED, rulesVersion, fighters: fighters({ ap: 0, attacksThisTurn: limit! }) };
+        expect(check(spent, "a", { kind: "attack", fighter: 0, target: 2 })).toEqual({ refused: `At most ${limit} attacks per turn` });
+        expect(options(fresh, fresh.fighters[0])).toHaveLength(2);
+        expect(options(spent, spent.fighters[0])).toEqual(options(fresh, fresh.fighters[0]));
+        // And from a square a lined-up move would end on.
+        expect(options(spent, spent.fighters[0], at(WALLED, 9, 0))).toEqual(options(fresh, fresh.fighters[0], at(WALLED, 9, 0)));
     });
 
     it("finds nothing for a character that's down", () => {
