@@ -24,6 +24,71 @@ export const GLIDE_MS = 380;
 export const GLIDE_LEAD = 0.75;
 
 /**
+ * The page the expanded board leaves above it, in pixels: the game's sticky top
+ * bar and a gap under it. It is both what `expandedHeight` takes off the screen
+ * and the `scroll-margin-top` the pane is scrolled into view under, so the
+ * number is written once. (Realm Arena's `.ag-board-area` holds the same 72px
+ * clear of the bar in ag-theme.css, which must be kept in step.)
+ */
+export const EXPAND_TOP_PX = 72;
+
+/**
+ * The strip of page left under an expanded board, in pixels: enough to put a
+ * finger on and drag the page by, not enough to scroll far. Without it an
+ * expanded board is the whole screen, and a pan that runs off its top or bottom
+ * has nowhere to land.
+ */
+export const EXPAND_FOOT_PX = 64;
+
+/**
+ * How much taller than the board already is the expanded pane must be for the
+ * expand button to be worth drawing. A board fitted to a wide window is often
+ * as tall as the screen already, and a button that grows it by a few percent
+ * would only move the page about.
+ */
+export const EXPAND_WORTH = 1.2;
+
+/**
+ * The height an expanded pane takes: whatever is left of `available` (the
+ * screen's height less any dock fixed to its foot, which `useViewportRoom`
+ * reads) once the bar above and the strip below are taken off — but never more
+ * than the board comes to at its deepest zoom (`fitHeight` is its height fitted
+ * to the column, `max` that zoom as a percentage), or the pane would show empty
+ * ground under the board.
+ */
+export function expandedHeight(available: number, fitHeight: number, max: number): number {
+    return Math.max(0, Math.min(available - EXPAND_TOP_PX - EXPAND_FOOT_PX, (fitHeight * max) / FIT_WIDTH));
+}
+
+/**
+ * Whether an expanded pane of that height is worth offering the button for: at
+ * least `EXPAND_WORTH` times the board's own, fitted height. Never for a board
+ * not yet measured.
+ */
+export function canExpand(expanded: number, fitHeight: number | null): boolean {
+    return !!fitHeight && expanded >= fitHeight * EXPAND_WORTH;
+}
+
+/**
+ * The zoom at which the board's height exactly fills an expanded pane: the
+ * lowest the pill, a pinch or a focus may go while it is expanded, since any
+ * lower leaves the pane half empty. Never below fit and never above `max`.
+ */
+export function expandFloor(expanded: number, fitHeight: number, max: number): number {
+    if (!(expanded > 0) || !(fitHeight > 0)) return FIT_WIDTH;
+    return Math.min(max, Math.max(FIT_WIDTH, (FIT_WIDTH * expanded) / fitHeight));
+}
+
+/**
+ * The pill's steps while expanded: the floor in place of fit, then whichever of
+ * the board's own steps are still deeper than it. A step within a point of the
+ * floor is the floor, not a second stop to press through.
+ */
+export function expandedLevels(levels: number[], floor: number): number[] {
+    return [floor, ...levels.filter(level => level > floor + 1)];
+}
+
+/**
  * The widths the zoom pill steps through, in order: fitted, the board's own
  * first step, and a deeper one. The deep step is twice the first unless the
  * board names its own, and can never come out below it — a board asking for

@@ -82,7 +82,12 @@ out. A second copy is the signal to extract the first one.
   and ctrl-wheel zoom, both anchored so the part of the board under the fingers
   stays put. A board whose pieces are too small to tap asks it for a deeper
   step; it doesn't grow its own gesture handling or a cropped second copy of
-  itself. A third way the view can move is unprompted: pass `BoardZoom` a
+  itself. It also carries the expand / shrink button in the frame's bottom-right
+  corner — the pane grown to most of the screen's height, the board zoomed to
+  fill it, and a strip of page left below to scroll by — drawn only where it
+  would make the board a fifth taller, so a board never builds one of its own
+  and one with something pinned to its frame's foot clears it in `ag-theme.css`.
+  A third way the view can move is unprompted: pass `BoardZoom` a
   `focus` (a region in the child's own viewBox units, plus a key that changes
   whenever the focus should reapply) and it glides there on its own, zooming
   and panning from wherever the board already is, as Race Cars does the
