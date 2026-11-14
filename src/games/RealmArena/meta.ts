@@ -44,7 +44,9 @@ export const meta: GameMeta = {
     // display and send these actions; each game still selects its own ruleset.
     // Version 10 sees at an angle in the battles created under it (rules
     // version 10): an older tab would offer shots and moves by the old sight.
-    commandVersion: 10,
+    // Version 11 makes every Archer shot 2 AP in the battles created under it
+    // (rules version 11): an older tab can't read that ruleset at all.
+    commandVersion: 11,
     oldestReplayableCommandVersion: 2,
     available: true,
 };

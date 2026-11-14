@@ -76,17 +76,32 @@ const stateFor = (rulesVersion: number): BattleState => battleFrom(FIELD, {
 describe("Realm Arena ruleset compatibility", () => {
     it("keeps released catalogues deeply frozen and refuses unknown versions", async () => {
         const real = await vi.importActual<typeof import("./rulesets")>("./rulesets");
-        for (const version of [undefined, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10]) {
+        for (const version of [undefined, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]) {
             const rules = real.rulesetFor(version);
             expect(Object.isFrozen(rules)).toBe(true);
             expect(Object.isFrozen(rules.CHARACTERS.knight.abilities)).toBe(true);
             expect(Object.isFrozen(rules.FACTIONS.realm.readyMade[100])).toBe(true);
         }
         expect(() => { real.rulesetFor(7).CHARACTERS.knight.weapon.damage = 99; }).toThrow();
-        for (const version of [-1, 1.5, NaN, 11]) expect(() => real.rulesetFor(version)).toThrow(/Unsupported/);
+        for (const version of [-1, 1.5, NaN, 12]) expect(() => real.rulesetFor(version)).toThrow(/Unsupported/);
         expect(real.rulesetFor(undefined).CHARACTERS.mage.weapon).toMatchObject({ accuracy: 70, range: 10 });
         expect(real.rulesetFor(undefined).ABILITIES.raise.oncePerBattle).toBe(true);
         expect(real.rulesetFor(7).ABILITIES.heal.oncePerTurn).toBe(true);
+    });
+
+    it("charges 2 AP for every Archer shot from v11 on, keeping each cooldown and the older costs", async () => {
+        const real = await vi.importActual<typeof import("./rulesets")>("./rulesets");
+        const shots = ["aimedShot", "cripplingShot", "poisonArrow", "bouncingArrow", "splittingArrow", "shootDodge"] as const;
+        const before = real.rulesetFor(10).ABILITIES, after = real.rulesetFor(11).ABILITIES;
+        for (const id of shots) {
+            expect(before[id]!.ap).toBe(3);
+            expect(after[id]).toEqual({ ...before[id], ap: 2 });
+        }
+        for (const id of Object.keys(after) as (keyof typeof after)[]) {
+            if (!(shots as readonly string[]).includes(id)) expect(after[id]).toBe(before[id]);
+        }
+        expect(real.rulesetFor(11).CHARACTERS).toBe(real.rulesetFor(10).CHARACTERS);
+        expect(real.rulesetFor(11).RULES).toBe(real.rulesetFor(10).RULES);
     });
 
     it("pins HP, movement and available abilities to the game, including an added ability", () => {

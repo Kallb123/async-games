@@ -1,9 +1,9 @@
 # Realm Arena — Game Design Document
 
-**Status:** v1.63. The Realm troop overhaul (§34) is implemented for new
+**Status:** v1.64. The Realm troop overhaul (§34) is implemented for new
 battles in rules version 9, using §34.10's proposed defaults for playtesting,
-sight with angles (§36) in rules version 10, and co-op for a team of four in
-Hold Out (§37). Battles already created keep their original rules.
+sight with angles (§36) in rules version 10, co-op for a team of four in
+Hold Out (§37), and every Archer shot at 2 AP (§38) in rules version 11. Battles already created keep their original rules.
 Earlier implementation
 notes and revision history describe the game before this overhaul wherever
 they conflict with §34.
@@ -4356,6 +4356,9 @@ Keeps Aimed shot. *Proposed:* each new arrow is a shot at the bow's odds (80%,
 range 20, cover counted as for any shot), puts its effect on only with a hit
 (§20.2), and can't be fired on overwatch.
 
+*From rules version 11 (§38), each of these, Aimed shot and Crippling shot
+costs 2 AP; the cooldowns below are unchanged.*
+
 | Ability | AP | Cooldown | What it does |
 |---|---:|---:|---|
 | **Poison Arrow** | *3* | *2* | *3* damage, and Poisoned on a hit (§34.2): Crippling shot's shape, poisoning rather than slowing |
@@ -4832,6 +4835,24 @@ for the last wave, and whole battles with and without fog, and a replay;
 `teamBlocks.test.ts` a block of four players; `balance.test.ts` the 13 rounds;
 `planner.pace.test.ts` the pace.
 
+## 38. Archer shots at 2 AP (rules version 11)
+
+At 3 AP, an Archer's abilities cost more than an ordinary shot (`ATTACK_AP`,
+2) and left a single AP over, so players fired the bow instead and the arrows
+went unused. From rules version 11, **every Archer shot costs 2 AP**: Aimed
+shot, Crippling shot (its mastery swap), Poison Arrow, Bouncing Arrow,
+Splitting Arrow and Shoot + Dodge. Nothing else about them changes. **The
+cooldown is what limits how often each is used**, so an Archer can now loose
+two different arrows in one turn, but never the same one twice running.
+
+- **Aimed shot is one ability**, so the Miners' Prospector, who carries it
+  too, also pays 2 AP for it.
+- `catalogues/v11.ts` overrides those six abilities' `ap` and nothing else;
+  battles created before it keep 3 AP to the end and replay by it. Command
+  version 11, so an open tab reloads before it reads a version-11 battle.
+- `rulesets.test.ts` pins the six costs, their unchanged cooldowns, and that
+  every other ability, character and rule value is version 10's.
+
 ---
 
 ## Appendix: Working title
@@ -4918,3 +4939,4 @@ Realm, its sibling in the same world.
 | 1.61 | Sight with angles (§36, rules and command version 10): sight runs from eye to eye, so what hides a character depends on the angle it's seen from. From higher ground, a wall still hides whoever is pressed close behind it, and the edge of a rise or a parapet hides the ground just below it. Hedges stand a full height, a wall that a blast clears. Battles created before it keep level sight and the low hedge. |
 | 1.62 | Co-op for a team of four, in Hold Out on the Sacked Fort or the Sunken Village only (§37): a zone in each quarter of the middle and the edge's thirds dealt to the four warbands as a Latin square, 13 rounds as for two and three. Hold the Centre and the gate forts stay at three, and `coopTeamMax` / `fitsCoop` say which settings seat which teams. No rules version: no four-player co-op battle existed. |
 | 1.63 | The flank badge: a target a shot would find with no cover wears Flank on its odds badge (gold, inverted) on both boards, in the list of targets and in the turn sheet, and the damage a flanked shot did is labelled Flanked (§26.1). Shot events carry `flanked?: true` when a shot that did damage found no cover, so older recorded battles read as before. Presentation only: no rules or command version changes. |
+| 1.64 | Archer shots at 2 AP (§38, rules and command version 11): Aimed shot, Crippling shot, Poison Arrow, Bouncing Arrow, Splitting Arrow and Shoot + Dodge each cost 2 AP rather than 3, with their cooldowns unchanged; the Prospector's Aimed shot too. Battles created before it keep 3 AP. |

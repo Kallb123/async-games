@@ -82,6 +82,11 @@ export const WHATS_NEW: WhatsNewGroup[] = [
         icon: "✨",
         items: [
             {
+                title: "Realm Arena: Archer arrows cost 2 AP",
+                detail: "Aimed shot, Crippling shot, Poison, Bouncing and Splitting Arrows and Shoot + Dodge now cost 2 AP instead of 3, the same as an ordinary shot — so they're worth firing. Each still has its cooldown, so you can't loose the same arrow every turn. The Prospector's Aimed shot is 2 AP too. Battles already under way keep their original rules.",
+                game: "realmarena",
+            },
+            {
                 title: "Realm Arena's castle walls look like stone",
                 detail: "On the 3D battlefield, walls, towers and rubble are now built of neat courses of cut stone, sharp even zoomed right in, and wall tops are paved with flagstones — no more smeared brick or dark seams between squares.",
                 game: "realmarena",
@@ -122,11 +127,6 @@ export const WHATS_NEW: WhatsNewGroup[] = [
             {
                 title: "Realm Arena: new abilities for the Realm",
                 detail: "Leap and dash with Men-at-arms, brace your side and shove enemies with Knights, try four new Archer arrows, freeze and stun with Mages, and pull, bless and ward allies with Clerics. The Scout retires from new squads. Battles already under way keep their original rules.",
-                game: "realmarena",
-            },
-            {
-                title: "Realm Arena's scoreboard shows your allies' full squad and HP",
-                detail: "Allies share vision, so their squads no longer say ‘in sight’ in fog of war. In co-op, tap the scoreboard to see how much HP each allied squad has left out of its full total, including your own.",
                 game: "realmarena",
             },
         ],
