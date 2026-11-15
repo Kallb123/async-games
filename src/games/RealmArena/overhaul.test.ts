@@ -34,6 +34,7 @@ describe("Realm overhaul catalogue isolation", () => {
     it("plays v9's kits from v9 on, preserving the legacy, v7 and v8 kits", () => {
         expect(CURRENT_RULESET_VERSION).toBeGreaterThanOrEqual(9);
         expect(rulesetFor(10).CHARACTERS).toBe(rulesetFor(9).CHARACTERS);
+        expect(rulesetFor(11).CHARACTERS).toBe(rulesetFor(9).CHARACTERS);
         for (const rulesVersion of [undefined, 7, 8]) {
             const old = rulesetFor(rulesVersion);
             expect(old.FACTIONS.realm.characters).toContain("scout");
