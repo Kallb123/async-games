@@ -4,7 +4,7 @@
 battles in rules version 9, using §34.10's proposed defaults for playtesting,
 sight with angles (§36) in rules version 10, co-op for a team of four in
 Hold Out (§37), and every Archer shot at 2 AP (§38) in rules version 11. Battles already created keep their original rules.
-§39 plans what comes next for Hold Out against the Swarm, none of it built.
+§39 plans what comes next for Hold Out against the Swarm; its first PR, Taunt's radius (§39.2), is built in the unreleased rules version 12.
 Earlier implementation
 notes and revision history describe the game before this overhaul wherever
 they conflict with §34.
@@ -3769,6 +3769,10 @@ falls, and round by round how many of the team are still standing.
   better. What it measures well is a change: battle *k* of a scenario rolls
   from seed *k*, so the same seeds before and after a change differ only
   where the rules do (and where a warband's turn met its two-second deadline).
+- **An unreleased catalogue.** `--rules <n>` (the workflow's *rules*) fights
+  under any registered rules version rather than the current one; the
+  scenario's name gains `rules v<n>`, so its samples never merge with the
+  current rules'.
 - **A change to the planner, measured alone.** The planner plays both sides,
   so improving it improves the team as much as the warbands. `--team-planner
   <ref>` (the workflow's *team planner*) has the team play the planner as it
@@ -4276,7 +4280,7 @@ and the planner lists one action per target rather than one per combination.
 | Ice Ball | A square | The 3×3 |
 | Beckon | An ally | Where the pull stops |
 | Ward | An ally | — |
-| Slash and Dash, Taunt, Focus, Blessing | Itself | Who is braced or blessed |
+| Slash and Dash, Taunt, Focus, Blessing | Itself (one with a radius is armed first, §39.2) | Who is braced or blessed |
 
 The two additions:
 
@@ -4858,7 +4862,7 @@ two different arrows in one turn, but never the same one twice running.
 
 ## 39. Hold Out against the Swarm: the next seven PRs (plan)
 
-*Planned, not built.* Hold Out with the players as the Realm against the
+*Planned; PR 1 (§39.2) is built, in a catalogue not yet released.* Hold Out with the players as the Realm against the
 computer's Swarm is the game's main mode, which is why the Realm's kit was
 rebuilt first (§34). This section plans what makes the Swarm worth using that
 kit on: a Taunt with a reach, Bloaters that burst when they fall, a rally each
@@ -4896,7 +4900,7 @@ Every value marked *Proposed* is a starting point for the balance harness
 
 | PR | What | Needs |
 |---|---|---|
-| 1 | Taunt reaches a radius (§39.2) | — |
+| 1 | Taunt reaches a radius (§39.2) — **built** | — |
 | 2 | A Bloater bursts when it's downed (§39.3) | — |
 | 3 | The rally is each player's choice (§39.4) | — |
 | 4 | Elite Swarm characters (§39.5) | — |
@@ -4921,16 +4925,26 @@ a range as the lever.
 - **Engine.** `v12.ts` overrides `taunt` with `radius: 3` and a new
   description. `act` already reads an ability's `radius` for Taunt and
   Blessing alike, so no rule code changes.
-- **Board.** Selecting Taunt shades its radius as Blessing's is shaded, and
-  the preview lists who would be braced.
+- **Board.** Blessing's radius turned out not to be shaded: both went the
+  moment their row was tapped. So an ability used on its user that has a
+  radius in the battle's own rules is armed first, like any aim: its row
+  shades the squares within the radius, rings the allies it reaches and names
+  them over a send button, with Cancel beside it. That is Blessing in every
+  battle, and Taunt in a version-12 one; a Taunt without a radius still goes
+  at once. `act` and the preview pick the allies with one function
+  (`alliesWithin`).
 - **Planner.** Taunt's aim gains `useful`: listed only with an ally besides
-  the Knight in its radius.
+  the Knight in its radius. Where Taunt has no radius it is listed as before,
+  so no warband plays an existing battle differently.
 - **Tests.** `rulesets.test.ts` pins the radius and that nothing else of
   version 11 changed; `overhaul.test.ts` braces an ally at 3 squares and not
   one at 4.
 - **Measured.** The team's win rate with radius 3 and 4 against the baseline.
   If it barely moves, the planner isn't using Taunt, and that is worth knowing
-  before PR 7.
+  before PR 7. *Not yet measured:* neither Step 0's baseline nor this has
+  been run. The harness and the *Realm Arena balance* workflow take
+  `--rules 12` (the workflow's `rules` input) for it; radius 4 needs the
+  catalogue edited on a branch.
 
 ### 39.3 PR 2: A Bloater bursts when it's downed
 
@@ -5399,3 +5413,4 @@ Realm, its sibling in the same world.
 | 1.63 | The flank badge: a target a shot would find with no cover wears Flank on its odds badge (gold, inverted) on both boards, in the list of targets and in the turn sheet, and the damage a flanked shot did is labelled Flanked (§26.1). Shot events carry `flanked?: true` when a shot that did damage found no cover, so older recorded battles read as before. Presentation only: no rules or command version changes. |
 | 1.64 | Archer shots at 2 AP (§38, rules and command version 11): Aimed shot, Crippling shot, Poison Arrow, Bouncing Arrow, Splitting Arrow and Shoot + Dodge each cost 2 AP rather than 3, with their cooldowns unchanged; the Prospector's Aimed shot too. Battles created before it keep 3 AP. |
 | 1.65 | Hold Out against the Swarm, planned and not built (§39): Taunt reaching a radius, a Bloater bursting when it's downed, the rally as each player's choice of a heal, a downed character back or their items restocked, three elite Swarm characters, themed waves bought with points, nests whose destruction shrinks the next wave, and temperaments for the planner — all in one rules catalogue, version 12, released by the last PR. |
+| 1.66 | §39 PR 1 builds Taunt's radius (§39.2): `catalogues/v12.ts`, registered and not current, where Taunt braces allies within 3 squares of the Knight; the planner lists Taunt only with an ally in that reach; the balance harness and its workflow take a rules version (`--rules`). On the board, an ability with a radius — Blessing today, Taunt in version 12 — is armed before it's sent, shading its reach and naming who it would touch. Its balance is not yet measured. |

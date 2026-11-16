@@ -127,6 +127,10 @@ To release changed units or abilities:
 2. Register and deeply freeze the new catalogue in `RULESETS`, then advance
    `CURRENT_RULESET_VERSION`. Keep every old registry entry pointing at its
    original catalogue. `currentRuleset` is derived from that registry.
+   A catalogue built across several PRs may be registered before it is
+   current (v12, realm-arena.md §39): nothing stamps a game with it, so it may
+   still be edited until the PR that advances `CURRENT_RULESET_VERSION`; from
+   then it is shipped.
 3. Express supported behavior changes in the new catalogue: `RULES` owns AP,
    attack limits, reaction costs and bank caps, accuracy, cover and armour,
    scoring and round limits, and line of sight (`ANGLED_SIGHT`), which picks
