@@ -111,6 +111,18 @@ describe("Knight", () => {
         expect(get(startTurn(result, "a"), 0).effects.braced).toBeUndefined();
     });
 
+    it("from v12 Taunt braces allies within 3 squares of the Knight, itself included, and no further (§39.2)", () => {
+        const v12 = { rulesVersion: 12 };
+        const at12 = (id: number, character: CharacterId, col: number, owner = "a") => ({ ...newFighter(id, owner, character, point(col), null, undefined, false, v12), ap: 4 });
+        const knight = at12(0, "knight", 3), near = at12(1, "archer", 6), far = at12(2, "archer", 7), enemy = at12(3, "manAtArms", 4, "b");
+        const state = { ...battle(knight, near, far, enemy), ...v12, sides: { a: "team", b: "enemy" } };
+        const result = run(state, { kind: "taunt", fighter: 0 });
+        expect(get(result, 0).effects.braced).toBe(1);
+        expect(get(result, 1).effects.braced).toBe(1);
+        expect(get(result, 2).effects.braced).toBeUndefined();
+        expect(get(result, 3).effects.braced).toBeUndefined();
+    });
+
     it("pushes without reactions and hurts both characters in a collision; a miss does neither", () => {
         const knight = fighter(0, "knight", 2), enemy = fighter(1, "manAtArms", 3, "b"), blocker = fighter(2, "archer", 5, "a");
         const state = battle(knight, enemy, blocker);

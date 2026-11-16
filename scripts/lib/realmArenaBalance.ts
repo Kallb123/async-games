@@ -39,6 +39,8 @@ export interface BalanceScenario {
     difficulty: Difficulty;
     size: BattleSize;
     fog: boolean;
+    /** The rules version to fight under (`--rules`); absent is the current one, and leaves the scenario's name as it was. */
+    rules?: number;
 }
 
 /**
@@ -99,6 +101,7 @@ export function scenarioKey(s: BalanceScenario): string {
         s.difficulty !== "normal" ? DIFFICULTY_NAMES[s.difficulty] : undefined,
         s.size !== "normal" ? `${BATTLE_SIZE_NAMES[s.size]} battle` : undefined,
         s.fog ? "fog" : undefined,
+        s.rules !== undefined ? `rules v${s.rules}` : undefined,
     ].filter(Boolean);
     return `${team} vs ${factionName(s.enemy)} · ${mission}${extras.length ? ` · ${extras.join(", ")}` : ""}`;
 }
@@ -112,6 +115,7 @@ export function settingsOf(s: BalanceScenario): RealmArenaSettings {
         ...(s.team !== "realm" ? { factions: [s.team] } : {}),
         ...(s.fog ? { fog: true } : {}),
         ...(s.size !== "normal" ? { size: s.size } : {}),
+        ...(s.rules !== undefined ? { rulesVersion: s.rules } : {}),
         coop: {
             enemy: s.enemy,
             ...(s.mission === "holdOut" ? { mission: "holdOut" as const } : {}),
