@@ -111,9 +111,20 @@ describe("Realm Arena ruleset compatibility", () => {
         expect(after.ABILITIES.taunt).toEqual({ ...before.ABILITIES.taunt, radius: 3, description: expect.stringContaining("within 3 squares") });
         const { taunt: _before, ...rest } = before.ABILITIES, { taunt: _after, ...restAfter } = after.ABILITIES;
         expect(restAfter).toEqual(rest);
-        for (const id of ["CHARACTERS", "RULES", "OPTIONS", "ITEMS", "EFFECTS", "FACTIONS"] as const) expect(after[id]).toBe(before[id]);
+        // The Bloater's burst-when-downed is the one character change so far (§39.3).
+        for (const id of ["RULES", "OPTIONS", "ITEMS", "EFFECTS", "FACTIONS"] as const) expect(after[id]).toBe(before[id]);
         // Not released until §39.9: nobody creates a version-12 battle yet.
         expect(real.CURRENT_RULESET_VERSION).toBe(11);
+    });
+
+    it("makes a Bloater burst when it's downed in v12 and changes nothing else of v11's characters (§39.3)", async () => {
+        const real = await vi.importActual<typeof import("./rulesets")>("./rulesets");
+        const before = real.rulesetFor(11).CHARACTERS, after = real.rulesetFor(12).CHARACTERS;
+        expect(before.bloater.burstsWhenDowned).toBeUndefined();
+        expect(real.rulesetFor(10).CHARACTERS.bloater.burstsWhenDowned).toBeUndefined();
+        expect(after.bloater).toEqual({ ...before.bloater, burstsWhenDowned: true });
+        const { bloater: _before, ...rest } = before, { bloater: _after, ...restAfter } = after;
+        expect(restAfter).toEqual(rest);
     });
 
     it("pins HP, movement and available abilities to the game, including an added ability", () => {

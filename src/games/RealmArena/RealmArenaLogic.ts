@@ -540,7 +540,7 @@ function clause(event: BattleEvent, fighters: readonly Fighter[], actor: string,
         case "marked": return `used ${ABILITIES.huntersMark.name} with ${name(event.fighter)}`;
         case "burst": {
             const hit = hitIn(event.targets).length === 0 ? "" : `, hitting ${pluralize(hitIn(event.targets).length, "character")}${event.damages ? "" : ` for ${event.damage}`}`;
-            return `burst ${name(event.fighter)}${hit}`;
+            return `burst ${name(event.fighter)}${event.downed ? " as it fell" : ""}${hit}`;
         }
         case "raised": return `raised ${name(event.target)} with ${name(event.fighter)}`;
         case "hunkered": return `hunkered ${name(event.fighter)} down`;
@@ -569,8 +569,9 @@ function veiledClause(event: BattleEvent, name: (id: number) => string, hitIn: (
         case "fireball":
         case "iceBall":
         case "dynamite":
-        case "demolished":
-        case "burst": return `used an ability with ${name(event.fighter)}${hit(event.targets, event.damage)}`;
+        case "demolished": return `used an ability with ${name(event.fighter)}${hit(event.targets, event.damage)}`;
+        // A Bloater's death burst names no ability: it was downed, and the blast is what it did as it fell (§39.3).
+        case "burst": return event.downed ? `released a blast as ${name(event.fighter)} fell${hit(event.targets, event.damage)}` : `used an ability with ${name(event.fighter)}${hit(event.targets, event.damage)}`;
         case "healed": return event.via === "draught" ? undefined : `used an ability on ${name(event.target)} with ${name(event.fighter)}`;
         case "raised": return `used an ability on ${name(event.target)} with ${name(event.fighter)}`;
         case "ability":

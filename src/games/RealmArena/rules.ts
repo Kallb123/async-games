@@ -338,7 +338,7 @@ export type BattleEvent =
     /** A Knight's Demolish at the cover on `at`: `targets` is everyone beside it that it struck (§23.2). Its `blasted` follows. */
     | { kind: "demolished"; fighter: number; at: Square; targets: number[]; damage: number; damages?: Record<number, number> }
     /** A Bloater's Burst: `targets` is everyone next to it that the acid hit (§31.2). Its own `downed` follows theirs. */
-    | { kind: "burst"; fighter: number; targets: number[]; damage: number; damages?: Record<number, number> }
+    | { kind: "burst"; fighter: number; targets: number[]; damage: number; damages?: Record<number, number>; downed?: true }
     /** A Scout's Hunter's mark on `target`, whose `effect` follows (§23.2). */
     | { kind: "marked"; fighter: number; target: number }
     | { kind: "raised"; fighter: number; target: number; hp: number }
@@ -1468,6 +1468,9 @@ function resolver(state: BattleState, roll: Roll) {
         return fighter;
     };
 
+    /** Bloaters downed and not yet burst, in the order they fell, with whoever downed each (§39.3). */
+    const fallen: { id: number; by: Pick<Fighter, "id" | "owner"> }[] = [];
+
     /**
      * Takes HP off a character; at 0 it's down, losing every effect, and an
      * enemy who downed it scores (§13.5, §13.7, §20.2). So does every other
@@ -1494,6 +1497,7 @@ function resolver(state: BattleState, roll: Roll) {
         // Downing your own side's character — a fireball's, say — scores nobody anything.
         if (enemy) events.push({ kind: "scored", player: by.owner, points: knockoutPoints(target.character, state), reason: "knockout" });
         for (const player of assists) events.push({ kind: "scored", player, points: assistPoints(target.character, state), reason: "assist" });
+        if (burstsWhenDowned(target, state)) fallen.push({ id: target.id, by });
     };
 
     const afflict = (by: Fighter, target: Fighter, effect: Affliction) => {
@@ -1548,7 +1552,7 @@ function resolver(state: BattleState, roll: Roll) {
      * `told` makes of who it hit, then its damage, then its effect on
      * whoever it didn't down (§13.6, §20.2).
      */
-    const land = (by: Fighter, squares: readonly Square[], damage: number, effect: Affliction | undefined, told: (targets: number[]) => BattleEvent, via: BlowSource = "ability") => {
+    const land = (by: Fighter, squares: readonly Square[], damage: number, effect: Affliction | undefined, told: (targets: number[]) => BattleEvent, via: BlowSource = "ability", scorer: Pick<Fighter, "id" | "owner"> = by) => {
         const area = new Set(squares);
         const hit = fighters.filter(one => isStanding(one) && area.has(one.square));
         const damages = Object.fromEntries(hit.map(target => [target.id, damageTo(battle, by, target, damage, via)]));
@@ -1558,8 +1562,25 @@ function resolver(state: BattleState, roll: Roll) {
         if ("targets" in event && "damage" in event && effectsCarrying(state).has("damageBonus")
             && hit.some(target => damages[target.id] !== damage)) event.damages = damages;
         events.push(event);
-        if (damage > 0) for (const target of hit) wound(by, target, damages[target.id]);
+        if (damage > 0) for (const target of hit) wound(scorer, target, damages[target.id]);
         if (effect) for (const target of hit) afflict(by, target, effect);
+    };
+
+    /**
+     * Bursts every Bloater that has fallen since the last call, in the order
+     * they fell, until none is left: a burst that downs another Bloater queues
+     * it. Each is Burst's own blast with the Bloater's own damage, and any
+     * knock-out it makes scores for whoever downed the Bloater (§39.3).
+     */
+    const settle = () => {
+        for (let next = fallen.shift(); next; next = fallen.shift()) {
+            const bloater = get(next.id);
+            if (!burstsWhenDowned(bloater, state)) continue;
+            bloater.spent.push("burst");
+            const { damage, effect } = rulesetOf(state).ABILITIES.burst;
+            land(bloater, burstArea(state.field, bloater.square), damage, effect,
+                targets => ({ kind: "burst", fighter: bloater.id, targets, damage, downed: true }), "ability", next.by);
+        }
     };
 
     /**
@@ -1599,7 +1620,7 @@ function resolver(state: BattleState, roll: Roll) {
         mover.facing = facingTowards(state.field, path[path.length - 2], path[path.length - 1]);
         mover.square = path[path.length - 1];
     };
-    return { fighters, battle, events, get, shoot, strike, wound, afflict, land, blast, mend, hit, relocate };
+    return { fighters, battle, events, get, shoot, strike, wound, afflict, land, settle, blast, mend, hit, relocate };
 }
 
 /**
@@ -1623,9 +1644,12 @@ function walk(state: BattleState, run: ReturnType<typeof resolver>, mover: Fight
     for (const { watcher: id, step } of reactions) {
         moveTo(step);
         const watcher = run.get(id);
+        // A Bloater's burst can down a watcher before its turn to react.
+        if (!isStanding(watcher)) continue;
         watcher.banked -= REACTION_COST;
         if (shoots(watcher, state)) run.shoot(watcher, mover, "overwatch");
         else run.strike(watcher, mover, true);
+        run.settle();
         if (!isStanding(mover)) return;
     }
     moveTo(path.length - 1);
@@ -1716,6 +1740,8 @@ export function act(state: BattleState, player: string, action: Action, roll: Ro
             break;
         case "shootDodge": {
             run.shoot(actor, get(action.target), action.kind);
+            run.settle();
+            if (!isStanding(actor)) break;
             const { path, found } = routed(run.battle, actor, action.path, false, ABILITIES.shootDodge!.dodge!);
             for (const enemy of found) events.push({ kind: "spotted", fighter: actor.id, by: enemy.id });
             run.relocate(actor, path, action.kind);
@@ -1847,6 +1873,7 @@ export function act(state: BattleState, player: string, action: Action, roll: Ro
             break;
         }
     }
+    run.settle();
     if (isStanding(actor)) actor.ap += ABILITIES[action.kind as AbilityId]?.bonusAp ?? 0;
     return { fighters: run.fighters, events };
 }
@@ -1881,6 +1908,7 @@ function tickEffects(run: ReturnType<typeof resolver>, player: string, boundary:
                 const by = run.fighters.find(one => one.id === source) ?? { id: source ?? fighter.id, owner: fighter.owner };
                 run.events.push({ kind: "burned", fighter: fighter.id, damage: effect.damage, ...(id === "burning" ? {} : { effect: id }) });
                 run.wound(by, fighter, effect.damage);
+                run.settle();
             }
             if (!isStanding(fighter)) break;
             if ((effect.decayAt ?? effect.tick ?? "start") === boundary) {
