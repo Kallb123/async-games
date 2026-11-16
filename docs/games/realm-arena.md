@@ -1,9 +1,10 @@
 # Realm Arena — Game Design Document
 
-**Status:** v1.64. The Realm troop overhaul (§34) is implemented for new
+**Status:** v1.65. The Realm troop overhaul (§34) is implemented for new
 battles in rules version 9, using §34.10's proposed defaults for playtesting,
 sight with angles (§36) in rules version 10, co-op for a team of four in
 Hold Out (§37), and every Archer shot at 2 AP (§38) in rules version 11. Battles already created keep their original rules.
+§39 plans what comes next for Hold Out against the Swarm, none of it built.
 Earlier implementation
 notes and revision history describe the game before this overhaul wherever
 they conflict with §34.
@@ -4855,6 +4856,463 @@ two different arrows in one turn, but never the same one twice running.
 
 ---
 
+## 39. Hold Out against the Swarm: the next seven PRs (plan)
+
+*Planned, not built.* Hold Out with the players as the Realm against the
+computer's Swarm is the game's main mode, which is why the Realm's kit was
+rebuilt first (§34). This section plans what makes the Swarm worth using that
+kit on: a Taunt with a reach, Bloaters that burst when they fall, a rally each
+player chooses, elite Swarm characters, waves that differ, nests to destroy,
+and a Swarm that plays like one. The ability loadout is planned apart, in
+[issue 957](https://github.com/Kallb123/async-games/issues/957), and §39.10
+says how the two meet.
+
+Every value marked *Proposed* is a starting point for the balance harness
+(§30.12), not a decision.
+
+### 39.1 How it's built
+
+- **One rules catalogue, version 12, for all of it.** `catalogues/v12.ts` is
+  added by the first PR and registered in `RULESETS`, but
+  `CURRENT_RULESET_VERSION` stays 11 until the last PR (§39.9). Until then
+  nobody can create a version-12 battle, so the catalogue isn't shipped and
+  each PR may still edit it; tests and the harness build their battles at
+  version 12 through the fixtures' `rulesVersion`. The harness gains a
+  `--rules <version>` flag for it. Battles created before the last PR keep
+  version 11 to their end, as always.
+- **Rules are data.** Each change below is a field on a character, an ability,
+  a faction or `RULES`, absent in every earlier catalogue, and absent means
+  the old behaviour. The Renegades and the Miners have none of the new fields,
+  so Hold Out against them plays as it does today.
+- **A command version where one is due** (`docs/command-versions.md`): for the
+  rally's new action (§39.4), and for the End turn landing a wave by the new
+  rules (§39.6, §39.7).
+- **One "What's new" line**, written by the last PR, for the lot.
+- **Step 0: a baseline.** Before PR 1, run the harness at version 11: Hold Out
+  against the Swarm, teams of one to four, on the gate forts, the Sacked Fort
+  and the Sunken Village, 200 battles a cell. §30.12's numbers are from before
+  the Realm's new kit; every PR below is measured against this run, with the
+  same seeds.
+
+| PR | What | Needs |
+|---|---|---|
+| 1 | Taunt reaches a radius (§39.2) | — |
+| 2 | A Bloater bursts when it's downed (§39.3) | — |
+| 3 | The rally is each player's choice (§39.4) | — |
+| 4 | Elite Swarm characters (§39.5) | — |
+| 5 | Waves that differ, bought with points (§39.6) | 4 |
+| 6 | Nests (§39.7) | 5 |
+| 7 | The Swarm plays like a swarm (§39.8) | 2, 4 |
+| 8 | Balance, copy and release (§39.9) | all |
+
+PRs 1–4 don't depend on each other and can be built in any order.
+
+### 39.2 PR 1: Taunt reaches a radius
+
+Today Taunt braces every standing character on the Knight's side, wherever it
+stands (§34.5), for 1 AP every other turn. Against the Swarm, whose claws and
+spit do 2, that halves most of what the team takes — the same armour that §30.13 kept from
+the team against the Swarm because it won 96% of battles. §34.5 already named
+a range as the lever.
+
+- **The rule.** *Proposed:* Taunt braces allies within **3** squares of the
+  Knight, the Knight included: Blessing's radius (§34.8). Cost, cooldown and
+  the Braced effect are unchanged.
+- **Engine.** `v12.ts` overrides `taunt` with `radius: 3` and a new
+  description. `act` already reads an ability's `radius` for Taunt and
+  Blessing alike, so no rule code changes.
+- **Board.** Selecting Taunt shades its radius as Blessing's is shaded, and
+  the preview lists who would be braced.
+- **Planner.** Taunt's aim gains `useful`: listed only with an ally besides
+  the Knight in its radius.
+- **Tests.** `rulesets.test.ts` pins the radius and that nothing else of
+  version 11 changed; `overhaul.test.ts` braces an ally at 3 squares and not
+  one at 4.
+- **Measured.** The team's win rate with radius 3 and 4 against the baseline.
+  If it barely moves, the planner isn't using Taunt, and that is worth knowing
+  before PR 7.
+
+### 39.3 PR 2: A Bloater bursts when it's downed
+
+A Bloater's Burst is its own action (§31.2). From version 12 it also goes off
+when the Bloater is downed by anything else, so where a Bloater dies is the
+team's decision too: Shove it back into its own swarm, shoot it before it
+arrives, Beckon an ally out from beside it.
+
+- **The rule.** A Bloater downed by a blow, a blast, burning or poison bursts
+  where it falls: Burst's own area, damage (3) and Corroded, friend or foe.
+  One that used Burst has burst already, and doesn't again.
+- **Chains.** A burst that downs another Bloater bursts that one too, each
+  Bloater once, in the order they fell.
+- **Who scores.** A knock-out by a death burst scores for whoever downed the
+  Bloater, as a knock-out by burning scores for whoever threw the fire (§20).
+  The Bloater's own knock-out scores as any does.
+- **Engine.** `burstsWhenDowned: true` on the character in `v12.ts`.
+  `run.wound` queues a character with the flag as it goes down, and the run
+  drains the queue after the blow that caused it, through the same `run.land`
+  the Burst action uses. The event is `burst` with `downed: true`, so the
+  board plays the visual it has and the recap can say why it happened.
+- **Reactions and undo.** A Bloater downed on overwatch bursts mid-move, on
+  whoever is beside it then. A blow that bursts one hurt somebody, so it can't
+  be undone, as now.
+- **Board.** Aiming anything at a Bloater shades its burst area and marks who
+  would be caught, with the same shading a fireball's 3×3 has.
+- **Planner.** It plays every action out with `act`, so both sides see the
+  burst in the battle they score; no planner code.
+- **Hidden information.** A burst in the fog is told by `toldTo`, as a blast
+  is: whoever it hit knows they were hit. `hiddenHands.test.ts` gains a death
+  burst nobody of the viewer's saw.
+- **Tests.** Downed by a shot, a Shove's collision, burning and a guard's
+  strike; a chain of three; no second burst after its own; a version-11
+  battle's Bloater falls quietly; a replay bursts the same way.
+
+### 39.4 PR 3: The rally is each player's choice
+
+The rally heals every standing character of the team by half as a wave lands
+(§30.11), and the downed stay down. The balance experiments found bringing a
+downed character back the best single lever against the Swarm, and too strong
+on top of everything else (`realm-arena-balance.md`). As one choice of three,
+in place of the heal, it becomes a trade.
+
+**The rule.** From version 12 a wave heals nobody as it lands. Each player of
+the team owes a rally choice instead, made as their next turn begins, before
+anything else:
+
+| Choice | What it does | *Proposed* |
+|---|---|---|
+| **Rally** | Every standing character of theirs regains half its HP | As today, for their own squad only |
+| **Reinforce** | One downed character of theirs returns at half HP, on a free square of their deployment zone | The player picks which; it takes its turn at once |
+| **Resupply** | Every character of theirs standing gets back the item it mustered with | Only where one was used |
+
+- **A choice with nothing to do isn't offered.** Reinforce needs someone down,
+  and Resupply an item used. Rally is always there.
+- **A wiped-out player still chooses.** `nextSeat` steps past a squad with
+  nobody standing, so today that player never has another turn. A seat that
+  owes a choice and has someone down is not stepped past: its turn begins, it
+  can only Reinforce, and then it plays on. This is the case the choice
+  matters most for.
+- **A timed-out turn** takes Rally, or Reinforce with its dearest downed
+  character if nobody of theirs stands.
+- **It can't be undone**, and it clears the undo stack.
+
+**Engine.**
+
+- `landWave` under version 12 sets `rallyOwed: string[]` on the state — every
+  team seat — in place of calling `rally`.
+- A new action, `{ kind: "rally", choice, fighter? }`, through
+  `RealmArenaAct`. `check` refuses it unless the actor's owner owes one, and
+  refuses every other action and the End turn while they do. Command version
+  12.
+- Reinforce places the character as `waveOf` places the enemy's: the first
+  free square of the zone. *Open:* letting the player tap the square, with the
+  muster's placing.
+- A fighter keeps `musteredItem`, set at muster: `item` is null once used, so
+  Resupply has nothing to read today.
+- The log says "Bob's squad rallies", "Bob's Archer rejoins the fight" or
+  "Bob's squad is resupplied", to everyone. `HoldOutRecord` gains each wave's
+  choices, and the result's *Hold Out* group a line for them.
+- The choice earns no mastery XP.
+
+**Screens.** While a choice is owed, the turn sheet shows it alone: three
+`BuildRow`s in an `.ag-build-list`, the unavailable ones disabled with their
+reason, and Reinforce opening a second list of the downed. The response
+carries `rallyOwed` for the viewer's seat. The guide's co-op section and the
+tutorial's Hold Out step are rewritten.
+
+**The harness's team** needs a policy, since the planner scores battles, not
+menus: Reinforce when the downed character is worth more than half the HP a
+Rally would give back, Resupply never, Rally otherwise. It lives in the
+harness, not in `ai.ts`: warbands never rally.
+
+**Tests.** Each choice's effect and its refusal when there is nothing to do;
+every other action refused while owed; a wiped-out seat gets its turn and
+only Reinforce; the timeout's pick; a version-11 End turn rallies as before; a
+replay; the null viewer's response in `hiddenHands.test.ts`.
+
+**Measured.** Against the baseline, with the harness's policy and with Rally
+always. If Reinforce overshoots as restore did, the first levers are
+Reinforce at a quarter HP, and no turn for the returned character until the
+next round.
+
+*Open:* the choice is made as each player's turn begins, so in a team of four
+the last player waits most of a round for their heal. It could be an
+out-of-turn action instead (`docs/out-of-turn-actions.md`), made by everyone
+as the wave lands.
+
+### 39.5 PR 4: Elite Swarm characters
+
+No Swarm character costs more than 20 points, so the Realm's single-target
+abilities — Thunder, Poison Arrow, Aimed shot, Shove — have nothing worth
+spending them on, and its area abilities win every comparison. Three elites,
+each asking for a different answer. They are the computer's: no player
+musters one.
+
+| Character | Points | HP | Move | Weapon | Ability | What answers it |
+|---|---:|---:|---|---|---|---|
+| **Brood Queen** | 60 | 20 | 4, sight 25 | Talons: melee, 3 | **Hatch** (2 AP, cooldown 2): a Skitterling stands on a free square next to it | Kill it first; Thunder's stun costs it a Hatch; poison and fire tick while it hides |
+| **Carapace Brute** | 50 | 22 | 4 | Crushing claws: melee, 5 | **Carapace** (passive): armour 1 | Fire and poison, which armour doesn't reduce; a Focused spell; Shove and Ice Ball to keep it off the line |
+| **Bile Lobber** | 40 | 12 | 4 | Acid spit: 70%, range 12, 2, corrodes | **Bile** (3 AP, cooldown 2): 2 and Corroded to a 3×3 in sight within 10, no roll, friend or foe | An Aimed shot or a Leap onto it; standing apart |
+
+All values *Proposed*.
+
+- **The Lobber is the counter to bunching up**, which Bulwark, Blessing and
+  the new Taunt (§39.2) all reward. That tension is the point.
+- **Hatch is capped.** A Queen hatches only while fewer than *3* of its
+  hatchlings stand, so the board and the planner's time stay bounded.
+  Hatchlings are ordinary Skitterlings owned by the Queen's warband, worth a
+  Skitterling's points, and stay when the Queen falls.
+- **Engine.**
+  - `FACTIONS.swarm.elites: ["broodQueen", "carapaceBrute", "bileLobber"]` in
+    `v12.ts`, apart from `characters`, the roster a player's muster is checked
+    against (§32).
+  - Carapace is `armour: 1` on the character, read where Braced's armour is
+    read (`damageTo`); the two add.
+  - Bile is a square aim with `useful`, as Ice Ball's (§34.3). Hatch is aimed
+    at nothing: the rules pick the free square next to the Queen nearest an
+    enemy it can see, ties by square.
+  - A hatchling takes the next fighter id, and is seen in fog only if it's in
+    sight (`noteSighting`).
+- **Art.** Each is modelled in `art-masters/realmarena/characters` and
+  rendered by `npm run ra-characters`, for the isometric board and the 3D one.
+  To start with, each can be its base character's model, larger and with one
+  addition (the Queen's egg sac, the Brute's plates, the Lobber's swollen
+  tail), so the PR isn't held up by three new models.
+- **Screens.** The stats ⓘ and `/admin/realmarena` read the catalogue, so they
+  list the elites unprompted. The fighter box shows "Armour 1" as it does for
+  Hold Out's armour.
+- **Tests.** No muster accepts an elite; the cap on Hatch; armour never
+  leaves a blow under 1 and doesn't reduce burning or poison; every new action
+  has an aim (the existing guard); the planner stays inside its pace
+  (`planner.pace.test.ts`) with a Queen and three hatchlings a warband.
+- **Until PR 5** the elites appear in no battle outside tests.
+
+### 39.6 PR 5: Waves that differ, bought with points
+
+Every wave today is the warband's ready-made squad again, one character
+larger each time (`waveStrength`, §30.10). From version 12 a faction can name
+its waves, and each is bought with points.
+
+**The rule.**
+
+- **A wave has a budget.** The warband's own budget (`warbandBudgetOf`), plus
+  *15* points for every wave landed before it (`WAVE_GROWTH_POINTS`, about the
+  one character more that §30.10 brings today), less what the team has taken
+  off it (§39.7).
+- **A wave has a theme**: a name, an elite or none, and the order it buys the
+  rest in. Hold Out's waves land at rounds 4, 7, 10 and 13 for every team size
+  (§30.3), so the Swarm has four. *Proposed:*
+
+  | Round | Theme | Elite | Buys, in order, again and again |
+  |---:|---|---|---|
+  | 4 | **The Rush** | — | Skitterling, Skitterling, Ravager |
+  | 7 | **The Bile** | Bile Lobber | Spitter, Bloater, Spitter |
+  | 10 | **The Brutes** | Carapace Brute | Ravager, Skitterling, Bloater |
+  | 13 | **The Queen** | Brood Queen | Ravager, Spitter, Skitterling, Bloater |
+
+- **Buying.** The elite first, if the budget covers it; then down the list,
+  round and round, skipping what the points left can't buy, until nothing on
+  it can be bought. No draw, so nothing to record.
+- **A wave still refills.** It brings what its purchase lists that the warband
+  doesn't have standing, as now. Survivors of an earlier theme stay, so a
+  warband can stand above its purchase. *Proposed:* a wave never takes a
+  warband past *12* standing, about today's most (the largest ready-made
+  squad after four growing waves), which keeps the planner's time and the zones' room where they
+  are.
+- **The first muster is unchanged**: the ready-made squad.
+
+**Engine.**
+
+- `FACTIONS.swarm.waves` in `v12.ts`. A faction without it — the Renegades,
+  the Miners, and the Swarm before version 12 — lands waves by
+  `waveStrength`.
+- `waveStrength` becomes one of two ways `waveOf` asks what a warband should
+  be brought up to; the other is `wavePurchase(faction, budget, round)`, pure
+  and in `rules.ts`. `waveOf`, the placement and `nextWaveOf` are otherwise as
+  they are.
+- An End turn lands a wave by its command version, as growing waves did
+  (§30.10): version 13.
+- **The wave is told by name.** The log says "The Bile arrives". The
+  scoreboard's next-wave line (§30.11) names it: "Round 7: The Bile, 9
+  arriving". In fog the count stays a ceiling, and while a random enemy is
+  unseen neither the name nor the count is sent, as now: both name the
+  faction.
+- `HoldOutRecord` keeps each wave's theme, and the result's wave lines and the
+  *Enemies downed by wave* chart are labelled with it.
+
+**Tests.** Each theme's purchase at every budget on the ladder; the elite
+dropped when the budget can't cover it; the cap; every faction's strongest
+last wave still fits every zone on every Hold Out battlefield (the existing
+test, widened); a version-12 End turn against the Renegades lands
+`waveStrength`'s wave; the null viewer's response; a replay.
+
+*Open:* a fixed order is learnable, and the same every battle. Drawing the
+order of the first three as the battle is created, with the Queen always
+last, adds variety, and a stored order that must be kept off the wire until
+each wave is told.
+
+### 39.7 PR 6: Nests
+
+The team wins Hold Out by having anyone standing at the end, so the best play
+is never to leave the keep. Nests give it a reason to.
+
+**The rule.**
+
+- **Each Swarm warband has nests** in or beside its deployment zone, near the
+  map's edge: *2* each. They stand from the first muster.
+- **A nest is attacked like a character.** *Proposed:* 10 HP, no armour, can't
+  move, act or react, and takes no effect but burning and poison. A Shove
+  hurts it and doesn't push it. A Regrowth heals it.
+- **Destroying one shrinks the next wave.** Each nest of a warband destroyed
+  since the last wave landed takes *15* points off that warband's next wave's
+  budget (§39.6): a growth step each, so both nests cancel two waves' growth.
+  *Proposed:* never below half the budget, and the wave's elite is bought
+  first, so nests thin its escort and don't cancel it.
+- **A nest regrows** at full HP as the wave it shrank lands, so the sortie is
+  a decision before every wave. *Open:* destroyed for good, with the reduction
+  lasting every later wave, is simpler to tell and makes an early sortie worth
+  far more than a late one.
+- **A nest scores** as a knock-out of a 20-point character does (§13.7), for
+  the result's points race; the score still doesn't decide Hold Out.
+
+**Engine.**
+
+- **A nest is a fighter**, of a character `nest` with `structure: true`, no
+  weapon, no abilities and movement 0, owned by its warband. Everything that
+  can already hurt a character can hurt it, the board draws its HP bar, fog
+  hides and remembers it, and the planner sees it, with no new targeting.
+- **`structure` is the one thing to audit.** A nest is not someone standing.
+  A helper beside `isStanding` (`isCombatant`) is read by: the team's and the
+  enemy's endings and *Broken Tide* (§30.4), the wave's refill and its cap,
+  the next-wave count, the standing-per-round chart, `HoldOutRecord`'s enemies
+  downed, the centre's "no enemy" check, Bulwark's and Blessing's "next to",
+  and the planner's Threat and Exposure. Each is a line in the PR and a test.
+- **Where they stand is the map's.** Each Hold Out battlefield lists `nests`
+  for each warband zone, in `maps/`: the gate forts, the Sacked Fort and the
+  Sunken Village, for every team size. `maps/holdOut.test.ts` holds them to
+  the quarter turn the map has, reachable from the team's zone, not in sight
+  of it on the first turn, and clear of the squares a wave is placed on.
+  `FACTIONS.swarm.nest: "nest"` puts them on the field; a faction without it
+  has none.
+- `nestsDestroyed` per warband on the state, cleared as a wave lands, read by
+  the wave's budget.
+- The End turn's command version 13 (§39.6) covers the regrowth, if PRs 5 and
+  6 ship close together; else 14.
+
+**Screens.** The scoreboard's next-wave line says what the nests have cost
+it: "Round 7: The Bile, 6 arriving (1 nest destroyed)". The nests' squares are
+marked on the board from the start, as zones are, since they are the map's;
+whether one stands is seen only in sight, in fog.
+
+**Hidden information.** Nests exist only against the Swarm, so while a random
+enemy is unseen their squares, their count and the next-wave line's note are
+all withheld (`enemyHidden`), and `hiddenHands.test.ts` pins it. A croupier
+pass is due.
+
+**Planner.** A warband counts a nest's worth in full, not at
+`HOLD_OUT_OWN_WORTH`: waves bring its characters back, and the nest only
+conditionally. The team's planner, in the harness, will hit a nest it happens
+to reach and never walk to one, so the harness measures nests twice: ignored
+(the floor), and with a scripted sortie of each player's fastest character.
+
+**Art.** One nest, as an SVG master rendered by `npm run ra-marks`, standing
+and destroyed.
+
+### 39.8 PR 7: The Swarm plays like a swarm
+
+Every term of the planner's score has one weight for every character (§29.7),
+which says a weight per character is the first thing to add when one plays
+out of character. A Bloater that keeps to cover is that.
+
+**Temperaments.** A table in `ai.ts`, by character: multipliers on Exposure
+and Threat, and at most one extra term. A character without a row plans
+exactly as today, which a test holds for every Renegade and Miner.
+
+| Character | Exposure | Threat | Extra |
+|---|---:|---:|---|
+| Skitterling | ×0.25 | ×1 | **Pack**: a bonus for each other of its side next to the enemy it's next to |
+| Ravager, Carapace Brute | ×0.5 | ×1 | — |
+| Bloater | ×0 | — | Threat counts the enemies in its burst area, not its barbs |
+| Spitter, Bile Lobber | ×1.5 | ×1 | **Range**: a penalty for standing within an enemy's melee reach |
+| Broodmother, Brood Queen | ×2 | ×0.5 | — |
+
+All values *Proposed*.
+
+- **It isn't a rule.** The planner's choices are recorded, not replayed
+  (§29.7), so this takes no rules or command version and changes no battle
+  already fought. It can ship before or after the rest.
+- **The memo.** `TurnMemo` keeps each square's Exposure and Threat by
+  character, so a temperament is applied after the memo is read, not folded
+  into what it keeps.
+- **Still fair, still fast.** Deterministic, the same view only, and inside
+  `planner.pace.test.ts`'s budgets: Pack reads the squares next to one enemy,
+  and Range one distance.
+- **Puzzles** (§29.11), each with one right answer: a Skitterling takes the
+  square that flanks over one that doesn't; a Bloater walks into three of the
+  team over striking a lone Archer; a Spitter steps back out of a Knight's
+  reach before it spits; a Queen hatches from behind the wall, not in front of
+  it.
+- **Measured.** `--team-planner main` against the Swarm on every Hold Out
+  battlefield: the warbands play the checkout's planner and the team main's,
+  so the team's win rate falling is the Swarm playing better. If a temperament
+  makes the warbands weaker, as a truer Exposure did
+  (`realm-arena-balance.md`, *Planner experiments*), that row isn't kept.
+
+### 39.9 PR 8: Balance, copy and release
+
+- **Balance.** The harness at version 12 against the baseline, 200 battles a
+  cell: teams of one to four, every Hold Out battlefield, Easy, Normal and
+  Hard, with and without fog. *Target:* the planner-played team wins about
+  half to two thirds on Normal, where §30.13's levers were found most even
+  (`realm-arena-balance.md`), with no cell under a quarter or over
+  three quarters. The levers, in the order to reach for them:
+  `WAVE_GROWTH_POINTS`, the nests' 15, Reinforce's HP, the elites' HP, and
+  last `HOLD_OUT_ENEMY_STEPS` and `TEAM_HP_FACTOR`. The tables go in
+  `realm-arena-balance.md`.
+- **Release.** `CURRENT_RULESET_VERSION` becomes 12. `rulesets.test.ts` pins
+  everything version 12 changes and that nothing else of version 11 did.
+- **Copy.** The guide's co-op section (the rally's choices, the themed waves,
+  the nests, the Bloater), the tutorial's Hold Out steps, and the setup
+  screen's line for Hold Out.
+- **Achievements** (§30.4, ids permanent): *Regicide*, for downing a Brood
+  Queen, and *Scorched Earth*, for destroying every nest before one wave.
+  Both judged at the end from the public response, with their null views in
+  `hiddenHands.test.ts`.
+- **What's new.** One line, under enhancements.
+- **The crew.** `croupier` for PRs 2, 5 and 6 (bursts in fog, the wave's name,
+  the nests); `locksmith` and `gremlin` for PR 3's new action; `rulebook` for
+  PR 8; `caveman` for all of them.
+
+### 39.10 What it leaves, and what it meets
+
+- **The loadout** ([issue 957](https://github.com/Kallb123/async-games/issues/957))
+  is a rules change of its own. If it lands in the same release it shares
+  version 12; if later, it's version 13. Either way it should be measured
+  after §39.5 and §39.6: the elites are what make a single-target pick worth
+  taking, so a loadout tuned before them would be tuned against the wrong
+  enemy.
+- **The other factions.** The Renegades and the Miners keep growing waves, with
+  no nests and no elites. The rally's choice is the mission's, not the
+  enemy's, so they get it too. Themes and elites for them are data once
+  this is built.
+- **Solo.** Everything here applies to Solo's Hold Out unchanged; its cells
+  are in every measurement above.
+
+### 39.11 Open questions
+
+1. **The rally's timing**: as each player's turn begins (§39.4, as planned),
+   or out of turn as the wave lands?
+2. **Reinforce's square**: the first free one, or the player's tap?
+3. **The waves' order**: fixed, or drawn as the battle is created (§39.6)?
+4. **Nests**: regrown with each wave, or destroyed for good (§39.7)? Does
+   enough of them cancel a wave's elite?
+5. **Taunt's radius**: 3, or 4 (§39.2)?
+6. **The elites' names and numbers** (§39.5), and whether a player's Swarm
+   squad may ever muster one.
+7. **Does the rally's choice reach Hold Out against every enemy** (as planned),
+   or the Swarm alone?
+
+---
+
 ## Appendix: Working title
 
 "Realm Arena", chosen in round 4. The shared "Realm" ties it to Defender of the
@@ -4940,3 +5398,4 @@ Realm, its sibling in the same world.
 | 1.62 | Co-op for a team of four, in Hold Out on the Sacked Fort or the Sunken Village only (§37): a zone in each quarter of the middle and the edge's thirds dealt to the four warbands as a Latin square, 13 rounds as for two and three. Hold the Centre and the gate forts stay at three, and `coopTeamMax` / `fitsCoop` say which settings seat which teams. No rules version: no four-player co-op battle existed. |
 | 1.63 | The flank badge: a target a shot would find with no cover wears Flank on its odds badge (gold, inverted) on both boards, in the list of targets and in the turn sheet, and the damage a flanked shot did is labelled Flanked (§26.1). Shot events carry `flanked?: true` when a shot that did damage found no cover, so older recorded battles read as before. Presentation only: no rules or command version changes. |
 | 1.64 | Archer shots at 2 AP (§38, rules and command version 11): Aimed shot, Crippling shot, Poison Arrow, Bouncing Arrow, Splitting Arrow and Shoot + Dodge each cost 2 AP rather than 3, with their cooldowns unchanged; the Prospector's Aimed shot too. Battles created before it keep 3 AP. |
+| 1.65 | Hold Out against the Swarm, planned and not built (§39): Taunt reaching a radius, a Bloater bursting when it's downed, the rally as each player's choice of a heal, a downed character back or their items restocked, three elite Swarm characters, themed waves bought with points, nests whose destruction shrinks the next wave, and temperaments for the planner — all in one rules catalogue, version 12, released by the last PR. |
