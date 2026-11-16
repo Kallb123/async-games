@@ -356,7 +356,7 @@ export default function GameRealmArena({ params }: { params: Promise<{ gameid: u
             // on watch, hunkered down or knocked out on the way — is let go of.
             const after = (response.gameData as IRealmArenaGameDataResponse).specificGameState.fighters.find(fighter => fighter.id === action.fighter);
             if (!after || !canAct(after, battle)) setSelectedId(current => current === action.fighter ? null : current);
-        }, actTarget(action));
+        }, actTarget(action, battle));
     };
     const turn = useTurnDraft(battle, myUserId, actor, turnKey, act);
     const focusTarget = (target: Fighter) => {
@@ -653,7 +653,7 @@ export default function GameRealmArena({ params }: { params: Promise<{ gameid: u
                                 area: turn.area,
                                 blasts: turn.blasts,
                                 candidates: turn.candidates,
-                                aimed: turn.targets,
+                                aimed: turn.aimed,
                                 hpChange: turn.hpChange,
                                 flagged: turn.reactions.map(reaction => reaction.watcher.id),
                                 onSquare: turn.tapSquare,

@@ -82,6 +82,11 @@ export const WHATS_NEW: WhatsNewGroup[] = [
         icon: "✨",
         items: [
             {
+                title: "Realm Arena: a Blessing shows who it reaches",
+                detail: "Tapping a Cleric's Blessing now shades the squares it reaches and names the allies it would bless, before you spend the AP — tap Bless to send it, or Cancel to think again.",
+                game: "realmarena",
+            },
+            {
                 title: "Realm Arena: Archer arrows cost 2 AP",
                 detail: "Aimed shot, Crippling shot, Poison, Bouncing and Splitting Arrows and Shoot + Dodge now cost 2 AP instead of 3, the same as an ordinary shot — so they're worth firing. Each still has its cooldown, so you can't loose the same arrow every turn. The Prospector's Aimed shot is 2 AP too. Battles already under way keep their original rules.",
                 game: "realmarena",
@@ -122,11 +127,6 @@ export const WHATS_NEW: WhatsNewGroup[] = [
             {
                 title: "Realm Arena: clearer battle details",
                 detail: "Inspect unit stats during battle, read passives and status effects below their actions, and track defeated enemies and both sides’ health in Hold Out.",
-                game: "realmarena",
-            },
-            {
-                title: "Realm Arena: new abilities for the Realm",
-                detail: "Leap and dash with Men-at-arms, brace your side and shove enemies with Knights, try four new Archer arrows, freeze and stun with Mages, and pull, bless and ward allies with Clerics. The Scout retires from new squads. Battles already under way keep their original rules.",
                 game: "realmarena",
             },
         ],

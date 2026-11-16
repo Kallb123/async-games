@@ -11,7 +11,7 @@ import { rulesetOf, type RulesContext } from "@/games/RealmArena/rulesets";
 // rules.ts — `check` above all — so nothing here can offer what the server
 // would refuse. Pure and browser-safe, like rules.ts.
 
-import type { Square } from "@/utils/games/battlefield/terrain";
+import { distance, type Battlefield, type Square } from "@/utils/games/battlefield/terrain";
 import { ABILITIES, STRIKING_ABILITIES, type Ability, type AbilityId } from "./characters";
 import {
     abilityRefusal, actionPointsOf, check, dodgeReach, leapLanding, coverNextTo, fighterById, inRange, itemOf, nextTo, oddsBreakdown, reactionsTo, damageTo, shoots, shotOdds, strikeChance, weaponReaches,
@@ -125,6 +125,11 @@ export function rangeKindOf(kind: ActionKind, context?: RulesContext): RangeKind
     if (ability?.range !== undefined) return ability.range;
     const aim = ACTION_AIMS[kind];
     return "range" in aim ? aim.range : undefined;
+}
+
+/** Every square within `radius` of one, as the crow flies, itself included: what an ability with a radius (Taunt in version 12, Blessing) reaches. */
+export function squaresWithin(field: Battlefield, at: Square, radius: number): Square[] {
+    return field.tiles.flatMap((_, square) => distance(field, at, square) <= radius ? [square] : []);
 }
 
 /**

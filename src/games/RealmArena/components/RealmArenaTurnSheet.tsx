@@ -14,18 +14,16 @@ import { ATTACK_AP, HUNKER_AP, REACTION_COST, bankedAp, abilitiesOf, allied, che
 import { abilityWait, AREA_BLAST, FLANKED_WORD, ODDS_FLANK_WORD, oddsLines, whoseName } from '@/games/RealmArena/ui';
 import { rangeSquares, shotOf, targetsOf, type TargetKind } from '@/games/RealmArena/tactics';
 import { ABILITY_MARK, CHARACTER_MARK, weaponLine, weaponMark } from '@/games/RealmArena/roster';
-import { healingHp, INSTANT_KINDS, isAtSquare, landsOf, type Aim, type InstantKind, type TurnDraft } from '@/games/RealmArena/useTurnDraft';
+import { healingHp, isInstantIn, isInstantKind, isAtSquare, landsOf, type Aim, type InstantKind, type TurnDraft } from '@/games/RealmArena/useTurnDraft';
 import { andList, capitalise, pluralize } from '@/utils/ui/text';
 import { SpriteImage } from './RealmArenaTerrain';
 
 /** The `target` an action lined up on the board wears while it's in flight: the sheet's send button. */
 const LINED_UP = 'act';
 
-const isInstant = (kind: string): kind is InstantKind => (INSTANT_KINDS as readonly string[]).includes(kind);
-
-/** The `target` an action wears while it's in flight: its own row for one that goes the moment it's tapped, else the send button. */
-export function actTarget(action: Action): string {
-    return isInstant(action.kind) ? `act:${action.kind}` : LINED_UP;
+/** The `target` an action wears while it's in flight: its own row for one that goes the moment it's tapped (in the battle's own rules), else the send button. */
+export function actTarget(action: Action, battle: BattleState): string {
+    return isInstantIn(action.kind, battle) ? `act:${action.kind}` : LINED_UP;
 }
 
 /** What to tap, for an aim with nothing lined up yet. */
@@ -58,6 +56,8 @@ const AIM_HINT: Readonly<Record<Aim, string>> = {
     demolish: 'Tap the low cover next to them to blast it away. Everyone else beside it is struck, friend or foe.',
     rend: 'Tap an enemy next to them to see the odds.',
     regrowth: `Tap a hurt ally they can see in range.`,
+    taunt: 'Allies in the shaded squares are braced.',
+    blessing: 'Allies in the shaded squares are blessed.',
 };
 
 /** What the send button says, by the action lined up. */
@@ -90,6 +90,8 @@ const SEND_LABEL: Readonly<Record<Aim, string>> = {
     demolish: 'Demolish',
     rend: 'Rend',
     regrowth: 'Regrowth',
+    taunt: 'Taunt',
+    blessing: 'Bless',
 };
 
 /**
@@ -186,7 +188,8 @@ export default function RealmArenaTurnSheet({ draft, battle, player, pendingTarg
         const { needs: inReach, least } = ABILITY_ROW[id];
         if (inReach === 'cover') return rangeSquares(battle, fighter, 'cover').size > 0 ? undefined : 'No low cover beside them';
         if (inReach) return reachable(inReach, least);
-        if (!isInstant(id)) return undefined;
+        // Whatever goes without aiming, armed first or not, is refused here for what `check` would refuse.
+        if (!isInstantKind(id)) return undefined;
         const verdict = check(battle, player, { kind: id, fighter: fighter.id });
         return 'refused' in verdict ? verdict.refused : undefined;
     };
@@ -195,7 +198,7 @@ export default function RealmArenaTurnSheet({ draft, battle, player, pendingTarg
 
     /** A row: one that arms the board for `id`, or one that sends `id` at once. */
     const row = (id: Aim | InstantKind, icon: React.ReactNode, title: string, cost: string, wait: string | undefined, tag: string) => {
-        const instant = isInstant(id);
+        const instant = isInstantIn(id, battle);
         const pending = instant && pendingTarget === `act:${id}`;
         return (
             <BuildRow
@@ -208,7 +211,7 @@ export default function RealmArenaTurnSheet({ draft, battle, player, pendingTarg
                 disabled={busy || wait !== undefined}
                 active={aim === id}
                 pending={pending}
-                onClick={() => instant ? draft.now(id) : aim === id ? draft.clear() : draft.arm(id)}
+                onClick={() => instant ? draft.now(id) : aim === id ? draft.clear() : draft.arm(id as Aim)}
             />
         );
     };
@@ -399,6 +402,11 @@ function Detail({ draft, battle, name, ap, target }: DetailProps) {
     const hint = (text: React.ReactNode) => <p className="ag-hint">{text}</p>;
     const Name = (id: number) => capitalise(name(id));
 
+    if (aim === 'taunt' || aim === 'blessing') {
+        // Everyone the ability reaches, the user among them: the same allies `act` will afflict.
+        const { name: ability, effect } = ABILITIES[aim]!;
+        return hint(`${ability} leaves ${andList(draft.aimed.map(name))} ${EFFECTS[effect!]!.state}.`);
+    }
     if (draft.path && aim !== "shootDodge") return <MoveDetail draft={draft} name={name} ap={ap} />;
     if (draft.area) {
         // What lands — a fireball, dynamite, the item thrown, or a Demolish — and on whom.

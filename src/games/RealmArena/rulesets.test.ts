@@ -74,7 +74,7 @@ const stateFor = (rulesVersion: number): BattleState => battleFrom(FIELD, {
 });
 
 describe("Realm Arena ruleset compatibility", () => {
-    it("keeps released catalogues deeply frozen and refuses unknown versions", async () => {
+    it("keeps registered catalogues deeply frozen and refuses unknown versions", async () => {
         const real = await vi.importActual<typeof import("./rulesets")>("./rulesets");
         for (const version of [undefined, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]) {
             const rules = real.rulesetFor(version);

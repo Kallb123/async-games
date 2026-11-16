@@ -1,12 +1,12 @@
 import { describe, expect, it } from "vitest";
 import { at } from "@/utils/games/battlefield/testFixtures";
-import { buildBattlefield } from "@/utils/games/battlefield/terrain";
+import { buildBattlefield, distance } from "@/utils/games/battlefield/terrain";
 import type { CharacterId } from "./characters";
 import { ABILITIES, ITEMS } from "./characters";
 import { rulesetFor } from "./rulesets";
 import { ACTION_POINTS, leapLanding, leapSplash, newFighter, reachOf, shotOdds, weaponOf, type BattleState, type Fighter } from "./rules";
 import { targetsOf } from "./tactics";
-import { afterMove, hpPreview, landing, MOVE, reachAfter, tapFighter, tapSquare, targetOptions, type Draft, type TapContext } from "./useTurnDraft";
+import { afterMove, hpPreview, isInstantIn, radiusOf, landing, MOVE, reachAfter, tapFighter, tapSquare, targetOptions, type Draft, type TapContext } from "./useTurnDraft";
 
 // The tap decisions behind lining up an action on the board (§17.3 PR 7):
 // what a tap on a square or a character does, for each aim.
@@ -241,4 +241,32 @@ describe("hpPreview", () => {
         expect(hpPreview(battle, manAtArms, { aim: "huntersMark", square: null, targets: [near.id] }, null).size).toBe(0);
         expect(hpPreview(battle, manAtArms, MOVE, null).size).toBe(0);
     });
+});
+
+describe("a Taunt or Blessing with a radius (§39.2)", () => {
+    const knight = ready(0, "a", "knight", at(field, 4, 2));
+    const close = ready(1, "a", "archer", at(field, 7, 2));
+    const edge = ready(2, "a", "cleric", at(field, 4, 4));
+    const out = ready(3, "a", "mage", at(field, 8, 2));
+    const downed = ready(4, "a", "scout", at(field, 5, 2), { hp: 0 });
+    const foe = ready(5, "b", "knight", at(field, 5, 3));
+    const sides = { a: "team", b: "enemy" };
+    const fighters = [knight, close, edge, out, downed, foe];
+
+    it("is armed, not sent, in a version-12 battle for Taunt, and in any for Blessing", () => {
+        expect(radiusOf("taunt", { rulesVersion: 12 })).toBe(3);
+        expect(isInstantIn("taunt", { rulesVersion: 12 })).toBe(false);
+        expect(isInstantIn("blessing", { rulesVersion: 11 })).toBe(false);
+        expect(isInstantIn("blessing")).toBe(false);
+    });
+
+    it("stays instant where the battle's rules give it no radius, as do the other self actions", () => {
+        // Judged by the battle's own rules, not the current catalogue.
+        expect(radiusOf("taunt", { rulesVersion: 11 })).toBeUndefined();
+        expect(isInstantIn("taunt", { rulesVersion: 11 })).toBe(true);
+        expect(isInstantIn("taunt")).toBe(true);
+        for (const kind of ["hunker", "focus", "watch", "shieldWall"]) expect(isInstantIn(kind, { rulesVersion: 12 })).toBe(true);
+        expect(isInstantIn("attack", { rulesVersion: 12 })).toBe(false);
+    });
+
 });
