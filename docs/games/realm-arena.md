@@ -4862,7 +4862,7 @@ two different arrows in one turn, but never the same one twice running.
 
 ## 39. Hold Out against the Swarm: the next seven PRs (plan)
 
-*Planned; PR 1 (§39.2) is built, in a catalogue not yet released.* Hold Out with the players as the Realm against the
+*Planned; PRs 1 and 2 (§39.2, §39.3) are built, in a catalogue not yet released.* Hold Out with the players as the Realm against the
 computer's Swarm is the game's main mode, which is why the Realm's kit was
 rebuilt first (§34). This section plans what makes the Swarm worth using that
 kit on: a Taunt with a reach, Bloaters that burst when they fall, a rally each
@@ -4901,7 +4901,7 @@ Every value marked *Proposed* is a starting point for the balance harness
 | PR | What | Needs |
 |---|---|---|
 | 1 | Taunt reaches a radius (§39.2) — **built** | — |
-| 2 | A Bloater bursts when it's downed (§39.3) | — |
+| 2 | A Bloater bursts when it's downed (§39.3) — **built** | — |
 | 3 | The rally is each player's choice (§39.4) | — |
 | 4 | Elite Swarm characters (§39.5) | — |
 | 5 | Waves that differ, bought with points (§39.6) | 4 |
@@ -4961,16 +4961,32 @@ arrives, Beckon an ally out from beside it.
 - **Who scores.** A knock-out by a death burst scores for whoever downed the
   Bloater, as a knock-out by burning scores for whoever threw the fire (§20).
   The Bloater's own knock-out scores as any does.
-- **Engine.** `burstsWhenDowned: true` on the character in `v12.ts`.
-  `run.wound` queues a character with the flag as it goes down, and the run
-  drains the queue after the blow that caused it, through the same `run.land`
-  the Burst action uses. The event is `burst` with `downed: true`, so the
-  board plays the visual it has and the recap can say why it happened.
+- **Engine.** `burstsWhenDowned: true` on the character in `v12.ts`, read
+  through `burstsWhenDowned(fighter)` in `rules.ts`, which is also false once
+  the Bloater has used its own Burst. `run.wound` queues a character for which
+  it holds as it goes down, with whoever downed it, and `run.settle()` drains
+  the queue after the blow that caused it, through the same `run.land` the
+  Burst action uses: at the end of `act`, after each reaction in a walk, after
+  Shoot + Dodge's shot (before the dodge), and after each burn or poison tick.
+  The blast's damage is the Bloater's (`land`'s damage is reckoned from it, so
+  nobody's buffs change it); `land`'s new `scorer` is whoever downed it, for
+  the knock-outs. A Bloater shoved and downed bursts where the Shove left it,
+  after the whole Shove; a Cleave's or a Splitting Arrow's bursts come after
+  all its blows. The event is `burst` with `downed: true` (absent on the
+  action's own burst, so recorded battles read as before), so the board plays
+  the visual it has, and the log and the recap say it burst "as it fell".
 - **Reactions and undo.** A Bloater downed on overwatch bursts mid-move, on
   whoever is beside it then. A blow that bursts one hurt somebody, so it can't
   be undone, as now.
 - **Board.** Aiming anything at a Bloater shades its burst area and marks who
-  would be caught, with the same shading a fireball's 3×3 has.
+  would be caught, with the same shading a fireball's 3×3 has. As built
+  (`burstPreview` in `useTurnDraft.ts`): any action whose HP preview hurts a
+  Bloater that would burst — a shot, a strike, a Shove, a blast whose area
+  covers one, a Leap's splash — adds the burst areas to the shaded squares,
+  rings whoever stands in them (friend or foe, not the Bloaters) with the
+  dashed danger ring, and adds a line to the turn sheet: "If the Bloater
+  falls, it bursts: 3 damage to …". It's only a chance, so their HP isn't
+  previewed. Both boards draw it, through `shadedSquares` and `ringOf`.
 - **Planner.** It plays every action out with `act`, so both sides see the
   burst in the battle they score; no planner code.
 - **Hidden information.** A burst in the fog is told by `toldTo`, as a blast
@@ -4978,7 +4994,8 @@ arrives, Beckon an ally out from beside it.
   burst nobody of the viewer's saw.
 - **Tests.** Downed by a shot, a Shove's collision, burning and a guard's
   strike; a chain of three; no second burst after its own; a version-11
-  battle's Bloater falls quietly; a replay bursts the same way.
+  battle's Bloater falls quietly; a replay bursts the same way
+  (`deathBurst.test.ts`). The board's preview is `burstAim.test.ts`.
 
 ### 39.4 PR 3: The rally is each player's choice
 
@@ -5414,3 +5431,4 @@ Realm, its sibling in the same world.
 | 1.64 | Archer shots at 2 AP (§38, rules and command version 11): Aimed shot, Crippling shot, Poison Arrow, Bouncing Arrow, Splitting Arrow and Shoot + Dodge each cost 2 AP rather than 3, with their cooldowns unchanged; the Prospector's Aimed shot too. Battles created before it keep 3 AP. |
 | 1.65 | Hold Out against the Swarm, planned and not built (§39): Taunt reaching a radius, a Bloater bursting when it's downed, the rally as each player's choice of a heal, a downed character back or their items restocked, three elite Swarm characters, themed waves bought with points, nests whose destruction shrinks the next wave, and temperaments for the planner — all in one rules catalogue, version 12, released by the last PR. |
 | 1.66 | §39 PR 1 builds Taunt's radius (§39.2): `catalogues/v12.ts`, registered and not current, where Taunt braces allies within 3 squares of the Knight; the planner lists Taunt only with an ally in that reach; the balance harness and its workflow take a rules version (`--rules`). On the board, an ability with a radius — Blessing today, Taunt in version 12 — is armed before it's sent, shading its reach and naming who it would touch. Its balance is not yet measured. |
+| 1.67 | §39 PR 2 builds the Bloater's death burst (§39.3): in rules version 12, still not current, a Bloater downed by a blow, a blast, burning or poison bursts where it falls, as its Burst does, each Bloater once and chains in the order they fell, its knock-outs scoring for whoever downed it. The event is `burst` with `downed: true`. Aiming at a Bloater shades its burst and rings whoever it would catch. |
