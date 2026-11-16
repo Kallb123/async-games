@@ -1378,6 +1378,14 @@ export function demolishArea(field: Battlefield, knight: Square, at: Square): Sq
 /** Who a Bloater's Burst splashes: everyone next to it, friend or foe, but itself (§31.2) — a Demolish at its own square. */
 export const burstArea = (field: Battlefield, bloater: Square): Square[] => demolishArea(field, bloater, bloater);
 
+/**
+ * Whether this character would burst if something downed it now (§39.3): its
+ * kind bursts when downed under the battle's rules, and it hasn't used its
+ * own Burst, which it only does once.
+ */
+export const burstsWhenDowned = (fighter: Pick<Fighter, "character" | "spent">, context?: RulesContext): boolean =>
+    rulesetOf(context).CHARACTERS[fighter.character].burstsWhenDowned === true && !fighter.spent.includes("burst");
+
 /** The afflictions on a character, which Purify clears: every one, Marked among them (§23.2). */
 export function afflictionsOn(fighter: Fighter, context?: RulesContext): Affliction[] {
     return afflictionsOf(context).filter(effect => hasEffect(fighter, effect));
