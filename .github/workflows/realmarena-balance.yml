@@ -42,6 +42,9 @@ on:
       seed:
         description: First seed; battle k of each scenario rolls from seed + k
         default: '1'
+      rules:
+        description: Rules version to fight under (blank for the current one; 12 for the unreleased §39 catalogue)
+        default: ''
       team_planner:
         description: Git ref whose planner plays the team, as main (blank for the branch's on both sides)
         default: ''
@@ -104,6 +107,7 @@ jobs:
           FOG: ${{ inputs.fog }}
           SEED: ${{ inputs.seed }}
           TEAM_PLANNER: ${{ inputs.team_planner }}
+          RULES: ${{ inputs.rules }}
           SHARD: ${{ matrix.shard }}/${{ inputs.shards }}
         # Each shard's own summary would repeat the merged one, so it's kept to the log.
         run: |
@@ -111,7 +115,7 @@ jobs:
             --runs "$RUNS" --players "$PLAYERS" --teams "$TEAMS" --enemies "$ENEMIES" --missions "$MISSIONS" \
             --maps "$MAPS" --difficulties "$DIFFICULTIES" --sizes "$SIZES" --fog "$FOG" \
             --seed "$SEED" --shard "$SHARD" --out "samples-${{ matrix.shard }}.json" \
-            ${TEAM_PLANNER:+--team-planner "$TEAM_PLANNER"}
+            ${TEAM_PLANNER:+--team-planner "$TEAM_PLANNER"} ${RULES:+--rules "$RULES"}
 
       - uses: actions/upload-artifact@v4
         if: always()

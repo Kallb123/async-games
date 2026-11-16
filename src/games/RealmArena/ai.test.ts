@@ -8,7 +8,7 @@ import {
     ACTION_POINTS, act, areaAround, ATTACK_AP, blastedIn, check, endTurn, inMeleeReach, newFighter, reachOf, reactionsTo, shotOdds, startTurn, viewOf,
     type Action, type BattleState, type Fighter, type FogGhost,
 } from "./rules";
-import { nextAction, turnMemo } from "./ai";
+import { nextAction, optionsOf, turnMemo } from "./ai";
 
 // docs/games/realm-arena.md §29.7, §29.11: the computer's planner. Each puzzle
 // is a small battle with one right answer, set up for the warband "ai:0" to
@@ -391,4 +391,26 @@ describe("a turn's memo (§29.7)", () => {
         expect(seen.has("shot") || seen.has("struck")).toBe(true);
         expect(seen).toContain("downed");
     }, 60_000);
+});
+
+describe("Taunt in the planner's options (§39.2)", () => {
+    // Version 12 gives Taunt a radius of 3; Blessing already had one, and is never filtered.
+    const listsTaunt = (rulesVersion: number, allyCol?: number) => {
+        const knight = ready(0, AI, "knight", at(OPEN, 2, 4));
+        const ally = allyCol === undefined ? [] : [ready(1, AI, "archer", at(OPEN, allyCol, 4))];
+        const foe = ready(2, "a", "manAtArms", at(OPEN, 15, 0));
+        const state = { ...battle(OPEN, [knight, ...ally, foe]), rulesVersion };
+        return optionsOf(viewOf(state, AI), AI, knight).some(action => action.kind === "taunt");
+    };
+
+    it("lists it from v12 only with an ally besides the Knight within 3 squares", () => {
+        expect(listsTaunt(12)).toBe(false);
+        expect(listsTaunt(12, 6)).toBe(false);
+        expect(listsTaunt(12, 5)).toBe(true);
+    });
+
+    it("lists it as before in v11, with no radius to leave it empty", () => {
+        expect(listsTaunt(11)).toBe(true);
+        expect(listsTaunt(11, 12)).toBe(true);
+    });
 });

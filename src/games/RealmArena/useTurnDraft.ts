@@ -4,18 +4,35 @@ import { useResettingState } from "@/utils/hooks/useResettingState";
 import { pathTo, type Reach } from "@/utils/games/battlefield/pathfinding";
 import type { Square } from "@/utils/games/battlefield/terrain";
 import { type Ability, type Item } from "./characters";
-import { allied, blastedBy, beckonPath, shovePath, leapSplash, leapTargets, dodgeReach, check, demolishArea, fighterById, areaAround, isStanding, itemOf, oddsBreakdown, reachOf, damageTo, shotOdds, type Action, type BattleState, type Check, type Fighter, type OddsBreakdown } from "./rules";
-import { ACTION_AIMS, attackOptions, rangeKindOf, rangeSquares, reactionPreviews, rollsToHit, shotOf, targetKindOf, targetsOf, type AttackOption } from "./tactics";
+import { alliesWithin, allied, blastedBy, beckonPath, shovePath, leapSplash, leapTargets, dodgeReach, check, demolishArea, fighterById, areaAround, isStanding, itemOf, oddsBreakdown, reachOf, damageTo, shotOdds, type Action, type BattleState, type Check, type Fighter, type OddsBreakdown } from "./rules";
+import { ACTION_AIMS, attackOptions, rangeKindOf, rangeSquares, squaresWithin, reactionPreviews, rollsToHit, shotOf, targetKindOf, targetsOf, type AttackOption } from "./tactics";
 import { reachShading } from "./ui";
 
 /** What the board is armed for: a tap on a square or a character lines up one of these. */
 export type Aim =
     | "move" | "sneak" | "attack" | "aimedShot" | "cleave" | "fireball" | "dynamite" | "heal" | "raise" | "throw" | "draught"
-    | "shieldBash" | "cripplingShot" | "huntersMark" | "demolish" | "rend" | "regrowth" | "leap" | "iceBall" | "shove" | "poisonArrow" | "bouncingArrow" | "splittingArrow" | "shootDodge" | "thunder" | "beckon" | "ward" | "runeRaise";
+    | "shieldBash" | "cripplingShot" | "huntersMark" | "demolish" | "rend" | "regrowth" | "leap" | "iceBall" | "shove" | "poisonArrow" | "bouncingArrow" | "splittingArrow" | "shootDodge" | "thunder" | "beckon" | "ward" | "runeRaise" | "taunt" | "blessing";
 
 /** The actions that need nothing aimed, and go the moment they're tapped. */
 export const INSTANT_KINDS = ["hunker", "watch", "shieldWall", "purify", "burst", "slashAndDash", "bulwark", "taunt", "focus", "blessing"] as const;
 export type InstantKind = typeof INSTANT_KINDS[number];
+
+/**
+ * Whether an action goes the moment it's tapped. Taunt and Blessing do only
+ * where the battle's own rules give them no radius (Taunt before version 12):
+ * with one, they're armed first, the radius shaded and who it reaches listed,
+ * like any aim.
+ */
+export const isInstantKind = (kind: string): kind is InstantKind => (INSTANT_KINDS as readonly string[]).includes(kind);
+
+export function isInstantIn(kind: string, context?: RulesContext): kind is InstantKind {
+    return isInstantKind(kind) && radiusOf(kind, context) === undefined;
+}
+
+/** An ability's radius in the battle's own rules, if it's one that reaches a circle around its user: what arms it instead of sending it. */
+export function radiusOf(kind: string, context?: RulesContext): number | undefined {
+    return ACTION_AIMS[kind as keyof typeof ACTION_AIMS]?.at === "self" ? (rulesetOf(context).ABILITIES as Record<string, Ability | undefined>)[kind]?.radius : undefined;
+}
 
 export interface Draft {
     aim: Aim;
@@ -87,6 +104,8 @@ function actionOf(fighter: Fighter, { aim, square, targets }: Draft, path: Squar
         case "leap":
         case "iceBall":
         case "demolish": return square === null ? null : { kind: aim, fighter: fighter.id, at: square };
+        case "taunt":
+        case "blessing": return { kind: aim, fighter: fighter.id };
         case "shootDodge": return targets.length === 1 && path ? { kind: aim, fighter: fighter.id, target: targets[0], path } : null;
         case "splittingArrow":
         case "cleave": return targets.length === 2 ? { kind: aim, fighter: fighter.id, targets } : null;
@@ -264,7 +283,8 @@ export function useTurnDraft(battle: BattleState, player: string, fighter: Fight
     const shading = useMemo(() => fighter && reach ? reachShading(fighter, reach, aim === "sneak", battle) : null, [fighter, reach, aim, battle]);
     // Aimed at anything else, the shading is where it could land instead: its range.
     const rangeKind = aim === "shootDodge" && draft.targets.length === 1 ? "dodge" : rangeKindOf(aim, battle);
-    const range = useMemo(() => fighter && rangeKind ? rangeSquares({ field, fighters, sides, rulesVersion }, fighter, rangeKind) : null, [field, fighters, sides, rulesVersion, fighter, rangeKind]);
+    const radius = radiusOf(aim, battle);
+    const range = useMemo(() => fighter && radius !== undefined ? new Set(squaresWithin(field, fighter.square, radius)) : fighter && rangeKind ? rangeSquares({ field, fighters, sides, rulesVersion }, fighter, rangeKind) : null, [field, fighters, sides, rulesVersion, fighter, rangeKind, radius]);
     if (!fighter) return null;
 
     const path = reach && draft.square !== null ? (draft.square === fighter.square ? [fighter.square] : pathTo(reach, draft.square)?.squares) : undefined;
@@ -277,6 +297,7 @@ export function useTurnDraft(battle: BattleState, player: string, fighter: Fight
     const forcedPath = aim === "leap" && draft.square !== null ? [fighter.square, draft.square]
         : forcedTarget && aim === "shove" ? shovePath(battle, fighter, forcedTarget).path
         : forcedTarget && aim === "beckon" ? beckonPath(battle, fighter, forcedTarget) : undefined;
+    // Who an armed Taunt or Blessing would reach: the board rings them as aimed.
     const area = isAtSquare(aim) && draft.square !== null ? landing(battle, fighter, aim, draft.square) : null;
 
     const send = () => {
@@ -300,6 +321,8 @@ export function useTurnDraft(battle: BattleState, player: string, fighter: Fight
             if (!("refused" in check(battle, player, instant))) onAct(instant);
         },
         targets: draft.targets,
+        /** Who the armed aim would touch, for the board to ring: the aimed targets, or everyone an armed Taunt or Blessing reaches. */
+        aimed: radius !== undefined ? alliesWithin(battle, battle.fighters, fighter, radius).map(one => one.id) : draft.targets,
         /** Who a tap can line this aim up on. */
         candidates,
         /** The same, with each enemy's chance to be hit: the sheet's list of targets. */

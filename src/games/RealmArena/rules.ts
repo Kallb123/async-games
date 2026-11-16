@@ -918,6 +918,12 @@ export function watchedSquares(state: BattleState, player: string): ReadonlySet<
     return new Set(state.field.tiles.flatMap((_, square) => watchers.some(watcher => setsOff(state, watcher, square, smoke)) ? [square] : []));
 }
 
+/** The standing allies of a character within `radius` of it, itself included — or on the whole side without one: who Taunt and Blessing reach. `act` and the board's preview both read it. */
+export function alliesWithin(state: Pick<BattleState, "field" | "sides">, fighters: readonly Fighter[], actor: Fighter, radius: number | undefined): Fighter[] {
+    return fighters.filter(one => isStanding(one) && allied(state, actor.owner, one.owner)
+        && (radius === undefined || distance(state.field, actor.square, one.square) <= radius));
+}
+
 /** The 3×3 around a square, as far as the map goes: what a fireball, a thunder flask or a smoke pot centred there covers. */
 export function areaAround(field: Battlefield, at: Square): Square[] {
     const { col, row } = coordsOf(field, at);
@@ -1716,8 +1722,7 @@ export function act(state: BattleState, player: string, action: Action, roll: Ro
         case "ward": {
             const ability = ABILITIES[action.kind]!;
             const allies = action.kind === "ward" ? [get(action.target)] : action.kind === "focus" ? [actor]
-                : run.fighters.filter(one => isStanding(one) && allied(state, actor.owner, one.owner)
-                    && (ability.radius === undefined || distance(state.field, actor.square, one.square) <= ability.radius));
+                : alliesWithin(state, run.fighters, actor, ability.radius);
             for (const ally of allies) run.afflict(actor, ally, ability.effect!);
             break;
         }

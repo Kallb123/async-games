@@ -35,7 +35,7 @@ import { costsFrom, DEFAULT_CLIMB, reachFrom, pathTo, type Reach } from "@/utils
 import { battlefieldWith, coordsOf, type Battlefield, type Square } from "@/utils/games/battlefield/terrain";
 import { type AbilityId } from "./characters";
 import {
-    abilitiesOf, activeEffects, act, canAct, allied, areaAround, blastedIn, CENTRE, centrePoints, check, fighterById, isStanding, landedSmoke,
+    abilitiesOf, alliesWithin, activeEffects, act, canAct, allied, areaAround, blastedIn, CENTRE, centrePoints, check, fighterById, isStanding, landedSmoke,
     damageTo, dodgeReach, leapTargets, maxHpOf, moveAp, movementOf, reachOf, ROLL_SIDES, shotOdds, squadSight, strikeChance, watchedSquares, weaponOf, weaponReaches,
     type Action, type BattleEvent, type BattleState, type Fighter, type FogGhost, type ShotOdds,
 } from "./rules";
@@ -273,6 +273,9 @@ function middleOf(field: Battlefield, area: readonly Square[]): Square | undefin
  */
 const UNIVERSAL_ACTIONS: ReadonlySet<ActionKind> = new Set(["move", "attack", "hunker", "watch", "throw", "draught"]);
 
+/** For tests: what the planner lists for a fighter, `optionsFor` over a plan of `view`. */
+export const optionsOf = (view: BattleState, owner: string, fighter: Fighter): Action[] => optionsFor(planFor(view, owner, 1, turnMemo()), fighter);
+
 function optionsFor(plan: Plan, fighter: Fighter): Action[] {
     const { state, owner } = plan;
     return (Object.keys(ACTION_AIMS) as ActionKind[]).flatMap((kind): Action[] => {
@@ -283,8 +286,12 @@ function optionsFor(plan: Plan, fighter: Fighter): Action[] {
         switch (aim.at) {
             case "path":
                 return movesFor(plan, fighter, kind as "move" | "sneak");
-            case "self":
+            case "self": {
+                // Only a radius (§39.2) can leave Taunt with nobody to brace but its Knight; before it, it always braced the whole side.
+                const radius = ABILITIES[kind as AbilityId]?.radius;
+                if (aim.useful === "allies" && radius !== undefined && alliesWithin(state, state.fighters, fighter, radius).length <= 1) return [];
                 return allowed(plan, [{ kind, fighter: fighter.id } as Action]);
+            }
             case "enemy":
             case "ally": {
                 const ids = target ? targetsOf(state, owner, fighter, target) : [];

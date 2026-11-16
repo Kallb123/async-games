@@ -4,6 +4,7 @@ import { catalogueV8 } from "./catalogues/v8";
 import { catalogueV9 } from "./catalogues/v9";
 import { catalogueV10 } from "./catalogues/v10";
 import { catalogueV11 } from "./catalogues/v11";
+import { catalogueV12 } from "./catalogues/v12";
 import type { Ability, AbilityId, Character, CharacterId, CharacterOption, Effect, EffectId, Faction, FactionId, Item, ItemId, OptionId, Weapon } from "./characters";
 
 /** Independent of commandVersion: a protocol change need not change a match's rules. */
@@ -38,6 +39,8 @@ const rulesetV8: RealmArenaRuleset = freeze(catalogueV8);
 const rulesetV9: RealmArenaRuleset = freeze(catalogueV9);
 const rulesetV10: RealmArenaRuleset = freeze(catalogueV10);
 const rulesetV11: RealmArenaRuleset = freeze(catalogueV11);
+// Registered but not current: version 12 is built across §39 and released by its last PR.
+const rulesetV12: RealmArenaRuleset = freeze(catalogueV12);
 
 // Games created before the balance release had no stamp, or one below 7.
 // These are complete definitions, including the old descriptions and limits.
@@ -58,7 +61,7 @@ const legacyRuleset: RealmArenaRuleset = freeze({
 
 const RULESETS: Readonly<Record<number, RealmArenaRuleset>> = Object.freeze({
     0: legacyRuleset, 1: legacyRuleset, 2: legacyRuleset, 3: legacyRuleset,
-    4: legacyRuleset, 5: legacyRuleset, 6: legacyRuleset, 7: rulesetV7, 8: rulesetV8, 9: rulesetV9, 10: rulesetV10, 11: rulesetV11,
+    4: legacyRuleset, 5: legacyRuleset, 6: legacyRuleset, 7: rulesetV7, 8: rulesetV8, 9: rulesetV9, 10: rulesetV10, 11: rulesetV11, 12: rulesetV12,
 });
 
 // The last version asked for, read before the checks: the planner asks

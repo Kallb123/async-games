@@ -8,6 +8,7 @@
 //   npm run ra-balance -- --runs 300 --players 3 --enemies swarm --difficulties easy,normal,hard
 //   npm run ra-balance -- --teams realm,miners --enemies realm,swarm,miners # each team faction against each enemy
 //   npm run ra-balance -- --missions holdOut,holdTheCentre --maps gate --fog on,off
+//   npm run ra-balance -- --rules 12 --players 3 --enemies swarm # fight under a registered rules version (default: the current one, so an unreleased catalogue can be measured)
 //   npm run ra-balance -- --team-planner main            # the team plays main's planner, the warbands this checkout's
 //   npm run ra-balance -- --shard 2/4 --out samples-2.json # one quarter of the battles, every sample kept
 //   npm run ra-balance -- --merge samples-*.json          # the report for samples already fought
@@ -35,6 +36,7 @@ import { dirname, join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { parseArgs } from "node:util";
 import { COOP_PLAYERS, FACTION_IDS, fitsCoop, type BattleSize, type Difficulty, type FactionId } from "../src/games/RealmArena/characters";
+import { CURRENT_RULESET_VERSION, rulesetFor } from "../src/games/RealmArena/rulesets";
 import { COOP_MAPS } from "../src/games/RealmArena/maps/holdOut";
 import {
     formatReport, scenarioKey, simulateBattle, summariseAll,
@@ -58,7 +60,7 @@ function oneOf<T extends string>(name: string, values: string[], allowed: readon
 }
 
 /** What the command line says to fight: each a comma-separated list but the runs and the first seed. */
-type MatrixArgs = Record<"runs" | "seed" | "players" | "teams" | "enemies" | "missions" | "maps" | "difficulties" | "sizes" | "fog", string>;
+type MatrixArgs = Record<"runs" | "seed" | "players" | "teams" | "enemies" | "missions" | "maps" | "difficulties" | "sizes" | "fog", string> & { rules?: string };
 
 /** Every battle the arguments ask for, scenario by scenario, then seed by seed. */
 function jobsFrom(args: MatrixArgs): Job[] {
@@ -75,11 +77,14 @@ function jobsFrom(args: MatrixArgs): Job[] {
     const difficulties = oneOf<Difficulty>("difficulties", list(args.difficulties), ["easy", "normal", "hard"]);
     const sizes = oneOf<BattleSize>("sizes", list(args.sizes), ["small", "normal", "large"]);
     const fogs = oneOf("fog", list(args.fog), ["off", "on"]).map(fog => fog === "on");
+    // Only when asked for, so a run at the current rules keeps the names of runs before the flag. rulesetFor throws on an unknown one.
+    const rules = args.rules === undefined ? undefined : Number(args.rules);
+    if (rules !== undefined) try { rulesetFor(rules); } catch { throw new Error(`--rules: "${args.rules}" isn't a registered rules version`); }
 
     const scenarios = new Map<string, BalanceScenario>();
     for (const mission of missions) for (const map of mission === "holdOut" ? maps : ["gate" as const])
         for (const team of teams) for (const enemy of enemies) for (const count of players) for (const difficulty of difficulties) for (const size of sizes) for (const fog of fogs) {
-            const scenario: BalanceScenario = { players: count, team, enemy, mission, map, difficulty, size, fog };
+            const scenario: BalanceScenario = { players: count, team, enemy, mission, map, difficulty, size, fog, ...(rules !== undefined ? { rules } : {}) };
             // A team of four fits only Hold Out on a battlefield of its own (§37), and refused here rather than fought as a free-for-all.
             if (!fitsCoop(count, { mission, map: map === "gate" ? undefined : map })) {
                 throw new Error(`--players ${count} doesn't fit ${scenarioKey(scenario)}: a team of ${count} needs --missions holdOut with --maps sackedFort or sunkenVillage`);
@@ -206,6 +211,7 @@ async function main(): Promise<void> {
             difficulties: { type: "string", default: "normal" },
             sizes: { type: "string", default: "normal" },
             fog: { type: "string", default: "off" },
+            rules: { type: "string" },
             workers: { type: "string", default: String(availableParallelism()) },
             shard: { type: "string" },
             out: { type: "string" },
@@ -243,7 +249,9 @@ async function main(): Promise<void> {
     samples.sort((a, b) => a.scenario.localeCompare(b.scenario) || a.seed - b.seed);
     if (args.out) writeFileSync(args.out, JSON.stringify(samples));
 
-    const report = formatReport(summariseAll(samples), args.heading)
+    // A merge reads its rules from the samples' scenario names; a fresh run says which it fought.
+    const heading = args.merge ? args.heading : `${args.heading} (rules version ${args.rules ?? CURRENT_RULESET_VERSION})`;
+    const report = formatReport(summariseAll(samples), heading)
         + (failures.length > 0 ? `\n### Battles that broke (${failures.length})\n\n${failures.map(line => `- ${line.split("\n")[0]}`).join("\n")}\n` : "");
     process.stdout.write(report);
     if (process.env.GITHUB_STEP_SUMMARY) appendFileSync(process.env.GITHUB_STEP_SUMMARY, report);

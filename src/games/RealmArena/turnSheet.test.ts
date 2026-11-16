@@ -15,7 +15,7 @@ it("shows Shoot + Dodge's hit, graze and damage stats alongside dodge guidance",
     const noop = () => {};
     const draft: TurnDraft = {
         fighter: archer, aim: "shootDodge", targets: [1], candidates: [], options: [],
-        arm: noop, clear: noop, now: noop, send: noop, pick: noop,
+        aimed: [1], arm: noop, clear: noop, now: noop, send: noop, pick: noop,
         tapSquare: noop, tapFighter: () => false,
         reach: null, range: null, path, forcedPath: null, after: { square: 1, ap: 1 },
         reactions: [], area: null, hpChange: new Map(), blasts: null,

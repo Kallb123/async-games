@@ -74,16 +74,16 @@ const stateFor = (rulesVersion: number): BattleState => battleFrom(FIELD, {
 });
 
 describe("Realm Arena ruleset compatibility", () => {
-    it("keeps released catalogues deeply frozen and refuses unknown versions", async () => {
+    it("keeps registered catalogues deeply frozen and refuses unknown versions", async () => {
         const real = await vi.importActual<typeof import("./rulesets")>("./rulesets");
-        for (const version of [undefined, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]) {
+        for (const version of [undefined, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]) {
             const rules = real.rulesetFor(version);
             expect(Object.isFrozen(rules)).toBe(true);
             expect(Object.isFrozen(rules.CHARACTERS.knight.abilities)).toBe(true);
             expect(Object.isFrozen(rules.FACTIONS.realm.readyMade[100])).toBe(true);
         }
         expect(() => { real.rulesetFor(7).CHARACTERS.knight.weapon.damage = 99; }).toThrow();
-        for (const version of [-1, 1.5, NaN, 12]) expect(() => real.rulesetFor(version)).toThrow(/Unsupported/);
+        for (const version of [-1, 1.5, NaN, 13]) expect(() => real.rulesetFor(version)).toThrow(/Unsupported/);
         expect(real.rulesetFor(undefined).CHARACTERS.mage.weapon).toMatchObject({ accuracy: 70, range: 10 });
         expect(real.rulesetFor(undefined).ABILITIES.raise.oncePerBattle).toBe(true);
         expect(real.rulesetFor(7).ABILITIES.heal.oncePerTurn).toBe(true);
@@ -102,6 +102,18 @@ describe("Realm Arena ruleset compatibility", () => {
         }
         expect(real.rulesetFor(11).CHARACTERS).toBe(real.rulesetFor(10).CHARACTERS);
         expect(real.rulesetFor(11).RULES).toBe(real.rulesetFor(10).RULES);
+    });
+
+    it("gives Taunt a radius of 3 in v12 and changes nothing else of v11 (§39.2)", async () => {
+        const real = await vi.importActual<typeof import("./rulesets")>("./rulesets");
+        const before = real.rulesetFor(11), after = real.rulesetFor(12);
+        expect(before.ABILITIES.taunt?.radius).toBeUndefined();
+        expect(after.ABILITIES.taunt).toEqual({ ...before.ABILITIES.taunt, radius: 3, description: expect.stringContaining("within 3 squares") });
+        const { taunt: _before, ...rest } = before.ABILITIES, { taunt: _after, ...restAfter } = after.ABILITIES;
+        expect(restAfter).toEqual(rest);
+        for (const id of ["CHARACTERS", "RULES", "OPTIONS", "ITEMS", "EFFECTS", "FACTIONS"] as const) expect(after[id]).toBe(before[id]);
+        // Not released until §39.9: nobody creates a version-12 battle yet.
+        expect(real.CURRENT_RULESET_VERSION).toBe(11);
     });
 
     it("pins HP, movement and available abilities to the game, including an added ability", () => {

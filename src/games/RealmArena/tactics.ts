@@ -11,7 +11,7 @@ import { rulesetOf, type RulesContext } from "@/games/RealmArena/rulesets";
 // rules.ts — `check` above all — so nothing here can offer what the server
 // would refuse. Pure and browser-safe, like rules.ts.
 
-import type { Square } from "@/utils/games/battlefield/terrain";
+import { distance, type Battlefield, type Square } from "@/utils/games/battlefield/terrain";
 import { ABILITIES, STRIKING_ABILITIES, type Ability, type AbilityId } from "./characters";
 import {
     abilityRefusal, actionPointsOf, check, dodgeReach, leapLanding, coverNextTo, fighterById, inRange, itemOf, nextTo, oddsBreakdown, reactionsTo, damageTo, shoots, shotOdds, strikeChance, weaponReaches,
@@ -35,11 +35,13 @@ export type ActionKind = Action["kind"];
  * What a kind of action is aimed at (§29.3): a path to walk; nothing, for one
  * that goes the moment it's taken; one enemy or one ally, in its range; a
  * number of enemies at once, each one that `each` could be aimed at; or a
- * square, whoever stands on it. `shot` is the shot an action at an enemy takes
+ * square, whoever stands on it. A `self` action that is `useful` only with
+ * allies (Taunt, §39.2) is listed only with one in its radius, where it has one. `shot` is the shot an action at an enemy takes
  * with a ranged weapon, whose odds are `shotOdds`: anything else lands.
  */
 export type ActionAim =
-    | { at: "path" | "self" }
+    | { at: "path" }
+    | { at: "self"; useful?: "allies" }
     | { at: "enemy"; range: RangeKind; shot?: Exclude<ShotKind, "overwatch">; then?: { at: "path"; range: "dodge" } }
     | { at: "ally"; range: RangeKind }
     | { at: "enemies"; count: number; each: TargetKind; range: RangeKind; shot?: Exclude<ShotKind, "overwatch"> }
@@ -56,7 +58,7 @@ export const ACTION_AIMS: Readonly<Record<ActionKind, ActionAim>> = {
     iceBall: { at: "square", range: 12, useful: "area" },
     slashAndDash: { at: "self" },
     bulwark: { at: "self" },
-    taunt: { at: "self" },
+    taunt: { at: "self", useful: "allies" },
     focus: { at: "self" },
     blessing: { at: "self" },
     shove: { at: "enemy", range: "weapon" },
@@ -123,6 +125,11 @@ export function rangeKindOf(kind: ActionKind, context?: RulesContext): RangeKind
     if (ability?.range !== undefined) return ability.range;
     const aim = ACTION_AIMS[kind];
     return "range" in aim ? aim.range : undefined;
+}
+
+/** Every square within `radius` of one, as the crow flies, itself included: what an ability with a radius (Taunt in version 12, Blessing) reaches. */
+export function squaresWithin(field: Battlefield, at: Square, radius: number): Square[] {
+    return field.tiles.flatMap((_, square) => distance(field, at, square) <= radius ? [square] : []);
 }
 
 /**
