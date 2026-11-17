@@ -838,7 +838,8 @@ export function eventLines(events: readonly ToldEvent[], fighters: readonly Figh
     const firstMove = firstMoveOf(events);
     const draft = (event: ToldEvent, index: number): LineDraft[] => {
         switch (event.kind) {
-            case "ability": return [{ icon: "✦", title: `${Name(event.fighter)} used ${ABILITIES[event.ability]!.name}` }];
+            case "ability": return [{ icon: "✦", title: `${Name(event.fighter)} used ${ABILITIES[event.ability]!.name}`, ...(event.fizzled ? { sub: "No room to stand it" } : {}) }];
+            case "hatched": return [{ icon: "🥚", title: `${Name(event.fighter)} hatched a Skitterling`, sub: "It acts from its owner's next turn" }];
             case "moved":
                 return index === firstMove ? [{ icon: "👣", title: `${Name(event.fighter)} ${event.via ? `moved with ${ABILITIES[event.via]!.name}` : event.sneaking ? "sneaked" : "moved"}` }] : [];
             case "shot": {
@@ -871,6 +872,7 @@ export function eventLines(events: readonly ToldEvent[], fighters: readonly Figh
             }
             case "fireball":
             case "iceBall":
+            case "bile":
             case "dynamite": {
                 const names = event.targets.map(name);
                 const { name: ability } = ABILITIES[event.kind]!;
@@ -1239,8 +1241,10 @@ const BUFF_BURST: Readonly<Partial<Record<EffectId, BurstKind>>> = { braced: "au
  * How each ability that lands on a 3×3 shows (§26.1, §33.2): the glyph its
  * lines and rows lead with, what flies, and what it bursts into.
  */
-export const AREA_BLAST: Readonly<Record<"fireball" | "dynamite" | "iceBall", { icon: string; missile: Missile; burst: BurstKind }>> = {
+export const AREA_BLAST: Readonly<Record<"fireball" | "dynamite" | "iceBall" | "bile", { icon: string; missile: Missile; burst: BurstKind }>> = {
     iceBall: { icon: "❄️", missile: "iceShard", burst: "frost" },
+    // The Bile Lobber's (§39.5) flies and bursts as the Spitter's and the Bloater's acid do.
+    bile: { icon: "🧪", missile: "acid", burst: "acid" },
     fireball: { icon: "🔥", missile: "fireball", burst: "fire" },
     dynamite: { icon: "🧨", missile: "dynamite", burst: "blast" },
 };
@@ -1538,6 +1542,13 @@ function timeline(field: Battlefield, events: readonly ToldEvent[], before: read
                 burst("aura", at.get(event.fighter), when);
                 break;
             }
+            case "hatched": {
+                // The hatchling is a fighter only once the action is over: it stands up where the burst shows.
+                const when = beat();
+                say(event.fighter, when, ABILITIES.hatch!.name);
+                burst("aura", event.at, when);
+                break;
+            }
             case "hunkered":
             case "shieldWall":
                 say(event.fighter, beat(), STANCE_WORD[event.kind], event.kind);
@@ -1551,6 +1562,7 @@ function timeline(field: Battlefield, events: readonly ToldEvent[], before: read
             }
             case "fireball":
             case "iceBall":
+            case "bile":
             case "dynamite":
             case "thrown": {
                 const item = event.kind === "thrown" ? event.item : null;

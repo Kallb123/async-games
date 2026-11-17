@@ -18,7 +18,6 @@ import type { GameResultEvent } from "@/utils/apiModels/GameDataApi";
 import type { IReplayStep } from "@/utils/games/replay";
 import { type CharacterId } from "./characters";
 import type { IRealmArenaSpecificGameState } from "./RealmArenaModels";
-import { CHARACTER_IDS } from "./roster";
 import { isRallyAction, type RallyChoice } from "./rally";
 import { areaDamage, allied, battleRounds, ENEMY_SIDE, isStanding, isWarband, knockoutPoints, sideOf, squadHp, TEAM_SIDE, waveArrives, type BattleEvent, type BattleState, type Fighter } from "./rules";
 
@@ -142,6 +141,8 @@ const copyOf = (records: ReadonlyMap<string, FightingRecord>) => new Map([...rec
  */
 export function battleRecorder(seats: readonly string[], sides?: BattleState["sides"], rounds = battleRounds(seats.length), context?: RulesContext) {
     const { CHARACTERS } = rulesetOf(context);
+    // The battle's own catalogue, so an elite (§39.5) has its row as the muster's characters do.
+    const characterIds = Object.keys(CHARACTERS) as CharacterId[];
     const lastRound = rounds - 1;
     const sided = { sides };
     /** The record's columns, and the one an owner's deeds go in. */
@@ -194,7 +195,7 @@ export function battleRecorder(seats: readonly string[], sides?: BattleState["si
             else attacker.dealt += taken;
         };
         for (const event of events) {
-            if (event.kind === "shot" || event.kind === "struck" || event.kind === "iceBall" || event.kind === "fireball" || event.kind === "dynamite" || event.kind === "thrown" || event.kind === "demolished" || event.kind === "burst") attacker = event.fighter;
+            if (event.kind === "shot" || event.kind === "struck" || event.kind === "iceBall" || event.kind === "bile" || event.kind === "fireball" || event.kind === "dynamite" || event.kind === "thrown" || event.kind === "demolished" || event.kind === "burst") attacker = event.fighter;
             switch (event.kind) {
                 case "effect": {
                     const sources = effectSources.get(event.fighter) ?? {};
@@ -221,6 +222,7 @@ export function battleRecorder(seats: readonly string[], sides?: BattleState["si
                     break;
                 }
                 case "iceBall":
+                case "bile":
                 case "fireball":
                 case "dynamite":
                 case "thrown":
@@ -306,7 +308,8 @@ export function battleRecorder(seats: readonly string[], sides?: BattleState["si
                 for (let begun = round + 1; begun <= Math.min(gs.roundsPlayed, lastRound); begun++) {
                     if (waveArrives(begun + 1, lastRound + 1)) waves.push({ round: begun, arrived: 0, downed: new Map() });
                 }
-                waves.at(-1)!.arrived += fighters.filter(fighter => isWarband(fighter.owner) && !known.has(fighter.id)).length;
+                // A hatchling (§39.5) stands up in the middle of a turn: nobody brought it as a wave.
+                waves.at(-1)!.arrived += fighters.filter(fighter => isWarband(fighter.owner) && !known.has(fighter.id) && fighter.hatchedBy === undefined).length;
             }
             for (const fighter of fighters) {
                 known.set(fighter.id, { owner: fighter.owner, character: fighter.character });
@@ -345,7 +348,7 @@ export function battleRecorder(seats: readonly string[], sides?: BattleState["si
 
         result(): BattleRecord {
             return {
-                fighting: columns.flatMap(userId => CHARACTER_IDS.flatMap(character => {
+                fighting: columns.flatMap(userId => characterIds.flatMap(character => {
                     const record = records.get(keyOf(userId, character));
                     return record ? [{ userId, character, ...record }] : [];
                 })),

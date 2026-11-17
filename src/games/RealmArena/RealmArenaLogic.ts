@@ -219,6 +219,9 @@ const TALLIED: Readonly<Partial<Record<Action["kind"], keyof Tally>>> = {
     splittingArrow: "abilities",
     shootDodge: "abilities",
     iceBall: "abilities",
+    bile: "abilities",
+    hatch: "abilities",
+    carapace: "abilities",
     thunder: "abilities",
     focus: "abilities",
     beckon: "abilities",
@@ -465,7 +468,10 @@ export function unnamed(events: readonly BattleEvent[], hidden: (fighter: number
             case "shot": return [withoutVia(event)];
             case "struck": return [withoutVia(event)];
             case "ability": return [];
+            // Which kind stood the hatchling up would name the Queen; it is seen where it stands, as any character is.
+            case "hatched": return [];
             case "iceBall":
+            case "bile":
             case "fireball":
             case "dynamite":
             case "demolished":
@@ -531,7 +537,8 @@ function clause(event: BattleEvent, fighters: readonly Fighter[], actor: string,
     const veiled = hidden && "fighter" in event && warbands(event.fighter) ? veiledClause(event, name, hitIn) : undefined;
     if (veiled !== undefined) return veiled;
     switch (event.kind) {
-        case "ability": return `used ${ABILITIES[event.ability]!.name} with ${name(event.fighter)}`;
+        case "ability": return `used ${ABILITIES[event.ability]!.name} with ${name(event.fighter)}${event.fizzled ? `, but there was no room to stand it` : ""}`;
+        case "hatched": return `hatched a Skitterling with ${name(event.fighter)}`;
         case "moved": return `${event.via ? `moved with ${ABILITIES[event.via]!.name}` : event.sneaking ? "sneaked" : "moved"} ${name(event.fighter)}`;
         case "shot":
             return event.reaction
@@ -548,6 +555,7 @@ function clause(event: BattleEvent, fighters: readonly Fighter[], actor: string,
         }
         case "fireball":
         case "iceBall":
+        case "bile":
         case "dynamite":
             return `${ACTION_PHRASES[event.kind]} with ${name(event.fighter)}, hitting ${pluralize(hitIn(event.targets).length, "character")}${event.damages ? "" : ` for ${event.damage}`}`;
         case "downed": return `${name(event.fighter)} is down`;
@@ -599,6 +607,7 @@ function veiledClause(event: BattleEvent, name: (id: number) => string, hitIn: (
         case "moved": return `moved ${name(event.fighter)}`;
         case "fireball":
         case "iceBall":
+        case "bile":
         case "dynamite":
         case "demolished":
         case "burst":
@@ -607,6 +616,7 @@ function veiledClause(event: BattleEvent, name: (id: number) => string, hitIn: (
             return `used an ability with ${name(event.fighter)}${hit(event.targets, event.damage)}`;
         case "healed": return event.via === "draught" ? undefined : `used an ability on ${name(event.target)} with ${name(event.fighter)}`;
         case "raised": return `used an ability on ${name(event.target)} with ${name(event.fighter)}`;
+        case "hatched":
         case "ability":
         case "marked":
         case "shieldWall": return `used an ability with ${name(event.fighter)}`;
@@ -707,6 +717,7 @@ function felt(battle: BattleState, events: readonly BattleEvent[]): boolean {
             case "struck": return enemy(event.fighter) && event.damage > 0 && !enemy(event.target);
             case "fireball":
             case "iceBall":
+            case "bile":
             case "dynamite":
             case "thrown":
             case "demolished":
@@ -827,6 +838,7 @@ export function toldTo(events: readonly BattleEvent[], battle: BattleState, view
             }
             case "fireball":
             case "iceBall":
+            case "bile":
             case "dynamite":
             case "thrown":
             case "demolished":
@@ -841,6 +853,11 @@ export function toldTo(events: readonly BattleEvent[], battle: BattleState, view
                 return keep(saw(event.fighter) || saw(event.target));
             case "spotted":
                 return keep(saw(event.fighter) || saw(event.by));
+            // A hatchling standing on a square the viewer sees is told in full. A viewer
+            // who saw only the Queen is told it used Hatch, and not where or what stood.
+            case "hatched":
+                return saw(event.target) || seen(event.at) ? [event]
+                    : saw(event.fighter) ? [{ kind: "ability", fighter: event.fighter, ability: "hatch" }] : [];
             case "downed":
             case "hunkered":
             case "shieldWall":
@@ -1024,7 +1041,8 @@ export function waveOf(gs: IRealmArenaSpecificGameState, owner: string, growing:
     const field = battlefieldById(gs.map);
     const planned = readyMadeMuster(field, gs.seats.length + warband, waveStrength(warbandSquad(gs), round, growing));
     const missing = [...planned];
-    for (const fighter of gs.fighters.filter(one => one.owner === owner && isStanding(one))) {
+    // A hatchling (§39.5) is a body on top of the squad, not one the wave would have brought.
+    for (const fighter of gs.fighters.filter(one => one.owner === owner && isStanding(one) && one.hatchedBy === undefined)) {
         const index = missing.findIndex(pick => pick.character === fighter.character);
         if (index >= 0) missing.splice(index, 1);
     }
@@ -1283,6 +1301,9 @@ const ACTION_PHRASES: Readonly<Record<Action["kind"], string>> = {
     splittingArrow: "fired a Splitting Arrow",
     shootDodge: "used Shoot + Dodge",
     iceBall: "cast Ice Ball",
+    bile: "spat bile",
+    hatch: "hatched a Skitterling",
+    carapace: "used Carapace",
     thunder: "cast Thunder",
     focus: "used Focus",
     beckon: "used Beckon",
@@ -1339,12 +1360,15 @@ function cleanAction(action: Action): Action {
         case "taunt":
         case "focus":
         case "blessing":
+        case "hatch":
+        case "carapace":
         case "burst": return { kind: action.kind, fighter: action.fighter };
         case "shootDodge": return { kind: action.kind, fighter: action.fighter, target: action.target, path: [...action.path] };
         case "splittingArrow":
         case "cleave": return { kind: action.kind, fighter: action.fighter, targets: [...action.targets] };
         case "fireball":
         case "iceBall":
+        case "bile":
         case "dynamite":
         case "throw":
         case "leap":

@@ -179,6 +179,13 @@ export interface Fighter {
      * As public as `item` itself.
      */
     musteredItem?: ItemId;
+    /**
+     * The Brood Queen that hatched it (§39.5): her id, set on the Skitterling
+     * a Hatch stands up and nowhere else. It's what caps her brood (`Ability.cap`),
+     * and it outlives her, so her hatchlings stay when she falls. The server's
+     * alone: the response leaves it out, as it does `woundedBy`.
+     */
+    hatchedBy?: number;
     /** The option it was mustered with, swapping part of its kit for another (§23.2): absent on the starter character. */
     option?: OptionId;
     /**
@@ -305,18 +312,21 @@ export function allied(state: Pick<BattleState, "sides">, a: string | null | und
 export type Action =
     | { kind: "move" | "sneak"; fighter: number; path: Square[] }
     | { kind: "attack" | "aimedShot" | "heal" | "raise" | "draught" | "shieldBash" | "cripplingShot" | "huntersMark" | "rend" | "regrowth" | "shove" | "poisonArrow" | "bouncingArrow" | "thunder" | "beckon" | "ward" | "runeRaise"; fighter: number; target: number }
-    | { kind: "hunker" | "watch" | "shieldWall" | "purify" | "burst" | "slashAndDash" | "bulwark" | "taunt" | "focus" | "blessing"; fighter: number }
+    | { kind: "hunker" | "watch" | "shieldWall" | "purify" | "burst" | "slashAndDash" | "bulwark" | "taunt" | "focus" | "blessing" | "hatch" | "carapace"; fighter: number }
     | { kind: "cleave" | "splittingArrow"; fighter: number; targets: number[] }
     | { kind: "shootDodge"; fighter: number; target: number; path: Square[] }
     /** A demolish is aimed at the square of low cover it blasts. */
-    | { kind: "fireball" | "dynamite" | "throw" | "demolish" | "leap" | "iceBall"; fighter: number; at: Square };
+    | { kind: "fireball" | "dynamite" | "throw" | "demolish" | "leap" | "iceBall" | "bile"; fighter: number; at: Square };
 
 export type ShotResult = "hit" | "graze" | "miss";
 
 /** One thing that happened, in the order it happened: what the board shows coming back, and what a recap tells. */
 export type BattleEvent =
     | { kind: "moved"; fighter: number; path: Square[]; sneaking: boolean; via?: AbilityId }
-    | { kind: "ability"; fighter: number; ability: AbilityId }
+    /** `fizzled` is a Hatch with no room to stand its hatchling: the AP and the cooldown are spent all the same (§39.5). */
+    | { kind: "ability"; fighter: number; ability: AbilityId; fizzled?: true }
+    /** A Brood Queen's Hatch: a Skitterling, `target`, standing up on `at`, which can't act until its owner's next turn (§39.5). */
+    | { kind: "hatched"; fighter: number; target: number; at: Square }
     /** `via` names the ability a shot was, for those that name it (`NAMED_SHOTS`). */
     /** `flanked` is set when the target had no cover against the shot and it did damage, a hit or a graze carrying `FLANK_BONUS` more (§13.3). A miss never has it: it would hint at which side an unseen shooter stands. A battle recorded before it was told never has it either. */
     | { kind: "shot"; fighter: number; target: number; chance: number; roll: number; result: ShotResult; damage: number; reaction: boolean; via?: AbilityId; flanked?: true }
@@ -329,7 +339,7 @@ export type BattleEvent =
      * Shove's collision, a Bouncing Arrow's bounce (§34).
      */
     | { kind: "struck"; fighter: number; target: number; damage: number; reaction: boolean; chance?: number; roll?: number; missed?: true; via?: AbilityId }
-    | { kind: "fireball" | "iceBall"; fighter: number; at: Square; targets: number[]; damage: number; damages?: Record<number, number> }
+    | { kind: "fireball" | "iceBall" | "bile"; fighter: number; at: Square; targets: number[]; damage: number; damages?: Record<number, number> }
     /** A Sapper's Dynamite, landing as a fireball does but leaving nothing alight (§33.2). Its `blasted` follows. */
     | { kind: "dynamite"; fighter: number; at: Square; targets: number[]; damage: number; damages?: Record<number, number> }
     | { kind: "downed"; fighter: number; by: number }
@@ -476,9 +486,12 @@ function teamArmour(state: Pick<BattleState, "armoured" | "rulesVersion">, fight
     return state.armoured && !isWarband(fighter.owner) && !ruleValuesOf(state).ARMOUR_EXEMPT_FACTIONS.includes(factionOf(fighter.character, state)) ? ARMOUR : 0;
 }
 
-/** What a character wears: the team's armour against the warbands, and what its effects add against any blow (`Effect.armour`). */
+/** What a character's own kind wears against any blow, or 0 (`Character.armour`: the Carapace Brute, §39.5). */
+const bodyArmour = (state: RulesContext, fighter: Pick<Fighter, "character">): number => rulesetOf(state).CHARACTERS[fighter.character].armour ?? 0;
+
+/** What a character wears: its own kind's, the team's armour against the warbands, and what its effects add against any blow (`Effect.armour`). */
 export function armourOf(state: Pick<BattleState, "armoured" | "rulesVersion">, fighter: Pick<Fighter, "owner" | "character"> & Partial<Pick<Fighter, "effects">>): number {
-    return teamArmour(state, fighter) + effectTotal(fighter, "armour", state);
+    return bodyArmour(state, fighter) + teamArmour(state, fighter) + effectTotal(fighter, "armour", state);
 }
 
 /** What dealt a blow: an ability's own hits earn `Effect.abilityDamageBonus` as well as `damageBonus`. */
@@ -497,7 +510,7 @@ export type BlowSource = "weapon" | "ability" | "item";
 export function damageTo(state: Pick<BattleState, "armoured" | "rulesVersion">, by: Pick<Fighter, "owner" | "character" | "option"> & Partial<Pick<Fighter, "effects">>, target: Pick<Fighter, "owner" | "character"> & Partial<Pick<Fighter, "effects">>, blow = weaponOf(state, by).damage, via: BlowSource = "weapon"): number {
     if (blow <= 0) return blow;
     const dealt = blow + effectTotal(by, "damageBonus", state) + (via === "ability" ? effectTotal(by, "abilityDamageBonus", state) : 0);
-    const armour = (isWarband(by.owner) ? teamArmour(state, target) : 0) + effectTotal(target, "armour", state);
+    const armour = (isWarband(by.owner) ? teamArmour(state, target) : 0) + bodyArmour(state, target) + effectTotal(target, "armour", state);
     return armour > 0 ? Math.max(1, dealt - armour) : dealt;
 }
 
@@ -1283,7 +1296,10 @@ export function check(battle: BattleState, player: string, action: unknown): Che
         case "taunt":
         case "focus":
         case "blessing":
+        case "carapace":
             return ability(kind, () => undefined);
+        case "hatch":
+            return ability(kind, () => hatchRefusal(state, actor));
         case "aimedShot":
             return ability("aimedShot", () => attackRefusal(state, actor, target, "aimedShot"));
         // An attack with the character's own weapon, at its usual odds, that
@@ -1322,6 +1338,7 @@ export function check(battle: BattleState, player: string, action: unknown): Che
         case "fireball":
         case "dynamite":
         case "iceBall":
+        case "bile":
             return ability(kind, () => aimRefusal(state, actor, at, ABILITIES[kind]!.range!));
         case "heal":
         case "regrowth":
@@ -1393,6 +1410,33 @@ export const burstArea = (field: Battlefield, bloater: Square): Square[] => demo
  */
 export const burstsWhenDowned = (fighter: Pick<Fighter, "character" | "spent">, context?: RulesContext): boolean =>
     rulesetOf(context).CHARACTERS[fighter.character].burstsWhenDowned === true && !fighter.spent.includes("burst");
+
+/** Whose standing hatchlings a Queen has (§39.5): the Skitterlings of its owner whose `hatchedBy` is it. */
+export const brood = (state: Pick<BattleState, "fighters">, queen: Pick<Fighter, "id">): Fighter[] =>
+    state.fighters.filter(one => one.hatchedBy === queen.id && isStanding(one));
+
+/**
+ * The squares a Hatch could stand its hatchling on, in the order the Queen's
+ * side would pick them (§39.5): the free squares it could step to, nearest an
+ * enemy it sees — as `distance` measures — first, and the lowest square number
+ * among equals, which is all there is to go on with no enemy in sight. Read
+ * off `state`, so the Queen's own view says what it knows is free; the truth
+ * may hold a hidden enemy on one (`act` skips those).
+ */
+export function hatchSquares(state: BattleState, queen: Fighter): Square[] {
+    const enemies = state.fighters.filter(one => isEnemy(state, queen, one));
+    const free = areaAround(state.field, queen.square).filter(square => square !== queen.square
+        && state.field.tiles[square].terrain.standable && inMeleeReach(state.field, queen.square, square, state)
+        && !state.fighters.some(one => isStanding(one) && one.square === square));
+    const nearest = (square: Square) => Math.min(Infinity, ...enemies.map(enemy => distance(state.field, square, enemy.square)));
+    return free.sort((a, b) => nearest(a) - nearest(b) || a - b);
+}
+
+/** Why a Queen can't Hatch now, or undefined when it can: its brood is at its cap, or there's no free square next to it (§39.5). */
+function hatchRefusal(state: BattleState, queen: Fighter): string | undefined {
+    if (brood(state, queen).length >= (rulesetOf(state).ABILITIES.hatch!.cap ?? Infinity)) return "Its brood is as large as it can be";
+    return hatchSquares(state, queen).length > 0 ? undefined : "There's no free square next to it";
+}
 
 /** The afflictions on a character, which Purify clears: every one, Marked among them (§23.2). */
 export function afflictionsOn(fighter: Fighter, context?: RulesContext): Affliction[] {
@@ -1777,7 +1821,28 @@ export function act(state: BattleState, player: string, action: Action, roll: Ro
             for (const ally of allies) run.afflict(actor, ally, ability.effect!);
             break;
         }
-        case "bulwark": break; // Passive: check always refuses activating it.
+        case "bulwark":
+        case "carapace": break; // Passive: check always refuses activating it.
+        case "hatch": {
+            // Judged on the Queen's own view, placed on the truth: the first
+            // square its side thought free that nobody hidden holds. With none
+            // left the Hatch fizzles, the AP and the cooldown spent (§39.5).
+            const ability = ABILITIES.hatch!;
+            const view = viewOf(state, player);
+            const square = hatchSquares(view, fighterById(view, actor.id)!).find(one => !run.fighters.some(other => isStanding(other) && other.square === one));
+            if (square === undefined) {
+                events.push({ kind: "ability", fighter: actor.id, ability: action.kind, fizzled: true });
+                break;
+            }
+            const id = Math.max(-1, ...run.fighters.map(one => one.id)) + 1;
+            run.fighters.push({
+                ...newFighter(id, actor.owner, ability.hatches!, square, null, undefined, false, state),
+                ...(actor.facing !== undefined ? { facing: actor.facing } : {}),
+                hatchedBy: actor.id,
+            });
+            events.push({ kind: "hatched", fighter: actor.id, target: id, at: square });
+            break;
+        }
         case "shieldBash":
             // For the ability's damage, not the sword's, and stunned if it stays up (§23.2).
             // A miss stuns nobody, as a shot leaves its effect only on a hit.
@@ -1831,11 +1896,13 @@ export function act(state: BattleState, player: string, action: Action, roll: Ro
             break;
         case "fireball":
         case "dynamite":
-        case "iceBall": {
+        case "iceBall":
+        case "bile": {
             // Every character in the area, friend or foe — the thrower too, if
             // it's that close — and no roll (§13.6). Whoever a fireball doesn't
             // down is left burning: it doesn't roll, so it always does (§20.2);
-            // dynamite leaves nothing behind (§33.2). Then the low cover it
+            // dynamite leaves nothing behind (§33.2), and a Bile Lobber's bile
+            // corrodes everyone it hits (§39.5). Then the low cover it
             // landed on is gone (§22).
             const kind = action.kind;
             const ability: Ability = ABILITIES[kind]!;

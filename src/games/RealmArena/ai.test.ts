@@ -76,6 +76,41 @@ describe("nextAction's puzzles (§29.11)", () => {
         expect(planned(battle(OPEN, [bloater, knight, archer]))).toEqual({ kind: "burst", fighter: bloater.id });
     });
 
+    describe("the Swarm's elites (§39.5, rules version 12)", () => {
+        const V12 = { rulesVersion: 12 };
+        const elite = (id: number, owner: string, character: CharacterId, square: Square, extra: Partial<Fighter> = {}): Fighter =>
+            ({ ...newFighter(id, owner, character, square, null, undefined, false, V12), ap: ACTION_POINTS, ...extra });
+        const v12 = (field: Battlefield, fighters: Fighter[]): BattleState => ({ ...battle(field, fighters), ...V12 });
+
+        it("spits bile on a huddle of enemies it would down", () => {
+            const lobber = elite(0, AI, "bileLobber", at(OPEN, 2, 4), { ap: 3 });
+            const huddle = [at(OPEN, 9, 3), at(OPEN, 9, 4), at(OPEN, 9, 5)].map((square, i) => elite(i + 1, i % 2 ? "b" : "a", "manAtArms", square, { hp: 2 }));
+            expect(planned(v12(OPEN, [lobber, ...huddle]))).toMatchObject({ kind: "bile", fighter: lobber.id });
+        });
+
+        it("holds its bile when it would only hurt its own", () => {
+            const lobber = elite(0, AI, "bileLobber", at(OPEN, 2, 4), { ap: 3 });
+            const own = [at(OPEN, 9, 3), at(OPEN, 9, 4)].map((square, i) => elite(i + 1, AI, "skitterling", square, { hp: 4 }));
+            const lone = elite(3, "a", "knight", at(OPEN, 9, 5), { hp: 12 });
+            expect(optionsOf(viewOf(v12(OPEN, [lobber, ...own, lone]), AI), AI, lobber).filter(action => action.kind === "bile").length).toBeGreaterThan(0);
+            expect(planned(v12(OPEN, [lobber, ...own, lone]))).not.toMatchObject({ kind: "bile", at: at(OPEN, 9, 4) });
+        });
+
+        it("hatches a Skitterling when it has nobody in reach, and not once its brood is full", () => {
+            const queen = elite(0, AI, "broodQueen", at(OPEN, 6, 4));
+            const enemy = elite(1, "a", "knight", at(OPEN, 14, 4));
+            const hatching = optionsOf(viewOf(v12(OPEN, [queen, enemy]), AI), AI, queen);
+            expect(hatching).toContainEqual({ kind: "hatch", fighter: queen.id });
+            expect(planned(v12(OPEN, [queen, enemy]))).toEqual({ kind: "hatch", fighter: queen.id });
+            const brood = [at(OPEN, 3, 2), at(OPEN, 3, 6), at(OPEN, 4, 4)].map((square, i) => elite(i + 2, AI, "skitterling", square, { hatchedBy: 0, ap: 0 }));
+            const full = optionsOf(viewOf(v12(OPEN, [queen, enemy, ...brood]), AI), AI, queen);
+            expect(full.some(action => action.kind === "hatch")).toBe(false);
+            // The passive Carapace is never offered as something to do.
+            const brute = elite(9, AI, "carapaceBrute", at(OPEN, 6, 2));
+            expect(optionsOf(viewOf(v12(OPEN, [brute, enemy]), AI), AI, brute).some(action => action.kind === "carapace")).toBe(false);
+        });
+    });
+
     it("throws a Sapper's dynamite among three enemies (§33.2)", () => {
         const sapper = ready(0, AI, "sapper", at(OPEN, 2, 4));
         const enemies = [at(OPEN, 8, 3), at(OPEN, 8, 4), at(OPEN, 8, 5)].map((square, i) => ready(i + 1, "a", "manAtArms", square, { hp: 4 }));

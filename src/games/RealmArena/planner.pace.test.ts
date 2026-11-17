@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { FACTION_IDS, FACTIONS } from "./characters";
+import { FACTION_IDS, FACTIONS, type CharacterId } from "./characters";
 import { FOUR_GATE_FORT } from "./maps/fourGateFort";
-import { act, endTurn, newFighter, readyMadeMuster, startTurn, viewOf, type BattleState } from "./rules";
+import { act, endTurn, newFighter, readyMadeMuster, startTurn, viewOf, type BattleState, type Fighter } from "./rules";
 import { nextAction, turnMemo } from "./ai";
 import type { RealmArenaEndTurn } from "./RealmArenaLogic";
 import { COOP_MAPS } from "./maps";
@@ -20,6 +20,41 @@ afterEach(() => {
 
 const AI = "ai:0";
 
+/**
+ * Six rounds of the team's three ready-made squads and one warband of `squad`
+ * on the Four-Gate Fort, under `rulesVersion`: how long each of the warband's
+ * turns took the planner, one memo for the whole turn as the turn loop plans it.
+ * `dressed` sets the warband's fighters up before the first turn.
+ */
+function warbandTurns(squad: readonly CharacterId[], rulesVersion?: number, dressed: (fighters: Fighter[]) => Fighter[] = fighters => fighters): number[] {
+    const team = ["a", "b", "c"];
+    const owners = [...team, AI];
+    const context = rulesVersion === undefined ? undefined : { rulesVersion };
+    let id = 0;
+    const fighters = dressed(owners.flatMap((owner, seat) => readyMadeMuster(FOUR_GATE_FORT, seat, owner === AI ? squad : FACTIONS.realm.readyMade[80])
+        .map(pick => newFighter(id++, owner, pick.character, pick.square, null, undefined, false, context))));
+    let state: BattleState = { field: FOUR_GATE_FORT, fighters, ...context, sides: { a: "team", b: "team", c: "team", [AI]: "enemy" } };
+    const turn = (owner: string, round: number) => {
+        state = { ...state, fighters: startTurn(state, owner).fighters };
+        const start = performance.now();
+        if (owner === AI) {
+            const memo = turnMemo();
+            const plan = () => nextAction(viewOf(state, AI), AI, round, undefined, memo);
+            for (let action = plan(); action; action = plan()) {
+                state = { ...state, fighters: act(state, AI, action, () => 50).fighters };
+            }
+        }
+        state = { ...state, fighters: endTurn(state, owner, round).fighters };
+        return performance.now() - start;
+    };
+    const times: number[] = [];
+    for (let round = 1; round <= 6; round++) {
+        for (const player of team) turn(player, round);
+        times.push(turn(AI, round));
+    }
+    return times;
+}
+
 describe("nextAction's pace (§29.7)", () => {
     // The Swarm's warband is six characters to the Realm's four (§31.1), the Miners' three (§33.1).
     it.each(["realm", "swarm", "miners"] as const)("plans a %s warband's turn on the Four-Gate Fort in under 343.75 ms", faction => {
@@ -27,32 +62,16 @@ describe("nextAction's pace (§29.7)", () => {
         // each of its turns where it stands, so every one of its characters is
         // on watch and every move the warband weighs has a way round to find:
         // as long as a turn gets. Rolls are as good as fixed.
-        const team = ["a", "b", "c"];
-        const owners = [...team, AI];
-        let id = 0;
-        const fighters = owners.flatMap((owner, seat) => readyMadeMuster(FOUR_GATE_FORT, seat, FACTIONS[owner === AI ? faction : "realm"].readyMade[80])
-            .map(pick => newFighter(id++, owner, pick.character, pick.square)));
-        let state: BattleState = { field: FOUR_GATE_FORT, fighters, sides: { a: "team", b: "team", c: "team", [AI]: "enemy" } };
-        const turn = (owner: string, round: number) => {
-            state = { ...state, fighters: startTurn(state, owner).fighters };
-            const start = performance.now();
-            if (owner === AI) {
-                // As the turn loop plans it: one memo for the whole turn.
-                const memo = turnMemo();
-                const plan = () => nextAction(viewOf(state, AI), AI, round, undefined, memo);
-                for (let action = plan(); action; action = plan()) {
-                    state = { ...state, fighters: act(state, AI, action, () => 50).fighters };
-                }
-            }
-            state = { ...state, fighters: endTurn(state, owner, round).fighters };
-            return performance.now() - start;
-        };
-        const times: number[] = [];
-        for (let round = 1; round <= 6; round++) {
-            for (const player of team) turn(player, round);
-            times.push(turn(AI, round));
-        }
+        const times = warbandTurns(FACTIONS[faction].readyMade[80]);
         // On average, with room for a slow turn on a busy test runner.
+        expect(times.reduce((total, ms) => total + ms, 0) / times.length).toBeLessThan(343.75);
+        expect(Math.max(...times)).toBeLessThan(687.5);
+    });
+
+    it("plans a Swarm warband's turn in the same time with a Brood Queen, three of her hatchlings and the other elites (§39.5)", () => {
+        const squad = ["broodQueen", "skitterling", "skitterling", "skitterling", "carapaceBrute", "bileLobber"] as const;
+        // The Queen is the squad's first, so her id is the warband's first; her three Skitterlings are hers.
+        const times = warbandTurns(squad, 12, fighters => fighters.map(one => one.owner === AI && one.character === "skitterling" ? { ...one, hatchedBy: fighters.find(other => other.owner === AI)!.id } : one));
         expect(times.reduce((total, ms) => total + ms, 0) / times.length).toBeLessThan(343.75);
         expect(Math.max(...times)).toBeLessThan(687.5);
     });

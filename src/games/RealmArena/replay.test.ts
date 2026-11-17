@@ -117,7 +117,9 @@ describe("Realm Arena replay", () => {
         // on what stepOutcomeToModel cuts from it for a viewer (§27).
         const fields: Record<ToldEvent["kind"], string[]> = {
             iceBall: ["at", "damage", "fighter", "targets"],
+            bile: ["at", "damage", "fighter", "targets"],
             ability: ["ability", "fighter"],
+            hatched: ["at", "fighter", "target"],
             moved: ["fighter", "path", "sneaking"],
             shot: ["chance", "damage", "fighter", "reaction", "result", "target"],
             struck: ["chance", "damage", "fighter", "reaction", "target"],
@@ -145,7 +147,7 @@ describe("Realm Arena replay", () => {
         for (const event of events) {
             const { kind, ...rest } = event;
             // A draught's or a Purify's `via`, a strike's `missed` and a shot's `flanked` are the optional fields.
-            expect(Object.keys(rest).filter(key => key !== "via" && key !== "missed" && key !== "damages" && key !== "flanked" && key !== "downed").sort()).toEqual(fields[kind]);
+            expect(Object.keys(rest).filter(key => key !== "via" && key !== "missed" && key !== "damages" && key !== "flanked" && key !== "downed" && key !== "fizzled").sort()).toEqual(fields[kind]);
         }
     });
 

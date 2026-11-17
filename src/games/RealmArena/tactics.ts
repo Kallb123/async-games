@@ -56,6 +56,9 @@ export type ActionAim =
 export const ACTION_AIMS: Readonly<Record<ActionKind, ActionAim>> = {
     leap: { at: "square", range: "leap", useful: "leap" },
     iceBall: { at: "square", range: 12, useful: "area" },
+    bile: { at: "square", range: 10, useful: "area" },
+    hatch: { at: "self" },
+    carapace: { at: "self" },
     slashAndDash: { at: "self" },
     bulwark: { at: "self" },
     taunt: { at: "self", useful: "allies" },

@@ -565,9 +565,10 @@ export function gameStateToModel(
         // Who has hurt each one is the server's, for scoring assists (§13.7):
         // the board has no use for it, and in fog it would name whose blast
         // hurt a character the viewer couldn't see being hit.
+        // `hatchedBy` (§39.5) is a Brood Queen's id, which would name one the viewer couldn't see.
         // `musteredItem` (§39.4) is a sealed muster's purchase, so only the viewer's own side is told it:
         // once the item is spent, an opponent seeing it would learn what was bought and used out of sight.
-        fighters: view.fighters.map(storedFighter).map(({ woundedBy: _woundedBy, effectSources: _effectSources, musteredItem, ...fighter }) => ({
+        fighters: view.fighters.map(storedFighter).map(({ woundedBy: _woundedBy, effectSources: _effectSources, hatchedBy: _hatchedBy, musteredItem, ...fighter }) => ({
             ...fighter,
             ...(musteredItem && viewerId !== null && allied(view, fighter.owner, viewerId) ? { musteredItem } : {}),
             maxHp: maxHpOf(fighter, gs), maxAp: actionPointsOf(fighter, gs),

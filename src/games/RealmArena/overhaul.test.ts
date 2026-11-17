@@ -240,7 +240,7 @@ it("Shoot + Dodge uses two taps, then confirms a legal destination; splitting ke
     expect(tapFighter(context, 0)).toEqual({ aim: "shootDodge", targets: [1], square: archer.square });
     context.draft = { aim: "splittingArrow", targets: [1], square: null };
     expect(tapFighter(context, 2)).toEqual({ aim: "splittingArrow", targets: [1, 2], square: null });
-    for (const id of Object.keys(rulesetFor(9).ABILITIES)) expect(ACTION_AIMS).toHaveProperty(id);
+    for (const version of [9, 12]) for (const id of Object.keys(rulesetFor(version).ABILITIES)) expect(ACTION_AIMS).toHaveProperty(id);
 });
 
 it("the computer's new actions remain legal and deterministic", () => {

@@ -70,6 +70,9 @@ const AREA = "3×3, friend or foe";
 const ABILITY_USE: Readonly<Record<AbilityId, AbilityUse>> = {
     leap: { reach: "aimed" },
     iceBall: { reach: "aimed" },
+    bile: { reach: "aimed", note: AREA },
+    hatch: { reach: "self", note: "A Skitterling on a free square next to it, nearest an enemy in sight" },
+    carapace: { reach: "self", note: "Takes 1 less from every blow, never under 1" },
     slashAndDash: { reach: "self" },
     bulwark: { reach: "self" },
     taunt: { reach: "self" },
@@ -207,6 +210,7 @@ export function characterStats(id: CharacterId, context?: RulesContext): UnitSta
             { label: "Move/AP", value: `${character.movement}` },
             { label: "Sight", value: `${sightOf({ character: id }, context)}` },
             { label: "Points", value: `${character.points}` },
+            ...(character.armour ? [{ label: "Armour", value: `${character.armour}` }] : []),
             ...(climb !== DEFAULT_CLIMB ? [{ label: "Climb", value: climb >= FULL_HEIGHT ? "Full height" : `${climb}/${FULL_HEIGHT}` }] : []),
         ],
         actions: [
