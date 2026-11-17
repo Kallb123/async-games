@@ -1,5 +1,5 @@
-import type { RulesContext } from "@/games/RealmArena/rulesets";
-import { actionPointsOf, isStanding, maxHpOf, type BattleState, type Fighter } from "@/games/RealmArena/rules";
+import { rulesetOf, type RulesContext } from "@/games/RealmArena/rulesets";
+import { freeSquares, freshTurn, isStanding, maxHpOf, viewOf, type BattleState, type Fighter } from "@/games/RealmArena/rules";
 import type { ItemId } from "@/games/RealmArena/characters";
 import { pluralize } from "@/utils/ui/text";
 import type { Square } from "@/utils/games/battlefield/terrain";
@@ -19,6 +19,13 @@ export type RallyChoice = "rally" | "reinforce" | "resupply";
 
 /** Every choice, in the order the turn sheet lists them. */
 export const RALLY_CHOICES: readonly RallyChoice[] = ["rally", "reinforce", "resupply"];
+
+/** What each choice looks like wherever it is shown: its glyph and its name. */
+export const RALLY_LOOK: Readonly<Record<RallyChoice, { icon: string; name: string }>> = {
+    rally: { icon: "✚", name: "Rally" },
+    reinforce: { icon: "🛡️", name: "Reinforce" },
+    resupply: { icon: "🎒", name: "Resupply" },
+};
 
 /**
  * The command a player sends through `RealmArenaAct` to make their choice.
@@ -48,8 +55,8 @@ export interface RallyOption {
     available: boolean;
     /** Why it isn't available, in the player's language. Only when `available` is false. */
     reason?: string;
-    /** Reinforce only, when available: the ids of the seat's downed characters it may bring back. */
-    downed?: number[];
+    /** Reinforce only, when available: the seat's downed characters it may bring back. */
+    downed?: Fighter[];
 }
 
 /** What a rally gives one character back (§30.11): half its HP, rounded down, never past full. The new HP. */
@@ -69,28 +76,34 @@ export const downedOf = (state: Pick<BattleState, "fighters">, seat: string): Fi
 
 /**
  * The first free square of the seat's deployment zone, where a reinforcement
- * stands (the way a wave places the enemy's): one nobody standing is on.
- * Undefined when the zone is full, or the seat has none.
+ * stands (the way a wave places the enemy's): one nobody standing is on, in
+ * the state given. Undefined when the zone is full there, or the seat has none.
  */
 export function reinforceSquare(state: BattleState, seats: readonly string[], seat: string): Square | undefined {
     const index = seats.indexOf(seat);
-    if (index < 0) return undefined;
-    const occupied = new Set(state.fighters.filter(isStanding).map(fighter => fighter.square));
-    return (state.field.deployments[index] ?? []).find(square => !occupied.has(square));
+    return index < 0 ? undefined : freeSquares(state, state.field.deployments[index] ?? [])[0];
 }
 
+/** Whether a standing character of the seat has used up the item it mustered with. */
+const usedUp = (fighter: Fighter, seat: string): boolean =>
+    fighter.owner === seat && isStanding(fighter) && fighter.musteredItem !== undefined && fighter.item === null;
+
 /** Standing characters of the seat that have used the item they mustered with. */
-const resuppliable = (state: Pick<BattleState, "fighters">, seat: string): Fighter[] =>
-    state.fighters.filter(fighter => fighter.owner === seat && isStanding(fighter) && fighter.musteredItem !== undefined && fighter.item === null);
+const resuppliable = (state: Pick<BattleState, "fighters">, seat: string): Fighter[] => state.fighters.filter(fighter => usedUp(fighter, seat));
 
 /**
  * Each of the three choices for `seat`, in `RALLY_CHOICES` order, with whether
  * it would do anything. Rally is always there; Reinforce needs someone down and
  * a free square in the seat's deployment zone; Resupply needs someone standing
  * who has used up the item they mustered with. `seats` is the players in seat
- * order, which the deployment zone is read by.
+ * order, which the deployment zone is read by. What is available is judged from
+ * the seat's own sight (`viewOf`), so a hidden enemy standing in the zone doesn't
+ * make the answer differ between the sheet, which holds only the fogged view,
+ * and the server, which holds the battle. Where the reinforcement then stands
+ * is placed in truth (`rallied`).
  */
-export function rallyOptionsOf(state: BattleState, seats: readonly string[], seat: string): RallyOption[] {
+export function rallyOptionsOf(battle: BattleState, seats: readonly string[], seat: string): RallyOption[] {
+    const state = viewOf(battle, seat);
     const downed = downedOf(state, seat);
     const square = reinforceSquare(state, seats, seat);
     const used = resuppliable(state, seat);
@@ -100,7 +113,7 @@ export function rallyOptionsOf(state: BattleState, seats: readonly string[], sea
             case "reinforce":
                 if (downed.length === 0) return { choice, available: false, reason: "No one of yours is down" };
                 if (square === undefined) return { choice, available: false, reason: "No free square in your deployment zone" };
-                return { choice, available: true, downed: downed.map(fighter => fighter.id) };
+                return { choice, available: true, downed };
             case "resupply":
                 return used.length === 0 ? { choice, available: false, reason: "No one standing has used up their item" } : { choice, available: true };
         }
@@ -114,19 +127,47 @@ export function rallyOptionsOf(state: BattleState, seats: readonly string[], sea
 export function rallyRefusal(state: BattleState, seats: readonly string[], seat: string, sent: unknown): string | undefined {
     if (!isRallyAction(sent)) return "That isn't a rally choice";
     const { choice, fighter } = sent as { choice?: unknown; fighter?: unknown };
-    const option = RALLY_CHOICES.includes(choice as RallyChoice) ? rallyOptionsOf(state, seats, seat).find(one => one.choice === choice) : undefined;
+    const option = rallyOptionsOf(state, seats, seat).find(one => one.choice === choice);
     if (!option) return "That isn't a rally choice";
     if (!option.available) return option.reason;
-    if (choice === "reinforce" && (typeof fighter !== "number" || !option.downed?.includes(fighter))) return "Pick one of your downed characters";
+    if (choice === "reinforce" && (typeof fighter !== "number" || !option.downed?.some(one => one.id === fighter))) return "Pick one of your downed characters";
     return undefined;
 }
 
+/** Whether a Reinforce is on offer to the seat: someone down, and room for them by what the seat can see. Decides whether a wiped-out seat still has a turn. */
+export const canReinforce = (state: BattleState, seats: readonly string[], seat: string): boolean =>
+    rallyOptionsOf(state, seats, seat).find(option => option.choice === "reinforce")?.available === true;
+
+/**
+ * The choice a seat is taken to make when it doesn't (a turn timed out, a
+ * harness without a menu): Rally, or — with nobody of theirs standing, so
+ * nothing for a Rally to heal — Reinforce with their dearest downed character
+ * (the most points, then the lowest id) when a Reinforce is on offer.
+ */
+export function defaultRally(battle: BattleState, seats: readonly string[], seat: string): RallyAction {
+    const rally: RallyAction = { kind: "rally", choice: "rally" };
+    if (battle.fighters.some(fighter => fighter.owner === seat && isStanding(fighter)) || !canReinforce(battle, seats, seat)) return rally;
+    const { CHARACTERS } = rulesetOf(battle);
+    const [dearest] = downedOf(battle, seat).sort((a, b) => CHARACTERS[b.character].points - CHARACTERS[a.character].points || a.id - b.id);
+    return { kind: "rally", choice: "reinforce", fighter: dearest.id };
+}
+
+/**
+ * Whether a Reinforce the seat was offered has nowhere to stand in truth: every
+ * square it thought free is held by someone it couldn't see (§39.4). The choice
+ * is then taken as a Rally instead, rather than refused, so a refusal tells
+ * nothing about what is hidden.
+ */
+export const crowdedOut = (state: BattleState, seats: readonly string[], seat: string, action: RallyAction): boolean =>
+    action.choice === "reinforce" && reinforceSquare(state, seats, seat) === undefined;
+
 /**
  * The fighters once `seat` has made its choice. The action must have passed
- * `rallyRefusal`. Rally heals every standing character of the seat by half;
- * Reinforce stands the chosen downed one up at half HP on the first free square
- * of the zone, with a full turn's AP to spend at once; Resupply hands every
- * standing character that has used up its item the one it mustered with.
+ * `rallyRefusal`, and not be `crowdedOut`. Rally heals every standing character
+ * of the seat by half; Reinforce stands the chosen downed one up at half HP on
+ * the first free square of the zone, with a full turn's AP to spend at once;
+ * Resupply hands every standing character that has used up its item the one it
+ * mustered with.
  */
 export function rallied(state: BattleState, seats: readonly string[], seat: string, action: RallyAction): Fighter[] {
     switch (action.choice) {
@@ -136,12 +177,13 @@ export function rallied(state: BattleState, seats: readonly string[], seat: stri
             const square = reinforceSquare(state, seats, seat);
             return state.fighters.map(fighter => {
                 if (fighter.id !== action.fighter || square === undefined) return fighter;
-                const { attacksThisTurn: _attacks, usedThisTurn: _used, smoke: _smoke, ...rest } = fighter;
-                return { ...rest, hp: reinforcedHp(fighter, state), square, ap: actionPointsOf(fighter, state), banked: 0 };
+                const back = { ...fighter, hp: reinforcedHp(fighter, state), square };
+                freshTurn(back, state);
+                return back;
             });
         }
         case "resupply":
-            return state.fighters.map(fighter => resuppliable(state, seat).includes(fighter) ? { ...fighter, item: fighter.musteredItem! } : fighter);
+            return state.fighters.map(fighter => usedUp(fighter, seat) ? { ...fighter, item: fighter.musteredItem! } : fighter);
     }
 }
 

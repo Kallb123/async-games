@@ -17,12 +17,11 @@ import { RaceCarsEndTurn, RaceCarsLaunch, RaceCarsMove, RaceCarsShift, RaceCarsS
 import { IRaceCarsGameData } from "@/games/RaceCars/RaceCarsModels";
 import { conservativeTurn } from "@/games/RaceCars/rules";
 import { battleOf, budgetOf, owesRally, playableFactions, RealmArenaAct, RealmArenaEndTurn, RealmArenaMuster } from "@/games/RealmArena/RealmArenaLogic";
-import { rallyOptionsOf, type RallyAction } from "@/games/RealmArena/rally";
+import { defaultRally } from "@/games/RealmArena/rally";
 import { IRealmArenaGameData } from "@/games/RealmArena/RealmArenaModels";
 import { readyMadeSquad } from "@/games/RealmArena/characters";
 import { battlefieldById } from "@/games/RealmArena/maps";
 import { rulesetOf } from "@/games/RealmArena/rulesets";
-import { isStanding } from "@/games/RealmArena/rules";
 import { readyMadeMuster } from "@/games/RealmArena/rules";
 import { SACBuildRoad, SACEndTurn, SACMoveRobber, SACPlaceRoadSetup, SACPlaceSettlementSetup, SACRollDice } from "@/games/SettlementsAndCities/SettlementsAndCitiesLogic";
 import { ISettlementsAndCitiesGameData } from "@/games/SettlementsAndCities/SettlementsAndCitiesModels";
@@ -287,21 +286,6 @@ registerTurnTimeoutAdapter({
     },
 });
 
-/**
- * What a timed-out player owing a rally takes (§39.4): Rally, or — with
- * nobody of theirs standing, so nothing for a Rally to heal — Reinforce with
- * their dearest downed character (the most points, then the lowest id).
- */
-function timedOutRally(gs: IRealmArenaGameData["specificGameState"], userId: string): RallyAction {
-    const battle = battleOf(gs);
-    const reinforce = rallyOptionsOf(battle, gs.seats, userId).find(option => option.choice === "reinforce");
-    if (!reinforce?.available || battle.fighters.some(fighter => fighter.owner === userId && isStanding(fighter))) return { kind: "rally", choice: "rally" };
-    const { CHARACTERS } = rulesetOf(gs);
-    const dearest = battle.fighters.filter(fighter => reinforce.downed!.includes(fighter.id))
-        .sort((a, b) => CHARACTERS[b.character].points - CHARACTERS[a.character].points || a.id - b.id)[0];
-    return { kind: "rally", choice: "reinforce", fighter: dearest.id };
-}
-
 registerTurnTimeoutAdapter({
     className: "RealmArenaGameType",
     // docs/games/realm-arena.md §17.2: a timed-out turn ends the way the player
@@ -324,7 +308,7 @@ registerTurnTimeoutAdapter({
             // A rally choice owed (§39.4) is made first, then the turn ends on the next call.
             if (!owesRally(gs, userId)) return new RealmArenaEndTurn();
             const act = new RealmArenaAct();
-            act.action = timedOutRally(gs, userId);
+            act.action = defaultRally(battleOf(gs), gs.seats, userId);
             return act;
         }
         const muster = new RealmArenaMuster();

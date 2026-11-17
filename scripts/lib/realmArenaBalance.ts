@@ -17,8 +17,8 @@ import { nextAction, turnMemo } from "../../src/games/RealmArena/ai";
 import { DIFFICULTY_NAMES, BATTLE_SIZE_NAMES, FACTIONS, type BattleSize, type Difficulty, type FactionId } from "../../src/games/RealmArena/characters";
 import type { RealmArenaSettings } from "../../src/games/RealmArena/RealmArenaModels";
 import { battlefieldById, mapFor, type CoopMap } from "../../src/games/RealmArena/maps";
-import { battleRoundsOf } from "../../src/games/RealmArena/RealmArenaLogic";
-import { rallyHp, rallyOptionsOf, reinforcedHp, type RallyAction } from "../../src/games/RealmArena/rally";
+import { battleRoundsOf, owesRally } from "../../src/games/RealmArena/RealmArenaLogic";
+import { defaultRally, rallyOptionsOf, rallyTotal, reinforcedHp, type RallyAction } from "../../src/games/RealmArena/rally";
 import { ACTION_POINTS, isStanding, isWarband, viewOf, waveArrives, type BattleState } from "../../src/games/RealmArena/rules";
 import { actBy, battleOf, endTurnBy, makeGame, musterAll, play } from "../../src/games/RealmArena/testFixtures";
 import { percentile as sortedPercentile } from "../../src/utils/performance";
@@ -62,20 +62,19 @@ export type RallyPolicy = "policy" | "always";
  * best downed character would return (half its max HP) with more than half of
  * what a Rally would hand back to this player's own standing characters,
  * otherwise Rally. A player with nobody standing has no Rally to price, so
- * Reinforces. Resupply is never chosen: the planner's items are a minor part
+ * takes `defaultRally`. Resupply is never chosen: the planner's items are a minor part
  * of its play and a menu row it can't weigh. `always` is Rally every time, the
  * heal as it was before the choice, for the player's own squad.
  */
 export function rallyChoiceFor(battle: BattleState, seats: readonly string[], player: string, policy: RallyPolicy = "policy"): RallyAction {
     const rally: RallyAction = { kind: "rally", choice: "rally" };
     if (policy === "always") return rally;
+    // Nobody standing has no Rally to price: the default's Reinforce, or Rally when there's no room.
+    if (!battle.fighters.some(fighter => fighter.owner === player && isStanding(fighter))) return defaultRally(battle, seats, player);
     const reinforce = rallyOptionsOf(battle, seats, player).find(option => option.choice === "reinforce");
     if (!reinforce?.available) return rally;
-    const best = battle.fighters.filter(fighter => reinforce.downed!.includes(fighter.id))
-        .reduce((a, b) => reinforcedHp(b, battle) > reinforcedHp(a, battle) ? b : a);
-    const healed = battle.fighters.filter(fighter => fighter.owner === player && isStanding(fighter))
-        .reduce((sum, fighter) => sum + rallyHp(fighter, battle) - fighter.hp, 0);
-    return reinforcedHp(best, battle) > healed / 2 ? { kind: "rally", choice: "reinforce", fighter: best.id } : rally;
+    const best = reinforce.downed!.reduce((a, b) => reinforcedHp(b, battle) > reinforcedHp(a, battle) ? b : a);
+    return reinforcedHp(best, battle) > rallyTotal(battle, player) / 2 ? { kind: "rally", choice: "reinforce", fighter: best.id } : rally;
 }
 
 /**
@@ -209,7 +208,7 @@ export async function simulateBattle(scenario: BalanceScenario, seed: number, te
         const roundBefore = game.specificGameState.roundsPlayed;
         const memo = planner.turnMemo?.();
         // The team makes the rally's choice first, as the board asks it to (§39.4).
-        if (game.specificGameState.rallyOwed?.includes(player)) {
+        if (owesRally(game.specificGameState, player)) {
             const choice = rallyChoiceFor(battleOf(game), players, player, scenario.rally);
             if (!(await play(game, actBy(player, choice))).outcome.validMove) throw new Error(`${scenarioKey(scenario)}, seed ${seed}: ${player}'s rally choice was refused`);
         }

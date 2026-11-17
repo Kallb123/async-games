@@ -299,7 +299,8 @@ export default function GameRealmArena({ params }: { params: Promise<{ gameid: u
     );
     // A wave has landed and the viewer owes the team a rally choice (§39.4): it comes before anything else, so nothing is selected or acted with until it's made.
     const rallying = battleTurn && !!gs?.rallyOwed;
-    const actor = battleTurn && !rallying && selected && selected.owner === myUserId && isStanding(selected) ? selected : null;
+    const actingTurn = battleTurn && !rallying;
+    const actor = actingTurn && selected && selected.owner === myUserId && isStanding(selected) ? selected : null;
     const [lastEvents, setLastEvents] = useResettingState<BattleEvent[]>([], turnKey);
     const [keepStill, setKeepStill] = useResettingState<number[]>([], turnKey);
     const ownPlayback = ownNow?.playback ?? null;
@@ -365,7 +366,7 @@ export default function GameRealmArena({ params }: { params: Promise<{ gameid: u
     const choose = (action: RallyAction) => {
         const command = new RealmArenaAct();
         command.action = action;
-        submitCommand(command, undefined, rallyTarget(action.choice));
+        submitCommand(command, undefined, rallyTarget(action.choice, action.fighter));
     };
     const turn = useTurnDraft(battle, myUserId, actor, turnKey, act);
     const focusTarget = (target: Fighter) => {
@@ -693,10 +694,10 @@ export default function GameRealmArena({ params }: { params: Promise<{ gameid: u
                         ahead of the squad. */}
                     {rallying && (
                         <div className="ag-section ag-stack">
-                            <RealmArenaRallySheet battle={battle} seats={gs.mustered} player={myUserId} pendingTarget={pendingTarget} onChoose={choose} />
+                            <RealmArenaRallySheet battle={battle} seats={gs.mustered /* in a battle, the server's own seat order (`gs.seats`), which a deployment zone is read by: `turnOrder` loses a dropped player */} player={myUserId} pendingTarget={pendingTarget} onChoose={choose} />
                         </div>
                     )}
-                    {battleTurn && !rallying && (
+                    {actingTurn && (
                         <div className="ag-section ag-stack">
                             <RealmArenaTurnEnd
                                 onEndTurn={endTurn}
@@ -724,7 +725,7 @@ export default function GameRealmArena({ params }: { params: Promise<{ gameid: u
                             battle={shownBattle}
                             player={myUserId}
                             colourFor={colourFor}
-                            acting={battleTurn && !rallying}
+                            acting={actingTurn}
                             showReach={!complete}
                             selectedId={selected?.id ?? null}
                             onSelect={selectUnit}
@@ -766,7 +767,7 @@ export default function GameRealmArena({ params }: { params: Promise<{ gameid: u
                         <RealmArenaResults context={battle} events={lastEvents} fighters={fighters} viewerId={myUserId} nameFor={playerName} />
                     )}
 
-                    {battleTurn && !rallying && (
+                    {actingTurn && (
                         <RealmArenaWatchSwitches context={battle} fighters={fighters} player={myUserId} keepStill={keepStill} onKeepStill={setKeepStill} disabled={pendingTarget !== null} />
                     )}
 

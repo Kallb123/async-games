@@ -5039,8 +5039,10 @@ anything else:
 - `landWave` under it sets `rallyOwed: string[]` on the state — every team seat
   still in the battle — in place of calling `rally`, and writes the public line
   "The team must each choose how to rally: …". Earlier versions are untouched
-  (`RALLYING_VERSION`'s branch). The state's `rallyOwed` is a Mixed path, deleted
-  when the last seat has chosen, and kept by `cloneRealmArenaState`.
+  (`RALLYING_VERSION`'s branch). The state's `rallyOwed` is a Mixed path, cleared by
+  `forgiveRally` when the last seat has chosen or left — by assigning
+  `undefined`, never `delete`, which a Mongoose document's cached path ignores
+  and a save would write the old list back — and kept by `cloneRealmArenaState`.
 - **The action is not an `Action`.** `{ kind: "rally", choice, fighter? }`
   (`RallyAction`, `rally.ts`) goes through `RealmArenaAct`, whose `action` is
   `Action | RallyAction`, but never reaches `applyAction`, `check`, `act`, the
@@ -5048,8 +5050,8 @@ anything else:
   branches to `executeRally` in the Logic layer. `rally.ts` is browser-safe and
   holds the rule for server and board alike: `rallyOptionsOf(battle, seats,
   seat)` — each of the three choices with `available`, a `reason` when it isn't,
-  and for Reinforce the ids it may bring back (`downed`) — `rallyRefusal`,
-  `rallied` and `cleanRally`. A choice is refused unless it is the sender's turn
+  and for Reinforce the downed characters it may bring back (`downed`) —
+  `rallyRefusal`, `rallied`, `cleanRally`, `defaultRally` and `RALLY_LOOK`. A choice is refused unless it is the sender's turn
   and they owe one and it is available; every other `RealmArenaAct` and the End
   turn from a player owing one is refused as well. It earns no mastery, rolls
   nothing, tells no battle event, and empties the undo stack.
@@ -5057,16 +5059,27 @@ anything else:
   same `rallyHp` the version-11 rally heals by. **Reinforce** stands the chosen downed character up
   at half its max HP, floored and at least 1, on the first free square of the
   seat's deployment zone (`deployments[seat index]`, a square nobody standing is
-  on), with a turn's AP at once; it isn't Raise's path, since Raise reads a
+  on), with a turn's AP at once (`freshTurn`, the reset `startTurn` gives); it isn't Raise's path, since Raise reads a
   Cleric's ability and rounds up. **Resupply** hands each standing character
   whose `item` is null the `musteredItem` it has.
-- `Fighter.musteredItem` is set by `newFighter` for a player's character that
-  carries an item, only where the battle's rules have `RALLY_CHOICE`. It travels
-  with the fighter, so as visible as `item` itself is: an opponent in fog never
-  gets a fighter the viewer can't see.
+- `Fighter.musteredItem` is set where the squads take the field, for a team
+  character that carries an item, only in a Hold Out whose rules have
+  `RALLY_CHOICE`: no other battle keeps one. The response sends it only on
+  fighters allied to the viewer (never to a viewerless replay), since once the
+  item is spent it would tell an opponent what a sealed muster bought.
+- **Availability is the player's own knowledge; placement is truth.**
+  `rallyOptionsOf` judges on `viewOf(battle, seat)`, so the sheet (which holds
+  only the fogged view) and the server answer alike and a refusal can't tell
+  the player what is hidden. A Reinforce offered on that view whose zone has no
+  free square in truth (a hidden enemy holds each one it thought free) isn't
+  refused: it is taken as a Rally, logged "Bob's squad rallies: there was no
+  room to bring anyone back" and recorded as the Rally. Otherwise the character
+  stands on the first zone square nobody standing holds, one a hidden enemy
+  holds skipped. The timeout takes the same path.
 - **A wiped-out player still chooses.** `takesTurn` (RealmArenaLogic.ts) is the
   one test `nextSeat` and `handOff` step past a seat by: someone standing, or
-  owing a choice with someone down. A seat that owes a choice isn't "next after
+  owing a choice with a Reinforce on offer by its own view (someone down and a
+  free square), so a wiped-out seat whose zone is full gets no pointless turn. A seat that owes a choice isn't "next after
   itself": `nextSeat` of it is the head of the table, since the turn that ended
   was the last of the round before the wave, so the new round begins where it
   always does and the wiped-out seat gets its turn in its place in it. If the
@@ -5074,8 +5087,9 @@ anything else:
   A seat that has chosen Rally with nobody standing has nothing to do but End
   turn, and is stepped past from then on.
 - **A timed-out turn** (`turnTimeout.ts`) sends the Rally act first — or, with
-  nobody of theirs standing and a free square, Reinforce with the dearest downed
-  character (most points, then the lowest id) — and ends the turn on its next call.
+  nobody of theirs standing and a Reinforce on offer, Reinforce with the dearest
+  downed character (most points, then the lowest id: `defaultRally`, which the
+  test script and the balance harness use as well) — and ends the turn on its next call.
 - **Command version 12** (`meta.ts`). The rule itself is read from the rules
   version: a version-11 battle's End turn rallies everyone as before.
 - The log says "Bob's squad rallies", "Bob's Archer rejoins the fight" or "Bob's
@@ -5084,7 +5098,7 @@ anything else:
   that landed, in order — filled by the recorder from a replay and stored on the
   result's waves; absent in a battle before it.
 - The response carries `rallyOwed: true` for a viewer who owes one and never the
-  list; their own fighters carry `musteredItem` as far as they carry `item`.
+  list; their own side's fighters carry `musteredItem`.
 - *Open:* letting the player tap the square Reinforce places the character on,
   with the muster's placing.
 

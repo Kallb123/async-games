@@ -4,11 +4,15 @@ import { resolveStalledTurn } from "@/utils/games/turnTimeout";
 import { rallyChoiceFor } from "../../../scripts/lib/realmArenaBalance";
 import { recordBattle } from "./recordBattle";
 import { gameStateToModel } from "./RealmArenaModels";
-import { RealmArenaUndo } from "./RealmArenaLogic";
+import type { IGameData } from "@/utils/mongodb/GameData";
+import { runCommand } from "@/utils/games/commandPipeline";
+import { nextSeat, RealmArenaGameType, RealmArenaUndo } from "./RealmArenaLogic";
+import { RealmArenaGameDataModel } from "./RealmArenaModels";
 import { rallyOptionsOf, rallyRefusal, rallyTally, rallyTotal, resupplyItems, type RallyAction } from "./rally";
 import { battlefieldById } from "./maps";
-import { isStanding, isWarband, maxHpOf, newFighter, type Fighter } from "./rules";
-import { actBy, battleOf, cmd, endTurnBy, makeGame, musterAll, play, playScriptedBattle, responseFor, seedRolls, type RealmArenaTestGame } from "./testFixtures";
+import { distance } from "@/utils/games/battlefield/terrain";
+import { isStanding, isWarband, maxHpOf, newFighter, viewOf, warbandOwner, type Fighter } from "./rules";
+import { actBy, battleOf, cmd, endTurnBy, makeGame, muster, musterAll, play, readyMadePicks, playScriptedBattle, responseFor, seedRolls, type RealmArenaTestGame } from "./testFixtures";
 
 // docs/games/realm-arena.md §39.4: from rules version 12 a Hold Out wave heals
 // nobody as it lands, and each player of the team owes a rally choice instead:
@@ -37,7 +41,7 @@ const hurt = (fighter: Fighter) => { fighter.hp = 1; };
  * team up, then a and b end their turns and the wave lands, leaving a's turn
  * begun with a choice to make (rules 12) or not (11).
  */
-async function waveLanded(settings: typeof V12, tweak: (game: RealmArenaTestGame) => void = () => {}): Promise<RealmArenaTestGame> {
+async function waveLanded(settings: typeof V12 & { fog?: boolean }, tweak: (game: RealmArenaTestGame) => void = () => {}): Promise<RealmArenaTestGame> {
     const game = makeGame(["a", "b"], {}, settings);
     await musterAll(game);
     game.specificGameState.fighters.forEach(fighter => { if (isWarband(fighter.owner)) down(fighter); });
@@ -49,12 +53,28 @@ async function waveLanded(settings: typeof V12, tweak: (game: RealmArenaTestGame
 }
 
 describe("what a fighter keeps of the item it mustered with (§39.4)", () => {
-    it("is remembered by a player's character under rules 12, and by nobody else or under 11", () => {
-        const fresh = (version: number, owner: string) => newFighter(0, owner, "knight", 0, "fireFlask", undefined, false, { rulesVersion: version });
-        expect(fresh(12, "a").musteredItem).toBe("fireFlask");
-        expect(fresh(11, "a")).not.toHaveProperty("musteredItem");
-        expect(fresh(12, "ai:0")).not.toHaveProperty("musteredItem");
-        expect(newFighter(0, "a", "knight", 0, null, undefined, false, { rulesVersion: 12 })).not.toHaveProperty("musteredItem");
+    /** Both players muster one character fewer than the ready-made squad, the first carrying a fire flask. */
+    const musteredWith = async (settings: Parameters<typeof makeGame>[2]) => {
+        const game = makeGame(["a", "b"], {}, settings);
+        for (const [seat, player] of ["a", "b"].entries()) {
+            const picks = readyMadePicks(game, seat).slice(0, -1);
+            picks[0] = { ...picks[0], item: "fireFlask" };
+            expect((await play(game, muster(player, picks))).outcome.validMove).toBe(true);
+        }
+        return game.specificGameState.fighters;
+    };
+
+    it("is remembered by a Hold Out player's character under rules 12, and by nobody else or under 11", async () => {
+        const holdOut = await musteredWith(V12);
+        const carrying = holdOut.filter(fighter => !isWarband(fighter.owner) && fighter.item);
+        expect(carrying.length).toBeGreaterThan(0);
+        expect(carrying.every(fighter => fighter.musteredItem === fighter.item)).toBe(true);
+        expect(holdOut.filter(fighter => isWarband(fighter.owner)).some(fighter => "musteredItem" in fighter)).toBe(false);
+        expect(holdOut.filter(fighter => !fighter.item).some(fighter => "musteredItem" in fighter)).toBe(false);
+        expect((await musteredWith(V11)).some(fighter => "musteredItem" in fighter)).toBe(false);
+        // A battle that isn't Hold Out has no rally, so nothing of what was bought is kept, or sent.
+        expect((await musteredWith({ rulesVersion: 12 })).some(fighter => "musteredItem" in fighter)).toBe(false);
+        expect((await musteredWith({ rulesVersion: 12, coop: { enemy: "realm" } })).some(fighter => "musteredItem" in fighter)).toBe(false);
     });
 });
 
@@ -137,7 +157,7 @@ describe("Reinforce (§39.4)", () => {
         const seats = game.specificGameState.seats;
         const options = rallyOptionsOf(battleOf(game), seats, "a");
         expect(options.map(option => [option.choice, option.available])).toEqual([["rally", true], ["reinforce", true], ["resupply", false]]);
-        expect(options[1].downed).toEqual([mine(game, "a")[1].id]);
+        expect(options[1].downed?.map(fighter => fighter.id)).toEqual([mine(game, "a")[1].id]);
         for (const bad of [mine(game, "a")[0].id, mine(game, "b")[0].id, 999, undefined, "1", -1]) {
             expect((await play(game, actBy("a", { kind: "rally", choice: "reinforce", fighter: bad } as RallyAction))).outcome.validMove, String(bad)).toBe(false);
         }
@@ -338,6 +358,97 @@ describe("a timed-out turn that owes a rally (§39.4)", () => {
         const dearest = [...mine(game, "a")].sort((x, y) => points(y) - points(x) || x.id - y.id)[0];
         expect(await resolveStalledTurn(game, "a", "a")).toBe("advanced");
         expect(mine(game, "a").filter(isStanding).map(fighter => fighter.id)).toEqual([dearest.id]);
+    });
+});
+
+describe("the last choice, on a real document (§39.4)", () => {
+    it("is saved: nothing is owed in what the document would write, and the player can end their turn", async () => {
+        const game = await waveLanded(V12);
+        const { markModified: _, ...data } = game;
+        // A hydrated document, as the command route holds one: `delete` on its nested path would leave the old list cached.
+        const doc = RealmArenaGameDataModel.hydrate(structuredClone(data));
+        const run = (command: Parameters<typeof play>[1]) => runCommand(doc as unknown as IGameData, new RealmArenaGameType(), command);
+        const saved = () => JSON.stringify([doc.toObject().specificGameState.rallyOwed ?? null, doc.$getChanges()]);
+
+        expect((await run(actBy("a", rally))).outcome.validMove).toBe(true);
+        expect(doc.toObject().specificGameState.rallyOwed).toEqual(["b"]);
+        expect((await run(endTurnBy("a"))).outcome.validMove).toBe(true);
+        expect(doc.currentTurn).toBe("b");
+        expect((await run(actBy("b", rally))).outcome.validMove).toBe(true);
+        expect(doc.toObject().specificGameState.rallyOwed ?? undefined).toBeUndefined();
+        expect(saved()).not.toContain('"rallyOwed":[');
+        // Cleared for good: b can't choose again, and can end the turn.
+        expect((await run(actBy("b", rally))).outcome.validMove).toBe(false);
+        expect((await run(endTurnBy("b"))).outcome.validMove).toBe(true);
+    });
+});
+
+describe("Reinforce in fog of war (§39.4)", () => {
+    const FOG = { ...V12, fog: true };
+    /** A fogged wave landed on a wiped-out a, with a warband character out of a's sight standing on each of the first `count` squares of a's zone. */
+    async function ambushed(count: number): Promise<RealmArenaTestGame> {
+        const game = await waveLanded(FOG, g => mine(g, "a").forEach(down));
+        const field = battleOf(game).field;
+        const zone = field.deployments[0];
+        // b's characters go as far from a's zone as the ground allows, so nobody on a's side can see into it.
+        const taken = new Set(game.specificGameState.fighters.filter(isStanding).map(fighter => fighter.square));
+        const far = field.tiles.map((tile, square) => ({ tile, square })).filter(({ tile, square }) => tile.terrain.standable && !taken.has(square) && !zone.includes(square))
+            .sort((x, y) => Math.min(...zone.map(near => distance(field, y.square, near))) - Math.min(...zone.map(near => distance(field, x.square, near))));
+        mine(game, "b").filter(isStanding).forEach((fighter, index) => { fighter.square = far[index].square; });
+        let id = 100;
+        for (const square of zone.slice(0, count)) game.specificGameState.fighters.push(newFighter(id++, warbandOwner(0), "knight", square, null, undefined, false, game.specificGameState));
+        const seen = new Set(viewOf(battleOf(game), "a").fighters.map(fighter => fighter.id));
+        expect([...seen].some(one => one >= 100), "the blockers are out of sight").toBe(false);
+        return game;
+    }
+    const zoneOf = (game: RealmArenaTestGame) => battlefieldById(game.specificGameState.map).deployments[0];
+
+    it("places the character on the first square nobody standing holds, skipping one hidden in the way", async () => {
+        const game = await ambushed(1);
+        const seats = game.specificGameState.seats;
+        expect(rallyOptionsOf(battleOf(game), seats, "a")[1].available).toBe(true);
+        const { id } = mine(game, "a")[0];
+        expect((await play(game, actBy("a", reinforce(id)))).outcome.validMove).toBe(true);
+        expect(isStanding(now(game, id))).toBe(true);
+        expect(now(game, id).square).toBe(zoneOf(game)[1]);
+    });
+
+    it("takes a Reinforce as a Rally when every square it thought free is held in truth, and says so", async () => {
+        const game = await ambushed(zoneOf(await waveLanded(FOG)).length);
+        const seats = game.specificGameState.seats;
+        // Judged from a's own sight, nothing is in the way: the sheet offers it and a refusal would tell a what is there.
+        expect(rallyOptionsOf(viewOf(battleOf(game), "a"), seats, "a")[1].available).toBe(true);
+        expect(rallyOptionsOf(battleOf(game), seats, "a")[1].available).toBe(true);
+        const { id } = mine(game, "a")[0];
+        expect((await play(game, actBy("a", reinforce(id)))).outcome.validMove).toBe(true);
+        expect(isStanding(now(game, id))).toBe(false);
+        expect(game.specificGameState.rallyOwed).toEqual(["b"]);
+        expect(game.gameState.history[0].text).toBe("{{a}}'s squad rallies: there was no room to bring anyone back");
+        // Recorded as the Rally it became, so a replay agrees.
+        expect((game.gameState.commandHistory.at(-1) as unknown as { action: RallyAction }).action).toEqual(rally);
+        expect((await play(game, endTurnBy("a"))).outcome.validMove).toBe(true);
+    });
+
+    it("does the same when the turn times out", async () => {
+        const game = await ambushed(zoneOf(await waveLanded(FOG)).length);
+        const { id } = mine(game, "a")[0];
+        expect(await resolveStalledTurn(game, "a", "a")).toBe("advanced");
+        expect(isStanding(now(game, id))).toBe(false);
+        expect(game.gameState.history.some(entry => entry.text.includes("no room to bring anyone back"))).toBe(true);
+        expect(game.specificGameState.rallyOwed).toEqual(["b"]);
+    });
+});
+
+describe("a wiped-out player whose zone is full has no turn to take (§39.4)", () => {
+    it("is stepped past, where one with room is given theirs", async () => {
+        const open = await waveLanded(V12, g => mine(g, "a").forEach(down));
+        expect(nextSeat(open, "b")).toBe("a");
+        const full = await waveLanded(V12, g => mine(g, "a").forEach(down));
+        const zone = battlefieldById(full.specificGameState.map).deployments[0];
+        let id = 100;
+        for (const square of zone) full.specificGameState.fighters.push(newFighter(id++, "b", "knight", square, null, undefined, false, full.specificGameState));
+        expect(rallyOptionsOf(battleOf(full), full.specificGameState.seats, "a")[1].available).toBe(false);
+        expect(nextSeat(full, "b")).toBe("b");
     });
 });
 

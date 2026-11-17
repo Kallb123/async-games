@@ -46,7 +46,7 @@ import { battlefieldOf } from "./maps";
 import { enemyNameOf, UNKNOWN_ENEMY, type CharacterId, type ItemId } from "./characters";
 import { battleFrom, centreHolders, ENEMY_SIDE, isStanding, isWarband, sideOf, sideScore, TEAM_SIDE, type BattleEvent, type Fighter } from "./rules";
 import { AREA_BLAST, centreInSight } from "./ui";
-import { isRallyAction } from "./rally";
+import { isRallyAction, RALLY_LOOK } from "./rally";
 
 type RAState = IRealmArenaSpecificGameStateResponse;
 
@@ -370,7 +370,7 @@ function toEvents(
             const rally = (command as Partial<RealmArenaAct>).action;
             if (isRallyAction(rally)) {
                 const title = [...lines].reverse().find(entry => entry.actorId === command.senderId)?.text ?? `${name} ${command.myString()}`;
-                rows.push({ ...base, type: RA_RALLY, glyph: rally.choice === "reinforce" ? "🛡️" : rally.choice === "resupply" ? "🎒" : "✚", title });
+                rows.push({ ...base, type: RA_RALLY, glyph: RALLY_LOOK[rally.choice].icon, title });
                 break;
             }
             const { events: all = [], recap } = outcome as Partial<IRealmArenaOutcome>;

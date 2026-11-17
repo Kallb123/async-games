@@ -962,4 +962,39 @@ describe("Realm Arena's rally choice in fog of war (§39.4)", () => {
         // A response never carries the list of who else owes, nor does the state's wire shape have the key under another name.
         expect(JSON.stringify(await wire(game, "a"))).not.toContain('"rallyOwed":["');
     });
+
+    it("tells a's response nothing of b's rally once a has chosen, while b's still says it", async () => {
+        const game = await owed();
+        await playRealmArena(game, realmArenaAct("a", { kind: "rally", choice: "rally" }));
+        expect(game.specificGameState.rallyOwed).toEqual(["b"]);
+        expect(await wire(game, "a")).not.toHaveProperty("rallyOwed");
+        expect(JSON.stringify(await wire(game, "a"))).not.toMatch(/rallyOwed/);
+        expect((await wire(game, "b")).rallyOwed).toBe(true);
+    });
+
+    it("never sends an opponent the item a character mustered with, spent or not, but sends its own side", async () => {
+        // A free-for-all under rules 12: a's character stands beside b's, whose spent item was bought in a sealed muster.
+        const game = makeRealmArenaGame(["a", "b"], {}, { fog: true, rulesVersion: 12 });
+        await realmArenaMusterAll(game);
+        const fighters = game.specificGameState.fighters;
+        const theirs = fighters.find(one => one.owner === "b" && isRealmArenaStanding(one))!;
+        const mine = fighters.find(one => one.owner === "a" && isRealmArenaStanding(one))!;
+        theirs.musteredItem = "fireFlask";
+        theirs.item = null;
+        const field = realmArenaBattle(game).field;
+        theirs.square = realmArenaAreaAround(field, mine.square).find(square => square !== mine.square && field.tiles[square].terrain.standable && !fighters.some(one => isRealmArenaStanding(one) && one.square === square))!;
+        const seenByA = await wire(game, "a");
+        expect(seenByA.fighters.some(one => one.id === theirs.id), "b's character stands in a's sight").toBe(true);
+        expect(JSON.stringify(seenByA)).not.toContain("musteredItem");
+        expect((await wire(game, "b")).fighters.find(one => one.id === theirs.id)?.musteredItem).toBe("fireFlask");
+        expect(JSON.stringify(await wire(game, null))).not.toContain("musteredItem");
+    });
+
+    it("lets a Hold Out teammate see it, as an ally's whole character is shown", async () => {
+        const game = await owed();
+        const teammate = game.specificGameState.fighters.find(one => one.owner === "b" && isRealmArenaStanding(one))!;
+        teammate.musteredItem = "smokePot";
+        teammate.item = null;
+        expect((await wire(game, "a")).fighters.find(one => one.id === teammate.id)?.musteredItem).toBe("smokePot");
+    });
 });

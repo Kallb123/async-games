@@ -467,7 +467,7 @@ var RealmArenaGameDataSchema = new Schema<IRealmArenaGameDataDocument>(
             rulesVersion: Number,
             phase: String,
             roundsPlayed: Number,
-            // Mixed, so a Hold Out wave setting it and the last choice deleting it are both saved by `markDirty` (§39.4).
+            // Mixed, so `markDirty` saves it whole. It is cleared by assigning `undefined` (`forgiveRally`), never `delete`: a deleted path stays cached on a document, and the save still writes the old list (§39.4).
             rallyOwed: Schema.Types.Mixed,
             fighters: Schema.Types.Mixed,
             sightings: Schema.Types.Mixed,
@@ -565,7 +565,13 @@ export function gameStateToModel(
         // Who has hurt each one is the server's, for scoring assists (§13.7):
         // the board has no use for it, and in fog it would name whose blast
         // hurt a character the viewer couldn't see being hit.
-        fighters: view.fighters.map(storedFighter).map(({ woundedBy: _woundedBy, effectSources: _effectSources, ...fighter }) => ({ ...fighter, maxHp: maxHpOf(fighter, gs), maxAp: actionPointsOf(fighter, gs) })),
+        // `musteredItem` (§39.4) is a sealed muster's purchase, so only the viewer's own side is told it:
+        // once the item is spent, an opponent seeing it would learn what was bought and used out of sight.
+        fighters: view.fighters.map(storedFighter).map(({ woundedBy: _woundedBy, effectSources: _effectSources, musteredItem, ...fighter }) => ({
+            ...fighter,
+            ...(musteredItem && viewerId !== null && allied(view, fighter.owner, viewerId) ? { musteredItem } : {}),
+            maxHp: maxHpOf(fighter, gs), maxAp: actionPointsOf(fighter, gs),
+        })),
         ghosts: fogGhostsFor(gs, viewerId, complete),
         clouds: [...view.clouds ?? []],
         blasted: [...(gs.blasted ?? [])],
@@ -903,6 +909,7 @@ function holdOutGroup(stats: IRealmArenaGameResultStats): GameResultStatGroup | 
     const overrun = (mongoMap(standingPerRound[lasted - 1]).get(TEAM_SIDE) ?? 0) === 0;
     const arrived = waves.reduce((sum, wave) => sum + wave.arrived, 0);
     const downed = waves.reduce((sum, wave) => sum + downedIn(wave), 0);
+    const tally = rallyTally(waves.flatMap(wave => wave.rallies ?? []));
     return {
         username: "Hold Out",
         lines: [
@@ -911,7 +918,7 @@ function holdOutGroup(stats: IRealmArenaGameResultStats): GameResultStatGroup | 
                 : `Beat the last wave in round ${lasted} of ${rounds}`,
             `Faced ${pluralize(waves.length, "wave")}: ${arrived} of the enemy took the field, and the team downed ${downed}`,
             // Every choice is public in the log (§39.4); absent for a battle whose rally wasn't one.
-            ...(rallyTally(waves.flatMap(wave => [...(wave.rallies ?? [])])) ?? []),
+            ...(tally ? [tally] : []),
             ...waves.map((wave, index) => `Wave ${index + 1}, round ${wave.round + 1}: ${wave.arrived} arrived, ${downedIn(wave)} downed`),
         ],
     };

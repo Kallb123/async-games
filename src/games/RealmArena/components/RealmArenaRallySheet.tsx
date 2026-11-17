@@ -5,12 +5,12 @@ import PendingTag from '@/components/ui/PendingTag';
 import { rulesetOf } from '@/games/RealmArena/rulesets';
 import { fighterName } from '@/games/RealmArena/ui';
 import { CHARACTER_MARK } from '@/games/RealmArena/roster';
-import { rallyOptionsOf, rallyTotal, reinforcedHp, resupplyItems, type RallyAction, type RallyChoice } from '@/games/RealmArena/rally';
+import { RALLY_LOOK, rallyOptionsOf, rallyTotal, reinforcedHp, resupplyItems, type RallyAction, type RallyChoice } from '@/games/RealmArena/rally';
 import type { BattleState } from '@/games/RealmArena/rules';
 import { andList, capitalise } from '@/utils/ui/text';
 
-/** The `target` a rally choice wears while it's in flight: its own row. */
-export const rallyTarget = (choice: RallyChoice): string => `rally:${choice}`;
+/** The `target` a rally choice wears while it's in flight: its own row, and for a Reinforce the downed character it names. */
+export const rallyTarget = (choice: RallyChoice, fighter?: number): string => fighter === undefined ? `rally:${choice}` : `rally:${choice}:${fighter}`;
 
 interface RealmArenaRallySheetProps {
     battle: BattleState;
@@ -25,12 +25,8 @@ interface RealmArenaRallySheetProps {
 /** Where a reinforcement stands, and what it can do. */
 const RETURNS = "Who rejoins the fight? They return on a free square of your deployment zone with a full turn of AP to spend at once.";
 
-/** What each choice looks like in its row: the glyph and the trailing verb. */
-const LOOK: Readonly<Record<RallyChoice, { icon: string; name: string; tag: string }>> = {
-    rally: { icon: '✚', name: 'Rally', tag: 'Rally' },
-    reinforce: { icon: '🛡️', name: 'Reinforce', tag: 'Choose' },
-    resupply: { icon: '🎒', name: 'Resupply', tag: 'Resupply' },
-};
+/** The trailing verb of each choice's row. */
+const TAG: Readonly<Record<RallyChoice, string>> = { rally: 'Rally', reinforce: 'Choose', resupply: 'Resupply' };
 
 /**
  * A fresh wave has landed and the viewer owes the team a rally choice
@@ -50,8 +46,8 @@ export default function RealmArenaRallySheet({ battle, seats, player, pendingTar
             <>
                 <p className="ag-hint ag-hint--tight">{RETURNS}</p>
                 <div className="ag-build-list">
-                    {battle.fighters.filter(fighter => downed.includes(fighter.id)).map(fighter => {
-                        const pending = pendingTarget === rallyTarget('reinforce');
+                    {downed.map(fighter => {
+                        const pending = pendingTarget === rallyTarget('reinforce', fighter.id);
                         return (
                             <BuildRow
                                 key={fighter.id}
@@ -90,7 +86,7 @@ export default function RealmArenaRallySheet({ battle, seats, player, pendingTar
             <p className="ag-hint ag-hint--tight">A fresh wave has landed. Choose how your squad rallies before you act.</p>
             <div className="ag-build-list">
                 {options.map(option => {
-                    const look = LOOK[option.choice];
+                    const look = RALLY_LOOK[option.choice];
                     const pending = pendingTarget === rallyTarget(option.choice);
                     return (
                         <BuildRow
@@ -98,7 +94,7 @@ export default function RealmArenaRallySheet({ battle, seats, player, pendingTar
                             icon={look.icon}
                             name={look.name}
                             cost={option.available ? cost(option.choice) : option.reason}
-                            tag={pending ? <PendingTag label="Sending…" /> : option.available ? look.tag : 'Unavailable'}
+                            tag={pending ? <PendingTag label="Sending…" /> : option.available ? TAG[option.choice] : 'Unavailable'}
                             tagMuted={!option.available}
                             disabled={busy || !option.available}
                             pending={pending}
