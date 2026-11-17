@@ -17,8 +17,9 @@ import { nextAction, turnMemo } from "../../src/games/RealmArena/ai";
 import { DIFFICULTY_NAMES, BATTLE_SIZE_NAMES, FACTIONS, type BattleSize, type Difficulty, type FactionId } from "../../src/games/RealmArena/characters";
 import type { RealmArenaSettings } from "../../src/games/RealmArena/RealmArenaModels";
 import { battlefieldById, mapFor, type CoopMap } from "../../src/games/RealmArena/maps";
-import { battleRoundsOf } from "../../src/games/RealmArena/RealmArenaLogic";
-import { ACTION_POINTS, isStanding, isWarband, viewOf, waveArrives } from "../../src/games/RealmArena/rules";
+import { battleRoundsOf, owesRally } from "../../src/games/RealmArena/RealmArenaLogic";
+import { defaultRally, rallyOptionsOf, rallyTotal, reinforcedHp, type RallyAction } from "../../src/games/RealmArena/rally";
+import { ACTION_POINTS, isStanding, isWarband, viewOf, waveArrives, type BattleState } from "../../src/games/RealmArena/rules";
 import { actBy, battleOf, endTurnBy, makeGame, musterAll, play } from "../../src/games/RealmArena/testFixtures";
 import { percentile as sortedPercentile } from "../../src/utils/performance";
 
@@ -41,6 +42,39 @@ export interface BalanceScenario {
     fog: boolean;
     /** The rules version to fight under (`--rules`); absent is the current one, and leaves the scenario's name as it was. */
     rules?: number;
+    /**
+     * How the team answers the rally's choice (§39.4) in a battle whose rules
+     * make it one (`--rally`): the policy `rallyChoiceFor` describes, or Rally
+     * every time. Absent is the policy, and leaves the scenario's name as it
+     * was; it changes nothing under rules that have no choice.
+     */
+    rally?: RallyPolicy;
+}
+
+/** How the harness's team makes a rally choice (`--rally`). */
+export type RallyPolicy = "policy" | "always";
+
+/**
+ * What the harness's team chooses when a wave leaves it a rally to make
+ * (§39.4). The planner scores battles, not menus, so the harness answers for
+ * it, and `ai.ts` knows nothing of it (a warband never rallies). The policy
+ * prices a Reinforce and a Rally in the one currency, HP: Reinforce when the
+ * best downed character would return (half its max HP) with more than half of
+ * what a Rally would hand back to this player's own standing characters,
+ * otherwise Rally. A player with nobody standing has no Rally to price, so
+ * takes `defaultRally`. Resupply is never chosen: the planner's items are a minor part
+ * of its play and a menu row it can't weigh. `always` is Rally every time, the
+ * heal as it was before the choice, for the player's own squad.
+ */
+export function rallyChoiceFor(battle: BattleState, seats: readonly string[], player: string, policy: RallyPolicy = "policy"): RallyAction {
+    const rally: RallyAction = { kind: "rally", choice: "rally" };
+    if (policy === "always") return rally;
+    // Nobody standing has no Rally to price: the default's Reinforce, or Rally when there's no room.
+    if (!battle.fighters.some(fighter => fighter.owner === player && isStanding(fighter))) return defaultRally(battle, seats, player);
+    const reinforce = rallyOptionsOf(battle, seats, player).find(option => option.choice === "reinforce");
+    if (!reinforce?.available) return rally;
+    const best = reinforce.downed!.reduce((a, b) => reinforcedHp(b, battle) > reinforcedHp(a, battle) ? b : a);
+    return reinforcedHp(best, battle) > rallyTotal(battle, player) / 2 ? { kind: "rally", choice: "reinforce", fighter: best.id } : rally;
 }
 
 /**
@@ -102,6 +136,7 @@ export function scenarioKey(s: BalanceScenario): string {
         s.size !== "normal" ? `${BATTLE_SIZE_NAMES[s.size]} battle` : undefined,
         s.fog ? "fog" : undefined,
         s.rules !== undefined ? `rules v${s.rules}` : undefined,
+        s.rally === "always" ? "rally always" : undefined,
     ].filter(Boolean);
     return `${team} vs ${factionName(s.enemy)} · ${mission}${extras.length ? ` · ${extras.join(", ")}` : ""}`;
 }
@@ -172,6 +207,11 @@ export async function simulateBattle(scenario: BalanceScenario, seed: number, te
         const player = game.currentTurn;
         const roundBefore = game.specificGameState.roundsPlayed;
         const memo = planner.turnMemo?.();
+        // The team makes the rally's choice first, as the board asks it to (§39.4).
+        if (owesRally(game.specificGameState, player)) {
+            const choice = rallyChoiceFor(battleOf(game), players, player, scenario.rally);
+            if (!(await play(game, actBy(player, choice))).outcome.validMove) throw new Error(`${scenarioKey(scenario)}, seed ${seed}: ${player}'s rally choice was refused`);
+        }
         const cap = ACTION_POINTS * battleOf(game).fighters.filter(fighter => fighter.owner === player && isStanding(fighter)).length;
         for (let step = 0; step < cap && !game.complete; step++) {
             const action = planner.nextAction(viewOf(battleOf(game), player), player, game.specificGameState.roundsPlayed + 1, undefined, memo);

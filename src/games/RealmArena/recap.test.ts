@@ -104,6 +104,14 @@ describe("Realm Arena recap rows", () => {
         expect(rows[0]).toMatchObject({ type: "ra_hit", title: "Alice shot Bob's Knight with their Archer (80%): a hit for 3", affectedIds: ["b"] });
     });
 
+    it("gives a rally choice (§39.4) a row of its own, from the line the log wrote, though it tells no battle event", () => {
+        const row = (action: Record<string, unknown>, text: string) =>
+            toEvents(snap(state({ fighters })), snap(state({ fighters }), [line(text, "a")]), cmd("RealmArenaAct", { action }), valid())[0];
+        expect(row({ kind: "rally", choice: "rally" }, "Alice's squad rallies")).toMatchObject({ type: "ra_rally", glyph: "✚", title: "Alice's squad rallies" });
+        expect(row({ kind: "rally", choice: "reinforce", fighter: 0 }, "Alice's Archer rejoins the fight")).toMatchObject({ type: "ra_rally", title: "Alice's Archer rejoins the fight" });
+        expect(row({ kind: "rally", choice: "resupply" }, "Alice's squad is resupplied")).toMatchObject({ type: "ra_rally", glyph: "🎒" });
+    });
+
     it("tells a knock-out over the shot that made it, and the battle's end after it", () => {
         const events: BattleEvent[] = [
             { kind: "shot", fighter: 0, target: 1, chance: 80, roll: 12, result: "hit", damage: 9, reaction: false },

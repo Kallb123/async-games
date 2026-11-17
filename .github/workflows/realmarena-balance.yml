@@ -45,6 +45,9 @@ on:
       rules:
         description: Rules version to fight under (blank for the current one; 12 for the unreleased §39 catalogue)
         default: ''
+      rally:
+        description: How the team answers the rally's choice under rules that have one (policy, or always to Rally every time)
+        default: ''
       team_planner:
         description: Git ref whose planner plays the team, as main (blank for the branch's on both sides)
         default: ''
@@ -108,6 +111,7 @@ jobs:
           SEED: ${{ inputs.seed }}
           TEAM_PLANNER: ${{ inputs.team_planner }}
           RULES: ${{ inputs.rules }}
+          RALLY: ${{ inputs.rally }}
           SHARD: ${{ matrix.shard }}/${{ inputs.shards }}
         # Each shard's own summary would repeat the merged one, so it's kept to the log.
         run: |
@@ -115,7 +119,7 @@ jobs:
             --runs "$RUNS" --players "$PLAYERS" --teams "$TEAMS" --enemies "$ENEMIES" --missions "$MISSIONS" \
             --maps "$MAPS" --difficulties "$DIFFICULTIES" --sizes "$SIZES" --fog "$FOG" \
             --seed "$SEED" --shard "$SHARD" --out "samples-${{ matrix.shard }}.json" \
-            ${TEAM_PLANNER:+--team-planner "$TEAM_PLANNER"} ${RULES:+--rules "$RULES"}
+            ${TEAM_PLANNER:+--team-planner "$TEAM_PLANNER"} ${RULES:+--rules "$RULES"} ${RALLY:+--rally "$RALLY"}
 
       - uses: actions/upload-artifact@v4
         if: always()

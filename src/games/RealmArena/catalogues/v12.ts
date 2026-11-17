@@ -17,8 +17,12 @@ const CHARACTERS = {
     bloater: { ...catalogueV11.CHARACTERS.bloater, burstsWhenDowned: true },
 } satisfies Partial<Record<CharacterId, Character>>;
 
+// §39.4: the rally is each player's choice, not a heal the wave hands out.
+const RULES = { ...catalogueV11.RULES, RALLY_CHOICE: true };
+
 export const catalogueV12 = {
     ...catalogueV11,
+    RULES,
     CHARACTERS,
     ABILITIES,
 };

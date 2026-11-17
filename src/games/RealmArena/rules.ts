@@ -171,6 +171,14 @@ export interface Fighter {
     usedThisTurn?: AbilityId[];
     /** The item it carries, bought at muster, or null once it's used or when it never had one (§21.1). */
     item: ItemId | null;
+    /**
+     * The item it was mustered with, kept once `item` is used up, so a Resupply
+     * (§39.4) has something to give back. Set only for a player's character
+     * in a battle whose rules have `RALLY_CHOICE`, and only when it carried
+     * one; absent otherwise, so battles from before it are stored as they were.
+     * As public as `item` itself.
+     */
+    musteredItem?: ItemId;
     /** The option it was mustered with, swapping part of its kit for another (§23.2): absent on the starter character. */
     option?: OptionId;
     /**
@@ -1895,6 +1903,29 @@ function countDown<Id extends string>(counts: Partial<Record<Id, number>>): Part
 }
 
 /**
+ * A character's turn begun: its AP refilled (as its effects cap and move them),
+ * nothing banked, and what it did last turn forgotten. Changes `fighter` in
+ * place; its cooldowns and effects tick separately. The one reset `startTurn`
+ * and a Reinforce (§39.4) share.
+ */
+export function freshTurn(fighter: Fighter, state: RulesContext): void {
+    let ap = actionPointsOf(fighter, state);
+    const effects = activeEffects(fighter, state);
+    for (const [, effect] of effects) if (effect.ap !== undefined) ap = Math.min(ap, effect.ap);
+    fighter.ap = Math.max(0, effects.reduce((value, [, effect]) => value + (effect.apModifier ?? 0), ap));
+    fighter.banked = 0;
+    delete fighter.smoke;
+    delete fighter.usedThisTurn;
+    delete fighter.attacksThisTurn;
+}
+
+/** The squares of `zone`, in its order, that no standing character holds. */
+export function freeSquares(state: Pick<BattleState, "fighters">, zone: readonly Square[]): Square[] {
+    const occupied = new Set(state.fighters.filter(isStanding).map(fighter => fighter.square));
+    return zone.filter(square => !occupied.has(square));
+}
+
+/**
  * A player's turn begins: their characters get fresh AP (only 2 for one
  * stunned), anything banked and not used is lost, any smoke they threw clears,
  * and anything burning takes its damage. Then cooldowns and effects count
@@ -1935,14 +1966,7 @@ export function startTurn(state: BattleState, player: string): Outcome {
     const run = resolver(state, fixedRolls([]));
     for (const fighter of run.fighters) {
         if (fighter.owner !== player || !isStanding(fighter)) continue;
-        let ap = actionPointsOf(fighter, state);
-        const effects = activeEffects(fighter, state);
-        for (const [, effect] of effects) if (effect.ap !== undefined) ap = Math.min(ap, effect.ap);
-        fighter.ap = Math.max(0, effects.reduce((value, [, effect]) => value + (effect.apModifier ?? 0), ap));
-        fighter.banked = 0;
-        delete fighter.smoke;
-        delete fighter.usedThisTurn;
-        delete fighter.attacksThisTurn;
+        freshTurn(fighter, state);
     }
     tickEffects(run, player, "start");
     for (const fighter of run.fighters) if (fighter.owner === player && isStanding(fighter)) fighter.cooldowns = countDown(fighter.cooldowns);

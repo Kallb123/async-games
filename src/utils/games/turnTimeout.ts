@@ -16,7 +16,8 @@ import { forcedDiscard } from "@/games/BannedIslet/rules";
 import { RaceCarsEndTurn, RaceCarsLaunch, RaceCarsMove, RaceCarsShift, RaceCarsSlipstream } from "@/games/RaceCars/RaceCarsLogic";
 import { IRaceCarsGameData } from "@/games/RaceCars/RaceCarsModels";
 import { conservativeTurn } from "@/games/RaceCars/rules";
-import { budgetOf, playableFactions, RealmArenaEndTurn, RealmArenaMuster } from "@/games/RealmArena/RealmArenaLogic";
+import { battleOf, budgetOf, owesRally, playableFactions, RealmArenaAct, RealmArenaEndTurn, RealmArenaMuster } from "@/games/RealmArena/RealmArenaLogic";
+import { defaultRally } from "@/games/RealmArena/rally";
 import { IRealmArenaGameData } from "@/games/RealmArena/RealmArenaModels";
 import { readyMadeSquad } from "@/games/RealmArena/characters";
 import { battlefieldById } from "@/games/RealmArena/maps";
@@ -303,7 +304,13 @@ registerTurnTimeoutAdapter({
         const gs = data.specificGameState;
         const seat = data.gameState.turnOrder.indexOf(userId);
         if (seat < 0) return null;
-        if (gs.phase === "battle") return new RealmArenaEndTurn();
+        if (gs.phase === "battle") {
+            // A rally choice owed (§39.4) is made first, then the turn ends on the next call.
+            if (!owesRally(gs, userId)) return new RealmArenaEndTurn();
+            const act = new RealmArenaAct();
+            act.action = defaultRally(battleOf(gs), gs.seats, userId);
+            return act;
+        }
         const muster = new RealmArenaMuster();
         // The first of the factions the host allowed (B6), as an old muster's was the Realm.
         muster.faction = playableFactions(gs)[0];

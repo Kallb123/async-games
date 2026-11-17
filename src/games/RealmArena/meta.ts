@@ -46,7 +46,10 @@ export const meta: GameMeta = {
     // version 10): an older tab would offer shots and moves by the old sight.
     // Version 11 makes every Archer shot 2 AP in the battles created under it
     // (rules version 11): an older tab can't read that ruleset at all.
-    commandVersion: 11,
+    // Version 12 adds the rally's choice (§39.4): a rally action, sent by each
+    // player of the team as a wave lands in the battles created under rules
+    // version 12. An older tab can't send it, so it would wait out its turn.
+    commandVersion: 12,
     oldestReplayableCommandVersion: 2,
     available: true,
 };

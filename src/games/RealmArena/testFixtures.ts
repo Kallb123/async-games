@@ -14,11 +14,12 @@ import { battlefieldById } from "./maps";
 import { CURRENT_RULESET_VERSION, rulesetOf } from "./rulesets";
 import { meta } from "./meta";
 import type { MasterySnapshot } from "./mastery";
-import { battleOf as battleOfState, budgetOf, playableFactions, RealmArenaAct, RealmArenaEndTurn, RealmArenaGameType, RealmArenaMuster } from "./RealmArenaLogic";
+import { battleOf as battleOfState, budgetOf, owesRally, playableFactions, RealmArenaAct, RealmArenaEndTurn, RealmArenaGameType, RealmArenaMuster } from "./RealmArenaLogic";
 import { buildInitialRealmArenaState, RealmArenaGameDataModel, type IRealmArenaGameData, type RealmArenaSettings } from "./RealmArenaModels";
 import type { IRealmArenaGameDataResponse } from "./apiModels";
 import { pathTo } from "@/utils/games/battlefield/pathfinding";
 import { distance } from "@/utils/games/battlefield/terrain";
+import { defaultRally, type RallyAction } from "./rally";
 import { allied, areaAround, check, isStanding, moveAp, reachOf, readyMadeMuster, warbandOwner, type Action, type BattleState, type Fighter, type MusterPick } from "./rules";
 
 export const PLAYERS = ["a", "b"];
@@ -72,7 +73,7 @@ export function play(game: RealmArenaTestGame, command: IGameCommand) {
 }
 
 export const muster = (sender: string, picks: MusterPick[]) => cmd(RealmArenaMuster, sender, { picks });
-export const actBy = (sender: string, action: Action) => cmd(RealmArenaAct, sender, { action });
+export const actBy = (sender: string, action: Action | RallyAction) => cmd(RealmArenaAct, sender, { action });
 export const endTurnBy = (sender: string, keepStill: number[] = []) => cmd(RealmArenaEndTurn, sender, { keepStill });
 
 /** The ready-made squad for a seat, where a timed-out muster would put it. */
@@ -165,6 +166,11 @@ export function scriptedAction(game: RealmArenaTestGame, fighter: Fighter): Acti
 /** One battle turn by the script: every action it can find, then End turn. */
 export async function playScriptedTurn(game: RealmArenaTestGame): Promise<void> {
     const player = game.currentTurn;
+    // A rally owed (§39.4, rules version 12) is chosen first, by default.
+    if (owesRally(game.specificGameState, player)) {
+        const choice = defaultRally(battleOf(game), game.specificGameState.seats, player);
+        if (!(await play(game, actBy(player, choice))).outcome.validMove) throw new Error(`${player}'s rally was refused`);
+    }
     for (let step = 0; step < 40 && !game.complete; step++) {
         const action = battleOf(game).fighters
             .filter(one => one.owner === player && isStanding(one))
