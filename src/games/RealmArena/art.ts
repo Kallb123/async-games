@@ -330,20 +330,21 @@ export const CHARACTER_ART = Object.fromEntries(ART_CHARACTER_IDS.map((character
 })) as Readonly<Record<CharacterId, Readonly<Record<CharacterPose, CharacterArt>>>>;
 
 /**
- * The nest (§39.7) in each pose: the one structure, so the one figure with no
- * row of the characters' sheet. It has no facing, and no body to fall: its
- * `fallen` pose is the nest destroyed. A cell the size of a character's, and
- * with no team layer, since the owner's colour is its HP bar's and ring's.
+ * The structures (§39.7), each in every pose, by character: a structure has no
+ * row of the characters' sheet, no facing and no body to fall — its `fallen`
+ * pose is the structure destroyed. A cell the size of a character's, and with
+ * no team layer, since the owner's colour is its HP bar's and ring's. The one
+ * answer to which characters are drawn as one, so a new one is a line here.
  */
-export const NEST_ART: Readonly<Record<CharacterPose, Sprite>> = {
-    standing: { sheet: "nest", x: 0, y: 0, width: CHARACTER_CELL.width, height: CHARACTER_CELL.height, tile: CHARACTER_CELL.tile },
-    fallen: { sheet: "nest", x: CHARACTER_CELL.width, y: 0, width: CHARACTER_CELL.width, height: CHARACTER_CELL.height, tile: CHARACTER_CELL.tile },
+export const STRUCTURE_ART: Partial<Record<CharacterId, Readonly<Record<CharacterPose, Sprite>>>> = {
+    nest: {
+        standing: { sheet: "nest", x: 0, y: 0, width: CHARACTER_CELL.width, height: CHARACTER_CELL.height, tile: CHARACTER_CELL.tile },
+        fallen: { sheet: "nest", x: CHARACTER_CELL.width, y: 0, width: CHARACTER_CELL.width, height: CHARACTER_CELL.height, tile: CHARACTER_CELL.tile },
+    },
 };
 
-/** The nest's sprite for `pose` where `character` is a structure drawn as one (`NEST_ART`), and nothing for a character drawn as a figure (`CHARACTER_ART`). */
-export function structureArt(character: CharacterId, pose: CharacterPose): Sprite | undefined {
-    return character in CHARACTER_ART ? undefined : NEST_ART[pose];
-}
+/** The sprite for `pose` where `character` is a structure drawn as one (`STRUCTURE_ART`), and nothing for a character drawn as a figure. */
+export const structureArt = (character: CharacterId, pose: CharacterPose): Sprite | undefined => STRUCTURE_ART[character]?.[pose];
 
 /** What a fighter is drawn with on the isometric board: its body, and the layer its owner's colour is laid on, which a structure has none of. */
 export function figureSprites(character: CharacterId, pose: CharacterPose, cell: number): { body: Sprite; team: Sprite | null } {
@@ -367,7 +368,7 @@ export const SPRITES: ReadonlyMap<Sprite, number> = new Map(
     [...new Set([
         ...GRASS, ...LAYERS.flatMap(layer => layer.sprites), ...Object.values(EFFECT_ART), WATCH_ART, ...Object.values(ITEM_ART), SMOKE_ART,
         ...Object.values(MISSILE_ART), SLASH_ART, ...Object.values(BURST_ART),
-        ...Object.values(NEST_ART),
+        ...Object.values(STRUCTURE_ART).flatMap(poses => Object.values(poses!)),
         ...Object.values(CHARACTER_ART).flatMap(poses => Object.values(poses).flatMap(art => [...art.body, ...art.team])),
     ])].map((sprite, index) => [sprite, index]),
 );

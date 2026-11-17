@@ -196,20 +196,29 @@ function takesTurn(gs: IRealmArenaSpecificGameState, battle: BattleState, userId
 
 /**
  * Adds what a run of events scored to the scores (§13.7), and counts the nests
- * (§39.7) it downed against the warband they stand for, which its next wave's
- * budget reads (`waveBudgetOf`). Both are replaced rather than changed in place.
+ * (§39.7) the team downed against the warband they stand for, which its next
+ * wave's budget reads (`waveBudgetOf`) — a nest downed by the Swarm's own burst,
+ * bile or burn is no one's to count — and the ones whose fall the team was told
+ * of (`nestsSeenDestroyed`), the only count a fogged response may send. Each is
+ * replaced rather than changed in place.
  */
 function addScores(gs: IRealmArenaSpecificGameState, events: readonly BattleEvent[]): void {
     const scores = { ...gs.scores };
     let nests = gs.nestsDestroyed;
+    let seenFall = gs.nestsSeenDestroyed ?? 0;
     for (const event of events) {
         if (event.kind === "scored") scores[event.player] = (scores[event.player] ?? 0) + event.points;
         if (event.kind !== "downed") continue;
         const nest = gs.fighters.find(fighter => fighter.id === event.fighter);
-        if (nest && isStructure(nest, gs)) nests = { ...nests, [nest.owner]: (nests?.[nest.owner] ?? 0) + 1 };
+        const downer = gs.fighters.find(fighter => fighter.id === event.by);
+        if (!nest || !downer || !isStructure(nest, gs) || isWarband(downer.owner)) continue;
+        nests = { ...nests, [nest.owner]: (nests?.[nest.owner] ?? 0) + 1 };
+        // The team shares its sight, so any seat's view is its own.
+        if (!gs.fog || toldTo([event], battleOf(gs), gs.seats[0]).length > 0) seenFall++;
     }
     gs.scores = scores;
     if (nests !== gs.nestsDestroyed) gs.nestsDestroyed = nests;
+    if (seenFall !== (gs.nestsSeenDestroyed ?? 0)) gs.nestsSeenDestroyed = seenFall;
 }
 
 // ─── Mastery (§23.3) ─────────────────────────────────────────────────────────
@@ -415,6 +424,8 @@ export function cloneRealmArenaState(gs: IRealmArenaSpecificGameState): IRealmAr
         ...(gs.factions ? { factions: [...gs.factions] } : {}),
         ...(gs.rulesVersion !== undefined ? { rulesVersion: gs.rulesVersion } : {}),
         ...(gs.rallyOwed ? { rallyOwed: [...gs.rallyOwed] } : {}),
+        ...(gs.nestsDestroyed ? { nestsDestroyed: { ...gs.nestsDestroyed } } : {}),
+        ...(gs.nestsSeenDestroyed ? { nestsSeenDestroyed: gs.nestsSeenDestroyed } : {}),
         musters: (gs.musters ?? []).map(({ owner, faction, picks }) => ({ owner, ...(faction ? { faction } : {}), picks: picks.map(pickOf) })),
         // Written once as the battle is created and never changed, so shared.
         mastery: gs.mastery ?? {},
@@ -1115,17 +1126,28 @@ function rally(gs: IRealmArenaSpecificGameState): void {
 }
 
 /**
+ * The map's nest squares (§39.7) for each warband, in the warbands' order, for a
+ * Hold Out battle whose enemy has nests on a map that places them: undefined
+ * otherwise. The one place that decides whether this battle has any.
+ */
+function nestSitesOf(gs: IRealmArenaSpecificGameState): readonly (readonly Square[])[] | undefined {
+    if (gs.coop?.mission !== "holdOut" || !factionById(gs.coop.enemy, gs).nest) return undefined;
+    const sites = battlefieldById(gs.map).nests;
+    return sites && sites.some(squares => squares.length > 0) ? sites : undefined;
+}
+
+/**
  * The nests an enemy that has them stands on the map's nest squares at the first
  * muster (§39.7): each warband's own, in its zone's order, with the ids after
  * everyone else's. None in a battle that isn't Hold Out, on a map without
  * them, or against a faction with none.
  */
 function nestFighters(gs: IRealmArenaSpecificGameState, fighters: readonly Fighter[]): Fighter[] {
-    const nest = gs.coop?.mission === "holdOut" ? factionById(gs.coop.enemy, gs).nest : undefined;
-    if (!nest) return [];
-    const squares = battlefieldById(gs.map).nests ?? [];
+    const sites = nestSitesOf(gs);
+    const nest = sites && factionById(gs.coop?.enemy, gs).nest;
+    if (!sites || !nest) return [];
     let nextId = nextFighterId(fighters);
-    return warbandsFor(gs.seats).flatMap((owner, k) => (squares[k] ?? []).map(square => newFighter(nextId++, owner, nest, square, null, undefined, false, gs)));
+    return warbandsFor(gs.seats).flatMap((owner, k) => (sites[k] ?? []).map(square => newFighter(nextId++, owner, nest, square, null, undefined, false, gs)));
 }
 
 /**
@@ -1135,32 +1157,36 @@ function nestFighters(gs: IRealmArenaSpecificGameState, fighters: readonly Fight
  * enemy, since a nest on the field names the Swarm.
  */
 export function nestSquaresOf(gs: IRealmArenaSpecificGameState): Square[] | undefined {
-    if (gs.coop?.mission !== "holdOut" || !factionById(gs.coop.enemy, gs).nest) return undefined;
-    const squares = (battlefieldById(gs.map).nests ?? []).flat();
-    return squares.length > 0 ? squares : undefined;
+    return nestSitesOf(gs)?.flat();
 }
 
 /**
  * The warband's destroyed nests grow back at full HP as its wave lands
- * (§39.7), on their own squares — or, where someone is standing on one, the
- * free square nearest it, ties to the lower one. Run after the wave is placed.
+ * (§39.7), on their map squares — each nest's own, by its place among the
+ * warband's structures as `nestFighters` stood them — or, where someone is
+ * standing on one, the free square nearest it, ties to the lower one. Run
+ * after the wave is placed.
  */
 function regrowNests(gs: IRealmArenaSpecificGameState, owner: string): boolean {
     const { field } = battleOf(gs);
+    const sites = nestSitesOf(gs)?.[warbandsFor(gs.seats).indexOf(owner)];
+    const own = gs.fighters.filter(fighter => fighter.owner === owner && isStructure(fighter, gs)).sort((a, b) => a.id - b.id);
     let grew = false;
-    for (const nest of gs.fighters.filter(fighter => fighter.owner === owner && isStructure(fighter, gs) && !isStanding(fighter))) {
-        // Every structure's square is kept, so two regrowing at once never share one.
+    own.forEach((nest, index) => {
+        if (isStanding(nest)) return;
+        // Not `freeSquares`: a fallen nest keeps its square too, so two regrowing at once never share one.
         const taken = new Set(gs.fighters.filter(fighter => fighter.id !== nest.id && (isStanding(fighter) || isStructure(fighter, gs))).map(fighter => fighter.square));
         const roomy = (square: Square) => field.tiles[square].terrain.standable && !taken.has(square);
-        const square = roomy(nest.square) ? nest.square
+        const home = sites?.[index] ?? nest.square;
+        const square = roomy(home) ? home
             : field.tiles.map((_, at) => at).filter(roomy)
-                .sort((a, b) => distance(field, nest.square, a) - distance(field, nest.square, b) || a - b)[0];
+                .sort((a, b) => distance(field, home, a) - distance(field, home, b) || a - b)[0];
         // Nowhere at all to grow on a full map: it stays down.
-        if (square === undefined) continue;
+        if (square === undefined) return;
         nest.square = square;
         nest.hp = maxHpOf(nest, gs);
         grew = true;
-    }
+    });
     return grew;
 }
 
@@ -1174,14 +1200,16 @@ function landWave(data: IRealmArenaGameData, version: number): void {
         regrown = regrowNests(gs, owner) || regrown;
     }
     // What the nests destroyed took off this wave is spent: they've grown back (§39.7).
+    const witnessed = gs.nestsSeenDestroyed ?? 0;
     if (gs.nestsDestroyed) gs.nestsDestroyed = undefined;
+    if (gs.nestsSeenDestroyed) gs.nestsSeenDestroyed = undefined;
     // The scheduled wave is public even when every deployment square is
     // blocked; its line must not reveal which hidden warbands found room.
     // A themed wave is told by name once the team knows whom it fights: the name would give a hidden enemy away.
     const theme = enemyKnown(gs.coop) ? waveThemeOf(factionById(gs.coop?.enemy, gs), gs.roundsPlayed + 1) : undefined;
     data.gameState.history.unshift({ text: theme ? `${theme.name} arrives` : `A fresh wave of ${enemyNameOf(enemyKnown(gs.coop) ? gs.coop.enemy : undefined, gs)} arrives` });
-    // Only where the team knows its enemy: nests exist against the Swarm alone, so the line would name it.
-    if (regrown && enemyKnown(gs.coop)) data.gameState.history.unshift({ text: "The nests regrow" });
+    // Only where the team knows its enemy: nests exist against the Swarm alone, so the line would name it. In fog, only once it saw one fall: it can't have seen one grow back.
+    if (regrown && enemyKnown(gs.coop) && (!gs.fog || witnessed > 0)) data.gameState.history.unshift({ text: "The nests regrow" });
     if (ruleValuesOf(gs).RALLY_CHOICE) {
         // From rules version 12 nobody is healed by the wave itself: every
         // player of the team still in the battle owes a choice (§39.4), made
@@ -1216,7 +1244,8 @@ export function nextWaveOf(gs: IRealmArenaSpecificGameState): NextWave | undefin
     // A count the placement can't work out costs the line its count, never
     // the board its response.
     // What the nests the team has destroyed have cost it (§39.7), told once the enemy is known: the count shrinks with them where it's exact, and stays the ceiling in fog.
-    const nests = Object.values(gs.nestsDestroyed ?? {}).reduce((sum, count) => sum + count, 0);
+    // In fog only those it saw fall: a nest down out of its sight isn't its to know.
+    const nests = gs.fog ? gs.nestsSeenDestroyed ?? 0 : Object.values(gs.nestsDestroyed ?? {}).reduce((sum, count) => sum + count, 0);
     const cost = nests > 0 ? { nestsDestroyed: nests } : {};
     if (!gs.fog) {
         try {
@@ -1669,6 +1698,9 @@ export class RealmArenaUndo implements IGameCommand {
         Object.assign(gs, restored);
         // Every snapshot is cloned with the list, but nothing is left to rest on that.
         gs.blasted = restored.blasted ?? [];
+        // A snapshot without the nest tallies had none, and a key it lacks wouldn't have been assigned: put back by hand, `undefined` and never `delete`, as `forgiveRally` clears (§39.7).
+        gs.nestsDestroyed = restored.nestsDestroyed;
+        gs.nestsSeenDestroyed = restored.nestsSeenDestroyed;
         gs.undoStack = undoStack;
         gs.undoAnchorId = this.id;
 

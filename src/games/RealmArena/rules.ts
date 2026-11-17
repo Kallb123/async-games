@@ -666,7 +666,7 @@ export function reactionsBlocked(fighter: Fighter, context?: RulesContext): bool
 export function actionPointsOf(fighter: Pick<Fighter, "character" | "option">, context?: RulesContext): number {
     const { RULES, CHARACTERS, ABILITIES } = rulesetOf(context);
     // A structure has no turn to spend (§39.7).
-    if (CHARACTERS[fighter.character]?.structure) return 0;
+    if (isStructure(fighter, context)) return 0;
     const passive = abilitiesOf(fighter, context).reduce((sum, id) => sum + (ABILITIES[id]!.passive ? ABILITIES[id]!.bonusAp ?? 0 : 0), 0);
     return Math.max(0, RULES.ACTION_POINTS + RULES.BONUS_AP + (CHARACTERS[fighter.character].bonusAp ?? 0) + passive);
 }
@@ -1339,7 +1339,7 @@ export function check(battle: BattleState, player: string, action: unknown): Che
         case "cripplingShot":
             return ability("cripplingShot", () => attackRefusal(state, actor, target, "cripplingShot"));
         case "huntersMark":
-            return ability("huntersMark", () => isEnemy(state, actor, target)
+            return ability("huntersMark", () => isEnemy(state, actor, target) && !isStructure(target, state)
                 ? aimRefusal(state, actor, target.square, ABILITIES.huntersMark.range)
                 : "Pick an enemy");
         case "hunker":

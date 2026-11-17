@@ -12,7 +12,7 @@ import { rallyOptionsOf, rallyRefusal, rallyTally, rallyTotal, resupplyItems, ty
 import { battlefieldById } from "./maps";
 import { distance } from "@/utils/games/battlefield/terrain";
 import { isStanding, isWarband, maxHpOf, newFighter, viewOf, warbandOwner, type Fighter } from "./rules";
-import { actBy, battleOf, cmd, endTurnBy, makeGame, muster, musterAll, play, readyMadePicks, playScriptedBattle, responseFor, seedRolls, type RealmArenaTestGame } from "./testFixtures";
+import { actBy, addFighter, battleOf, cmd, endTurnBy, makeGame, muster, musterAll, play, readyMadePicks, playScriptedBattle, responseFor, seedRolls, type RealmArenaTestGame } from "./testFixtures";
 
 // docs/games/realm-arena.md §39.4: from rules version 12 a Hold Out wave heals
 // nobody as it lands, and each player of the team owes a rally choice instead:
@@ -173,8 +173,7 @@ describe("Reinforce (§39.4)", () => {
             down(mine(g, "a")[1]);
             const zone = battlefieldById(g.specificGameState.map).deployments[0];
             const standing = new Set(g.specificGameState.fighters.filter(isStanding).map(fighter => fighter.square));
-            let id = 100;
-            for (const square of zone) if (!standing.has(square)) g.specificGameState.fighters.push({ ...newFighter(id++, "b", "knight", square, null, undefined, false, g.specificGameState) });
+            for (const square of zone) if (!standing.has(square)) addFighter(g, "b", "knight", square);
         });
         const option = rallyOptionsOf(battleOf(game), game.specificGameState.seats, "a")[1];
         expect(option).toMatchObject({ available: false, reason: "No free square in your deployment zone" });

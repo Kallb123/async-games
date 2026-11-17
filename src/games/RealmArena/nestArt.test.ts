@@ -5,15 +5,17 @@ import { describe, expect, it } from "vitest";
 import { at } from "@/utils/games/battlefield/testFixtures";
 import { buildBattlefield } from "@/utils/games/battlefield/terrain";
 import RealmArenaBoard from "./components/RealmArenaBoard";
-import { ART_SHEETS, CHARACTER_ART, figureSprites, NEST_ART, SPRITES, structureArt } from "./art";
+import { ART_SHEETS, CHARACTER_ART, figureSprites, SPRITES, STRUCTURE_ART, structureArt } from "./art";
 import { newFighter, warbandOwner, type Fighter } from "./rules";
-import { structureQuad } from "./three/structures3d";
+import { structureQuad } from "./three/marks3d";
 
 // docs/games/realm-arena.md §39.7: a nest is a structure, so it has no row of the
 // characters' sheet to be drawn from. It is one sprite a pose, on a sheet of its own.
 
 const field = buildBattlefield({ name: "Open", rows: ["..........", "..........", "..........", ".........."], deployments: [], objectives: {} });
 const CONTEXT = { rulesVersion: 12 };
+
+const NEST_ART = STRUCTURE_ART.nest!;
 
 describe("the nest's art", () => {
     it("is a sprite a pose, a character's cell each, on a sheet of its own the board defines", () => {
@@ -55,12 +57,12 @@ describe("a nest on the isometric board", () => {
 
     it("draws standing and destroyed without a figure's art, and marks its square from the start", () => {
         const standing = draw([nest(10)], [at(field, 4, 1)]);
-        expect(standing).toContain("ag-ra-nest-site");
+        expect(standing).toContain("ag-ra-deployment--nest");
         expect(standing).toContain("Nest · The enemy");
         expect(standing).toContain("10/10 HP");
         const downed = draw([nest(0)], [at(field, 4, 1)]);
         expect(downed).toContain("ag-ra-figure--down");
         // Nothing marked where none is told of.
-        expect(draw([])).not.toContain("ag-ra-nest-site");
+        expect(draw([])).not.toContain("ag-ra-deployment--nest");
     });
 });

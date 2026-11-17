@@ -5432,18 +5432,16 @@ html:has(.ag-pull) { overscroll-behavior-y: contain; }
 /* A warband's zone the round before Hold Out's next wave lands in it (§30.11):
    lit on the ground, and breathing over it (`.ag-ra-wave`, drawn over
    everything in the board's pulses). */
-/* A square a nest stands on (§39.7): the map's, so marked from the start, lighter than a zone and with no fill. */
-.ag-ra-nest-site {
-    fill: none;
-    stroke: color-mix(in oklch, var(--ra-seat) 60%, transparent);
-    stroke-width: 0.6;
-    stroke-dasharray: 1 1.2;
-    pointer-events: none;
-}
 .ag-ra-deployment--wave {
     fill: color-mix(in oklch, var(--ra-seat) 22%, transparent);
     stroke: color-mix(in oklch, var(--ra-seat) 75%, transparent);
     stroke-width: 1;
+}
+/* A square a nest stands on (§39.7): the map's, so marked from the start, lighter than a zone and with no fill. */
+.ag-ra-deployment--nest {
+    fill: none;
+    stroke: color-mix(in oklch, var(--ra-seat) 60%, transparent);
+    stroke-dasharray: 1 1.2;
 }
 .ag-ra-wave {
     fill: color-mix(in oklch, var(--ra-seat) 16%, transparent);

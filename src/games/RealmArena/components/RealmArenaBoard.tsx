@@ -20,7 +20,7 @@ import { PlaybackProvider, setAttributes, translation, usePlaybackFrame, usePlay
 import { facingCell, figureSprites, ITEM_ART, SMOKE_ART, spriteBox, TERRAIN_ART, type CharacterPose } from '@/games/RealmArena/art';
 import { ITEMS, type CharacterId, type ItemId } from '@/games/RealmArena/characters';
 import { rulesetOf } from '@/games/RealmArena/rulesets';
-import { CENTRE, ENEMY_SIDE, isStanding, isWarband, maxHpOf, smokeSquares, type BattleState, type Fighter, type FogGhost, type MusterPick, type ToldEvent } from '@/games/RealmArena/rules';
+import { CENTRE, isStanding, isWarband, maxHpOf, smokeSquares, type BattleState, type Fighter, type FogGhost, type MusterPick, type ToldEvent } from '@/games/RealmArena/rules';
 import type { AttackOption } from '@/games/RealmArena/tactics';
 import { AP_PIP_OFFSET, AP_PIP_RADIUS, AP_PIP_STEP, apPips, areaRect, BOARD_ZOOM, CENTRE_LABEL, EFFECT_MARK_OFFSET, EFFECT_MARK_SIZE, EFFECT_MARK_STEP, FIGURE_RADIUS, FIGURE_RISE, figureRectAt, fxPointsAt, HP_BAR_HEIGHT, HP_BAR_RISE, HP_BAR_WIDTH, ITEM_MARK_OFFSET, ITEM_MARK_SIZE, MARKER_RADIUS, ODDS_FLANK_DROP, ODDS_FLANK_EXTRA, ODDS_FLANK_WORD, ODDS_HEIGHT, ODDS_RISE, ODDS_WIDTH, PATH_END_RADIUS, RING_RADIUS, ringOf, shadedSquares, SHADOW_ALPHA, SHADOW_RADIUS, shieldPath, SMOKE_SIZE, type GroundShade, type Marker, type ShadeKind, type Ring, type BattleCue, type BoardFollow, type FallCue, type FxPoints, type ScorchCue, type Shove, type Timed, type WalkCue, effectsOn, facingOf, fadeInAt, fadeOutAt, fighterStatus, endOf, hpFraction, legLengthOn, progressOf, shakeAt, shakesOf, shovesOf, shoveAt, terrainLetter, toldAt, toldOf, walkerAt, walkCameraAt, walkFacing, legPoint, walkLift, walkSquares, type Told, type WalkMotion } from '@/games/RealmArena/ui';
 
@@ -945,19 +945,22 @@ export default function RealmArenaBoard({ field, fighters, fogGhosts = [], unsee
     const shades: Shade[] = shadedSquares({ unseen, smoke, aiming, placing, sealed }).map(shade => square => shade.has(square) ? shadeClass(shade, square) : undefined);
     const flatShades = shades.flatMap(shade => flatRuns(view, shade));
 
-    const zones = field.deploymentAreas.flatMap((areas, seat) => {
-        const owner = owners[seat];
-        const wave = waveDue && owner !== undefined && isWarband(owner);
-        const style = { '--ra-seat': owner ? colourFor(owner) : 'var(--ag-ink-softer)' } as React.CSSProperties;
-        return areas.map(({ col, row, width, height }, part) => ({ key: `${seat}-${part}`, points: isoArea(view, { x: col, y: row, width, height }), wave, style }));
-    });
+    const zones = [
+        ...field.deploymentAreas.flatMap((areas, seat) => {
+            const owner = owners[seat];
+            const wave = waveDue && owner !== undefined && isWarband(owner);
+            const style = { '--ra-seat': owner ? colourFor(owner) : 'var(--ag-ink-softer)' } as React.CSSProperties;
+            return areas.map(({ col, row, width, height }, part) => ({ key: `${seat}-${part}`, points: isoArea(view, { x: col, y: row, width, height }), wave, nest: false, style }));
+        }),
+        // A nest's square (§39.7), outlined in the warbands' colour as their zones are.
+        ...(nestSquares ?? []).map(square => {
+            const { col, row } = coordsOf(field, square);
+            const owner = owners.find(isWarband);
+            const style = { '--ra-seat': owner ? colourFor(owner) : 'var(--ag-ink-softer)' } as React.CSSProperties;
+            return { key: `nest-${square}`, points: isoArea(view, { x: col, y: row, width: 1, height: 1 }), wave: false, nest: true, style };
+        }),
+    ];
     const waves = zones.filter(zone => zone.wave);
-    // A nest's square, outlined in the warbands' colour as their zones are.
-    const nestStyle = { '--ra-seat': colourFor(owners.find(isWarband) ?? ENEMY_SIDE) } as React.CSSProperties;
-    const nestSites = (nestSquares ?? []).map(square => {
-        const { col, row } = coordsOf(field, square);
-        return { square, points: isoArea(view, { x: col, y: row, width: 1, height: 1 }) };
-    });
     const hpChanges = aiming ? fighters.flatMap(fighter => {
         const change = aiming.hpChange.get(fighter.id);
         return change && isStanding(fighter) ? [{ fighter, change }] : [];
@@ -1119,16 +1122,15 @@ export default function RealmArenaBoard({ field, fighters, fogGhosts = [], unsee
                             {ground.flat.map(art => <RealmArenaTerrainArt key={`flat-${art.square}`} id={artId} {...art} />)}
                             <path className="ag-ra-grid" d={ground.lines} />
 
-                            {/* A zone drawn in parts — a warband on more than one edge (§30.9) — is outlined part by part. */}
+                            {/* A zone drawn in parts — a warband on more than one edge (§30.9) — is outlined part by part; a nest's square is outlined the same way. */}
                             {zones.map(zone => (
                                 <polygon
                                     key={zone.key}
-                                    className={`ag-ra-deployment${zone.wave ? ' ag-ra-deployment--wave' : ''}`}
+                                    className={`ag-ra-deployment${zone.wave ? ' ag-ra-deployment--wave' : ''}${zone.nest ? ' ag-ra-deployment--nest' : ''}`}
                                     points={zone.points}
                                     style={zone.style}
                                 />
                             ))}
-                            {nestSites.map(site => <polygon key={`nest-${site.square}`} className="ag-ra-nest-site" points={site.points} style={nestStyle} />)}
                             {centre && <polygon className="ag-ra-centre" points={isoArea(view, centre)} />}
                             {flatShades.map(run => <path key={run.key} className={run.key} d={run.d} />)}
 

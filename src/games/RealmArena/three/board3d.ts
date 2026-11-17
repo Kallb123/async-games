@@ -33,7 +33,6 @@ import { FigurePools } from "./figurePools";
 import { BattleFx } from "./fx3d";
 import { azimuthOf, cameraBasis, cameraFor, figureMatrix, lerp3, lightOf, lookAtFor, lookAtGround, onScreen, QUARTER, squareCentre, toFrame, type BoardFrame, type BoardLayout, type CameraBasis, type Vec3 } from "./iso3d";
 import { MarkLayer, marksOf, type MarkLevel } from "./marks3d";
-import { StructureLayer } from "./structures3d";
 import { GroundOutlines, type Outline } from "./outlines3d";
 import { NO_PREVIEWS, Previews3D, type PreviewSpec } from "./previews3d";
 import type { Shading } from "./shading3d";
@@ -154,10 +153,8 @@ export class Board3D {
     private still = false;
     /** The effects an action plays over the battlefield, and the smoke that stands on it. */
     private readonly fx: BattleFx;
-    /** What hangs round the figures: marks, pips, items and rings. Made with the art it draws from. */
+    /** What hangs round the figures: marks, pips, items and rings — and the structures (§39.7) that stand in their place. Made with the art it draws from. */
     private marks: MarkLayer | null = null;
-    /** What stands on the field that is no figure — the Swarm's nests (§39.7) — drawn as the sprite it is on the isometric board. Made with the art it draws from. */
-    private structures: StructureLayer | null = null;
     private marking: Marking | null = null;
     /** The viewer's sealed squad while the muster lasts, and which of them is picked up. Their ids in `placed` are `-(index + 1)`. */
     private sealed: SealedSpec[] = [];
@@ -235,7 +232,6 @@ export class Board3D {
         this.terrain?.dispose();
         this.fx.dispose();
         this.marks?.dispose();
-        this.structures?.dispose();
         this.bars.dispose();
         this.previews.dispose();
         this.outlines.dispose();
@@ -281,12 +277,6 @@ export class Board3D {
         }
         this.marks = new MarkLayer(art.sheets, this.axes);
         this.scene.add(this.marks.group);
-        if (this.structures) {
-            this.scene.remove(this.structures.group);
-            this.structures.dispose();
-        }
-        this.structures = new StructureLayer(art.sheets, this.axes);
-        this.scene.add(this.structures.group);
         if (this.field) this.setField(this.field, this.top);
     }
 
@@ -596,12 +586,11 @@ export class Board3D {
         const bars: BarSpec[] = [];
         const playing = ms === null ? null : this.playing;
         this.marks?.begin(this.look);
-        this.structures?.begin();
         /** One figure of `character`, fully there or, with an `opacity` under 1, faint: fading, or a body lying (`FALLEN_OPACITY`) as the isometric board draws it. A nest has no model: it is its sprite, destroyed where a body would lie. */
         const lay = (character: CharacterId, at: Vec3, facing: Facing, fallen: boolean, tint: Color | null, opacity = 1) => {
             const structure = structureArt(character, fallen ? "fallen" : "standing");
             if (structure) {
-                this.structures?.add(at, structure, opacity);
+                this.marks?.structure(at, structure, opacity);
                 return;
             }
             matrix.fromArray(figureMatrix(at, facing, fallen));
@@ -682,7 +671,6 @@ export class Board3D {
         this.shadows.end();
         this.bars.lay(bars, this.look, this.still);
         this.marks?.end();
-        this.structures?.end();
     }
 
     /** Every blow a figure takes and strike it makes that moves it, worked out once an action (`shovesOf`). */

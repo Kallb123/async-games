@@ -9,7 +9,7 @@ import type { IGameCommand } from "@/utils/apiModels/gameCommand";
 import { runCommand } from "@/utils/games/commandPipeline";
 import { gameCommandVersion } from "@/utils/ui/games";
 import type { IGameDataDocument } from "@/utils/mongodb/GameData";
-import { readyMadeSquad } from "./characters";
+import { readyMadeSquad, type CharacterId } from "./characters";
 import { battlefieldById } from "./maps";
 import { CURRENT_RULESET_VERSION, rulesetOf } from "./rulesets";
 import { meta } from "./meta";
@@ -18,9 +18,9 @@ import { battleOf as battleOfState, budgetOf, owesRally, playableFactions, Realm
 import { buildInitialRealmArenaState, RealmArenaGameDataModel, type IRealmArenaGameData, type RealmArenaSettings } from "./RealmArenaModels";
 import type { IRealmArenaGameDataResponse } from "./apiModels";
 import { pathTo } from "@/utils/games/battlefield/pathfinding";
-import { distance } from "@/utils/games/battlefield/terrain";
+import { distance, type Square } from "@/utils/games/battlefield/terrain";
 import { defaultRally, type RallyAction } from "./rally";
-import { allied, areaAround, check, isCombatant, isStanding, moveAp, reachOf, readyMadeMuster, warbandOwner, type Action, type BattleState, type Fighter, type MusterPick } from "./rules";
+import { allied, areaAround, check, isCombatant, isStanding, moveAp, newFighter, nextFighterId, reachOf, readyMadeMuster, warbandOwner, type Action, type BattleState, type Fighter, type MusterPick } from "./rules";
 
 export const PLAYERS = ["a", "b"];
 
@@ -218,6 +218,14 @@ export function seedRolls(seed: number): void {
         }
         return array;
     });
+}
+
+/** Adds a fighter of any character to the battle at full AP, and returns it: the state is shared, so a later `battleOf` sees it. */
+export function addFighter(game: RealmArenaTestGame, owner: string, character: CharacterId, square: Square): Fighter {
+    const gs = game.specificGameState;
+    const fighter = { ...newFighter(nextFighterId(gs.fighters), owner, character, square, null, undefined, false, gs), ap: 4 };
+    gs.fighters.push(fighter);
+    return fighter;
 }
 
 /** The warbands of a co-op battle, by owner. */

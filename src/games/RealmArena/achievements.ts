@@ -7,7 +7,7 @@
 // response contains the battlefield that these checks read.
 import type { FinishedSeat, GameAchievement } from "@/utils/games/achievements";
 import type { IRealmArenaSpecificGameStateResponse } from "./apiModels";
-import { isCombatant, isStanding, isStructure, isWarband } from "./rules";
+import { isStanding, isStructure, isWarband } from "./rules";
 
 function wholeTeamStanding(view: IRealmArenaSpecificGameStateResponse): boolean {
     const team = view.fighters.filter(fighter => !isWarband(fighter.owner));
@@ -30,7 +30,7 @@ function isSolo(view: IRealmArenaSpecificGameStateResponse): boolean {
  */
 function enemyWipedOut(view: IRealmArenaSpecificGameStateResponse): boolean {
     const enemy = view.fighters.filter(fighter => isWarband(fighter.owner) && !isStructure(fighter, view));
-    return enemy.length > 0 && !enemy.some(fighter => isCombatant(fighter, view));
+    return enemy.length > 0 && !enemy.some(isStanding);
 }
 
 export const achievements: GameAchievement<IRealmArenaSpecificGameStateResponse>[] = [

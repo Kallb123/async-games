@@ -148,6 +148,13 @@ export interface IRealmArenaSpecificGameState {
      * whose enemy has no nests. The server's alone: never sent.
      */
     nestsDestroyed?: Record<string, number>;
+    /**
+     * How many nests (§39.7) the team was told fell since the last wave landed —
+     * those it saw go down, in fog of war: the only count of them a fogged
+     * response may send (`nextWaveOf`), since `nestsDestroyed` counts the ones
+     * out of its sight too. Cleared with it as the wave lands. The server's alone.
+     */
+    nestsSeenDestroyed?: number;
     /** Battle rounds played to the end: 0 until the first round's last turn ends. The round being played is one more. */
     roundsPlayed: number;
     /**
@@ -480,6 +487,7 @@ var RealmArenaGameDataSchema = new Schema<IRealmArenaGameDataDocument>(
             rallyOwed: Schema.Types.Mixed,
             // Mixed, so `markDirty` saves it whole; replaced, never mutated, as `scores` is (`addScores`).
             nestsDestroyed: Schema.Types.Mixed,
+            nestsSeenDestroyed: Number,
             fighters: Schema.Types.Mixed,
             sightings: Schema.Types.Mixed,
             blasted: [Number],

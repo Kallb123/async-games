@@ -14,7 +14,8 @@ import {
     viewOf, warbandOwner, warbandsFor, watchedSquares, wavePurchase, TEAM_SIDE, type Fighter,
 } from "./rules";
 import { ruleValuesOf, rulesetFor } from "./rulesets";
-import { actBy, battleOf, endTurnBy, makeGame, musterAll, play, playScriptedBattle, readyMadePicks, seedRolls, warbandsOf, type RealmArenaTestGame } from "./testFixtures";
+import { targetsOf } from "./tactics";
+import { actBy, addFighter, battleOf, endTurnBy, makeGame, musterAll, play, playScriptedBattle, readyMadePicks, seedRolls, warbandsOf, type RealmArenaTestGame } from "./testFixtures";
 import type { RealmArenaEndTurn } from "./RealmArenaLogic";
 
 // docs/games/realm-arena.md §39.7: nests. The Swarm's warbands stand two nests each
@@ -41,14 +42,6 @@ async function mustered(settings: Parameters<typeof makeGame>[2] = {}) {
     const game = holdOut(settings);
     await musterAll(game);
     return { game, gs: game.specificGameState, nest: nestsOf(game, warbandOwner(0))[0] };
-}
-
-/** Adds a fighter of any character to the battle, at full AP, and returns it (the state is shared, so a later `battleOf` sees it). */
-function add(game: RealmArenaTestGame, owner: string, character: CharacterId, square: Square): Fighter {
-    const gs = game.specificGameState;
-    const fighter = { ...newFighter(nextFighterId(gs.fighters), owner, character, square, null, undefined, false, gs), ap: 4 };
-    gs.fighters.push(fighter);
-    return fighter;
 }
 
 /** A free square next to `square`, which someone could stand on. */
@@ -135,7 +128,7 @@ describe("the nests a warband stands (§39.7)", () => {
         }
         // Standing in the open, a nest is seen as any warband's character is: the faction is named with it.
         const nest = nestsOf(game)[0];
-        const eye = add(game, "a", "scout", neighbour(game, nest.square));
+        const eye = addFighter(game, "a", "scout", neighbour(game, nest.square));
         const seen = gameStateToModel(gs, "a", null);
         expect(seen.fighters.some(fighter => fighter.id === nest.id)).toBe(true);
         expect(seen.enemy).toBe("swarm");
@@ -146,7 +139,7 @@ describe("the nests a warband stands (§39.7)", () => {
 describe("a nest is attacked like a character, and little else touches it (§39.7)", () => {
     it("takes a blow's damage with no armour, and a knock-out scores like a 20-point character's", async () => {
         const { game, gs, nest } = await mustered();
-        const fighter = add(game, "a", "manAtArms", neighbour(game, nest.square));
+        const fighter = addFighter(game, "a", "manAtArms", neighbour(game, nest.square));
         const outcome = act(battleOf(game), "a", { kind: "attack", fighter: fighter.id, target: nest.id }, fixedRolls([1]));
         const struck = outcome.events.find(event => event.kind === "struck");
         expect(struck).toMatchObject({ target: nest.id });
@@ -183,9 +176,22 @@ describe("a nest is attacked like a character, and little else touches it (§39.
         expect(events).toContainEqual({ kind: "downed", fighter: nest.id, by: 0 });
     });
 
+    it("is refused a Hunter's mark, and no mark is offered at it", async () => {
+        const { game, nest } = await mustered();
+        const scout = addFighter(game, "a", "scout", neighbour(game, nest.square));
+        scout.option = "huntersMark";
+        // Marking a character beside it is allowed, so it's the nest that's refused.
+        const enemy = addFighter(game, warbandOwner(0), "skitterling", neighbour(game, nest.square, [scout.square]));
+        const battle = battleOf(game);
+        expect("refused" in check(battle, "a", { kind: "huntersMark", fighter: scout.id, target: enemy.id })).toBe(false);
+        expect(targetsOf(battle, "a", scout, "huntersMark")).toContain(enemy.id);
+        expect(check(battle, "a", { kind: "huntersMark", fighter: scout.id, target: nest.id })).toEqual({ refused: "Pick an enemy" });
+        expect(targetsOf(battle, "a", scout, "huntersMark")).not.toContain(nest.id);
+    });
+
     it("is struck by a Shove and not pushed", async () => {
         const { game, nest } = await mustered();
-        const knight = add(game, "a", "knight", neighbour(game, nest.square));
+        const knight = addFighter(game, "a", "knight", neighbour(game, nest.square));
         const battle = battleOf(game);
         expect(shovePath(battle, knight, nest)).toEqual({ path: [nest.square], collision: false });
         const outcome = act(battle, "a", { kind: "shove", fighter: knight.id, target: nest.id }, fixedRolls([1]));
@@ -199,15 +205,15 @@ describe("a nest is attacked like a character, and little else touches it (§39.
     it("is healed by a Regrowth", async () => {
         const { game, nest } = await mustered();
         nest.hp = 4;
-        const mother = add(game, nest.owner, "broodmother", neighbour(game, nest.square));
+        const mother = addFighter(game, nest.owner, "broodmother", neighbour(game, nest.square));
         const outcome = act(battleOf(game), nest.owner, { kind: "regrowth", fighter: mother.id, target: nest.id }, fixedRolls([]));
         expect(outcome.fighters.find(one => one.id === nest.id)!.hp).toBe(4 + V12.ABILITIES.regrowth.hp!);
     });
 
     it("takes no shelter from a Knight's Bulwark beside it, as a character does", async () => {
         const { game, nest } = await mustered();
-        const skitterling = add(game, nest.owner, "skitterling", neighbour(game, nest.square));
-        const knight = add(game, "a", "knight", neighbour(game, skitterling.square, [nest.square]));
+        const skitterling = addFighter(game, nest.owner, "skitterling", neighbour(game, nest.square));
+        const knight = addFighter(game, "a", "knight", neighbour(game, skitterling.square, [nest.square]));
         // Bulwark covers anyone next to the Knight, friend or foe — a character, not a nest.
         expect(temporaryCover(battleOf(game), skitterling)).toBe("half");
         knight.square = neighbour(game, nest.square, [skitterling.square]);
@@ -234,7 +240,7 @@ describe("a nest can't move, act or react (§39.7)", () => {
         gs.fighters = gs.fighters.map(fighter => fighter.id === nest.id ? { ...fighter, banked: 6 } : fighter);
         expect(watchedSquares(battleOf(game), "a").size).toBe(0);
         // A warband's character watching in its place does.
-        const watcher = add(game, nest.owner, "spitter", neighbour(game, nest.square));
+        const watcher = addFighter(game, nest.owner, "spitter", neighbour(game, nest.square));
         watcher.banked = 4;
         expect(watchedSquares(battleOf(game), "a").size).toBeGreaterThan(0);
     });
@@ -259,19 +265,19 @@ describe("a nest can't move, act or react (§39.7)", () => {
         downWarbandCharacters(game);
         const sees = squadSight(battleOf(game), nest.owner);
         expect(sees(nest.square)).toBe(false);
-        const eye = add(game, nest.owner, "skitterling", neighbour(game, nest.square));
+        const eye = addFighter(game, nest.owner, "skitterling", neighbour(game, nest.square));
         expect(squadSight(battleOf(game), nest.owner)(eye.square)).toBe(true);
     });
 
     it("is left out of whoever a Taunt or a Blessing reaches, and of a Purify", async () => {
         const { game, nest } = await mustered();
-        const skitterling = add(game, nest.owner, "skitterling", neighbour(game, nest.square));
+        const skitterling = addFighter(game, nest.owner, "skitterling", neighbour(game, nest.square));
         const battle = battleOf(game);
         expect(alliesWithin(battle, battle.fighters, skitterling, 3).map(one => one.id)).toContain(skitterling.id);
         expect(alliesWithin(battle, battle.fighters, skitterling, 3).map(one => one.id)).not.toContain(nest.id);
         expect(alliesWithin(battle, battle.fighters, skitterling, undefined).some(one => one.character === "nest")).toBe(false);
         nest.hp = 5;
-        const cleric = add(game, nest.owner, "cleric", neighbour(game, nest.square, [skitterling.square]));
+        const cleric = addFighter(game, nest.owner, "cleric", neighbour(game, nest.square, [skitterling.square]));
         expect(purified(battleOf(game), cleric).map(one => one.id)).not.toContain(nest.id);
     });
 });
@@ -338,9 +344,9 @@ describe("a nest is nobody standing (§39.7)", () => {
         // The cap counts characters: 11 of them and 2 nests leave room for one.
         const field = battlefieldById(gs.map);
         const free = field.tiles.map((_, square) => square).filter(square => field.tiles[square].terrain.standable && !gs.fighters.some(one => one.square === square));
-        while (combatantsOf(game, owner).length < 11) add(game, owner, "bloater", free.pop()!);
+        while (combatantsOf(game, owner).length < 11) addFighter(game, owner, "bloater", free.pop()!);
         expect(waveOf(gs, owner, true, 13)).toHaveLength(1);
-        add(game, owner, "bloater", free.pop()!);
+        addFighter(game, owner, "bloater", free.pop()!);
         expect(waveOf(gs, owner, true, 13)).toEqual([]);
     });
 
@@ -361,6 +367,7 @@ describe("a nest is nobody standing (§39.7)", () => {
         fogged.roundsPlayed = 2;
         const ceiling = nextWaveOf(fogged)!;
         fogged.nestsDestroyed = { [one]: 2, [two]: 1 };
+        fogged.nestsSeenDestroyed = 3;
         // The ceiling is the purchase of the unreduced budget however many nests have fallen.
         expect(nextWaveOf(fogged)).toEqual({ ...ceiling, nestsDestroyed: 3 });
         expect(ceiling.upTo).toBe(true);
@@ -390,7 +397,7 @@ describe("a nest is nobody standing (§39.7)", () => {
         const centre = field.objectives.centre.filter(square => field.tiles[square].terrain.standable);
         downWarbandCharacters(game);
         fighters(game).forEach(fighter => { if (!isWarband(fighter.owner)) fighter.hp = 0; });
-        const mine = add(game, "a", "manAtArms", centre[0]);
+        const mine = addFighter(game, "a", "manAtArms", centre[0]);
         nest.square = centre[1];
         const battle = battleOf(game);
         expect(mine.ap).toBeGreaterThan(0);
@@ -442,7 +449,7 @@ describe("destroying a nest thins the next wave (§39.7)", () => {
     it("counts a nest destroyed by a command, scores it, and regrows it at full HP as that warband's wave lands", async () => {
         const { game, gs, nest } = await mustered();
         const [owner, other] = warbandsOf(game);
-        const mage = add(game, "a", "mage", neighbour(game, nest.square));
+        const mage = addFighter(game, "a", "mage", neighbour(game, nest.square));
         // Back up to somewhere the fireball is allowed from.
         const battle = battleOf(game);
         const spot = battle.field.tiles.map((_, square) => square).find(square => {
@@ -474,6 +481,24 @@ describe("destroying a nest thins the next wave (§39.7)", () => {
         expect(nestsOf(game)).toHaveLength(4);
     });
 
+    it("counts only the nests the team destroys: not one the Swarm's own burn, its own Bile or a burn whose setter is gone downs", async () => {
+        const burnt = async (setter: (game: RealmArenaTestGame, nest: Fighter) => number) => {
+            const { game, gs, nest } = await mustered();
+            gs.fighters = gs.fighters.map(one => one.id === nest.id ? { ...afflicted({ ...one, hp: 1 }, "burning", setter(game, one), CONTEXT)!.fighter, hp: 1 } : one);
+            // The warband's turn, which begins with the burn, is played out after the last of the team's.
+            await play(game, endTurnBy("a"));
+            await play(game, endTurnBy("b"));
+            expect(fighters(game).find(one => one.id === nest.id)!.hp).toBe(0);
+            return gs.nestsDestroyed;
+        };
+        // Lit by the team: counted against the nest's warband.
+        const ownerOf = (await mustered()).nest.owner;
+        expect(await burnt(game => fighters(game).find(one => one.owner === "a")!.id)).toEqual({ [ownerOf]: 1 });
+        // Lit by one of the warband's own characters, or by someone no longer there (so the burn is the nest's own): nobody's to count.
+        expect(await burnt((game, nest) => fighters(game).find(one => one.owner === nest.owner && !isStructure(one, CONTEXT))!.id)).toBeUndefined();
+        expect(await burnt(() => 9999)).toBeUndefined();
+    });
+
     it("regrows a nest on the free square nearest its own when someone stands there, each on a square of its own", async () => {
         const { game, gs } = await mustered();
         const owner = warbandOwner(0);
@@ -482,8 +507,8 @@ describe("destroying a nest thins the next wave (§39.7)", () => {
         for (const nest of [firstNest, secondNest]) nest.hp = 0;
         gs.nestsDestroyed = { [owner]: 2 };
         // The team stands on one, a downed character of its own on the other (which blocks nothing).
-        const onFirst = add(game, "b", "manAtArms", first.square);
-        add(game, "b", "archer", second.square).hp = 0;
+        const onFirst = addFighter(game, "b", "manAtArms", first.square);
+        addFighter(game, "b", "archer", second.square).hp = 0;
         await landWave(game, 4);
         const grown = nestsOf(game, owner);
         expect(grown.every(isStanding)).toBe(true);
@@ -495,6 +520,25 @@ describe("destroying a nest thins the next wave (§39.7)", () => {
         expect(new Set(grown.map(one => one.square)).size).toBe(2);
         expect(onFirst.square).toBe(first.square);
         expect(gs.nestsDestroyed).toBeUndefined();
+    });
+
+    it("sends a displaced nest back to its map square on a later wave once it's free", async () => {
+        const { game, gs } = await mustered();
+        const owner = warbandOwner(0);
+        const [firstNest, secondNest] = nestsOf(game, owner);
+        const homes = [firstNest.square, secondNest.square];
+        expect(homes).toEqual(battlefieldById(gs.map).nests![0]);
+        for (const nest of [firstNest, secondNest]) nest.hp = 0;
+        const blocker = addFighter(game, "b", "manAtArms", homes[0]);
+        await landWave(game, 4);
+        const displaced = nestsOf(game, owner).find(one => one.id === firstNest.id)!;
+        expect(displaced.square).not.toBe(homes[0]);
+        // The square is free again by the wave after, and the nest is destroyed again where it stood.
+        fighters(game).find(one => one.id === blocker.id)!.hp = 0;
+        displaced.hp = 0;
+        await landWave(game, 7);
+        expect(nestsOf(game, owner).map(one => one.square)).toEqual(homes);
+        expect(nestsOf(game, owner).every(isStanding)).toBe(true);
     });
 
     it("leaves a nest that is only hurt as hurt, and its count at nothing", async () => {
@@ -541,7 +585,7 @@ describe("the team's planner and the nest (§39.7)", () => {
         const { game, nest } = await mustered();
         downWarbandCharacters(game);
         fighters(game).forEach(fighter => { if (!isWarband(fighter.owner)) fighter.hp = 0; });
-        const fighter = add(game, "a", "manAtArms", neighbour(game, nest.square));
+        const fighter = addFighter(game, "a", "manAtArms", neighbour(game, nest.square));
         const action = nextAction(viewOf(battleOf(game), "a"), "a", 1);
         expect(action).toBeDefined();
         expect(action!.fighter).toBe(fighter.id);
@@ -549,6 +593,12 @@ describe("the team's planner and the nest (§39.7)", () => {
         expect(aimed).toContain(nest.id);
     });
 });
+
+/** The nest tallies and every nest's square and HP, as plain data: the state a response never sends. */
+const rawOf = (gs: RealmArenaTestGame["specificGameState"]) => JSON.parse(JSON.stringify({
+    nestsDestroyed: gs.nestsDestroyed, nestsSeenDestroyed: gs.nestsSeenDestroyed,
+    nests: gs.fighters.filter(fighter => fighter.character === "nest").map(({ id, square, hp }) => ({ id, square, hp })),
+}));
 
 describe("a replay of a Hold Out with nests destroyed (§39.7)", () => {
     it("lands on exactly the live state, with the nests destroyed and regrown as they were, rolling nothing again", async () => {
@@ -564,16 +614,19 @@ describe("a replay of a Hold Out with nests destroyed (§39.7)", () => {
             expect(nestsOf(game)).toHaveLength(4);
             expect(text(game).some(line => /\bNest\b/.test(line) && /down/i.test(line))).toBe(true);
             const history = game.gameState.commandHistory;
+            let replayed: ReturnType<typeof rawOf> | undefined;
             const timeline = await (async () => {
                 const random = vi.spyOn(Math, "random").mockImplementation(() => { throw new Error("replay consumed randomness"); });
                 try {
-                    return await buildTimeline(game, { a: "Alice", b: "Bob" }, [], undefined, "a");
+                    return await buildTimeline(game, { a: "Alice", b: "Bob" }, [], (_step, raw) => { replayed = rawOf(raw as typeof game.specificGameState); }, "a");
                 } finally {
                     random.mockRestore();
                 }
             })();
             const last = timeline.snapshots[timeline.currentIndex];
             expect(last.specificGameState).toEqual(gameStateToModel(game.specificGameState, "a", history.at(-1)?.id ?? null, true));
+            // The server-only state the response leaves out, as the replay left it: the tallies, and where every nest stands and how hurt.
+            expect(replayed).toEqual(rawOf(game.specificGameState));
             expect(history.some(command => ((command as RealmArenaEndTurn).recordedEnemyActions ?? []).length > 0)).toBe(true);
 
             const record = await recordBattle(game);

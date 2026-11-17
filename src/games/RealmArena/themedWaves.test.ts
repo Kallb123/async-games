@@ -7,7 +7,7 @@ import { recordBattle } from "./recordBattle";
 import { nextWaveOf, warbandBudgetOf, waveBudgetOf, waveOf } from "./RealmArenaLogic";
 import { isCombatant, isWarband, newFighter, nextFighterId, wavePurchase, wavesLanded, waveThemeOf } from "./rules";
 import { ruleValuesOf, rulesetFor } from "./rulesets";
-import { endTurnBy, makeGame, musterAll, play, playScriptedBattle, seedRolls, warbandsOf, type RealmArenaTestGame } from "./testFixtures";
+import { addFighter, endTurnBy, makeGame, musterAll, play, playScriptedBattle, seedRolls, warbandsOf, type RealmArenaTestGame } from "./testFixtures";
 import type { GameResultBarChart } from "@/utils/apiModels/GameDataApi";
 
 // docs/games/realm-arena.md §39.6: waves that differ, bought with points. The
@@ -143,9 +143,9 @@ describe("a themed wave in a battle (§39.6)", () => {
         // A warband already standing at 11 is brought to 12 and no further.
         const field = battlefieldById(gs.map);
         const free = field.tiles.map((_, square) => square).filter(square => field.tiles[square].terrain.standable && !gs.fighters.some(one => one.square === square));
-        while (standingOf(game, owner).length < 11) gs.fighters.push(newFighter(nextFighterId(gs.fighters), owner, "bloater", free.pop()!, null, undefined, false, gs));
+        while (standingOf(game, owner).length < 11) addFighter(game, owner, "bloater", free.pop()!);
         expect(waveOf(gs, owner, true, 13).length).toBeLessThanOrEqual(1);
-        gs.fighters.push(newFighter(nextFighterId(gs.fighters), owner, "bloater", free.pop()!, null, undefined, false, gs));
+        addFighter(game, owner, "bloater", free.pop()!);
         expect(waveOf(gs, owner, true, 13)).toEqual([]);
     });
 

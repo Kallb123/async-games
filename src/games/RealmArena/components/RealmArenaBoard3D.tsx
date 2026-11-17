@@ -43,7 +43,7 @@ const STROKES = {
     waveDue: { alpha: 0.75, width: 1, dash: [2, 1.5] },
     wave: { alpha: 1, width: 1 },
     centre: { alpha: 1, width: 0.9, dash: [3, 1.5] },
-    /** `.ag-ra-nest-site`: a nest's square. */
+    /** `.ag-ra-deployment--nest`: a nest's square. */
     nestSite: { alpha: 0.6, width: 0.6, dash: [1, 1.2] },
 } as const satisfies Record<string, Pick<Outline, 'alpha' | 'width' | 'dash'>>;
 
@@ -195,7 +195,7 @@ export default function RealmArenaBoard3D({ field, fighters, fogGhosts = [], uns
                 if (due) waveOutlines.push({ squares: part, colour, ...STROKES.wave });
             }
         });
-        // A nest's square is outlined in the warbands' colour, as `.ag-ra-nest-site` draws it (§39.7).
+        // A nest's square is outlined in the warbands' colour, as `.ag-ra-deployment--nest` draws it (§39.7).
         const warband = owners.find(isWarband);
         for (const square of nestSquares ?? []) {
             outlines.push({ squares: new Set([square]), colour: warband ? cssColour(scope, colourFor(warband)) : token('--ag-ink-softer'), ...STROKES.nestSite });
