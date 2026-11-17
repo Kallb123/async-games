@@ -5088,13 +5088,28 @@ anything else:
 - *Open:* letting the player tap the square Reinforce places the character on,
   with the muster's placing.
 
-**Screens.** While a choice is owed, the turn sheet shows it alone: three
-`BuildRow`s in an `.ag-build-list`, the unavailable ones disabled with their
-reason, and Reinforce opening a second list of the downed. The response
-carries `rallyOwed` for the viewer's seat. *Screens: to be written as built by
-the PR that builds them.* The guide's co-op section and the tutorial's Hold Out
-step describe the released rules, and version 12 is unreleased, so they are
-rewritten with the release (§39.9), not before.
+**Screens, as built.** The page holds `rallying` — the viewer's turn, with
+`rallyOwed` in the response — and, while it is set, the turn sheet shows the
+choice alone (`RealmArenaRallySheet`, `components/`): a hint ("A fresh wave has
+landed. Choose how your squad rallies before you act."), then three `BuildRow`s
+in one `.ag-build-list`, from `rallyOptionsOf(battle, mustered, viewer)`. Rally's
+line says the HP it would give back in all (`rallyTotal`) or that nobody is
+hurt; Resupply's names the items that come back (`resupplyItems`); the
+unavailable ones are disabled with their `reason`. Reinforce opens a second list
+of the downed — mark, name, "Returns at N HP" (`reinforcedHp`) — over a Back
+button, and tapping one sends it. A choice goes as a `RealmArenaAct` whose
+`action` is the `RallyAction`, and its row wears `PendingTag` while in flight
+(`rallyTarget`). While owed there is no End turn, Undo, Deselect or "When your
+turn ends" switches, the board and the squad list select nothing (`tapFighter`
+returns, the squad list isn't `acting`), and no `useTurnDraft` actor exists, so
+nothing can be lined up; the view refreshes from state, as no battle event is
+told. The **recap** gives a rally its own row (`ra_rally`, from the line the log
+wrote), where an action with no events had none. The **result's** Hold Out group
+gains "Rallies: 3 rallies, 2 reinforcements, 1 resupply" (`rallyTally`, kinds
+nobody chose left out), only where the record has `rallies`. The guide's co-op
+section and the tutorial's Hold Out step describe the released rules, and
+version 12 is unreleased, so they are rewritten with the release (§39.9), not
+before.
 
 **The harness's team** needs a policy, since the planner scores battles, not
 menus: Reinforce when the downed character is worth more than half the HP a

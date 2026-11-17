@@ -46,6 +46,7 @@ import { battlefieldOf } from "./maps";
 import { enemyNameOf, UNKNOWN_ENEMY, type CharacterId, type ItemId } from "./characters";
 import { battleFrom, centreHolders, ENEMY_SIDE, isStanding, isWarband, sideOf, sideScore, TEAM_SIDE, type BattleEvent, type Fighter } from "./rules";
 import { AREA_BLAST, centreInSight } from "./ui";
+import { isRallyAction } from "./rally";
 
 type RAState = IRealmArenaSpecificGameStateResponse;
 
@@ -83,6 +84,7 @@ const RA_END_TURN = "ra_endturn";
 const RA_BURNING = "ra_burning";
 const RA_CENTRE = "ra_centre";
 const RA_WON = "ra_won";
+const RA_RALLY = "ra_rally";
 
 /**
  * The lines the battle's end writes, after the command that ended it and so
@@ -364,6 +366,13 @@ function toEvents(
             break;
         }
         case "RealmArenaAct": {
+            // A rally choice (§39.4) tells no battle event: its row is its own line, who it was for and what it brought back.
+            const rally = (command as Partial<RealmArenaAct>).action;
+            if (isRallyAction(rally)) {
+                const title = [...lines].reverse().find(entry => entry.actorId === command.senderId)?.text ?? `${name} ${command.myString()}`;
+                rows.push({ ...base, type: RA_RALLY, glyph: rally.choice === "reinforce" ? "🛡️" : rally.choice === "resupply" ? "🎒" : "✚", title });
+                break;
+            }
             const { events: all = [], recap } = outcome as Partial<IRealmArenaOutcome>;
             // Nothing the viewer's side saw, so no line of their log and no row (§27.2).
             const events = said(recap?.told, all);
