@@ -786,7 +786,7 @@ export const realmArenaGameResultStatsSchemaDef = {
     losses: [gameResultEventSchemaDef],
     // Hold Out's alone (§30.10): absent from any other battle, and from a result recorded before them.
     // `rallies` (§39.4) is absent from a wave in a battle whose rally wasn't a choice.
-    waves: { type: [{ _id: false, round: Number, arrived: Number, downed: { type: Schema.Types.Map, of: Number }, rallies: { type: [{ _id: false, seat: String, choice: String, character: String }], default: undefined } }], default: undefined },
+    waves: { type: [{ _id: false, round: Number, arrived: Number, name: String, downed: { type: Schema.Types.Map, of: Number }, rallies: { type: [{ _id: false, seat: String, choice: String, character: String }], default: undefined } }], default: undefined },
     standingPerRound: { type: [{ type: Schema.Types.Map, of: Number }], default: undefined },
     battleRounds: Number,
 };
@@ -898,6 +898,9 @@ export function formatRealmArenaResultStats(stats: IRealmArenaGameResultStats, u
 /** Who downed how many of a wave. Read by name: a stored wave is a Mongoose subdocument. */
 const downedOf = ({ downed }: WaveRecord): Map<string, number> => mongoMap(downed ?? new Map<string, number>());
 
+/** A wave as the result names it, in its lines and its charts alike: its number from 1, and its theme (§39.6) where it has one. */
+const waveLabel = (wave: WaveRecord, index: number): string => `Wave ${index + 1}${wave.name ? ` · ${wave.name}` : ""}`;
+
 /** How many of the enemy a wave's players downed, all of them together. */
 const downedIn = (wave: WaveRecord): number => [...downedOf(wave).values()].reduce((sum, count) => sum + count, 0);
 
@@ -924,7 +927,7 @@ function holdOutGroup(stats: IRealmArenaGameResultStats): GameResultStatGroup | 
             `Faced ${pluralize(waves.length, "wave")}: ${arrived} of the enemy took the field, and the team downed ${downed}`,
             // Every choice is public in the log (§39.4); absent for a battle whose rally wasn't one.
             ...(tally ? [tally] : []),
-            ...waves.map((wave, index) => `Wave ${index + 1}, round ${wave.round + 1}: ${wave.arrived} arrived, ${downedIn(wave)} downed`),
+            ...waves.map((wave, index) => `${waveLabel(wave, index)}, round ${wave.round + 1}: ${wave.arrived} arrived, ${downedIn(wave)} downed`),
         ],
     };
 }
@@ -932,7 +935,7 @@ function holdOutGroup(stats: IRealmArenaGameResultStats): GameResultStatGroup | 
 /** How many of each side stood, round by round, with every wave marked on the enemy's line as it landed (§30.10). */
 function formatStandingChart(stats: IRealmArenaGameResultStats) {
     const events: StoredGameResultEvent[] = (stats.waves ?? []).slice(1).map((wave, index) =>
-        ({ turnIndex: wave.round, icon: "wave", title: `Wave ${index + 2}: ${wave.arrived} arrived`, seriesKey: ENEMY_SIDE }));
+        ({ turnIndex: wave.round, icon: "wave", title: `${waveLabel(wave, index + 1)}: ${wave.arrived} arrived`, seriesKey: ENEMY_SIDE }));
     return formatPerTurnChart(stats.standingPerRound, "Characters standing per round", "Characters", 1, SIDE_SERIES, events);
 }
 
@@ -944,7 +947,7 @@ function formatWaveChart(stats: IRealmArenaGameResultStats): GameResultBarChart 
         title: "Enemies downed by wave",
         yLabel: "Downed",
         bars: stats.waves.map((wave, index) => ({
-            label: `Wave ${index + 1}`,
+            label: waveLabel(wave, index),
             value: downedIn(wave),
             segments: Object.fromEntries(downedOf(wave)),
         })),

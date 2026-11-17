@@ -1052,6 +1052,12 @@ describe("the next wave on the scoreboard (§30.11)", () => {
         expect(waveLineOf({ round: 4 }, 1)).toBe("next wave 4");
         expect(waveLineOf(undefined, 14)).toBe("final wave landed");
     });
+
+    it("names a themed wave (§39.6), with the count when it's told", () => {
+        expect(waveLineOf({ round: 7, name: "The Bile", arriving: 9 }, 4)).toBe("Round 7: The Bile, 9 arriving");
+        expect(waveLineOf({ round: 7, name: "The Bile", arriving: 12, upTo: true }, 6)).toBe("Round 7: The Bile, up to 12 arriving");
+        expect(waveLineOf({ round: 4, name: "The Rush" }, 1)).toBe("Round 4: The Rush");
+    });
 });
 
 describe("coopColourOf", () => {

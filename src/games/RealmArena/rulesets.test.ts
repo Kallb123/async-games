@@ -122,7 +122,8 @@ describe("Realm Arena ruleset compatibility", () => {
         const before = real.rulesetFor(11).RULES, after = real.rulesetFor(12).RULES;
         expect(before.RALLY_CHOICE).toBeUndefined();
         expect(after.RALLY_CHOICE).toBe(true);
-        expect(after).toEqual({ ...before, RALLY_CHOICE: true });
+        // Only the themed waves' two numbers are added besides (§39.6).
+        expect(after).toEqual({ ...before, RALLY_CHOICE: true, WAVE_GROWTH_POINTS: 15, WAVE_CAP: 12 });
         expect(real.rulesetFor(11).RULES).toBe(real.rulesetFor(10).RULES);
     });
 
@@ -154,11 +155,34 @@ describe("Realm Arena ruleset compatibility", () => {
         // The elites stand beside the roster, which a muster is checked against, and no other faction's changes.
         expect(after.FACTIONS.swarm.elites).toEqual(["broodQueen", "carapaceBrute", "bileLobber"]);
         expect(before.FACTIONS.swarm.elites).toBeUndefined();
-        expect(after.FACTIONS.swarm).toEqual({ ...before.FACTIONS.swarm, elites: ["broodQueen", "carapaceBrute", "bileLobber"] });
+        expect(after.FACTIONS.swarm).toEqual({ ...before.FACTIONS.swarm, elites: ["broodQueen", "carapaceBrute", "bileLobber"], waves: after.FACTIONS.swarm.waves });
         expect(after.FACTIONS.swarm.characters).toBe(before.FACTIONS.swarm.characters);
         expect(after.FACTIONS.realm).toBe(before.FACTIONS.realm);
         expect(after.FACTIONS.miners).toBe(before.FACTIONS.miners);
         expect(Object.isFrozen(after.FACTIONS.swarm.elites)).toBe(true);
+    });
+
+    it("names the Swarm's four themed waves in v12 and gives no other faction or version any (§39.6)", async () => {
+        const real = await vi.importActual<typeof import("./rulesets")>("./rulesets");
+        const { RULES, FACTIONS, CHARACTERS } = real.rulesetFor(12);
+        expect(FACTIONS.swarm.waves).toEqual([
+            { name: "The Rush", buys: ["skitterling", "skitterling", "ravager"] },
+            { name: "The Bile", elite: "bileLobber", buys: ["spitter", "bloater", "spitter"] },
+            { name: "The Brutes", elite: "carapaceBrute", buys: ["ravager", "skitterling", "bloater"] },
+            { name: "The Queen", elite: "broodQueen", buys: ["ravager", "spitter", "skitterling", "bloater"] },
+        ]);
+        // Every id names a character the catalogue has, and a buy is never an elite.
+        for (const theme of FACTIONS.swarm.waves ?? []) for (const id of [...theme.elite ? [theme.elite] : [], ...theme.buys]) expect(CHARACTERS[id]).toBeDefined();
+        expect((FACTIONS.swarm.waves ?? []).flatMap(theme => theme.buys).some(id => FACTIONS.swarm.elites?.includes(id))).toBe(false);
+        expect(RULES.WAVE_GROWTH_POINTS).toBe(15);
+        expect(RULES.WAVE_CAP).toBe(12);
+        expect(FACTIONS.realm.waves).toBeUndefined();
+        expect(FACTIONS.miners.waves).toBeUndefined();
+        for (const version of [7, 8, 9, 10, 11]) {
+            expect(real.rulesetFor(version).FACTIONS.swarm.waves).toBeUndefined();
+            expect(real.rulesetFor(version).RULES.WAVE_GROWTH_POINTS).toBeUndefined();
+        }
+        expect(Object.isFrozen(FACTIONS.swarm.waves)).toBe(true);
     });
 
     it("pins HP, movement and available abilities to the game, including an added ability", () => {

@@ -49,7 +49,10 @@ export const meta: GameMeta = {
     // Version 12 adds the rally's choice (§39.4): a rally action, sent by each
     // player of the team as a wave lands in the battles created under rules
     // version 12. An older tab can't send it, so it would wait out its turn.
-    commandVersion: 12,
+    // Version 13 lands a Hold Out wave by its faction's themes (§39.6) in the
+    // battles created under rules version 12: bought with points, told by name.
+    // An End turn played under an older version lands the old wave, on a replay too.
+    commandVersion: 13,
     oldestReplayableCommandVersion: 2,
     available: true,
 };

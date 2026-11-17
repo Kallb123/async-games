@@ -39,11 +39,22 @@ const CHARACTERS = {
 const FACTIONS = {
     ...catalogueV11.FACTIONS,
     // §39.5: elites stand beside the roster, never in it, so no muster accepts one.
-    swarm: { ...catalogueV11.FACTIONS.swarm, elites: ["broodQueen", "carapaceBrute", "bileLobber"] },
+    swarm: {
+        ...catalogueV11.FACTIONS.swarm,
+        elites: ["broodQueen", "carapaceBrute", "bileLobber"],
+        // §39.6: its four waves, landing in rounds 4, 7, 10 and 13, each bought with points.
+        waves: [
+            { name: "The Rush", buys: ["skitterling", "skitterling", "ravager"] },
+            { name: "The Bile", elite: "bileLobber", buys: ["spitter", "bloater", "spitter"] },
+            { name: "The Brutes", elite: "carapaceBrute", buys: ["ravager", "skitterling", "bloater"] },
+            { name: "The Queen", elite: "broodQueen", buys: ["ravager", "spitter", "skitterling", "bloater"] },
+        ],
+    },
 } satisfies Partial<Record<FactionId, Faction>>;
 
 // §39.4: the rally is each player's choice, not a heal the wave hands out.
-const RULES = { ...catalogueV11.RULES, RALLY_CHOICE: true };
+// §39.6: a themed wave's budget grows 15 points a wave, and a wave never takes a warband past 12.
+const RULES = { ...catalogueV11.RULES, RALLY_CHOICE: true, WAVE_GROWTH_POINTS: 15, WAVE_CAP: 12 };
 
 export const catalogueV12 = {
     ...catalogueV11,

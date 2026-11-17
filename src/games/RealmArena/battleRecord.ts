@@ -16,10 +16,10 @@
 import { rulesetOf, type RulesContext } from "./rulesets";
 import type { GameResultEvent } from "@/utils/apiModels/GameDataApi";
 import type { IReplayStep } from "@/utils/games/replay";
-import { type CharacterId } from "./characters";
+import { factionById, type CharacterId } from "./characters";
 import type { IRealmArenaSpecificGameState } from "./RealmArenaModels";
 import { isRallyAction, type RallyChoice } from "./rally";
-import { areaDamage, allied, battleRounds, BLAST_EVENT_KINDS, ENEMY_SIDE, isStanding, isWarband, knockoutPoints, sideOf, squadHp, TEAM_SIDE, waveArrives, type BattleEvent, type BattleState, type Fighter } from "./rules";
+import { areaDamage, allied, battleRounds, BLAST_EVENT_KINDS, ENEMY_SIDE, isStanding, isWarband, knockoutPoints, sideOf, squadHp, TEAM_SIDE, waveArrives, waveThemeOf, type BattleEvent, type BattleState, type Fighter } from "./rules";
 
 /** What one player's characters of one kind did in a battle, pooled as their mastery is (§23.1). */
 export interface FightingRecord {
@@ -95,6 +95,8 @@ export interface WaveRecord {
     round: number;
     arrived: number;
     downed: Map<string, number>;
+    /** The wave's theme (§39.6), for a faction whose waves have them: absent on the first, which is the muster, and on a result recorded before them. */
+    name?: string;
     /**
      * What each player of the team chose as this wave landed (§39.4), in the
      * order they chose. Only in a battle whose rules make the rally a choice,
@@ -133,6 +135,8 @@ const copyOf = (records: ReadonlyMap<string, FightingRecord>) => new Map([...rec
  * whose ally, for friendly fire and knock-outs, and in co-op the warbands'
  * one column. Absent in a free-for-all. `rounds` is how long the battle lasts
  * (`battleRoundsOf`), which depends on more than the seats.
+ *
+ * `observe`'s `themed` is whether the step's End turn lands its wave by themes (command version `THEMED_WAVES_VERSION`), true as `waveOf`'s is.
  *
  * Undo: the one thing an undoable action can add to a record is healing — it
  * hurts nobody and rolls nothing (docs/undo.md). So the recorder keeps the
@@ -276,7 +280,7 @@ export function battleRecorder(seats: readonly string[], sides?: BattleState["si
 
     return {
         /** One step of the replay: its command and outcome, and the game's own state after it. */
-        observe(step: Pick<IReplayStep, "command" | "outcome">, gs: IRealmArenaSpecificGameState): void {
+        observe(step: Pick<IReplayStep, "command" | "outcome">, gs: IRealmArenaSpecificGameState, themed = true): void {
             if (gs.phase !== "battle") return;
             const { className, id } = step.command as { className?: string; id?: string };
             if (className === "RealmArenaUndo") {
@@ -306,7 +310,10 @@ export function battleRecorder(seats: readonly string[], sides?: BattleState["si
             if (holdOut) {
                 if (waves.length === 0) waves.push({ round: 0, arrived: 0, downed: new Map() });
                 for (let begun = round + 1; begun <= Math.min(gs.roundsPlayed, lastRound); begun++) {
-                    if (waveArrives(begun + 1, lastRound + 1)) waves.push({ round: begun, arrived: 0, downed: new Map() });
+                    if (!waveArrives(begun + 1, lastRound + 1)) continue;
+                    // `themed`: the step's End turn landed the wave by its themes (§39.6), so the theme's name is its.
+                    const name = themed ? waveThemeOf(factionById(gs.coop?.enemy, gs), begun + 1)?.name : undefined;
+                    waves.push({ round: begun, arrived: 0, downed: new Map(), ...(name ? { name } : {}) });
                 }
                 // A hatchling (§39.5) stands up in the middle of a turn: nobody brought it as a wave.
                 waves.at(-1)!.arrived += fighters.filter(fighter => isWarband(fighter.owner) && !known.has(fighter.id) && fighter.hatchedBy === undefined).length;

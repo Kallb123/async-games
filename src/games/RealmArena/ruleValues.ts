@@ -47,5 +47,13 @@ export interface RealmArenaRuleValues {
      * before version 12, where the wave rallies the whole team by itself.
      */
     RALLY_CHOICE?: boolean;
+    /**
+     * The points every Hold Out wave's budget grows by for each wave landed
+     * before it (realm-arena.md §39.6), for a faction whose waves are themed
+     * (`Faction.waves`). Absent before version 12.
+     */
+    WAVE_GROWTH_POINTS?: number;
+    /** The most characters a themed wave buys, and the most a warband stands at after one (§39.6). Absent before version 12. */
+    WAVE_CAP?: number;
     BATTLE_ROUNDS: Readonly<Record<PlayerCount, number>>;
 }

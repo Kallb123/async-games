@@ -5,7 +5,7 @@
 import { ruleValuesOf, rulesetOf, type RulesContext } from "./rulesets";
 import type { Rect } from "@/utils/ui/mapLabels";
 import { isoCentre, ISO_HALF_HEIGHT, ISO_HALF_WIDTH, type IsoView, type Point } from "@/utils/ui/isometric";
-import type { IRealmArenaStepOutcome, IRealmArenaStepPart, RealmArenaPartState } from "./apiModels";
+import type { NextWave, IRealmArenaStepOutcome, IRealmArenaStepPart, RealmArenaPartState } from "./apiModels";
 import { andList, capitalise, pluralize, possessive } from "@/utils/ui/text";
 import type { Reach } from "@/utils/games/battlefield/pathfinding";
 import { coordsOf, distance, FACING_COUNT, facingTowards, riseOf, squareAt, TERRAIN, type Battlefield, type Facing, type Square, type Terrain, type TerrainLetter } from "@/utils/games/battlefield/terrain";
@@ -43,10 +43,13 @@ export function coopColourOf(viewerId: string, owner: string): string {
  * (§30.3, §30.11), as the wire tells it (`nextWave`) in battle round `round`:
  * when it lands and how many it brings — in fog, the most it could.
  */
-export function waveLineOf(nextWave: { round: number; arriving?: number; upTo?: true } | undefined, round: number): string {
+export function waveLineOf(nextWave: NextWave | undefined, round: number): string {
     if (!nextWave) return 'final wave landed';
+    const count = nextWave.arriving === undefined ? '' : `${nextWave.upTo ? 'up to ' : ''}${nextWave.arriving} ${nextWave.name ? 'arriving' : 'coming'}`;
+    // A themed wave (§39.6) is named: "Round 7: The Bile, 9 arriving".
+    if (nextWave.name) return `Round ${nextWave.round}: ${nextWave.name}${count && `, ${count}`}`;
     const when = nextWave.round === round + 1 ? 'wave next round' : `next wave ${nextWave.round}`;
-    return nextWave.arriving === undefined ? when : `${when} · ${nextWave.upTo ? 'up to ' : ''}${nextWave.arriving} coming`;
+    return count ? `${when} · ${count}` : when;
 }
 
 /** The letter a square's terrain is drawn with on the map: what the board styles it by. */
