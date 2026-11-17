@@ -6,7 +6,7 @@ import BoardZoom, { useBoardCentre, type BoardZoomFocus, type BoardZoomPivot } f
 import ClickableMapNode from '@/components/ui/ClickableMapNode';
 import MapLabelLayer from '@/components/ui/MapLabelLayer';
 import { coverBySide, SIDE_STEPS, type Side } from '@/utils/games/battlefield/cover';
-import { type Battlefield, type Facing, type Square, type TerrainLetter } from '@/utils/games/battlefield/terrain';
+import { coordsOf, type Battlefield, type Facing, type Square, type TerrainLetter } from '@/utils/games/battlefield/terrain';
 import { isoArea, isoBlock, isoBounds, isoCentre, isoCorner, isoDepth, isoGridLines, isoGroundAt, isoPoint, isoPoints, isoRuns, isoSlab, isoSquareAt, isoView, ISO_HALF_HEIGHT, ISO_HALF_WIDTH, type IsoBlock, type IsoRotation, type IsoView, type Point } from '@/utils/ui/isometric';
 import { RealmArenaTerrainArt, RealmArenaTerrainDefs, spriteId, SpriteUse } from '@/games/RealmArena/components/RealmArenaTerrain';
 import { RealmArenaEffectMarks } from '@/games/RealmArena/components/RealmArenaEffects';
@@ -17,9 +17,10 @@ import type { Rect } from '@/utils/ui/mapLabels';
 import { useSvgId } from '@/utils/hooks/useSvgId';
 import { usePrefersReducedMotion } from '@/utils/hooks/usePrefersReducedMotion';
 import { PlaybackProvider, setAttributes, translation, usePlaybackFrame, usePlaybackRef, usePlaybackValue } from '@/utils/hooks/usePlayback';
-import { CHARACTER_ART, facingCell, ITEM_ART, SMOKE_ART, spriteBox, TERRAIN_ART, type CharacterPose } from '@/games/RealmArena/art';
-import { CHARACTERS, ITEMS, type CharacterId, type ItemId } from '@/games/RealmArena/characters';
-import { CENTRE, isStanding, isWarband, maxHpOf, smokeSquares, type BattleState, type Fighter, type FogGhost, type MusterPick, type ToldEvent } from '@/games/RealmArena/rules';
+import { facingCell, figureSprites, ITEM_ART, SMOKE_ART, spriteBox, TERRAIN_ART, type CharacterPose } from '@/games/RealmArena/art';
+import { ITEMS, type CharacterId, type ItemId } from '@/games/RealmArena/characters';
+import { rulesetOf } from '@/games/RealmArena/rulesets';
+import { CENTRE, ENEMY_SIDE, isStanding, isWarband, maxHpOf, smokeSquares, type BattleState, type Fighter, type FogGhost, type MusterPick, type ToldEvent } from '@/games/RealmArena/rules';
 import type { AttackOption } from '@/games/RealmArena/tactics';
 import { AP_PIP_OFFSET, AP_PIP_RADIUS, AP_PIP_STEP, apPips, areaRect, BOARD_ZOOM, CENTRE_LABEL, EFFECT_MARK_OFFSET, EFFECT_MARK_SIZE, EFFECT_MARK_STEP, FIGURE_RADIUS, FIGURE_RISE, figureRectAt, fxPointsAt, HP_BAR_HEIGHT, HP_BAR_RISE, HP_BAR_WIDTH, ITEM_MARK_OFFSET, ITEM_MARK_SIZE, MARKER_RADIUS, ODDS_FLANK_DROP, ODDS_FLANK_EXTRA, ODDS_FLANK_WORD, ODDS_HEIGHT, ODDS_RISE, ODDS_WIDTH, PATH_END_RADIUS, RING_RADIUS, ringOf, shadedSquares, SHADOW_ALPHA, SHADOW_RADIUS, shieldPath, SMOKE_SIZE, type GroundShade, type Marker, type ShadeKind, type Ring, type BattleCue, type BoardFollow, type FallCue, type FxPoints, type ScorchCue, type Shove, type Timed, type WalkCue, effectsOn, facingOf, fadeInAt, fadeOutAt, fighterStatus, endOf, hpFraction, legLengthOn, progressOf, shakeAt, shakesOf, shovesOf, shoveAt, terrainLetter, toldAt, toldOf, walkerAt, walkCameraAt, walkFacing, legPoint, walkLift, walkSquares, type Told, type WalkMotion } from '@/games/RealmArena/ui';
 
@@ -66,6 +67,12 @@ interface RealmArenaBoardProps {
     waveDue?: boolean;
     /** The map's centre is drawn, with its name: not in Hold Out, where holding it decides nothing (§30). */
     showCentre?: boolean;
+    /**
+     * Where the enemy's nests stand on the map (§39.7), marked from the start as
+     * a zone is: the wire's `nestSquares`, so a battle that hasn't told the team
+     * its enemy draws none. Whether a nest stands there is the figure's to say.
+     */
+    nestSquares?: readonly Square[];
     /** The signed-in viewer, whose preferred turn of the board this browser remembers. */
     viewerId: string;
     colourFor: (userId: string) => string;
@@ -273,17 +280,17 @@ interface FigureProps {
 function Figure({ artId, view, square, character, facing, pose = 'standing', item, className = '', tint, ring, marker, ghost = false, moving }: FigureProps) {
     const feet = isoCentre(view, square);
     const { x, y } = discCentre(view, square);
-    const art = CHARACTER_ART[character][pose];
-    const cell = facingCell(facing, view.rotation);
-    const box = spriteBox(art.body[cell]);
+    // A nest is a structure: one drawing a pose whichever way it's turned, and no owner's colour laid on it.
+    const { body: bodySprite, team: teamSprite } = figureSprites(character, pose, facingCell(facing, view.rotation));
+    const box = spriteBox(bodySprite);
     const groundRing = (className: string, radius: number, fillOpacity?: number) => (
         <ellipse className={className} cx={feet.x} cy={feet.y} rx={ISO_HALF_WIDTH * radius} ry={ISO_HALF_HEIGHT * radius} fillOpacity={fillOpacity} />
     );
     const body = (
         <>
             <g className={`ag-ra-figure ${className}`} transform={`translate(${feet.x} ${feet.y - ISO_HALF_HEIGHT})`}>
-                <use href={`#${spriteId(artId, art.body[cell])}`} {...box} />
-                {tint && <use href={`#${spriteId(artId, art.team[cell])}`} {...box} filter={`url(#${tint})`} />}
+                <use href={`#${spriteId(artId, bodySprite)}`} {...box} />
+                {tint && teamSprite && <use href={`#${spriteId(artId, teamSprite)}`} {...box} filter={`url(#${tint})`} />}
             </g>
             {item && (
                 <SpriteUse className="ag-ra-figure-mark" id={artId} sprite={ITEM_ART[item]} x={x + ITEM_MARK_OFFSET.x} y={y + ITEM_MARK_OFFSET.y} size={ITEM_MARK_SIZE} />
@@ -626,6 +633,8 @@ interface FighterNodeProps {
     facingFor: FacingFor;
     tintFor: TintFor;
     nameFor: (userId: string) => string;
+    /** What its character is called, by the battle's own catalogue (an elite or a nest is in no other). */
+    characterName: string;
     onSelect: (fighterId: number) => void;
     /**
      * The fighter its HP bar, effect marks, watch ring and item are drawn from,
@@ -641,10 +650,9 @@ interface FighterNodeProps {
 }
 
 /** A character on the battlefield, standing or fallen: its figure, HP bar, watch and effects and AP, and the tap that selects it. */
-function FighterNode({ artId, view, fighter, ring, selected, acting, colour, facingFor, tintFor, nameFor, onSelect, drawn = fighter, told, moving }: FighterNodeProps) {
+function FighterNode({ artId, view, fighter, ring, selected, acting, colour, facingFor, tintFor, nameFor, characterName, onSelect, drawn = fighter, told, moving }: FighterNodeProps) {
     const { x, y } = discCentre(view, fighter.square);
     const feet = isoCentre(view, fighter.square);
-    const character = CHARACTERS[fighter.character];
     const standing = isStanding(fighter);
     const watching = standing && drawn.banked > 0;
     return (
@@ -654,7 +662,7 @@ function FighterNode({ artId, view, fighter, ring, selected, acting, colour, fac
             isSelected={selected}
             showRing={false}
             onClick={() => onSelect(fighter.id)}
-            title={[`${character.name} · ${nameFor(fighter.owner)}`, `${fighter.hp}/${maxHpOf(fighter)} HP`, ...fighterStatus(fighter)].join(' · ')}
+            title={[`${characterName} · ${nameFor(fighter.owner)}`, `${fighter.hp}/${maxHpOf(fighter)} HP`, ...fighterStatus(fighter)].join(' · ')}
         >
             <Figure
                 ring={ring}
@@ -872,8 +880,10 @@ function blasting(artId: string, view: IsoView, playback: Playback, cue: ScorchC
  * here and nowhere else — and whatever was in the middle of the frame is still
  * there after it (`BoardZoom`'s `pivot`).
  */
-export default function RealmArenaBoard({ field, fighters, fogGhosts = [], unseen, clouds, sides, rulesVersion, sealed, owners, waveDue = false, showCentre = true, viewerId, colourFor, nameFor, selected, onSelect, placing, aiming, acting, refocus = 0, follow, home, odds, coverAt, overlay, playback, onPlayed, unplaced }: RealmArenaBoardProps) {
+export default function RealmArenaBoard({ field, fighters, fogGhosts = [], unseen, clouds, sides, rulesVersion, sealed, owners, waveDue = false, showCentre = true, nestSquares, viewerId, colourFor, nameFor, selected, onSelect, placing, aiming, acting, refocus = 0, follow, home, odds, coverAt, overlay, playback, onPlayed, unplaced }: RealmArenaBoardProps) {
     const [rotation, turn, turned] = useBoardRotation(viewerId);
+    // Who is what, by the battle's own catalogue: an elite or a nest is in no other.
+    const characters = rulesetOf({ rulesVersion }).CHARACTERS;
 
     // The ground changes only when cover is blasted away, so it's laid out once a battlefield, and again each turn of the view.
     const ground = useMemo(() => {
@@ -942,6 +952,12 @@ export default function RealmArenaBoard({ field, fighters, fogGhosts = [], unsee
         return areas.map(({ col, row, width, height }, part) => ({ key: `${seat}-${part}`, points: isoArea(view, { x: col, y: row, width, height }), wave, style }));
     });
     const waves = zones.filter(zone => zone.wave);
+    // A nest's square, outlined in the warbands' colour as their zones are.
+    const nestStyle = { '--ra-seat': colourFor(owners.find(isWarband) ?? ENEMY_SIDE) } as React.CSSProperties;
+    const nestSites = (nestSquares ?? []).map(square => {
+        const { col, row } = coordsOf(field, square);
+        return { square, points: isoArea(view, { x: col, y: row, width: 1, height: 1 }) };
+    });
     const hpChanges = aiming ? fighters.flatMap(fighter => {
         const change = aiming.hpChange.get(fighter.id);
         return change && isStanding(fighter) ? [{ fighter, change }] : [];
@@ -956,7 +972,7 @@ export default function RealmArenaBoard({ field, fighters, fogGhosts = [], unsee
         depth: isoDepth(view, ghost.square) + 0.45,
         node: (
             <g key={`fog-ghost-${ghost.id}`} className="ag-ra-fog-ghost">
-                <title>{`${CHARACTERS[ghost.character].name} · ${nameFor(ghost.owner)} · last seen here`}</title>
+                <title>{`${characters[ghost.character].name} · ${nameFor(ghost.owner)} · last seen here`}</title>
                 <Figure artId={artId} view={view} square={ghost.square} character={ghost.character} facing={facingFor(ghost)} tint={tintFor(ghost.owner)} ghost />
             </g>
         ),
@@ -976,7 +992,7 @@ export default function RealmArenaBoard({ field, fighters, fogGhosts = [], unsee
                 className={`ag-ra-sealed${placing ? ' ag-ra-sealed--placing' : ''}`}
                 onClick={placing ? () => placing.onTap(pick.square) : undefined}
             >
-                <title>{`${CHARACTERS[pick.character].name}${pick.item ? ` with a ${ITEMS[pick.item].name.toLowerCase()}` : ''} · your squad, sealed until every player has mustered`}</title>
+                <title>{`${characters[pick.character].name}${pick.item ? ` with a ${ITEMS[pick.item].name.toLowerCase()}` : ''} · your squad, sealed until every player has mustered`}</title>
                 <Figure
                     artId={artId} view={view} square={pick.square} character={pick.character} facing={facingFor(pick)} item={pick.item}
                     marker="sealed" ring={placing?.selected === index ? 'selected' : undefined}
@@ -1034,7 +1050,7 @@ export default function RealmArenaBoard({ field, fighters, fogGhosts = [], unsee
             selected: fighter.id === selected?.id,
             acting: fighter.owner === acting,
             colour: colourFor(fighter.owner),
-            facingFor, tintFor, nameFor, onSelect,
+            facingFor, tintFor, nameFor, characterName: characters[fighter.character].name, onSelect,
         };
         // Its bar, marks and item are as the action found them until the cue that changed them lands.
         const told = toldFor(fighter);
@@ -1112,6 +1128,7 @@ export default function RealmArenaBoard({ field, fighters, fogGhosts = [], unsee
                                     style={zone.style}
                                 />
                             ))}
+                            {nestSites.map(site => <polygon key={`nest-${site.square}`} className="ag-ra-nest-site" points={site.points} style={nestStyle} />)}
                             {centre && <polygon className="ag-ra-centre" points={isoArea(view, centre)} />}
                             {flatShades.map(run => <path key={run.key} className={run.key} d={run.d} />)}
 
@@ -1141,7 +1158,7 @@ export default function RealmArenaBoard({ field, fighters, fogGhosts = [], unsee
                                         isValid
                                         showRing={false}
                                         onClick={() => onSelect(fighter.id)}
-                                        title={`${CHARACTERS[fighter.character].name} · ${nameFor(fighter.owner)} · out of sight`}
+                                        title={`${characters[fighter.character].name} · ${nameFor(fighter.owner)} · out of sight`}
                                     >
                                         <g className="ag-ra-ghost">
                                             <Figure artId={artId} view={view} square={fighter.square} character={fighter.character} facing={facingFor(fighter)} tint={tintFor(fighter.owner)} ghost />

@@ -1058,6 +1058,15 @@ describe("the next wave on the scoreboard (§30.11)", () => {
         expect(waveLineOf({ round: 7, name: "The Bile", arriving: 12, upTo: true }, 6)).toBe("Round 7: The Bile, up to 12 arriving");
         expect(waveLineOf({ round: 4, name: "The Rush" }, 1)).toBe("Round 4: The Rush");
     });
+
+    it("says what the nests destroyed have cost the wave (§39.7), one or more, and nothing at none", () => {
+        expect(waveLineOf({ round: 7, name: "The Bile", arriving: 6, nestsDestroyed: 1 }, 4)).toBe("Round 7: The Bile, 6 arriving (1 nest destroyed)");
+        expect(waveLineOf({ round: 7, name: "The Bile", arriving: 5, nestsDestroyed: 2 }, 4)).toBe("Round 7: The Bile, 5 arriving (2 nests destroyed)");
+        // In fog the count is still a ceiling, and the note stands beside it.
+        expect(waveLineOf({ round: 7, name: "The Bile", arriving: 12, upTo: true, nestsDestroyed: 2 }, 4)).toBe("Round 7: The Bile, up to 12 arriving (2 nests destroyed)");
+        expect(waveLineOf({ round: 7, name: "The Bile", arriving: 6 }, 4)).toBe("Round 7: The Bile, 6 arriving");
+        expect(waveLineOf({ round: 7, name: "The Bile", arriving: 6, nestsDestroyed: 0 }, 4)).toBe("Round 7: The Bile, 6 arriving");
+    });
 });
 
 describe("coopColourOf", () => {

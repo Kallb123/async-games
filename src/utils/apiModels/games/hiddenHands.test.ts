@@ -31,11 +31,12 @@ import { AMBULANCE_START, EDGE_COUNT, ENGINE_START, INTERIOR_SPACE_COUNT, SPACE_
 import { buildTimeline } from "@/utils/games/replay";
 import { at as realmArenaSquareAt, fieldOf as realmArenaFieldOf } from "@/utils/games/battlefield/testFixtures";
 import { REALM } from "@/games/RealmArena/characters";
+import { battlefieldById as realmArenaBattlefieldById } from "@/games/RealmArena/maps";
 import { gameStateToModel as realmArenaStateToModel, stepOutcomeToModel as realmArenaStepOutcome } from "@/games/RealmArena/RealmArenaModels";
 import { RealmArenaGameType, toldTo as realmArenaToldTo, type IRealmArenaOutcome, type RealmArenaEndTurn } from "@/games/RealmArena/RealmArenaLogic";
 import { buildAllEvents } from "@/utils/games/recap";
 import type { IRealmArenaSpecificGameStateResponse } from "@/games/RealmArena/apiModels";
-import { act as realmArenaActRules, fixedRolls as realmArenaFixedRolls, newFighter as realmArenaNewFighter, areaAround as realmArenaAreaAround, check as realmArenaCheck, isStanding as isRealmArenaStanding, warbandOwner } from "@/games/RealmArena/rules";
+import { act as realmArenaActRules, fixedRolls as realmArenaFixedRolls, newFighter as realmArenaNewFighter, areaAround as realmArenaAreaAround, check as realmArenaCheck, isStanding as isRealmArenaStanding, warbandOwner, warbandsFor as realmArenaWarbandsFor } from "@/games/RealmArena/rules";
 import {
     actBy as realmArenaAct,
     battleOf as realmArenaBattle,
@@ -895,6 +896,56 @@ describe("Realm Arena's themed next wave in fog of war (§39.6)", () => {
             // A ceiling for both warbands, the same for every viewer: never a count of who is down or where there's room.
             expect(nextWave?.arriving).toBe(2 * 6);
         }
+    });
+});
+
+describe("Realm Arena's nests in fog of war (§39.7)", () => {
+    const VIEWERS = ["a", "b", null];
+    const swarm = (coop: { random?: true; enemy?: "swarm" | "realm" } = {}) => makeRealmArenaGame(["a", "b"], {}, { fog: true, rulesVersion: 12, coop: { enemy: "swarm", mission: "holdOut", ...coop } });
+    const nestSquaresOn = (game: ReturnType<typeof swarm>) => realmArenaBattlefieldById(game.specificGameState.map).nests!.flat();
+    const costing = (game: ReturnType<typeof swarm>, count: number) => {
+        const [one, two] = realmArenaWarbandsFor(game.specificGameState.seats);
+        game.specificGameState.nestsDestroyed = count === 0 ? undefined : { [one]: 1, ...(count > 1 ? { [two]: count - 1 } : {}) };
+    };
+
+    it("sends neither the nest squares nor what the nests cost the next wave while a random enemy is unseen, to the null viewer too", async () => {
+        const game = swarm({ random: true });
+        for (const phase of ["muster", "battle"]) {
+            if (phase === "battle") await realmArenaMusterAll(game);
+            costing(game, 2);
+            for (const viewer of VIEWERS) {
+                const response = realmArenaStateToModel(game.specificGameState, viewer, null);
+                expect(response, `${phase} for ${viewer}`).not.toHaveProperty("nestSquares");
+                expect(response).not.toHaveProperty("enemy");
+                if (phase === "battle") expect(response.nextWave).toEqual({ round: 4 });
+                expect(JSON.stringify(response)).not.toContain("nestsDestroyed");
+            }
+        }
+    });
+
+    it("marks the nest squares from the muster once the enemy is known, to every viewer, and says what the nests cost the wave", async () => {
+        const game = swarm();
+        for (const viewer of VIEWERS) expect(realmArenaStateToModel(game.specificGameState, viewer, null).nestSquares).toEqual(nestSquaresOn(game));
+        await realmArenaMusterAll(game);
+        for (const viewer of VIEWERS) {
+            const { nextWave, nestSquares } = realmArenaStateToModel(game.specificGameState, viewer, null);
+            expect(nestSquares).toEqual(nestSquaresOn(game));
+            expect(nextWave).toMatchObject({ round: 4, name: "The Rush", upTo: true, arriving: 2 * 6 });
+            // At nothing destroyed, no note.
+            expect(nextWave).not.toHaveProperty("nestsDestroyed");
+        }
+        costing(game, 2);
+        for (const viewer of VIEWERS) {
+            const { nextWave } = realmArenaStateToModel(game.specificGameState, viewer, null);
+            // The note is told, the count stays the ceiling of what a wave could bring: never taken down by where a nest fell.
+            expect(nextWave).toEqual({ round: 4, name: "The Rush", upTo: true, arriving: 2 * 6, nestsDestroyed: 2 });
+        }
+    });
+
+    it("sends no nest squares against a faction with none", async () => {
+        const game = swarm({ enemy: "realm" });
+        await realmArenaMusterAll(game);
+        for (const viewer of VIEWERS) expect(realmArenaStateToModel(game.specificGameState, viewer, null)).not.toHaveProperty("nestSquares");
     });
 });
 

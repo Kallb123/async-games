@@ -653,6 +653,7 @@ export default function GameRealmArena({ params }: { params: Promise<{ gameid: u
                             owners={coop ? [...seats, ...warbandsFor(seats)] : seats}
                             waveDue={waveDue}
                             showCentre={gs.mission !== 'holdOut'}
+                            nestSquares={gs.nestSquares}
                             viewerId={myUserId}
                             colourFor={colourFor}
                             nameFor={playerName}

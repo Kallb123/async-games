@@ -7,7 +7,7 @@ import { mongoMap } from "@/utils/games/mongoMaps";
 import { capitalise, pluralize } from "@/utils/ui/text";
 import { userIdListToNamesAndMap } from "@/utils/users/clerk";
 import { RealmArenaGameType, type IGameCommand } from "@/utils/apiModels/GameLogic";
-import { battleOf, battleRoundsOf, budgetOf, enemyEvents, enemyHidden, enemyTurnsOf, nextWaveOf, toldTo, unnamed, warbandBudgetOf, type IRealmArenaOutcome, type RealmArenaBoard, type Told } from "./RealmArenaLogic";
+import { battleOf, battleRoundsOf, budgetOf, enemyEvents, enemyHidden, enemyTurnsOf, nestSquaresOf, nextWaveOf, toldTo, unnamed, warbandBudgetOf, type IRealmArenaOutcome, type RealmArenaBoard, type Told } from "./RealmArenaLogic";
 import { rollOffTurnOrder } from "@/utils/games/rollOff";
 import { CURRENT_RULESET_VERSION, registeredRulesets } from "./rulesets";
 import { ART_CHARACTER_IDS } from "./art";
@@ -552,6 +552,8 @@ export function gameStateToModel(
     const own = gs.phase === "muster" ? musters.find(muster => muster.owner === viewerId) : undefined;
     const view = viewOf(battleOf(gs, complete), viewerId);
     const nextWave = complete ? undefined : nextWaveOf(gs);
+    // A nest names the Swarm: its squares wait for the enemy to be known, as `enemy` does.
+    const nestSquares = !enemyHidden(gs.coop) || complete ? nestSquaresOf(gs) : undefined;
     return {
         map: gs.map,
         phase: gs.phase,
@@ -566,6 +568,7 @@ export function gameStateToModel(
         ...(gs.phase === "muster" ? { factions: [...gs.factions ?? REALM_ONLY] } : {}),
         ...(gs.coop?.mission ? { mission: gs.coop.mission } : {}),
         ...(nextWave ? { nextWave } : {}),
+        ...(nestSquares ? { nestSquares } : {}),
         ...(gs.coop?.mission === "holdOut" && gs.phase !== "muster" ? { enemiesDefeated: gs.fighters.filter(fighter => isWarband(fighter.owner) && fighter.hp <= 0 && !isStructure(fighter, gs)).length } : {}),
         ...(gs.coop?.difficulty ? { difficulty: gs.coop.difficulty } : {}),
         ...(gs.coop?.teamBlocks ? { teamBlocks: true as const } : {}),

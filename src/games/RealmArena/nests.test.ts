@@ -344,6 +344,28 @@ describe("a nest is nobody standing (§39.7)", () => {
         expect(waveOf(gs, owner, true, 13)).toEqual([]);
     });
 
+    it("tells the next wave's note, summed over the warbands, with the count reduced where it is exact and the ceiling in fog", async () => {
+        const { game, gs } = await mustered();
+        const [one, two] = warbandsOf(game);
+        downWarbandCharacters(game);
+        gs.roundsPlayed = 2;
+        const base = nextWaveOf(gs)!;
+        expect(base).not.toHaveProperty("nestsDestroyed");
+        gs.nestsDestroyed = { [one]: 2, [two]: 1 };
+        const cheaper = nextWaveOf(gs)!;
+        expect(cheaper.nestsDestroyed).toBe(3);
+        expect(cheaper.arriving).toBe(waveOf(gs, one, true, 4).length + waveOf(gs, two, true, 4).length);
+        expect(cheaper.arriving!).toBeLessThan(base.arriving!);
+
+        const fogged = (await mustered({ fog: true })).gs;
+        fogged.roundsPlayed = 2;
+        const ceiling = nextWaveOf(fogged)!;
+        fogged.nestsDestroyed = { [one]: 2, [two]: 1 };
+        // The ceiling is the purchase of the unreduced budget however many nests have fallen.
+        expect(nextWaveOf(fogged)).toEqual({ ...ceiling, nestsDestroyed: 3 });
+        expect(ceiling.upTo).toBe(true);
+    });
+
     it("doesn't count as an enemy downed, standing or arrived in the result, or on the wire", async () => {
         seedRolls(5);
         const { game, gs } = await mustered();
@@ -481,6 +503,27 @@ describe("destroying a nest thins the next wave (§39.7)", () => {
         await landWave(game, 4);
         expect(fighters(game).find(one => one.id === nest.id)!.hp).toBe(4);
         expect(gs.nestsDestroyed).toBeUndefined();
+    });
+
+    it("tells the team the nests regrow as the wave lands, where it knows its enemy, and only when one had fallen", async () => {
+        const known = await mustered();
+        nestsOf(known.game, warbandOwner(0))[0].hp = 0;
+        await landWave(known.game, 4);
+        expect(text(known.game)).toContain("The nests regrow");
+        // The wave is announced first, so it reads before it in the log, newest first.
+        expect(text(known.game).indexOf("The nests regrow")).toBeLessThan(text(known.game).indexOf("The Rush arrives"));
+
+        const hurt = await mustered();
+        nestsOf(hurt.game)[0].hp = 3;
+        await landWave(hurt.game, 4);
+        expect(text(hurt.game)).not.toContain("The nests regrow");
+
+        // A random enemy that hasn't been seen is named by neither the wave's theme nor its nests.
+        const hidden = await mustered({ fog: true, coop: { enemy: "swarm", mission: "holdOut", random: true } });
+        nestsOf(hidden.game, warbandOwner(0))[0].hp = 0;
+        await landWave(hidden.game, 4);
+        expect(hidden.gs.coop!.enemySeen).not.toBe(true);
+        expect(text(hidden.game).filter(line => /nest|Rush/.test(line))).toEqual([]);
     });
 
     it("stays down while the nests are all there is to be done: a count of nothing changes no wave", async () => {

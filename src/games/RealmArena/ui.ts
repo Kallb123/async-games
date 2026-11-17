@@ -41,15 +41,18 @@ export function coopColourOf(viewerId: string, owner: string): string {
 /**
  * What the enemy's line on the scoreboard says of Hold Out's next wave
  * (§30.3, §30.11), as the wire tells it (`nextWave`) in battle round `round`:
- * when it lands and how many it brings — in fog, the most it could.
+ * when it lands and how many it brings — in fog, the most it could — and what
+ * the nests destroyed have cost it.
  */
 export function waveLineOf(nextWave: NextWave | undefined, round: number): string {
     if (!nextWave) return 'final wave landed';
     const count = nextWave.arriving === undefined ? '' : `${nextWave.upTo ? 'up to ' : ''}${nextWave.arriving} ${nextWave.name ? 'arriving' : 'coming'}`;
+    // What the nests the team has downed have cost it (§39.7): "(1 nest destroyed)".
+    const nests = nextWave.nestsDestroyed ? ` (${nextWave.nestsDestroyed} ${nextWave.nestsDestroyed === 1 ? 'nest' : 'nests'} destroyed)` : '';
     // A themed wave (§39.6) is named: "Round 7: The Bile, 9 arriving".
-    if (nextWave.name) return `Round ${nextWave.round}: ${nextWave.name}${count && `, ${count}`}`;
+    if (nextWave.name) return `Round ${nextWave.round}: ${nextWave.name}${count && `, ${count}`}${nests}`;
     const when = nextWave.round === round + 1 ? 'wave next round' : `next wave ${nextWave.round}`;
-    return count ? `${when} · ${count}` : when;
+    return `${count ? `${when} · ${count}` : when}${nests}`;
 }
 
 /** The letter a square's terrain is drawn with on the map: what the board styles it by. */
