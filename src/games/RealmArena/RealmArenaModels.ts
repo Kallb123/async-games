@@ -9,7 +9,8 @@ import { userIdListToNamesAndMap } from "@/utils/users/clerk";
 import { RealmArenaGameType, type IGameCommand } from "@/utils/apiModels/GameLogic";
 import { battleOf, battleRoundsOf, budgetOf, enemyEvents, enemyHidden, enemyTurnsOf, nextWaveOf, toldTo, unnamed, warbandBudgetOf, type IRealmArenaOutcome, type RealmArenaBoard, type Told } from "./RealmArenaLogic";
 import { rollOffTurnOrder } from "@/utils/games/rollOff";
-import { CURRENT_RULESET_VERSION } from "./rulesets";
+import { CURRENT_RULESET_VERSION, registeredRulesets } from "./rulesets";
+import { ART_CHARACTER_IDS } from "./art";
 import { randomInt } from "@/utils/games/random";
 import { userToken } from "@/utils/games/history";
 import { BATTLE_SIZE_NAMES, CHARACTERS, COOP_PLAYERS, coopTeamMax, DIFFICULTY_NAMES, FACTION_IDS, factionById, FACTIONS, fitsCoop, isFactionId, playableFactionsOf, RANDOM_ENEMY, REALM_ONLY, UNKNOWN_ENEMY, type BattleSize, type CharacterId, type Difficulty, type FactionId } from "./characters";
@@ -566,10 +567,13 @@ export function gameStateToModel(
         // the board has no use for it, and in fog it would name whose blast
         // hurt a character the viewer couldn't see being hit.
         // `hatchedBy` (§39.5) is a Brood Queen's id, which would name one the viewer couldn't see.
+        // `tally` counts what a character has done, and an opponent's would count abilities used
+        // out of sight — a Queen's unseen hatches — so only the viewer's own side is told it.
         // `musteredItem` (§39.4) is a sealed muster's purchase, so only the viewer's own side is told it:
         // once the item is spent, an opponent seeing it would learn what was bought and used out of sight.
-        fighters: view.fighters.map(storedFighter).map(({ woundedBy: _woundedBy, effectSources: _effectSources, hatchedBy: _hatchedBy, musteredItem, ...fighter }) => ({
+        fighters: view.fighters.map(storedFighter).map(({ woundedBy: _woundedBy, effectSources: _effectSources, hatchedBy: _hatchedBy, tally, musteredItem, ...fighter }) => ({
             ...fighter,
+            ...(tally && viewerId !== null && allied(view, fighter.owner, viewerId) ? { tally } : {}),
             ...(musteredItem && viewerId !== null && allied(view, fighter.owner, viewerId) ? { musteredItem } : {}),
             maxHp: maxHpOf(fighter, gs), maxAp: actionPointsOf(fighter, gs),
         })),
@@ -979,12 +983,14 @@ function formatRaceChart(stats: IRealmArenaGameResultStats, perRound: Map<string
 /** The damage each kind of character dealt, a bar each in the muster's order, stacked by whose it was. */
 function formatDamageChart(stats: IRealmArenaGameResultStats): GameResultBarChart | undefined {
     const rows = stats.fighting ?? [];
-    const bars = CHARACTER_IDS.flatMap(character => {
+    // Named by whichever catalogue holds the character: an elite (§39.5) is in no catalogue before version 12.
+    const names = new Map(registeredRulesets.flatMap(ruleset => Object.entries(ruleset.CHARACTERS)).map(([id, character]) => [id, character.name]));
+    const bars = ART_CHARACTER_IDS.flatMap(character => {
         const kind = rows.filter(row => row.character === character);
         if (kind.length === 0) return [];
         const segments: Record<string, number> = {};
         for (const row of kind) segments[row.userId] = (segments[row.userId] ?? 0) + row.dealt;
-        return [{ label: CHARACTERS[character].name, value: kind.reduce((sum, row) => sum + row.dealt, 0), segments }];
+        return [{ label: names.get(character) ?? character, value: kind.reduce((sum, row) => sum + row.dealt, 0), segments }];
     });
     if (bars.length === 0) return undefined;
     return { kind: "bar", title: "Damage by character", yLabel: "Damage", bars, ...(isCoopRecord(stats) ? { extraSeries: [ENEMY_SERIES] } : {}) };

@@ -36,6 +36,7 @@ import {
     musterRefusal,
     nextWaveRound,
     freeSquares,
+    nextFighterId,
     newFighter,
     pickOf,
     readyMadeMuster,
@@ -538,7 +539,7 @@ function clause(event: BattleEvent, fighters: readonly Fighter[], actor: string,
     if (veiled !== undefined) return veiled;
     switch (event.kind) {
         case "ability": return `used ${ABILITIES[event.ability]!.name} with ${name(event.fighter)}${event.fizzled ? `, but there was no room to stand it` : ""}`;
-        case "hatched": return `hatched a Skitterling with ${name(event.fighter)}`;
+        case "hatched": return `${ACTION_PHRASES.hatch} with ${name(event.fighter)}`;
         case "moved": return `${event.via ? `moved with ${ABILITIES[event.via]!.name}` : event.sneaking ? "sneaked" : "moved"} ${name(event.fighter)}`;
         case "shot":
             return event.reaction
@@ -786,11 +787,13 @@ export function witnessed(events: readonly BattleEvent[], battle: BattleState, v
 }
 
 /** An area event without the characters the viewer didn't see it catch: no id, and no damage keyed by one. */
-function unseenOut<E extends { targets: number[]; damages?: Record<number, number> }>(event: E, saw: (id: number) => boolean): E {
+function unseenOut<E extends { targets: number[]; damage: number; damages?: Record<number, number> }>(event: E, saw: (id: number) => boolean): E {
     if (event.targets.every(saw)) return event;
     const { damages, ...rest } = event;
     const targets = event.targets.filter(saw);
-    return { ...rest, targets, ...(damages ? { damages: Object.fromEntries(targets.map(id => [id, damages[id]])) } : {}) } as E;
+    // A tally of damage that's the same for all says nothing; one that isn't would name the unseen Brute by its absence.
+    const kept = damages && targets.some(id => damages[id] !== event.damage) ? { damages: Object.fromEntries(targets.map(id => [id, damages[id]])) } : {};
+    return { ...rest, targets, ...kept } as E;
 }
 
 /**
@@ -853,11 +856,12 @@ export function toldTo(events: readonly BattleEvent[], battle: BattleState, view
                 return keep(saw(event.fighter) || saw(event.target));
             case "spotted":
                 return keep(saw(event.fighter) || saw(event.by));
-            // A hatchling standing on a square the viewer sees is told in full. A viewer
-            // who saw only the Queen is told it used Hatch, and not where or what stood.
+            // A viewer who saw the Queen is told what she did: in full when it saw the
+            // hatchling's square too, else only that she used Hatch. One who saw the
+            // square and not the Queen is told nothing — the Skitterling simply appears.
             case "hatched":
-                return saw(event.target) || seen(event.at) ? [event]
-                    : saw(event.fighter) ? [{ kind: "ability", fighter: event.fighter, ability: "hatch" }] : [];
+                return !saw(event.fighter) ? []
+                    : saw(event.target) || seen(event.at) ? [event] : [{ kind: "ability", fighter: event.fighter, ability: "hatch" }];
             case "downed":
             case "hunkered":
             case "shieldWall":
@@ -1048,7 +1052,7 @@ export function waveOf(gs: IRealmArenaSpecificGameState, owner: string, growing:
     }
     const preferred = planned.map(pick => pick.square);
     const zone = freeSquares(gs, [...preferred, ...field.deployments[gs.seats.length + warband].filter(square => !preferred.includes(square))]);
-    let nextId = Math.max(-1, ...gs.fighters.map(fighter => fighter.id)) + 1;
+    let nextId = nextFighterId(gs.fighters);
     return missing.slice(0, zone.length).map((pick, index) => newFighter(nextId++, owner, pick.character, zone[index], pick.item ?? null, pick.option, undefined, gs));
 }
 

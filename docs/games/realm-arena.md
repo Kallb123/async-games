@@ -5195,16 +5195,18 @@ All values *Proposed*.
   version 12, and typing them optional would put a `!` on every lookup in the
   game. No battle of an earlier version can hold an elite (its muster refuses
   one and nothing else creates one), so a lookup by a fighter's character
-  always finds it; `withoutElites` in `rulesets.ts` is the one place that says so.
+  always finds it; `registered` in `rulesets.ts` is the one place that says so, typing a catalogue before version 12 as holding every id while still holding it to version 7's characters.
 - **`factionOf` looks in `elites` too**, which is what `ARMOUR_EXEMPT_FACTIONS`
   reads. The other readers of a faction's characters are the muster's roster
   (`useMusterDraft`, `factionRosterLine`, `musterRefusal`) and mastery's active
   set (`masteryRoster`), all meant to leave the elites out; the ready-made
   squads name none. `CHARACTER_IDS` is the current catalogue's keys, so it gains
-  the three at release (§39.9): it feeds the mastery rows and the sprite sheet's
-  rows (`CHARACTER_ART`), which the art work has to leave room for. The battle
-  record's rows (`battleRecorder`) already read the battle's own catalogue
-  instead, so an elite has its row in a version-12 battle today.
+  the three at release (§39.9); of what reads it, only the mastery rows,
+  `squadCounts` and the admin's `ALL_UNITS` pick the elites up then. The sprite
+  sheets' rows no longer do: they are laid out from `ART_CHARACTER_IDS`
+  (below). The battle record's rows (`battleRecorder`) and the damage chart read
+  the characters of the battle's own catalogue, so an elite has its row and its
+  bar in a version-12 battle today.
 - **Carapace** is `armour: 1` on the character, read where Braced's armour is
   read: `armourOf` (the fighter card's "Armour 1", as for Hold Out's team) and
   `damageTo` (every shot, graze, strike, blast and the planner's previews)
@@ -5212,7 +5214,7 @@ All values *Proposed*.
   Burning and poison are not blows and `tickEffects` never reads it. The
   ability `carapace` is a passive with no cost, as Bulwark is: `check` refuses
   it as passive, it has an `ACTION_AIMS` entry (`{ at: "self" }`, which the
-  guard test demands of every ability, and which now also walks version 12's)
+  guard test demands of every ability of every registered catalogue)
   and is in `INSTANT_KINDS`, though nothing offers it.
 - **Bile** is `{ kind: "bile", fighter, at }`, aimed like Ice Ball
   (`{ at: "square", range: 10, useful: "area" }`; the range is the catalogue's,
@@ -5233,13 +5235,15 @@ All values *Proposed*.
   `distance` to the nearest enemy of those the Queen's side sees, then by
   lowest square number: all there is with no enemy in sight.
 - **The hatchling** is an ordinary Skitterling from `newFighter`, the Queen's
-  owner's, with the next id (the highest standing or fallen, plus one, as a wave
-  takes it), the Queen's `facing`, and **0 AP: it acts from its owner's next
-  turn**, which the plan left open. A new optional `Fighter.hatchedBy` is the
+  owner's, with the next id (`nextFighterId`: the highest standing or fallen,
+  plus one, as a wave takes it), no `facing` (it has none until it first moves),
+  and **0 AP: it acts from its owner's next turn**, which the plan left open. A new optional `Fighter.hatchedBy` is the
   Queen's id: it caps her brood, outlives her (so her hatchlings stay when she
   falls) and is worth a Skitterling's points as any is. It is a key of the
   `fighters` Mixed path, so it persists, and the response strips it with
-  `woundedBy` — it would name a Queen out of sight.
+  `woundedBy` — it would name a Queen out of sight. The id is sequential, so, as
+  a wave's is, it lets a viewer count the fighters made out of its sight:
+  accepted, as for waves.
   A wave (`waveOf`) doesn't count a hatchling as one of its warband's squad:
   they are bodies on top of it, so hatching never leaves the next wave short.
 - **Placement is the truth, choice is the view** — as Reinforce's is (§39.4).
@@ -5251,17 +5255,27 @@ All values *Proposed*.
   its sight (25 squares, and `nextTo` is `canSee`), so no hidden enemy can ever
   hold the square the view thought free today, and the fizzle has no test that
   reaches it; the test pins the view-then-truth shape instead.
-- **The event** is `hatched` (`fighter`, `target`, `at`). `toldTo` tells it in
-  full to whoever sees the hatchling's square or owns the Queen, tells a viewer
-  who saw only the Queen that it used Hatch (`ability`, with no square or id),
-  and nobody else anything; the new fighter is in the viewer's response only
-  where `viewOf` shows it. `noteSighting` and the sightings memory read the
+- **The event** is `hatched` (`fighter`, `target`, `at`). `toldTo` splits it
+  three ways on what the viewer saw of the Queen: one who saw her is told in
+  full if it saw the hatchling's square too, else only that she used Hatch
+  (`ability`, with no square or id); one who saw only the square is told
+  nothing — the Skitterling simply appears among the fighters, as any that
+  walks into sight — since the event would name a Queen it never saw and a kind
+  only a Queen makes; one who saw neither, nothing. The log line is the
+  event's, so that viewer's never names Hatch. The new fighter is in the
+  viewer's response only where `viewOf` shows it. `noteSighting` and the sightings memory read the
   fighters after the act, so a hatchling out of sight is not seen and one in
   sight is. A hidden random enemy's (§29.3) hatch is told as nothing
   (`unnamed`), and a veiled line says only that an ability was used. The log
   reads "The Swarm hatched a Skitterling with their Brood Queen" and "…spat
   bile with their Bile Lobber, hitting 2 characters for 2"; the recap's row is
   a manoeuvre with the egg glyph, and a blast's with Bile's.
+- **What else would tell.** A fighter's `tally` counts what it has done, abilities
+  among them, so an opponent's would count a Queen's hatches out of sight: the
+  response sends it only to the viewer's own side, as `musteredItem` (§39.4).
+  A blast told with fewer targets than it hit (`unseenOut`) keeps its `damages`
+  only when a kept target's damage differs from the event's `damage`; otherwise
+  the key would show an unseen Brute's reduced damage by its presence alone.
 - **Undo and mastery.** Neither Hatch nor Bile is in `UNDOABLE_KINDS`, and a
   `hatched` event isn't peaceful, so a hatch clears the undo stack. Both are
   `abilities` in `TALLIED`, as Burst is, which earns a warband nothing.
@@ -5275,17 +5289,21 @@ All values *Proposed*.
 - **Screens.** The stats ⓘ reads the catalogue: the Brute's sheet has an Armour
   tile and the three abilities their rows. The turn sheet's tables (hint, send
   label, row) have the three, for a character a player never has.
-- **Art** is separate work. Each is modelled in `art-masters/realmarena/characters`
-  and rendered by `npm run ra-characters`, for the isometric board and the 3D one;
-  to start with, each can be its base character's model, larger and with one
-  addition (the Queen's egg sac, the Brute's plates, the Lobber's swollen
-  tail). Until it lands `CHARACTER_MARK` has an egg, a rock and a sick face,
-  and the new characters have no sprite.
+- **Art** is drawn. Each elite's master is its base's, made larger with
+  `scaled()` in `kit.mjs` — the Broodmother ×1.25, the Ravager ×1.3, the Spitter
+  ×1.25 — plus one addition each (the Queen's great egg sac, the Brute's plates,
+  the Lobber's swollen gland). The sheets, `characters.json` and
+  `scripts/realmarena-characters.mjs` are laid out from `ART_CHARACTER_IDS`
+  (`art.ts`): every character of every registered catalogue, the current roster
+  first, so no row moves at release. The sheets are now 1024 × 6080.
+- **No command version.** Hatch and Bile are new action kinds only an elite has,
+  and a battle before version 12 refuses both, so nothing an older client sends
+  changes meaning.
 
 **Tests.** `elites.test.ts`: no muster accepts an elite (`musterRefusal` for
 every faction, and the muster command from the Swarm and the Realm); a Hatch's
 square (nearest a seen enemy, tied by square number, the lowest with nobody in
-sight, never a step too high), its id, facing, 0 AP and `hatchedBy`; the cap
+sight, never a step too high), its id, no facing, 0 AP and `hatchedBy`; the cap
 and its release as one falls; no free square, no AP and cooldown; the brood
 staying when the Queen falls; armour on a shot, a strike and a blast, adding
 to Braced, never under 1, and not reducing burning or poison; Bile's 3×3
@@ -5294,11 +5312,12 @@ refused out of sight; Hatch and Bile as commands, not undoable and tallied.
 `elitesReplay.test.ts` gives the Swarm a squad of elites in a mocked catalogue
 and replays a whole Hold Out, with and without fog, that hatches and spits
 bile. `rulesets.test.ts` pins the new entries and that version 11 is otherwise
-unchanged; the `ACTION_AIMS` guards walk version 12; `hiddenHands.test.ts` has
-a hatch in fog; `ai.test.ts` has the planner using both; `planner.pace.test.ts`
+unchanged; the `ACTION_AIMS` guard walks every registered catalogue;
+`art.test.ts` pins the sheets' size to `ART_CHARACTER_IDS` and a model for each;
+`hiddenHands.test.ts` has a hatch in fog (a viewer who sees the Queen, the square
+only, or neither), a Queen's tally kept to its side and a blast's uniform
+`damages` dropped; `ai.test.ts` has the planner using both; `planner.pace.test.ts`
 times a Queen with three hatchlings, a Brute and a Lobber.
-
-- **Until PR 5** the elites appear in no battle outside tests.
 
 ### 39.6 PR 5: Waves that differ, bought with points
 
@@ -5615,4 +5634,4 @@ Realm, its sibling in the same world.
 | 1.65 | Hold Out against the Swarm, planned and not built (§39): Taunt reaching a radius, a Bloater bursting when it's downed, the rally as each player's choice of a heal, a downed character back or their items restocked, three elite Swarm characters, themed waves bought with points, nests whose destruction shrinks the next wave, and temperaments for the planner — all in one rules catalogue, version 12, released by the last PR. |
 | 1.66 | §39 PR 1 builds Taunt's radius (§39.2): `catalogues/v12.ts`, registered and not current, where Taunt braces allies within 3 squares of the Knight; the planner lists Taunt only with an ally in that reach; the balance harness and its workflow take a rules version (`--rules`). On the board, an ability with a radius — Blessing today, Taunt in version 12 — is armed before it's sent, shading its reach and naming who it would touch. Its balance is not yet measured. |
 | 1.67 | §39 PR 2 builds the Bloater's death burst (§39.3): in rules version 12, still not current, a Bloater downed by a blow, a blast, burning or poison bursts where it falls, as its Burst does, each Bloater once and chains in the order they fell, its knock-outs scoring for whoever downed it. The event is `burst` with `downed: true`. Aiming at a Bloater shades its burst and rings whoever it would catch. |
-| 1.68 | §39 PR 4 builds the Swarm's three elites (§39.5) in the unreleased rules version 12: the Brood Queen (Hatch stands a Skitterling on a free square next to it, nearest an enemy it sees, at most three at a time, acting from its owner's next turn), the Carapace Brute (armour 1, added to Braced's and never reducing a blow under 1) and the Bile Lobber (Bile: 2 and Corroded to a 3×3 within 10, friend or foe, no roll). `Faction.elites` keeps them out of every muster; `Character.armour`, `Fighter.hatchedBy` and the `hatched` and `bile` events are new, and absent means the old behaviour. |
+| 1.68 | §39 PR 4 builds the Swarm's three elites (§39.5) in the unreleased rules version 12: the Brood Queen (Hatch stands a Skitterling on a free square next to it, nearest an enemy it sees, at most three at a time, acting from its owner's next turn), the Carapace Brute (armour 1, added to Braced's and never reducing a blow under 1) and the Bile Lobber (Bile: 2 and Corroded to a 3×3 within 10, friend or foe, no roll). `Faction.elites` keeps them out of every muster; `Character.armour`, `Fighter.hatchedBy` and the `hatched` and `bile` events are new, and absent means the old behaviour. Art for each is its base master scaled with an addition, and the sprite sheets grow to 1024 × 6080, laid out from `ART_CHARACTER_IDS`. |

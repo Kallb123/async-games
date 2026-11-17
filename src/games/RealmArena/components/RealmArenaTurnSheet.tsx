@@ -11,7 +11,7 @@ import Stat from '@/components/ui/Stat';
 import { EFFECTS, type AbilityId, type Affliction } from '@/games/RealmArena/characters';
 import { ITEM_ART } from '@/games/RealmArena/art';
 import { ATTACK_AP, HUNKER_AP, REACTION_COST, bankedAp, abilitiesOf, allied, check, damageTo, fighterById, hasEffect, healedEffects, isStanding, itemOf, maxHpOf, shotEffect, shotOdds, smokeSquares, strikeChance, weaponOf, type Action, type BattleState, type Fighter, type OddsBreakdown } from '@/games/RealmArena/rules';
-import { abilityWait, AREA_BLAST, FLANKED_WORD, ODDS_FLANK_WORD, oddsLines, whoseName } from '@/games/RealmArena/ui';
+import { abilityWait, AREA_BLAST, FLANKED_WORD, HATCH_MARK, ODDS_FLANK_WORD, oddsLines, whoseName } from '@/games/RealmArena/ui';
 import { rangeSquares, shotOf, targetsOf, type TargetKind } from '@/games/RealmArena/tactics';
 import { ABILITY_MARK, CHARACTER_MARK, weaponLine, weaponMark } from '@/games/RealmArena/roster';
 import { healingHp, isInstantIn, isInstantKind, isAtSquare, landsOf, type Aim, type InstantKind, type TurnDraft } from '@/games/RealmArena/useTurnDraft';
@@ -104,7 +104,7 @@ const ABILITY_ROW: Readonly<Record<AbilityId, { icon: string; tag: string; needs
     leap: { icon: ABILITY_MARK, tag: 'Aim' },
     iceBall: { icon: AREA_BLAST.iceBall.icon, tag: 'Aim' },
     bile: { icon: AREA_BLAST.bile.icon, tag: 'Aim' },
-    hatch: { icon: '🥚', tag: 'Use' },
+    hatch: { icon: HATCH_MARK, tag: 'Use' },
     carapace: { icon: ABILITY_MARK, tag: 'Use' },
     shove: { icon: ABILITY_MARK, tag: 'Aim', needs: 'shove' },
     poisonArrow: { icon: ABILITY_MARK, tag: 'Aim', needs: 'poisonArrow' },

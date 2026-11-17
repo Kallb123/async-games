@@ -839,7 +839,7 @@ export function eventLines(events: readonly ToldEvent[], fighters: readonly Figh
     const draft = (event: ToldEvent, index: number): LineDraft[] => {
         switch (event.kind) {
             case "ability": return [{ icon: "✦", title: `${Name(event.fighter)} used ${ABILITIES[event.ability]!.name}`, ...(event.fizzled ? { sub: "No room to stand it" } : {}) }];
-            case "hatched": return [{ icon: "🥚", title: `${Name(event.fighter)} hatched a Skitterling`, sub: "It acts from its owner's next turn" }];
+            case "hatched": return [{ icon: HATCH_MARK, title: `${Name(event.fighter)} hatched a Skitterling`, sub: "It acts from its owner's next turn" }];
             case "moved":
                 return index === firstMove ? [{ icon: "👣", title: `${Name(event.fighter)} ${event.via ? `moved with ${ABILITIES[event.via]!.name}` : event.sneaking ? "sneaked" : "moved"}` }] : [];
             case "shot": {
@@ -1236,6 +1236,9 @@ const SHOT_VIA_MISSILE: Readonly<Partial<Record<AbilityId, Missile>>> = { poison
 
 /** The glow each blessing puts down under whoever takes it (§34): Taunt's, Blessing's and Focus's light, and Ward's ring. */
 const BUFF_BURST: Readonly<Partial<Record<EffectId, BurstKind>>> = { braced: "aura", blessed: "aura", focused: "aura", warded: "ward" };
+
+/** The glyph a Brood Queen's Hatch leads with (§39.5) on its row, its line and its recap. */
+export const HATCH_MARK = "🥚";
 
 /**
  * How each ability that lands on a 3×3 shows (§26.1, §33.2): the glyph its

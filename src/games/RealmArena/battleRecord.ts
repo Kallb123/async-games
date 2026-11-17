@@ -19,7 +19,7 @@ import type { IReplayStep } from "@/utils/games/replay";
 import { type CharacterId } from "./characters";
 import type { IRealmArenaSpecificGameState } from "./RealmArenaModels";
 import { isRallyAction, type RallyChoice } from "./rally";
-import { areaDamage, allied, battleRounds, ENEMY_SIDE, isStanding, isWarband, knockoutPoints, sideOf, squadHp, TEAM_SIDE, waveArrives, type BattleEvent, type BattleState, type Fighter } from "./rules";
+import { areaDamage, allied, battleRounds, BLAST_EVENT_KINDS, ENEMY_SIDE, isStanding, isWarband, knockoutPoints, sideOf, squadHp, TEAM_SIDE, waveArrives, type BattleEvent, type BattleState, type Fighter } from "./rules";
 
 /** What one player's characters of one kind did in a battle, pooled as their mastery is (§23.1). */
 export interface FightingRecord {
@@ -195,7 +195,7 @@ export function battleRecorder(seats: readonly string[], sides?: BattleState["si
             else attacker.dealt += taken;
         };
         for (const event of events) {
-            if (event.kind === "shot" || event.kind === "struck" || event.kind === "iceBall" || event.kind === "bile" || event.kind === "fireball" || event.kind === "dynamite" || event.kind === "thrown" || event.kind === "demolished" || event.kind === "burst") attacker = event.fighter;
+            if ((event.kind === "shot" || event.kind === "struck" || BLAST_EVENT_KINDS.has(event.kind)) && "fighter" in event) attacker = event.fighter;
             switch (event.kind) {
                 case "effect": {
                     const sources = effectSources.get(event.fighter) ?? {};

@@ -16,7 +16,6 @@
 import { FACING_COUNT, FULL_HEIGHT, TERRAIN, type Facing, type TerrainLetter } from "@/utils/games/battlefield/terrain";
 import { ISO_HALF_HEIGHT, ISO_HALF_WIDTH, ISO_STEP, type IsoRotation } from "@/utils/ui/isometric";
 import { EFFECT_IDS, ITEM_IDS, type CharacterId, type ItemId } from "./characters";
-import { CHARACTER_IDS } from "./roster";
 import { registeredRulesets } from "./rulesets";
 
 /**
@@ -27,10 +26,7 @@ import { registeredRulesets } from "./rulesets";
  * introduced them, so a character's row never moves when a release lands.
  * The sheets, `characters.json` and the sheet script are all laid out from it.
  */
-export const ART_CHARACTER_IDS: readonly CharacterId[] = [...new Set([
-    ...CHARACTER_IDS,
-    ...registeredRulesets.flatMap(ruleset => Object.keys(ruleset.CHARACTERS) as CharacterId[]),
-])];
+export const ART_CHARACTER_IDS: readonly CharacterId[] = [...new Set(registeredRulesets.flatMap(ruleset => Object.keys(ruleset.CHARACTERS) as CharacterId[]))];
 
 /** The poses a character is drawn in, in the order their rows come down the characters' sheet. */
 export const CHARACTER_POSES = ["standing", "fallen"] as const;

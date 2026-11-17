@@ -374,6 +374,9 @@ export type BattleEvent =
     | { kind: "burned"; fighter: number; damage: number; effect?: EffectId }
     | { kind: "scored"; player: string; points: number; reason: "centre" | "knockout" | "assist" };
 
+/** The events that hit a list of `targets` at once — a blast, a flask, a Demolish, a Burst — each carrying its `fighter`. */
+export const BLAST_EVENT_KINDS: ReadonlySet<BattleEvent["kind"]> = new Set<BattleEvent["kind"]>(["fireball", "iceBall", "bile", "dynamite", "thrown", "demolished", "burst"]);
+
 /** Actual damage of an area hit; historical events carry one amount for everyone. */
 export const areaDamage = (event: { damage: number; damages?: Readonly<Record<number, number>> }, target: number): number => event.damages?.[target] ?? event.damage;
 
@@ -1425,9 +1428,8 @@ export const brood = (state: Pick<BattleState, "fighters">, queen: Pick<Fighter,
  */
 export function hatchSquares(state: BattleState, queen: Fighter): Square[] {
     const enemies = state.fighters.filter(one => isEnemy(state, queen, one));
-    const free = areaAround(state.field, queen.square).filter(square => square !== queen.square
-        && state.field.tiles[square].terrain.standable && inMeleeReach(state.field, queen.square, square, state)
-        && !state.fighters.some(one => isStanding(one) && one.square === square));
+    const free = freeSquares(state, areaAround(state.field, queen.square).filter(square => square !== queen.square
+        && state.field.tiles[square].terrain.standable && inMeleeReach(state.field, queen.square, square, state)));
     const nearest = (square: Square) => Math.min(Infinity, ...enemies.map(enemy => distance(state.field, square, enemy.square)));
     return free.sort((a, b) => nearest(a) - nearest(b) || a - b);
 }
@@ -1829,15 +1831,14 @@ export function act(state: BattleState, player: string, action: Action, roll: Ro
             // left the Hatch fizzles, the AP and the cooldown spent (§39.5).
             const ability = ABILITIES.hatch!;
             const view = viewOf(state, player);
-            const square = hatchSquares(view, fighterById(view, actor.id)!).find(one => !run.fighters.some(other => isStanding(other) && other.square === one));
+            const [square] = freeSquares(run, hatchSquares(view, fighterById(view, actor.id)!));
             if (square === undefined) {
                 events.push({ kind: "ability", fighter: actor.id, ability: action.kind, fizzled: true });
                 break;
             }
-            const id = Math.max(-1, ...run.fighters.map(one => one.id)) + 1;
+            const id = nextFighterId(run.fighters);
             run.fighters.push({
                 ...newFighter(id, actor.owner, ability.hatches!, square, null, undefined, false, state),
-                ...(actor.facing !== undefined ? { facing: actor.facing } : {}),
                 hatchedBy: actor.id,
             });
             events.push({ kind: "hatched", fighter: actor.id, target: id, at: square });
@@ -1985,6 +1986,9 @@ export function freshTurn(fighter: Fighter, state: RulesContext): void {
     delete fighter.usedThisTurn;
     delete fighter.attacksThisTurn;
 }
+
+/** The id the next character to join the battle takes: one past the highest ever held. */
+export const nextFighterId = (fighters: readonly Pick<Fighter, "id">[]): number => Math.max(-1, ...fighters.map(fighter => fighter.id)) + 1;
 
 /** The squares of `zone`, in its order, that no standing character holds. */
 export function freeSquares(state: Pick<BattleState, "fighters">, zone: readonly Square[]): Square[] {

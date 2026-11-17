@@ -36,22 +36,22 @@ function freeze<T>(value: T): T {
     return value;
 }
 
-/** A catalogue before version 12 holds no elite (§39.5): typed as if it did, which nothing in a battle of it can tell. */
-function withoutElites<T extends { CHARACTERS: object }>(catalogue: T): T & Pick<RealmArenaRuleset, "CHARACTERS"> {
-    return catalogue as T & Pick<RealmArenaRuleset, "CHARACTERS">;
-}
+type CatalogueBeforeElites = Omit<RealmArenaRuleset, "CHARACTERS"> & { CHARACTERS: Readonly<Record<keyof typeof catalogueV7.CHARACTERS, Character>> };
 
-const rulesetV7: RealmArenaRuleset = freeze(withoutElites(catalogueV7));
-const rulesetV8: RealmArenaRuleset = freeze(withoutElites(catalogueV8));
-const rulesetV9: RealmArenaRuleset = freeze(withoutElites(catalogueV9));
-const rulesetV10: RealmArenaRuleset = freeze(withoutElites(catalogueV10));
-const rulesetV11: RealmArenaRuleset = freeze(withoutElites(catalogueV11));
+/** No battle before version 12 holds an elite (§39.5), so its catalogue may be typed as holding every id. */
+const registered = (catalogue: CatalogueBeforeElites): RealmArenaRuleset => freeze(catalogue) as RealmArenaRuleset;
+
+const rulesetV7: RealmArenaRuleset = registered(catalogueV7);
+const rulesetV8: RealmArenaRuleset = registered(catalogueV8);
+const rulesetV9: RealmArenaRuleset = registered(catalogueV9);
+const rulesetV10: RealmArenaRuleset = registered(catalogueV10);
+const rulesetV11: RealmArenaRuleset = registered(catalogueV11);
 // Registered but not current: version 12 is built across §39 and released by its last PR.
 const rulesetV12: RealmArenaRuleset = freeze(catalogueV12);
 
 // Games created before the balance release had no stamp, or one below 7.
 // These are complete definitions, including the old descriptions and limits.
-const legacyRuleset: RealmArenaRuleset = freeze(withoutElites({
+const legacyRuleset: RealmArenaRuleset = registered({
     ...catalogueV7,
     RULES: { ...catalogueV7.RULES, MELEE_ROLLS: false, MELEE_ACCURACY: 100, FAR_SHOT_DISTANCE: null,
         TEAM_HP_FACTOR: 1, ARMOUR: 0, HOLD_OUT_ENEMY_STEPS: 0, HOLD_OUT_PAIR_ROUNDS: 15 },
@@ -64,7 +64,7 @@ const legacyRuleset: RealmArenaRuleset = freeze(withoutElites({
         heal: { name: "Heal", ap: 2, cooldown: 2, range: 12, hp: 4, description: "Restore 4 HP to itself or an ally it can see within 12 squares, and clear burning, slowed, stunned and corroded" },
         raise: { name: "Raise", ap: 3, cooldown: 0, apOnRaise: 0, oncePerBattle: true, description: "Bring a downed ally next to them back at half HP. Once a battle" },
     },
-}));
+});
 
 const RULESETS: Readonly<Record<number, RealmArenaRuleset>> = Object.freeze({
     0: legacyRuleset, 1: legacyRuleset, 2: legacyRuleset, 3: legacyRuleset,

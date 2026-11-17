@@ -3,7 +3,7 @@ import { buildBattlefield } from "@/utils/games/battlefield/terrain";
 import { at } from "@/utils/games/battlefield/testFixtures";
 import { ABILITIES, type CharacterId } from "./characters";
 import { ACTION_POINTS, check, newFighter, type Action, type Fighter } from "./rules";
-import { CURRENT_RULESET_VERSION, ruleValuesOf, rulesetFor } from "./rulesets";
+import { CURRENT_RULESET_VERSION, ruleValuesOf, registeredRulesets } from "./rulesets";
 import { ACTION_AIMS, attackOptions, rangeSquares, reactionPreviews, shotOf, targetsOf } from "./tactics";
 
 /** Squares as "col,row", sorted, to read a test's expectations by. */
@@ -19,12 +19,8 @@ function ready(id: number, owner: string, character: CharacterId, square: number
 }
 
 describe("ACTION_AIMS (§29.3)", () => {
-    it("aims every ability, so a new one is usable by a player and the computer the day it's added", () => {
-        for (const ability of Object.keys(ABILITIES)) expect(ACTION_AIMS).toHaveProperty(ability);
-    });
-
-    it("aims every ability of the unreleased catalogue too: the elites' Hatch, Carapace and Bile (§39.5)", () => {
-        for (const ability of Object.keys(rulesetFor(12).ABILITIES)) expect(ACTION_AIMS).toHaveProperty(ability);
+    it("aims every ability of every registered catalogue, so a new one is usable by a player and the computer the day it's added", () => {
+        for (const ruleset of registeredRulesets) for (const ability of Object.keys(ruleset.ABILITIES)) expect(ACTION_AIMS).toHaveProperty(ability);
     });
 
     it("aims every kind of action check takes", () => {

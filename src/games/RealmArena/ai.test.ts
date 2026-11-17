@@ -9,6 +9,7 @@ import {
     type Action, type BattleState, type Fighter, type FogGhost,
 } from "./rules";
 import { nextAction, optionsOf, turnMemo } from "./ai";
+import type { RulesContext } from "./rulesets";
 
 // docs/games/realm-arena.md §29.7, §29.11: the computer's planner. Each puzzle
 // is a small battle with one right answer, set up for the warband "ai:0" to
@@ -18,8 +19,8 @@ import { nextAction, optionsOf, turnMemo } from "./ai";
 const AI = "ai:0";
 const SIDES = { a: "team", b: "team", [AI]: "enemy" };
 
-function ready(id: number, owner: string, character: CharacterId, square: Square, extra: Partial<Fighter> = {}): Fighter {
-    return { ...newFighter(id, owner, character, square), ap: ACTION_POINTS, ...extra };
+function ready(id: number, owner: string, character: CharacterId, square: Square, extra: Partial<Fighter> = {}, context?: RulesContext): Fighter {
+    return { ...newFighter(id, owner, character, square, null, undefined, false, context), ap: ACTION_POINTS, ...extra };
 }
 
 type Area = { col: number; row: number; width: number; height: number };
@@ -78,35 +79,33 @@ describe("nextAction's puzzles (§29.11)", () => {
 
     describe("the Swarm's elites (§39.5, rules version 12)", () => {
         const V12 = { rulesVersion: 12 };
-        const elite = (id: number, owner: string, character: CharacterId, square: Square, extra: Partial<Fighter> = {}): Fighter =>
-            ({ ...newFighter(id, owner, character, square, null, undefined, false, V12), ap: ACTION_POINTS, ...extra });
         const v12 = (field: Battlefield, fighters: Fighter[]): BattleState => ({ ...battle(field, fighters), ...V12 });
 
         it("spits bile on a huddle of enemies it would down", () => {
-            const lobber = elite(0, AI, "bileLobber", at(OPEN, 2, 4), { ap: 3 });
-            const huddle = [at(OPEN, 9, 3), at(OPEN, 9, 4), at(OPEN, 9, 5)].map((square, i) => elite(i + 1, i % 2 ? "b" : "a", "manAtArms", square, { hp: 2 }));
+            const lobber = ready(0, AI, "bileLobber", at(OPEN, 2, 4), { ap: 3 }, V12);
+            const huddle = [at(OPEN, 9, 3), at(OPEN, 9, 4), at(OPEN, 9, 5)].map((square, i) => ready(i + 1, i % 2 ? "b" : "a", "manAtArms", square, { hp: 2 }, V12));
             expect(planned(v12(OPEN, [lobber, ...huddle]))).toMatchObject({ kind: "bile", fighter: lobber.id });
         });
 
         it("holds its bile when it would only hurt its own", () => {
-            const lobber = elite(0, AI, "bileLobber", at(OPEN, 2, 4), { ap: 3 });
-            const own = [at(OPEN, 9, 3), at(OPEN, 9, 4)].map((square, i) => elite(i + 1, AI, "skitterling", square, { hp: 4 }));
-            const lone = elite(3, "a", "knight", at(OPEN, 9, 5), { hp: 12 });
+            const lobber = ready(0, AI, "bileLobber", at(OPEN, 2, 4), { ap: 3 }, V12);
+            const own = [at(OPEN, 9, 3), at(OPEN, 9, 4)].map((square, i) => ready(i + 1, AI, "skitterling", square, { hp: 4 }, V12));
+            const lone = ready(3, "a", "knight", at(OPEN, 9, 5), { hp: 12 }, V12);
             expect(optionsOf(viewOf(v12(OPEN, [lobber, ...own, lone]), AI), AI, lobber).filter(action => action.kind === "bile").length).toBeGreaterThan(0);
             expect(planned(v12(OPEN, [lobber, ...own, lone]))).not.toMatchObject({ kind: "bile", at: at(OPEN, 9, 4) });
         });
 
         it("hatches a Skitterling when it has nobody in reach, and not once its brood is full", () => {
-            const queen = elite(0, AI, "broodQueen", at(OPEN, 6, 4));
-            const enemy = elite(1, "a", "knight", at(OPEN, 14, 4));
+            const queen = ready(0, AI, "broodQueen", at(OPEN, 6, 4), {}, V12);
+            const enemy = ready(1, "a", "knight", at(OPEN, 14, 4), {}, V12);
             const hatching = optionsOf(viewOf(v12(OPEN, [queen, enemy]), AI), AI, queen);
             expect(hatching).toContainEqual({ kind: "hatch", fighter: queen.id });
             expect(planned(v12(OPEN, [queen, enemy]))).toEqual({ kind: "hatch", fighter: queen.id });
-            const brood = [at(OPEN, 3, 2), at(OPEN, 3, 6), at(OPEN, 4, 4)].map((square, i) => elite(i + 2, AI, "skitterling", square, { hatchedBy: 0, ap: 0 }));
+            const brood = [at(OPEN, 3, 2), at(OPEN, 3, 6), at(OPEN, 4, 4)].map((square, i) => ready(i + 2, AI, "skitterling", square, { hatchedBy: 0, ap: 0 }, V12));
             const full = optionsOf(viewOf(v12(OPEN, [queen, enemy, ...brood]), AI), AI, queen);
             expect(full.some(action => action.kind === "hatch")).toBe(false);
             // The passive Carapace is never offered as something to do.
-            const brute = elite(9, AI, "carapaceBrute", at(OPEN, 6, 2));
+            const brute = ready(9, AI, "carapaceBrute", at(OPEN, 6, 2), {}, V12);
             expect(optionsOf(viewOf(v12(OPEN, [brute, enemy]), AI), AI, brute).some(action => action.kind === "carapace")).toBe(false);
         });
     });

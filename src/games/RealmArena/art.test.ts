@@ -3,7 +3,6 @@ import path from "node:path";
 import { describe, expect, it } from "vitest";
 import { FACING_COUNT, TERRAIN, type Facing, type TerrainLetter } from "@/utils/games/battlefield/terrain";
 import { EFFECT_IDS, ITEM_IDS } from "./characters";
-import { registeredRulesets } from "./rulesets";
 import { ART_CHARACTER_IDS, ART_SHEETS, BLOCK_SKIN, BURST_ART, CHARACTER_ART, CHARACTER_CELL, CHARACTER_POSES, CLIPS, EFFECT_ART, facingCell, GRASS, ITEM_ART, MISSILE_ART, SLASH_ART, SMOKE_ART, grassOf, SPRITES, spriteBox, TERRAIN_ART, variantOf } from "./art";
 import { FLIGHT_PACE } from "./ui";
 
@@ -48,12 +47,6 @@ describe("CHARACTER_ART", () => {
         const size = { width: FACING_COUNT * CHARACTER_CELL.width, height: characters.length * CHARACTER_POSES.length * CHARACTER_CELL.height };
         expect(ART_SHEETS.characters).toMatchObject(size);
         expect(ART_SHEETS.charactersTeam).toMatchObject(size);
-    });
-
-    it("has art for every character of every registered catalogue, including a release still being built", () => {
-        for (const ruleset of registeredRulesets) {
-            for (const character of Object.keys(ruleset.CHARACTERS)) expect(characters, character).toContain(character);
-        }
     });
 
     it("gives every character, pose and facing a cell of its own, and its owner's colour the same cell of the team sheet", () => {

@@ -45,7 +45,7 @@ import { enemyTurnsOf, unnamed, type EnemyTurn, type IRealmArenaOutcome, type Re
 import { battlefieldOf } from "./maps";
 import { enemyNameOf, UNKNOWN_ENEMY, type CharacterId, type ItemId } from "./characters";
 import { battleFrom, centreHolders, ENEMY_SIDE, isStanding, isWarband, sideOf, sideScore, TEAM_SIDE, type BattleEvent, type Fighter } from "./rules";
-import { AREA_BLAST, centreInSight } from "./ui";
+import { AREA_BLAST, centreInSight, HATCH_MARK } from "./ui";
 import { isRallyAction, RALLY_LOOK } from "./rally";
 
 type RAState = IRealmArenaSpecificGameStateResponse;
@@ -158,7 +158,7 @@ function actionKind(events: readonly BattleEvent[]): { type: string; glyph: stri
     if (has(event => event.kind === "raised")) return { type: RA_RAISED, glyph: "✚" };
     const healed = events.find((event): event is Extract<BattleEvent, { kind: "healed" }> => event.kind === "healed");
     if (healed) return { type: RA_HEALED, glyph: healed.via === "draught" ? ITEM_GLYPH.healingDraught : "✚" };
-    if (has(event => event.kind === "hatched")) return { type: RA_MANOEUVRE, glyph: "🥚" };
+    if (has(event => event.kind === "hatched")) return { type: RA_MANOEUVRE, glyph: HATCH_MARK };
     return { type: RA_MANOEUVRE, glyph: "👣" };
 }
 
