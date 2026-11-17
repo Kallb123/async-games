@@ -4991,7 +4991,12 @@ arrives, Beckon an ally out from beside it.
   burst in the battle they score; no planner code.
 - **Hidden information.** A burst in the fog is told by `toldTo`, as a blast
   is: whoever it hit knows they were hit. `hiddenHands.test.ts` gains a death
-  burst nobody of the viewer's saw.
+  burst nobody of the viewer's saw. As built, a blast or burst a viewer is
+  told of names only the targets they saw (`targets` and `damages` are cut to
+  them, as the log's count already was), since any attack on a Bloater can now
+  set one off beside hidden characters; and a burn or poison tick that hurts
+  the team at a turn's start or end reveals the enemy, as any other hurt
+  does.
 - **Tests.** Downed by a shot, a Shove's collision, burning and a guard's
   strike; a chain of three; no second burst after its own; a version-11
   battle's Bloater falls quietly; a replay bursts the same way

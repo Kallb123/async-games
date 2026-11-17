@@ -743,6 +743,14 @@ export function witnessed(events: readonly BattleEvent[], battle: BattleState, v
     return id => saw.has(id);
 }
 
+/** An area event without the characters the viewer didn't see it catch: no id, and no damage keyed by one. */
+function unseenOut<E extends { targets: number[]; damages?: Record<number, number> }>(event: E, saw: (id: number) => boolean): E {
+    if (event.targets.every(saw)) return event;
+    const { damages, ...rest } = event;
+    const targets = event.targets.filter(saw);
+    return { ...rest, targets, ...(damages ? { damages: Object.fromEntries(targets.map(id => [id, damages[id]])) } : {}) } as E;
+}
+
 /**
  * The events of a command in a fogged battle as one viewer is told them
  * (§27.2) — in their log, their recap and their review. Their own side's
@@ -791,9 +799,9 @@ export function toldTo(events: readonly BattleEvent[], battle: BattleState, view
             case "dynamite":
             case "thrown":
             case "demolished":
-                return keep(saw(event.fighter) || event.targets.some(saw) || areaAround(battle.field, event.at).some(seen));
+                return saw(event.fighter) || event.targets.some(saw) || areaAround(battle.field, event.at).some(seen) ? [unseenOut(event, saw)] : [];
             case "burst":
-                return keep(saw(event.fighter) || event.targets.some(saw));
+                return saw(event.fighter) || event.targets.some(saw) ? [unseenOut(event, saw)] : [];
             case "shot":
             case "struck":
             case "healed":
@@ -1347,7 +1355,7 @@ function beginTurn(data: IRealmArenaGameData, owner: string): { events: BattleEv
     gs.fighters = fighters;
     addScores(gs, events);
     const told = writeLine(data, events, (said, seen) => said.length === 0 ? undefined : { text: capitalise(narrate(said, battle.fighters, "", gs.coop, seen, gs)) });
-    noteSighting(gs);
+    noteSighting(gs, events);
     return { events, told };
 }
 
@@ -1364,7 +1372,7 @@ function applyEndTurn(data: IRealmArenaGameData, owner: string, keepStill: reado
     addScores(gs, events);
     // Told to everyone, whatever they saw of it: that a turn ended is no secret.
     writeLine(data, events, (said, seen) => lineBy(owner, ["ended their turn", ...said.map(event => clause(event, battle.fighters, owner, gs.coop, seen, gs))].join("; "), gs.coop, gs));
-    noteSighting(gs);
+    noteSighting(gs, events);
     return events;
 }
 

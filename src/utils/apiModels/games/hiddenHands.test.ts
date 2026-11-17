@@ -896,4 +896,28 @@ describe("Realm Arena's death burst in fog of war (§39.3)", () => {
         expect(bursts("a")).toHaveLength(1);
         expect(bursts("c")).toEqual([]);
     });
+
+    describe("catching someone the viewer can't see", () => {
+        // The Bloater stands in the open at the wall's foot; b's Knight, with a sentinel id, is just behind the wall.
+        const wall = realmArenaFieldOf(...Array(4).fill("..........#" + ".".repeat(29)), ".".repeat(40));
+        const SENTINEL = 7777;
+        const cast = [make2(0, "a", "archer", 6), make2(1, "b", "bloater", 10, 4, { hp: 1 }), make2(SENTINEL, "b", "knight", 11, 3), make2(3, "c", "mage", 39, 0)];
+        function make2(id: number, owner: string, character: "archer" | "bloater" | "knight" | "mage", col: number, row = 4, extra = {}) {
+            return { ...realmArenaNewFighter(id, owner, character, realmArenaSquareAt(wall, col, row), null, undefined, false, { rulesVersion: 12 }), ap: 4, ...extra };
+        }
+        const walled = { field: wall, fighters: cast, rulesVersion: 12, fog: true as const };
+        const { events: walledEvents } = realmArenaActRules(walled, "a", { kind: "attack", fighter: 0, target: 1 }, realmArenaFixedRolls([1]));
+
+        it("bursts on the hidden Knight", () => {
+            expect(walledEvents.some(event => event.kind === "burst" && event.targets.includes(SENTINEL))).toBe(true);
+        });
+
+        it.each(["a", "c", null])("never names it to %s", viewer => {
+            expect(JSON.stringify(realmArenaToldTo(walledEvents, walled, viewer)), String(viewer)).not.toContain(String(SENTINEL));
+        });
+
+        it("still tells a the burst it saw", () => {
+            expect(realmArenaToldTo(walledEvents, walled, "a").filter(event => event.kind === "burst")).toHaveLength(1);
+        });
+    });
 });

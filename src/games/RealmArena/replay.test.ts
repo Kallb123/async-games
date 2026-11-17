@@ -4,7 +4,8 @@ import { buildAllEvents, buildEventFeed } from "@/utils/games/recap";
 import { resolveStalledTurn } from "@/utils/games/turnTimeout";
 import { CHARACTERS } from "./characters";
 import { gameStateToModel } from "./RealmArenaModels";
-import { check, type ToldEvent } from "./rules";
+import { at, fieldOf } from "@/utils/games/battlefield/testFixtures";
+import { act, check, newFighter, type ToldEvent } from "./rules";
 import type { IRealmArenaSpecificGameStateResponse, IRealmArenaStepOutcome } from "./apiModels";
 import { actBy, battleOf, endTurnBy, makeGame, muster, musterAll, play, playScriptedBattle, playScriptedTurn, readyMadePicks, scriptedAction, type RealmArenaTestGame } from "./testFixtures";
 
@@ -127,6 +128,7 @@ describe("Realm Arena replay", () => {
             blasted: ["fighter", "squares"],
             demolished: ["at", "damage", "fighter", "targets"],
             burst: ["damage", "fighter", "targets"],
+            // A death burst (§39.3) also says it was downed; see the pin below.
             dynamite: ["at", "damage", "fighter", "targets"],
             marked: ["fighter", "target"],
             raised: ["fighter", "hp", "target"],
@@ -143,8 +145,18 @@ describe("Realm Arena replay", () => {
         for (const event of events) {
             const { kind, ...rest } = event;
             // A draught's or a Purify's `via`, a strike's `missed` and a shot's `flanked` are the optional fields.
-            expect(Object.keys(rest).filter(key => key !== "via" && key !== "missed" && key !== "damages" && key !== "flanked").sort()).toEqual(fields[kind]);
+            expect(Object.keys(rest).filter(key => key !== "via" && key !== "missed" && key !== "damages" && key !== "flanked" && key !== "downed").sort()).toEqual(fields[kind]);
         }
+    });
+
+    it("tells a death burst's fields, and a Burst action's without the downed key (§39.3)", () => {
+        const field = fieldOf(...Array(3).fill("........"));
+        const piece = (id: number, owner: string, character: "archer" | "bloater" | "knight", col: number, extra = {}) =>
+            ({ ...newFighter(id, owner, character, at(field, col, 1), null, undefined, false, { rulesVersion: 12 }), ap: 4, ...extra });
+        const battle = { field, fighters: [piece(0, "a", "archer", 0), piece(1, "b", "bloater", 2, { hp: 1 }), piece(2, "b", "knight", 3), piece(3, "a", "archer", 1)], rulesVersion: 12 };
+        const keys = (events: readonly ToldEvent[]) => events.filter(event => event.kind === "burst").map(({ kind: _kind, ...rest }) => Object.keys(rest).sort());
+        expect(keys(act(battle, "a", { kind: "attack", fighter: 0, target: 1 }, () => 1).events)).toEqual([["damage", "downed", "fighter", "targets"]]);
+        expect(keys(act(battle, "b", { kind: "burst", fighter: 1 }, () => 1).events)).toEqual([["damage", "fighter", "targets"]]);
     });
 
     it("titles each step of the review in the player's words", async () => {
