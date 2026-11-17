@@ -55,5 +55,11 @@ export interface RealmArenaRuleValues {
     WAVE_GROWTH_POINTS?: number;
     /** The most characters a themed wave buys, and the most a warband stands at after one (§39.6). Absent before version 12. */
     WAVE_CAP?: number;
+    /**
+     * The points each nest of a warband destroyed since its last wave took off
+     * that warband's next wave's budget, never below half of it (realm-arena.md
+     * §39.7). Absent before version 12, and for a faction without nests.
+     */
+    NEST_POINTS?: number;
     BATTLE_ROUNDS: Readonly<Record<PlayerCount, number>>;
 }

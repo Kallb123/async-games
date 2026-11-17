@@ -1,10 +1,15 @@
 import { describe, expect, it } from "vitest";
 import { REALM } from "../characters";
-import { readyMadeMuster } from "../rules";
-import { coordsOf, type Square } from "@/utils/games/battlefield/terrain";
+import { inRange, readyMadeMuster } from "../rules";
+import { ruleValuesOf, rulesetFor } from "../rulesets";
+import { reachFrom } from "@/utils/games/battlefield/pathfinding";
+import { coordsOf, distance, type Square } from "@/utils/games/battlefield/terrain";
 import { DEPLOYMENT_NAMES, REALM_ARENA_MAPS } from ".";
 import { fittingHoldOutMap } from "./holdOut";
 import { edgeStrips, MIDDLE_CENTRE } from "./middleOut";
+import { RUINED_FORT } from "./ruinedFort";
+import { THREE_GATE_FORT } from "./threeGateFort";
+import { TWIN_GATE_FORT } from "./twinGateFort";
 import { SACKED_FORT_FOUR, SACKED_FORT_THREE, SACKED_FORT_TWO } from "./sackedFort";
 import { SUNKEN_VILLAGE_FOUR, SUNKEN_VILLAGE_THREE } from "./sunkenVillage";
 import { inMiddle, onEdge, quarterTurn, sealedOff, sorted, strandedSeats, walksFrom } from "./testFixtures";
@@ -135,5 +140,82 @@ describe("fittingHoldOutMap", () => {
     it("offers each battlefield to the team it's built for, and the Sacked Fort to a team it fits that the pick doesn't", () => {
         expect([1, 2, 3, 4, 5].map(players => fittingHoldOutMap("sunkenVillage", players))).toEqual([undefined, "sackedFort", "sunkenVillage", "sunkenVillage", undefined]);
         expect([1, 2, 3, 4, 5].map(players => fittingHoldOutMap("sackedFort", players))).toEqual([undefined, "sackedFort", "sackedFort", "sackedFort", undefined]);
+    });
+});
+
+// The Swarm's nests (§39.7) are the map's: two to a warband, in or beside its
+// zone, at the map's edge, wherever the team of the size the map is built for
+// can reach them and not see them on the first turn, and never where a wave
+// stands. Each map that Hold Out is fought on lists them.
+describe.each([
+    { id: "ruinedFort", FIELD: RUINED_FORT, team: 1 },
+    { id: "twinGateFort", FIELD: TWIN_GATE_FORT, team: 2 },
+    { id: "threeGateFort", FIELD: THREE_GATE_FORT, team: 3 },
+    { id: "sackedFortTwo", FIELD: SACKED_FORT_TWO, team: 2 },
+    { id: "sackedFortThree", FIELD: SACKED_FORT_THREE, team: 3 },
+    { id: "sackedFortFour", FIELD: SACKED_FORT_FOUR, team: 4 },
+    { id: "sunkenVillageThree", FIELD: SUNKEN_VILLAGE_THREE, team: 3 },
+    { id: "sunkenVillageFour", FIELD: SUNKEN_VILLAGE_FOUR, team: 4 },
+] as const)("$id's nests, for a team of $team", ({ FIELD, team }) => {
+    const nests = FIELD.nests ?? [];
+    const teamZones = FIELD.deployments.slice(0, team);
+    const middleOut = FIELD.width === 54;
+    // The furthest any character of the team sees: the Realm's, or the plain range.
+    const sight = Math.max(ruleValuesOf({ rulesVersion: 12 }).SIGHT_RANGE, ...Object.values(rulesetFor(12).FACTIONS.realm.characters).map(id => rulesetFor(12).CHARACTERS[id].sight ?? 0));
+    const quarter = (square: Square) => quarterTurn(FIELD, square);
+
+    it("has two for each warband, on ground someone can stand on, none shared", () => {
+        expect(nests).toHaveLength(team);
+        for (const [k, squares] of nests.entries()) {
+            expect(squares, `warband ${k}`).toHaveLength(2);
+            expect(squares.every(square => FIELD.tiles[square].terrain.standable)).toBe(true);
+        }
+        expect(new Set(nests.flat()).size).toBe(2 * team);
+    });
+
+    it("stands them in or beside the warband's zone, within three squares of the edge, and on no square of the team's", () => {
+        for (const [k, squares] of nests.entries()) {
+            for (const square of squares) {
+                expect(Math.min(...FIELD.deployments[team + k].map(zone => distance(FIELD, zone, square))), `warband ${k}`).toBeLessThanOrEqual(1);
+                const { col, row } = coordsOf(FIELD, square);
+                expect(Math.min(col, row, FIELD.width - 1 - col, FIELD.height - 1 - row)).toBeLessThanOrEqual(3);
+                expect(teamZones.flat()).not.toContain(square);
+            }
+        }
+    });
+
+    it("can be walked to from every team zone", () => {
+        for (const zone of teamZones) {
+            const { costs } = reachFrom(FIELD, zone[0]);
+            for (const square of nests.flat()) expect(Number.isFinite(costs[square])).toBe(true);
+        }
+    });
+
+    it("is out of sight of the team's zone on the first turn", () => {
+        for (const zone of teamZones) {
+            for (const square of nests.flat()) {
+                expect(zone.some(eye => inRange(FIELD, eye, square, sight)), `${JSON.stringify(coordsOf(FIELD, square))}`).toBe(false);
+            }
+        }
+    });
+
+    it("is clear of every square a wave of the warband is placed on", () => {
+        for (const [k, squares] of nests.entries()) {
+            const placed = new Set(Array.from({ length: 12 }, (_, size) => readyMadeMuster(FIELD, team + k, Array(size + 1).fill("skitterling")).map(pick => pick.square)).flat());
+            for (const square of squares) expect(placed.has(square), `warband ${k}`).toBe(false);
+        }
+    });
+
+    // The middle-out maps turn into themselves a quarter at a time; the gate forts, a half turn that swaps the team and the warbands, so there's nothing for a nest to turn into.
+    it.runIf(middleOut)("keeps the turn the map has: a quarter turn carries each warband's nests onto the next one's, and for three a half turn each warband's onto itself", () => {
+        for (const [k, squares] of nests.entries()) {
+            if (team === 3) {
+                const half = squares.map(quarter).map(quarter);
+                expect(sorted(half), `warband ${k}`).toEqual(sorted(squares));
+            } else {
+                const turnedTo = team === 2 ? 1 - k : (k + 1) % 4;
+                expect(sorted(squares.map(quarter)), `warband ${k}`).toEqual(sorted(nests[turnedTo]));
+            }
+        }
     });
 });

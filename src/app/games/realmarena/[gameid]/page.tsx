@@ -22,7 +22,7 @@ import RealmArenaRallySheet, { rallyTarget } from "@/games/RealmArena/components
 import type { RallyAction } from "@/games/RealmArena/rally";
 import { reachAfter, useTurnDraft } from "@/games/RealmArena/useTurnDraft";
 import { battlefieldOf } from "@/games/RealmArena/maps";
-import { canAct, allied, armouredTeam, battleFrom, centreHolders, ENEMY_SIDE, isStanding, isWarband, sideScore, squadHp, stoutTeam, TEAM_SIDE, warbandsFor, type Action, type BattleEvent, type Fighter } from "@/games/RealmArena/rules";
+import { canAct, allied, armouredTeam, battleFrom, centreHolders, ENEMY_SIDE, isStanding, isStructure, isWarband, sideScore, squadHp, stoutTeam, TEAM_SIDE, warbandsFor, type Action, type BattleEvent, type Fighter } from "@/games/RealmArena/rules";
 import { actionFollow, battleCues, centreInSight, endOf, coopColourOf, ENEMY_COLOUR, fighterName, foundBy, friendlySquares, isFollowedPart, isUnplaced, partFollow, partLabel, reviewParts, STEP_BEAT_MS, STEP_MIN_MS, TEAM_COLOUR, TEAM_NAME, unseenSquares, waveLineOf, withPartState } from "@/games/RealmArena/ui";
 import type { IRealmArenaOutcome } from "@/games/RealmArena/RealmArenaLogic";
 import type { ICommandResponse } from "@/app/api/game/command/route";
@@ -488,9 +488,11 @@ export default function GameRealmArena({ params }: { params: Promise<{ gameid: u
     const dropped = gameData?.gameState?.droppedPlayers ?? [];
     // How many of a squad stand — or, in fog of war, all the viewer knows of
     // an enemy's: how many of it they can see (§27).
-    const standingLine = (squad: Fighter[], hidden: boolean): string => hidden
-        ? `${squad.filter(isStanding).length} in sight`
-        : `${squad.filter(isStanding).length}/${squad.length} standing`;
+    // A nest (§39.7) is no one standing, so it's counted in neither.
+    const standingLine = (squad: Fighter[], hidden: boolean): string => {
+        const people = squad.filter(fighter => !isStructure(fighter, battle));
+        return hidden ? `${people.filter(isStanding).length} in sight` : `${people.filter(isStanding).length}/${people.length} standing`;
+    };
     // What the strip says under a player: how their muster or their squad stands.
     // A dropped player's squad has left the battlefield; their score stands (§17.4 B2).
     const squadSub = (userId: string, detailed = false): string => {

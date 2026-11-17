@@ -90,6 +90,8 @@ export const THREE_GATE_FORT_MAP: BattlefieldMap = {
     objectives: {
         centre: { col: 29, row: 21, width: 6, height: 6 },
     },
+    // The Swarm's nests (§39.7), two to a warband beside its zone, on the row inside it.
+    nests: [[{ col: 4, row: 44 }, { col: 16, row: 44 }], [{ col: 26, row: 44 }, { col: 37, row: 44 }], [{ col: 47, row: 44 }, { col: 59, row: 44 }]],
 };
 
 export const THREE_GATE_FORT = buildBattlefield(THREE_GATE_FORT_MAP);

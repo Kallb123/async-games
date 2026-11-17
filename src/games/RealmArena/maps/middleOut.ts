@@ -85,3 +85,33 @@ export const EDGE_THIRDS_ROTATING = [0, 1, 2, 3].map(k => {
 
 /** The four-seat deployment names around a middle `ground` ("keep", "green"): the team's quarter of it, then each warband's edge thirds. */
 export const fourAround = (ground: string): string[] => [...FOUR_QUARTERS.map(quarter => `in the ${quarter} of the ${ground}`), ...EDGE_THIRDS_ROTATING];
+
+/** A square of a nest's, by its column and row. */
+type Cell = { col: number; row: number };
+
+/** A cell turned a quarter clockwise on the 54-square map, as the strips of `edgeStrips` turn into each other. */
+const turned = ({ col, row }: Cell): Cell => ({ col: SIZE - 1 - row, row: col });
+
+/** A cell as the map turns it, `quarters` times over. */
+const turnedBy = (cell: Cell, quarters: number): Cell => quarters === 0 ? cell : turnedBy(turned(cell), quarters - 1);
+
+/**
+ * Where the Swarm's nests stand (§39.7): two to a warband, on the outermost row
+ * or column of its zone, at the map's edge — never on the middle line a wave is
+ * placed along. The team's characters see 25 squares at most, so each is where
+ * none of them can on the first turn: the Sacked Fort's walls hide only some of
+ * the edge, and the team stands nearer the north and south than the east and
+ * west, so the squares are picked from those it can't see. The layouts follow
+ * the deployments' symmetry. For a team of two the first warband holds the north
+ * and south edges, so it has a nest on each and the second has the turn of them.
+ * For three, every warband holds a third of every edge, so each is a pair across
+ * the map from each other: two nests can't be a quarter turn's orbit, but a half
+ * turn keeps them. For four, each has a nest on two of its edges, and a quarter
+ * turn carries each warband's onto the next one's.
+ */
+export const NESTS_FOR_TWO: BattlefieldMap["nests"] = [
+    [{ col: 8, row: 0 }, turnedBy({ col: 8, row: 0 }, 2)],
+    [turnedBy({ col: 8, row: 0 }, 1), turnedBy({ col: 8, row: 0 }, 3)],
+];
+export const NESTS_FOR_THREE: BattlefieldMap["nests"] = [8, 18, 42].map(col => [{ col, row: 0 }, turnedBy({ col, row: 0 }, 2)]);
+export const NESTS_FOR_FOUR: BattlefieldMap["nests"] = [0, 1, 2, 3].map(k => [turnedBy({ col: 8, row: 0 }, k), turnedBy({ col: SIZE - 1, row: 17 }, k)]);

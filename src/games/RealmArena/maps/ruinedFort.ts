@@ -79,6 +79,8 @@ export const RUINED_FORT_MAP: BattlefieldMap = {
     objectives: {
         centre: { col: 15, row: 21, width: 6, height: 6 },
     },
+    // The Swarm's nests (§39.7), beside the warband's zone on the row inside it.
+    nests: [[{ col: 9, row: 44 }, { col: 26, row: 44 }]],
 };
 
 export const RUINED_FORT = buildBattlefield(RUINED_FORT_MAP);

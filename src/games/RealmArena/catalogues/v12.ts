@@ -34,6 +34,12 @@ const CHARACTERS = {
         name: "Bile Lobber", plural: "Bile Lobbers", role: "Lobs acid over the heads of its own", movement: 4, hp: 12,
         weapon: { name: "Acid spit", kind: "ranged", damage: 2, accuracy: 70, range: 12, effect: "corroded" }, abilities: ["bile"], points: 40,
     },
+    // §39.7: the Swarm's nest, which the warbands stand on the map's nest squares. Nothing to
+    // fight with and nowhere to go: it is 10 HP to destroy, worth a 20-point knock-out.
+    nest: {
+        name: "Nest", plural: "Nests", role: "Where the brood spawns; destroy it to thin the next wave", movement: 0, hp: 10,
+        weapon: { name: "None", kind: "melee", damage: 0 }, abilities: [], points: 20, structure: true,
+    },
 } satisfies Partial<Record<CharacterId, Character>>;
 
 const FACTIONS = {
@@ -42,6 +48,8 @@ const FACTIONS = {
     swarm: {
         ...catalogueV11.FACTIONS.swarm,
         elites: ["broodQueen", "carapaceBrute", "bileLobber"],
+        // §39.7: two nests a warband stand from the first muster, beside no roster.
+        nest: "nest",
         // §39.6: its four waves, landing in rounds 4, 7, 10 and 13, each bought with points.
         waves: [
             { name: "The Rush", buys: ["skitterling", "skitterling", "ravager"] },
@@ -54,7 +62,8 @@ const FACTIONS = {
 
 // §39.4: the rally is each player's choice, not a heal the wave hands out.
 // §39.6: a themed wave's budget grows 15 points a wave, and a wave never takes a warband past 12.
-const RULES = { ...catalogueV11.RULES, RALLY_CHOICE: true, WAVE_GROWTH_POINTS: 15, WAVE_CAP: 12 };
+// §39.7: each nest destroyed since a warband's last wave takes 15 points off the next one's budget.
+const RULES = { ...catalogueV11.RULES, RALLY_CHOICE: true, WAVE_GROWTH_POINTS: 15, WAVE_CAP: 12, NEST_POINTS: 15 };
 
 export const catalogueV12 = {
     ...catalogueV11,

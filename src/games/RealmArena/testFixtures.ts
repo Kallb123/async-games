@@ -20,7 +20,7 @@ import type { IRealmArenaGameDataResponse } from "./apiModels";
 import { pathTo } from "@/utils/games/battlefield/pathfinding";
 import { distance } from "@/utils/games/battlefield/terrain";
 import { defaultRally, type RallyAction } from "./rally";
-import { allied, areaAround, check, isStanding, moveAp, reachOf, readyMadeMuster, warbandOwner, type Action, type BattleState, type Fighter, type MusterPick } from "./rules";
+import { allied, areaAround, check, isCombatant, isStanding, moveAp, reachOf, readyMadeMuster, warbandOwner, type Action, type BattleState, type Fighter, type MusterPick } from "./rules";
 
 export const PLAYERS = ["a", "b"];
 
@@ -135,7 +135,8 @@ export function oneStep(game: RealmArenaTestGame, fighter: Fighter, kind: "move"
 function nearestEnemy(game: RealmArenaTestGame, fighter: Fighter): Fighter | undefined {
     const battle = battleOf(game);
     return battle.fighters
-        .filter(one => !allied(battle, one.owner, fighter.owner) && isStanding(one))
+        // A nest (§39.7) is attacked when it's reached, never walked to.
+        .filter(one => !allied(battle, one.owner, fighter.owner) && isCombatant(one, battle))
         .sort((x, y) => distance(battle.field, fighter.square, x.square) - distance(battle.field, fighter.square, y.square))[0];
 }
 

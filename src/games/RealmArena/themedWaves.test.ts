@@ -5,7 +5,7 @@ import { battlefieldById } from "./maps";
 import { computeRealmArenaResultStats, formatRealmArenaCharts, formatRealmArenaResultStats, gameStateToModel } from "./RealmArenaModels";
 import { recordBattle } from "./recordBattle";
 import { nextWaveOf, warbandBudgetOf, waveBudgetOf, waveOf } from "./RealmArenaLogic";
-import { isStanding, isWarband, newFighter, nextFighterId, wavePurchase, wavesLanded, waveThemeOf } from "./rules";
+import { isCombatant, isWarband, newFighter, nextFighterId, wavePurchase, wavesLanded, waveThemeOf } from "./rules";
 import { ruleValuesOf, rulesetFor } from "./rulesets";
 import { endTurnBy, makeGame, musterAll, play, playScriptedBattle, seedRolls, warbandsOf, type RealmArenaTestGame } from "./testFixtures";
 import type { GameResultBarChart } from "@/utils/apiModels/GameDataApi";
@@ -88,7 +88,7 @@ describe("what a wave buys (§39.6)", () => {
 
 describe("a themed wave in a battle (§39.6)", () => {
     const holdOut = (settings: Parameters<typeof makeGame>[2] = {}) => makeGame(["a", "b"], {}, { rulesVersion: 12, coop: { enemy: "swarm", mission: "holdOut" }, ...settings });
-    const standingOf = (game: RealmArenaTestGame, owner: string) => game.specificGameState.fighters.filter(fighter => fighter.owner === owner && isStanding(fighter));
+    const standingOf = (game: RealmArenaTestGame, owner: string) => game.specificGameState.fighters.filter(fighter => fighter.owner === owner && isCombatant(fighter, CONTEXT));
     const text = (game: RealmArenaTestGame) => game.gameState.history.map(entry => entry.text);
 
     /** Clears the enemy off the field, so the warbands' turns can't change who stands, then ends the round whose wave lands next. */

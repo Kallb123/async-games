@@ -415,6 +415,22 @@ export function fixedRolls(rolls: readonly number[]): Roll {
 
 export const isStanding = (fighter: Fighter): boolean => fighter.hp > 0;
 
+/**
+ * Whether a fighter is a structure — the Swarm's nest (§39.7) — rather than a
+ * character. A character of a catalogue the context doesn't hold (the current
+ * one, asked of a version-12 fighter) is not one: always pass the battle's.
+ */
+export const isStructure = (fighter: Pick<Fighter, "character">, context?: RulesContext): boolean => rulesetOf(context).CHARACTERS[fighter.character]?.structure === true;
+
+/**
+ * Whether a fighter is someone standing: on its feet and not a structure (§39.7).
+ * `isStanding` still says whether it stands — a nest in the way blocks a square,
+ * can be hit and burned — but a nest isn't someone left to fight, so whatever
+ * asks "who is still in this?" asks here: the endings, the wave's refill and
+ * cap, the centre, who sees, who watches, who a Taunt or Blessing reaches.
+ */
+export const isCombatant = (fighter: Fighter, context?: RulesContext): boolean => isStanding(fighter) && !isStructure(fighter, context);
+
 export const hasEffect = (fighter: Pick<Fighter, "effects">, effect: EffectId): boolean => (fighter.effects[effect] ?? 0) > 0;
 
 /** The item a character carries, if any (§21.1). */
@@ -428,7 +444,7 @@ export const itemsPoints = (items: readonly (ItemId | null | undefined)[], conte
 
 /** A standing character can still act with a ready free AP ability, even at zero AP. */
 export function canAct(fighter: Fighter, context?: RulesContext): boolean {
-    if (!isStanding(fighter)) return false;
+    if (!isCombatant(fighter, context)) return false;
     if (fighter.ap > 0) return true;
     const { ABILITIES } = rulesetOf(context);
     return abilitiesOf(fighter, context).some(id => ABILITIES[id]?.ap === 0 && (ABILITIES[id]?.bonusAp ?? 0) > 0 && !abilityRefusal(fighter, id, context));
@@ -456,10 +472,12 @@ export const abilitiesOf = (fighter: Pick<Fighter, "character" | "option">, cont
  */
 export const maxHpOf = (fighter: Pick<Fighter, "character" | "maxHp">, context?: RulesContext): number => fighter.maxHp ?? rulesetOf(context).CHARACTERS[fighter.character].hp;
 
-/** A squad's remaining and full HP, including fallen fighters and each fighter's mustered maximum. Shared by the live scoreboard and battle record. */
+/** A squad's remaining and full HP, including fallen fighters (but no structure) and each fighter's mustered maximum. Shared by the live scoreboard and battle record. */
 export function squadHp(fighters: readonly Fighter[], context?: RulesContext): { remaining: number; total: number } {
     let remaining = 0, total = 0;
     for (const fighter of fighters) {
+        // A nest is no part of a squad's strength (§39.7).
+        if (isStructure(fighter, context)) continue;
         remaining += fighter.hp;
         total += maxHpOf(fighter, context);
     }
@@ -647,6 +665,8 @@ export function reactionsBlocked(fighter: Fighter, context?: RulesContext): bool
 /** A turn's base AP, plus catalogue-wide, character and passive bonuses. */
 export function actionPointsOf(fighter: Pick<Fighter, "character" | "option">, context?: RulesContext): number {
     const { RULES, CHARACTERS, ABILITIES } = rulesetOf(context);
+    // A structure has no turn to spend (§39.7).
+    if (CHARACTERS[fighter.character]?.structure) return 0;
     const passive = abilitiesOf(fighter, context).reduce((sum, id) => sum + (ABILITIES[id]!.passive ? ABILITIES[id]!.bonusAp ?? 0 : 0), 0);
     return Math.max(0, RULES.ACTION_POINTS + RULES.BONUS_AP + (CHARACTERS[fighter.character].bonusAp ?? 0) + passive);
 }
@@ -682,12 +702,13 @@ function temporaryProtection(state: BattleState, target: Fighter): { cover: Cove
     // Most catalogues have no effect that covers: every shot's odds ask.
     if (effectsCarrying(state).has("cover")) for (const [, effect] of activeEffects(target, state)) offer(effect.cover);
     if (rank[cover] === 2) return { cover, ability: abilityId };
-    for (const giver of state.fighters) {
+    // A structure takes no shelter from anyone next to it (§39.7).
+    for (const giver of isStructure(target, state) ? [] : state.fighters) {
         // Only the target and those next to it can give it cover. Every shot's
         // odds ask, so the cheap test goes first: an aura reaching enemies
         // would otherwise weigh every character on the field (§29.7).
         const self = giver.id === target.id;
-        if (!isStanding(giver) || (!self && !isNeighbour(state.field, giver.square, target.square))) continue;
+        if (!isCombatant(giver, state) || (!self && !isNeighbour(state.field, giver.square, target.square))) continue;
         const friendly = allied(state, giver.owner, target.owner);
         if (!friendly && !reachesEnemies) continue;
         for (const [id, ability] of auras) {
@@ -927,7 +948,7 @@ export function reactionsTo(state: BattleState, mover: Fighter, path: readonly S
 
 /** The enemies watching that could react to a move by one of a player's characters: standing, with a reaction's AP banked (§13.4). */
 function watchersOf(state: BattleState, player: string): Fighter[] {
-    return state.fighters.filter(watcher => isStanding(watcher) && !allied(state, watcher.owner, player) && watcher.banked >= ruleValuesOf(state).REACTION_COST && !reactionsBlocked(watcher, state));
+    return state.fighters.filter(watcher => isCombatant(watcher, state) && !allied(state, watcher.owner, player) && watcher.banked >= ruleValuesOf(state).REACTION_COST && !reactionsBlocked(watcher, state));
 }
 
 /**
@@ -943,8 +964,8 @@ export function watchedSquares(state: BattleState, player: string): ReadonlySet<
 }
 
 /** The standing allies of a character within `radius` of it, itself included — or on the whole side without one: who Taunt and Blessing reach. `act` and the board's preview both read it. */
-export function alliesWithin(state: Pick<BattleState, "field" | "sides">, fighters: readonly Fighter[], actor: Fighter, radius: number | undefined): Fighter[] {
-    return fighters.filter(one => isStanding(one) && allied(state, actor.owner, one.owner)
+export function alliesWithin(state: Pick<BattleState, "field" | "sides" | "rulesVersion">, fighters: readonly Fighter[], actor: Fighter, radius: number | undefined): Fighter[] {
+    return fighters.filter(one => isCombatant(one, state) && allied(state, actor.owner, one.owner)
         && (radius === undefined || distance(state.field, actor.square, one.square) <= radius));
 }
 
@@ -976,7 +997,7 @@ export function areaAround(field: Battlefield, at: Square): Square[] {
  * answer, since a view asks about the same squares again and again.
  */
 export function squadSight(state: BattleState, player: string | null): (square: Square) => boolean {
-    const eyes = state.fighters.filter(fighter => allied(state, fighter.owner, player) && isStanding(fighter));
+    const eyes = state.fighters.filter(fighter => allied(state, fighter.owner, player) && isCombatant(fighter, state));
     const known = new Map<Square, boolean>();
     return square => {
         let seen = known.get(square);
@@ -1140,6 +1161,8 @@ function standingPath(field: Battlefield, path: Square[]): Square[] {
 /** The push's path and any character it collides with. A drop is allowed. */
 export function shovePath(state: BattleState, actor: Fighter, target: Fighter): { path: Square[]; collision: boolean; hit?: Fighter } {
     const ability = rulesetOf(state).ABILITIES.shove;
+    // A nest is struck and not pushed (§39.7): it stays where it stands, with nothing to collide with.
+    if (isStructure(target, state)) return { path: [target.square], collision: false };
     const a = coordsOf(state.field, actor.square), b = coordsOf(state.field, target.square);
     const dc = Math.sign(b.col - a.col), dr = Math.sign(b.row - a.row);
     const path = [target.square];
@@ -1244,6 +1267,7 @@ export function check(battle: BattleState, player: string, action: unknown): Che
     const actor = fighterById(state, id);
     if (!actor || actor.owner !== player) return refused("That isn't one of your characters");
     if (!isStanding(actor)) return refused("That character is down");
+    if (isStructure(actor, state)) return refused("A nest can't act");
     const limit = ruleValuesOf(state).MAX_ATTACKS_PER_TURN;
     if (limit !== null && countsAsAttack(String(kind), state) && (actor.attacksThisTurn ?? 0) >= limit) return refused(`At most ${limit} attacks per turn`);
     const target = fighterById(state, targetId);
@@ -1451,7 +1475,7 @@ export function afflictionsOn(fighter: Fighter, context?: RulesContext): Afflict
  * ones it would do anything for. Ids in battle order.
  */
 export function purified(state: BattleState, cleric: Fighter): Fighter[] {
-    return state.fighters.filter(ally => allied(state, ally.owner, cleric.owner) && isStanding(ally)
+    return state.fighters.filter(ally => allied(state, ally.owner, cleric.owner) && isCombatant(ally, state)
         && (ally.id === cleric.id || nextTo(state.field, cleric.square, ally.square))
         && (ally.hp < maxHpOf(ally, state) || afflictionsOn(ally, state).length > 0));
 }
@@ -1468,6 +1492,8 @@ export function purified(state: BattleState, cleric: Fighter): Fighter[] {
 export function afflicted(target: Fighter, effect: Affliction, by: number, context?: RulesContext): { fighter: Fighter; event: BattleEvent } | undefined {
     const { EFFECTS } = rulesetOf(context);
     if (!isStanding(target)) return undefined;
+    // A structure takes nothing but the effects that do damage, burning and poison (§39.7).
+    if (isStructure(target, context) && !EFFECTS[effect]!.damage) return undefined;
     const was = target.effects[effect] ?? 0;
     const fighter: Fighter = { ...target, effects: { ...target.effects, [effect]: Math.max(was, EFFECTS[effect]!.count) } };
     if (effect === "burning") fighter.burnedBy = by;
@@ -1708,7 +1734,7 @@ function walk(state: BattleState, run: ReturnType<typeof resolver>, mover: Fight
         moveTo(step);
         const watcher = run.get(id);
         // A Bloater's burst can down a watcher before its turn to react.
-        if (!isStanding(watcher)) continue;
+        if (!isCombatant(watcher, state)) continue;
         watcher.banked -= REACTION_COST;
         if (shoots(watcher, state)) run.shoot(watcher, mover, "overwatch");
         else run.strike(watcher, mover, true);
@@ -2047,7 +2073,7 @@ export function startTurn(state: BattleState, player: string): Outcome {
 /** The characters standing in the centre (§13.7). */
 function inCentre(state: BattleState): Fighter[] {
     const centre = new Set(state.field.objectives[CENTRE] ?? []);
-    return state.fighters.filter(fighter => isStanding(fighter) && centre.has(fighter.square));
+    return state.fighters.filter(fighter => isCombatant(fighter, state) && centre.has(fighter.square));
 }
 
 /**
@@ -2189,12 +2215,12 @@ export function lastWaveRound(rounds: number): number {
 
 /** The players, in seat order, who still have someone of their own standing: whose turns there are still to take. */
 export function squadsStanding(state: BattleState, players: readonly string[]): string[] {
-    return players.filter(player => state.fighters.some(fighter => fighter.owner === player && isStanding(fighter)));
+    return players.filter(player => state.fighters.some(fighter => fighter.owner === player && isCombatant(fighter, state)));
 }
 
 /** The sides with someone still standing (§29.6). In a free-for-all, the players who have. */
 export function sidesStanding(state: BattleState): string[] {
-    return [...new Set(state.fighters.filter(isStanding).map(fighter => sideOf(state, fighter.owner)))];
+    return [...new Set(state.fighters.filter(fighter => isCombatant(fighter, state)).map(fighter => sideOf(state, fighter.owner)))];
 }
 
 /** Whether the battle is over: the turn limit has been played out, or at most one side is left (§5.1). */
@@ -2204,7 +2230,7 @@ export function isBattleOver(state: BattleState, players: readonly string[], rou
 
 /** The points' worth of a side still standing: the first tie-break. In a free-for-all, a player's squad (`sideOf`). */
 export function standingPoints(state: BattleState, side: string): number {
-    return squadPoints(state.fighters.filter(fighter => sideOf(state, fighter.owner) === side && isStanding(fighter)).map(fighter => fighter.character), state);
+    return squadPoints(state.fighters.filter(fighter => sideOf(state, fighter.owner) === side && isCombatant(fighter, state)).map(fighter => fighter.character), state);
 }
 
 /** A side's score: its owners' added together (§29.6). In a free-for-all, a player's own. */
