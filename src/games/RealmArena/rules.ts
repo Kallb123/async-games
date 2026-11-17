@@ -171,6 +171,14 @@ export interface Fighter {
     usedThisTurn?: AbilityId[];
     /** The item it carries, bought at muster, or null once it's used or when it never had one (§21.1). */
     item: ItemId | null;
+    /**
+     * The item it was mustered with, kept once `item` is used up, so a Resupply
+     * (§39.4) has something to give back. Set only for a player's character
+     * in a battle whose rules have `RALLY_CHOICE`, and only when it carried
+     * one; absent otherwise, so battles from before it are stored as they were.
+     * As public as `item` itself.
+     */
+    musteredItem?: ItemId;
     /** The option it was mustered with, swapping part of its kit for another (§23.2): absent on the starter character. */
     option?: OptionId;
     /**
@@ -2174,6 +2182,8 @@ export function newFighter(id: number, owner: string, character: CharacterId, sq
     return {
         id, owner, character, square, hp: musterHp(character, stout, context), ...(stout ? { maxHp: teamHp(character, context) } : {}),
         ap: 0, banked: 0, effects: {}, cooldowns: {}, spent: [], item, ...(option ? { option } : {}),
+        // Remembered for a Resupply (§39.4), where the rules have one.
+        ...(item && !isWarband(owner) && ruleValuesOf(context).RALLY_CHOICE ? { musteredItem: item } : {}),
     };
 }
 

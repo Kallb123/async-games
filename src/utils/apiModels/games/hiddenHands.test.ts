@@ -921,3 +921,45 @@ describe("Realm Arena's death burst in fog of war (§39.3)", () => {
         });
     });
 });
+
+describe("Realm Arena's rally choice in fog of war (§39.4)", () => {
+    // A wave lands on a fogged Hold Out under rules 12: both players owe a choice, one has a spent item to resupply.
+    async function owed(): Promise<RealmArenaTestGame> {
+        const game = makeRealmArenaGame(["a", "b"], {}, { fog: true, rulesVersion: 12, coop: { enemy: "realm", mission: "holdOut" } });
+        await realmArenaMusterAll(game);
+        const fighters = game.specificGameState.fighters;
+        fighters.forEach(one => { if (one.owner.startsWith("ai:")) one.hp = 0; });
+        const mine = fighters.find(one => one.owner === "a" && isRealmArenaStanding(one))!;
+        mine.musteredItem = "fireFlask";
+        mine.item = null;
+        game.specificGameState.roundsPlayed = 2;
+        await playRealmArena(game, realmArenaEndTurn("a"));
+        await playRealmArena(game, realmArenaEndTurn("b"));
+        return game;
+    }
+    const wire = async (game: RealmArenaTestGame, viewer: string | null) => {
+        const { markModified: _, ...data } = game;
+        const { CreateDataResponse } = (await import("@/games/RealmArena/RealmArenaModels")).RealmArenaGameDataModel.schema.methods;
+        return (await CreateDataResponse.call(structuredClone(data), viewer)).specificGameState as IRealmArenaSpecificGameStateResponse;
+    };
+
+    it("tells a viewer only that they owe one, and tells a null viewer nothing of it", async () => {
+        const game = await owed();
+        expect(game.specificGameState.rallyOwed).toEqual(["a", "b"]);
+        for (const viewer of ["a", "b"]) expect((await wire(game, viewer)).rallyOwed).toBe(true);
+        const none = await wire(game, null);
+        expect(none).not.toHaveProperty("rallyOwed");
+        expect(none.fighters).toEqual([]);
+        expect(JSON.stringify(none)).not.toMatch(/musteredItem|rallyOwed/);
+    });
+
+    it("shows a viewer the item their own character mustered with, which they need to see a Resupply", async () => {
+        const game = await owed();
+        const own = (await wire(game, "a")).fighters.filter(one => one.owner === "a");
+        expect(own.filter(one => one.musteredItem).map(one => one.musteredItem)).toEqual(["fireFlask"]);
+        // The enemy never mustered with one, so nothing of theirs carries the field.
+        expect((await wire(game, "a")).fighters.filter(one => one.owner.startsWith("ai:")).some(one => "musteredItem" in one)).toBe(false);
+        // A response never carries the list of who else owes, nor does the state's wire shape have the key under another name.
+        expect(JSON.stringify(await wire(game, "a"))).not.toContain('"rallyOwed":["');
+    });
+});

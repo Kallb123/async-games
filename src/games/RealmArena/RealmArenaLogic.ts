@@ -1,4 +1,5 @@
-import { rulesetOf, type RulesContext } from "@/games/RealmArena/rulesets";
+import { ruleValuesOf, rulesetOf, type RulesContext } from "@/games/RealmArena/rulesets";
+import { cleanRally, downedOf, isRallyAction, rallied, rallyHp, rallyRefusal, type RallyAction } from "@/games/RealmArena/rally";
 import type { IGameData } from "@/utils/mongodb/GameData";
 import type { uuidString } from "@/utils/apiModels/GameDataApi";
 import { commandVersion, type ICommandOutcome, type IGameCommand, type IGameType } from "@/utils/apiModels/gameCommand";
@@ -32,7 +33,6 @@ import {
     isWarband,
     landedSmoke,
     lastWaveRound,
-    maxHpOf,
     musterRefusal,
     nextWaveRound,
     newFighter,
@@ -151,10 +151,28 @@ function onTurn(data: IRealmArenaGameData, userId: string, phase: IRealmArenaSpe
  */
 export function nextSeat(data: IRealmArenaGameData, userId: string): string {
     const gs = data.specificGameState;
-    const standing = new Set(gs.phase === "battle" ? squadsStanding(battleOf(gs), data.gameState.turnOrder) : data.gameState.turnOrder);
-    let next = nextActivePlayer(data, userId);
-    while (next !== userId && !standing.has(next)) next = nextActivePlayer(data, next);
+    const battle = gs.phase === "battle" ? battleOf(gs) : undefined;
+    const plays = (seat: string) => !battle || takesTurn(gs, battle, seat);
+    // A seat still owing its rally choice (§39.4) hasn't had a turn in the round a wave has just begun: the
+    // turn that ended was the last of the one before, so the next is the first at the table to play.
+    const order = data.gameState.turnOrder;
+    const from = owesRally(gs, userId) ? order[order.length - 1] : userId;
+    let next = nextActivePlayer(data, from);
+    while (next !== from && !plays(next)) next = nextActivePlayer(data, next);
     return next;
+}
+
+/** Whether `userId` owes a rally choice (§39.4). */
+export const owesRally = (gs: Pick<IRealmArenaSpecificGameState, "rallyOwed">, userId: string): boolean => gs.rallyOwed?.includes(userId) === true;
+
+/**
+ * Whether a seat has a turn to take once the battle has begun: it has someone
+ * standing, or it owes a rally choice and has someone down — the wiped-out
+ * player a Reinforce can bring back (§39.4). The one test `nextSeat` and
+ * `handOff` step past a seat by.
+ */
+function takesTurn(gs: IRealmArenaSpecificGameState, battle: BattleState, userId: string): boolean {
+    return squadsStanding(battle, [userId]).length > 0 || (owesRally(gs, userId) && downedOf(battle, userId).length > 0);
 }
 
 /** Adds what a run of events scored to the scores (§13.7). */
@@ -365,6 +383,7 @@ export function cloneRealmArenaState(gs: IRealmArenaSpecificGameState): IRealmAr
         ...(gs.size ? { size: gs.size } : {}),
         ...(gs.factions ? { factions: [...gs.factions] } : {}),
         ...(gs.rulesVersion !== undefined ? { rulesVersion: gs.rulesVersion } : {}),
+        ...(gs.rallyOwed ? { rallyOwed: [...gs.rallyOwed] } : {}),
         musters: (gs.musters ?? []).map(({ owner, faction, picks }) => ({ owner, ...(faction ? { faction } : {}), picks: picks.map(pickOf) })),
         // Written once as the battle is created and never changed, so shared.
         mastery: gs.mastery ?? {},
@@ -1017,8 +1036,7 @@ const RALLYING_VERSION = 6;
 function rally(gs: IRealmArenaSpecificGameState): void {
     for (const fighter of gs.fighters) {
         if (isWarband(fighter.owner) || !isStanding(fighter)) continue;
-        const full = maxHpOf(fighter, gs);
-        fighter.hp = Math.min(full, fighter.hp + Math.floor(full / 2));
+        fighter.hp = rallyHp(fighter, gs);
     }
 }
 
@@ -1034,7 +1052,13 @@ function landWave(data: IRealmArenaGameData, version: number): void {
     // The scheduled wave is public even when every deployment square is
     // blocked; its line must not reveal which hidden warbands found room.
     data.gameState.history.unshift({ text: `A fresh wave of ${enemyNameOf(enemyKnown(gs.coop) ? gs.coop.enemy : undefined, gs)} arrives` });
-    if (version >= RALLYING_VERSION) {
+    if (ruleValuesOf(gs).RALLY_CHOICE) {
+        // From rules version 12 nobody is healed by the wave itself: every
+        // player of the team still in the battle owes a choice (§39.4), made
+        // as their next turn begins.
+        gs.rallyOwed = gs.seats.filter(seat => data.gameState.turnOrder.includes(seat) && !isDropped(data, seat));
+        data.gameState.history.unshift({ text: "The team must each choose how to rally: rally the squad, reinforce with a fallen character, or resupply" });
+    } else if (version >= RALLYING_VERSION) {
         rally(gs);
         data.gameState.history.unshift({ text: "The team rallies: everyone standing regains half their HP" });
     }
@@ -1384,7 +1408,7 @@ export class RealmArenaAct implements IGameCommand {
     gameId: uuidString = NIL_UUID as uuidString;
     senderId: string = "Unknown";
     senderUsername: string = "Unknown";
-    action: Action = { kind: "hunker", fighter: -1 };
+    action: Action | RallyAction = { kind: "hunker", fighter: -1 };
     /**
      * Every 1–100 roll the action used, in the order it used them — its own
      * shot, and each overwatch it set off (§17.2). Written by the first
@@ -1399,6 +1423,7 @@ export class RealmArenaAct implements IGameCommand {
     readonly undoable = true;
 
     myString() {
+        if (isRallyAction(this.action)) return "chose how to rally";
         return (typeof this.action?.kind === "string" && Object.hasOwn(ACTION_PHRASES, this.action.kind)
             ? ACTION_PHRASES[this.action.kind as Action["kind"]] : undefined) ?? "acted";
     }
@@ -1407,8 +1432,12 @@ export class RealmArenaAct implements IGameCommand {
         const data = gameData as IRealmArenaGameData;
         const gs = data.specificGameState;
         if (!onTurn(data, this.senderId, "battle")) return INVALID;
+        // The rally's choice (§39.4) is no action of a character: no roll, no tally, no undo.
+        if (isRallyAction(this.action)) return this.executeRally(data);
+        // A player owing a rally choice makes it before anything else (§39.4).
+        if (owesRally(gs, this.senderId)) return INVALID;
         // Before the first mutation, pushed only if the action proves peaceful.
-        const snapshot = UNDOABLE_KINDS.has(this.action?.kind) ? cloneRealmArenaState(gs) : null;
+        const snapshot = UNDOABLE_KINDS.has(this.action?.kind as Action["kind"]) ? cloneRealmArenaState(gs) : null;
 
         const { roll, used } = recordedRolls(this.recordedRolls, () => randomInt(ROLL_SIDES) + 1);
         const applied = applyAction(data, this.senderId, this.action, roll);
@@ -1424,6 +1453,35 @@ export class RealmArenaAct implements IGameCommand {
         else clearUndo(gs);
         markDirty(gameData);
         return { validMove: true, turnOver: false, events, recap: { told: applied.told } } as IRealmArenaOutcome;
+    }
+
+    /**
+     * The sender's rally choice (§39.4), which only a player who owes one on
+     * their own turn can make, and only one that would do something. It
+     * changes what the board holds without a single event, rolls nothing, earns
+     * no mastery and is never undone: it empties the undo stack.
+     */
+    private executeRally(data: IRealmArenaGameData): ICommandOutcome {
+        const gs = data.specificGameState;
+        if (!owesRally(gs, this.senderId)) return INVALID;
+        const battle = battleOf(gs);
+        if (rallyRefusal(battle, gs.seats, this.senderId, this.action) !== undefined) return INVALID;
+        const action = cleanRally(this.action as RallyAction);
+        this.action = action;
+        const downed = action.choice === "reinforce" ? battle.fighters.find(fighter => fighter.id === action.fighter) : undefined;
+        gs.fighters = rallied(battle, gs.seats, this.senderId, action);
+        const left = (gs.rallyOwed ?? []).filter(seat => seat !== this.senderId);
+        if (left.length > 0) gs.rallyOwed = left;
+        else delete gs.rallyOwed;
+        const squad = `${possessive(userToken(this.senderId))} squad`;
+        const text = action.choice === "rally" ? `${squad} rallies`
+            : action.choice === "resupply" ? `${squad} is resupplied`
+                : `${possessive(userToken(this.senderId))} ${rulesetOf(gs).CHARACTERS[downed!.character].name} rejoins the fight`;
+        data.gameState.history.unshift({ text, actorId: this.senderId });
+        noteSighting(gs);
+        clearUndo(gs);
+        markDirty(data);
+        return { validMove: true, turnOver: false, events: [], recap: {} } as IRealmArenaOutcome;
     }
 }
 
@@ -1512,7 +1570,7 @@ export class RealmArenaEndTurn implements IGameCommand {
     async Execute(gameData: IGameData): Promise<ICommandOutcome> {
         const data = gameData as IRealmArenaGameData;
         const gs = data.specificGameState;
-        if (!onTurn(data, this.senderId, "battle")) return INVALID;
+        if (!onTurn(data, this.senderId, "battle") || owesRally(gs, this.senderId)) return INVALID;
 
         // Only the player's own standing characters, once each: anything else
         // a request named would change nothing, so it isn't kept either.
@@ -1685,13 +1743,15 @@ function handOff(data: IRealmArenaGameData, from: string, moves: WarbandMoves, v
         if (wraps()) {
             gs.roundsPlayed += 1;
             landWave(data, version);
+            // A wave that left a wiped-out squad a choice to make gives it its turn back (§39.4).
+            if (gs.rallyOwed) next = nextSeat(data, seat);
         }
         if (battleIsOver(gs)) return { enemy, started, startedTold };
 
         const { events, told } = beginTurn(data, next);
         started.push(...events);
         for (const viewer of order) startedTold?.[viewer].push(...told?.[viewer] ?? []);
-        if (battleIsOver(gs) || squadsStanding(battleOf(gs), [next]).length > 0) return { enemy, started, startedTold };
+        if (battleIsOver(gs) || takesTurn(gs, battleOf(gs), next)) return { enemy, started, startedTold };
         seat = next;
     }
 }
@@ -1724,6 +1784,12 @@ registerPlayerDropoutAdapter({
             if (!fighter.woundedBy) continue;
             fighter.woundedBy = fighter.woundedBy.filter(owner => owner !== userId);
             if (fighter.woundedBy.length === 0) delete fighter.woundedBy;
+        }
+        // A player who has left owes no rally choice (§39.4).
+        if (gs.rallyOwed) {
+            const left = gs.rallyOwed.filter(seat => seat !== userId);
+            if (left.length > 0) gs.rallyOwed = left;
+            else delete gs.rallyOwed;
         }
         clearUndo(gs);
     },

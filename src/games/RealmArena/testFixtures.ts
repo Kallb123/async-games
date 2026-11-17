@@ -19,6 +19,7 @@ import { buildInitialRealmArenaState, RealmArenaGameDataModel, type IRealmArenaG
 import type { IRealmArenaGameDataResponse } from "./apiModels";
 import { pathTo } from "@/utils/games/battlefield/pathfinding";
 import { distance } from "@/utils/games/battlefield/terrain";
+import type { RallyAction } from "./rally";
 import { allied, areaAround, check, isStanding, moveAp, reachOf, readyMadeMuster, warbandOwner, type Action, type BattleState, type Fighter, type MusterPick } from "./rules";
 
 export const PLAYERS = ["a", "b"];
@@ -72,7 +73,7 @@ export function play(game: RealmArenaTestGame, command: IGameCommand) {
 }
 
 export const muster = (sender: string, picks: MusterPick[]) => cmd(RealmArenaMuster, sender, { picks });
-export const actBy = (sender: string, action: Action) => cmd(RealmArenaAct, sender, { action });
+export const actBy = (sender: string, action: Action | RallyAction) => cmd(RealmArenaAct, sender, { action });
 export const endTurnBy = (sender: string, keepStill: number[] = []) => cmd(RealmArenaEndTurn, sender, { keepStill });
 
 /** The ready-made squad for a seat, where a timed-out muster would put it. */
@@ -165,6 +166,13 @@ export function scriptedAction(game: RealmArenaTestGame, fighter: Fighter): Acti
 /** One battle turn by the script: every action it can find, then End turn. */
 export async function playScriptedTurn(game: RealmArenaTestGame): Promise<void> {
     const player = game.currentTurn;
+    // A rally owed (§39.4, rules version 12) is chosen first: Rally, or with nobody standing Reinforce the first downed.
+    if (game.specificGameState.rallyOwed?.includes(player)) {
+        const mine = battleOf(game).fighters.filter(one => one.owner === player);
+        const down = mine.find(one => !isStanding(one));
+        const reinforce: RallyAction | undefined = down && !mine.some(isStanding) ? { kind: "rally", choice: "reinforce", fighter: down.id } : undefined;
+        if (!(await play(game, actBy(player, reinforce ?? { kind: "rally", choice: "rally" }))).outcome.validMove) throw new Error(`${player}'s rally was refused`);
+    }
     for (let step = 0; step < 40 && !game.complete; step++) {
         const action = battleOf(game).fighters
             .filter(one => one.owner === player && isStanding(one))

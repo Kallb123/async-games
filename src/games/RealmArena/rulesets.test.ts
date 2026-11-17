@@ -112,9 +112,18 @@ describe("Realm Arena ruleset compatibility", () => {
         const { taunt: _before, ...rest } = before.ABILITIES, { taunt: _after, ...restAfter } = after.ABILITIES;
         expect(restAfter).toEqual(rest);
         // The Bloater's burst-when-downed is the one character change so far (§39.3).
-        for (const id of ["RULES", "OPTIONS", "ITEMS", "EFFECTS", "FACTIONS"] as const) expect(after[id]).toBe(before[id]);
+        for (const id of ["OPTIONS", "ITEMS", "EFFECTS", "FACTIONS"] as const) expect(after[id]).toBe(before[id]);
         // Not released until §39.9: nobody creates a version-12 battle yet.
         expect(real.CURRENT_RULESET_VERSION).toBe(11);
+    });
+
+    it("makes the rally each player's choice in v12 and changes nothing else of v11's rules (§39.4)", async () => {
+        const real = await vi.importActual<typeof import("./rulesets")>("./rulesets");
+        const before = real.rulesetFor(11).RULES, after = real.rulesetFor(12).RULES;
+        expect(before.RALLY_CHOICE).toBeUndefined();
+        expect(after.RALLY_CHOICE).toBe(true);
+        expect(after).toEqual({ ...before, RALLY_CHOICE: true });
+        expect(real.rulesetFor(11).RULES).toBe(real.rulesetFor(10).RULES);
     });
 
     it("makes a Bloater burst when it's downed in v12 and changes nothing else of v11's characters (§39.3)", async () => {

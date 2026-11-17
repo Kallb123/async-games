@@ -16,7 +16,7 @@ import { characterStats } from "./stats";
 import { abilityWait, eventLines, hpFraction } from "./ui";
 import { nextAction } from "./ai";
 import { actBy, battleOf, endTurnBy, makeGame, musterAll, play, playScriptedBattle, type RealmArenaTestGame } from "./testFixtures";
-import { rulesetFor, rulesetOf } from "./rulesets";
+import { CURRENT_RULESET_VERSION, rulesetFor, rulesetOf } from "./rulesets";
 
 // docs/games/realm-arena-balance.md: the rebalance that command version 7
 // ships (`BALANCE_VERSION`). Each rule is tested on its own against a hand-built
@@ -78,16 +78,16 @@ describe("the rules version a battle plays by", () => {
         expect(weaponOf(stray, newFighter(0, "a", "mage", 0))).toMatchObject({ accuracy: 70, range: 10 });
 
         const game = makeGame();
-        expect(cloneRealmArenaState(game.specificGameState).rulesVersion).toBe(meta.commandVersion);
+        expect(cloneRealmArenaState(game.specificGameState).rulesVersion).toBe(CURRENT_RULESET_VERSION);
         const old = makeGame(undefined, undefined, { rulesVersion: LEGACY });
         expect(cloneRealmArenaState(old.specificGameState).rulesVersion).toBe(LEGACY);
     });
 
     it("stamps a new battle, which its settings read back for a replay and the board is sent", () => {
         const game = makeGame(["a", "b"], {}, { coop: { enemy: "realm", mission: "holdOut" } });
-        expect(game.specificGameState.rulesVersion).toBe(meta.commandVersion);
-        expect(buildInitialRealmArenaState(["a", "b"], {}, settingsOf(game.specificGameState)).rulesVersion).toBe(meta.commandVersion);
-        expect(gameStateToModel(game.specificGameState, "a", null).rulesVersion).toBe(meta.commandVersion);
+        expect(game.specificGameState.rulesVersion).toBe(CURRENT_RULESET_VERSION);
+        expect(buildInitialRealmArenaState(["a", "b"], {}, settingsOf(game.specificGameState)).rulesVersion).toBe(CURRENT_RULESET_VERSION);
+        expect(gameStateToModel(game.specificGameState, "a", null).rulesVersion).toBe(CURRENT_RULESET_VERSION);
         expect(isBalanced(battleOf(game).rulesVersion)).toBe(true);
 
         // A battle from before the stamp has none, and goes on without one.

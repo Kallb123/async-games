@@ -4862,7 +4862,7 @@ two different arrows in one turn, but never the same one twice running.
 
 ## 39. Hold Out against the Swarm: the next seven PRs (plan)
 
-*Planned; PRs 1 and 2 (§39.2, §39.3) are built, in a catalogue not yet released.* Hold Out with the players as the Realm against the
+*Planned; PRs 1, 2 and 3 (§39.2, §39.3, §39.4) are built, in a catalogue not yet released.* Hold Out with the players as the Realm against the
 computer's Swarm is the game's main mode, which is why the Realm's kit was
 rebuilt first (§34). This section plans what makes the Swarm worth using that
 kit on: a Taunt with a reach, Bloaters that burst when they fall, a rally each
@@ -4902,7 +4902,7 @@ Every value marked *Proposed* is a starting point for the balance harness
 |---|---|---|
 | 1 | Taunt reaches a radius (§39.2) — **built** | — |
 | 2 | A Bloater bursts when it's downed (§39.3) — **built** | — |
-| 3 | The rally is each player's choice (§39.4) | — |
+| 3 | The rally is each player's choice (§39.4) — **built** | — |
 | 4 | Elite Swarm characters (§39.5) | — |
 | 5 | Waves that differ, bought with points (§39.6) | 4 |
 | 6 | Nests (§39.7) | 5 |
@@ -5031,44 +5031,93 @@ anything else:
   character if nobody of theirs stands.
 - **It can't be undone**, and it clears the undo stack.
 
-**Engine.**
+**Engine, as built.**
 
-- `landWave` under version 12 sets `rallyOwed: string[]` on the state — every
-  team seat — in place of calling `rally`.
-- A new action, `{ kind: "rally", choice, fighter? }`, through
-  `RealmArenaAct`. `check` refuses it unless the actor's owner owes one, and
-  refuses every other action and the End turn while they do. Command version
-  12.
-- Reinforce places the character as `waveOf` places the enemy's: the first
-  free square of the zone. *Open:* letting the player tap the square, with the
-  muster's placing.
-- A fighter keeps `musteredItem`, set at muster: `item` is null once used, so
-  Resupply has nothing to read today.
-- The log says "Bob's squad rallies", "Bob's Archer rejoins the fight" or
-  "Bob's squad is resupplied", to everyone. `HoldOutRecord` gains each wave's
-  choices, and the result's *Hold Out* group a line for them.
-- The choice earns no mastery XP.
+- **Rules are data.** `RALLY_CHOICE: true` in `v12.ts`'s `RULES` (absent before,
+  documented on `RealmArenaRuleValues`). Nothing else of version 11's `RULES`
+  changed, which `rulesets.test.ts` pins.
+- `landWave` under it sets `rallyOwed: string[]` on the state — every team seat
+  still in the battle — in place of calling `rally`, and writes the public line
+  "The team must each choose how to rally: …". Earlier versions are untouched
+  (`RALLYING_VERSION`'s branch). The state's `rallyOwed` is a Mixed path, deleted
+  when the last seat has chosen, and kept by `cloneRealmArenaState`.
+- **The action is not an `Action`.** `{ kind: "rally", choice, fighter? }`
+  (`RallyAction`, `rally.ts`) goes through `RealmArenaAct`, whose `action` is
+  `Action | RallyAction`, but never reaches `applyAction`, `check`, `act`, the
+  planner or `TALLIED`: the first line of `Execute` after the turn check
+  branches to `executeRally` in the Logic layer. `rally.ts` is browser-safe and
+  holds the rule for server and board alike: `rallyOptionsOf(battle, seats,
+  seat)` — each of the three choices with `available`, a `reason` when it isn't,
+  and for Reinforce the ids it may bring back (`downed`) — `rallyRefusal`,
+  `rallied` and `cleanRally`. A choice is refused unless it is the sender's turn
+  and they owe one and it is available; every other `RealmArenaAct` and the End
+  turn from a player owing one is refused as well. It earns no mastery, rolls
+  nothing, tells no battle event, and empties the undo stack.
+- **Rally** heals every standing character of the sender's by half, through the
+  same `rallyHp` the version-11 rally heals by. **Reinforce** stands the chosen downed character up
+  at half its max HP, floored and at least 1, on the first free square of the
+  seat's deployment zone (`deployments[seat index]`, a square nobody standing is
+  on), with a turn's AP at once; it isn't Raise's path, since Raise reads a
+  Cleric's ability and rounds up. **Resupply** hands each standing character
+  whose `item` is null the `musteredItem` it has.
+- `Fighter.musteredItem` is set by `newFighter` for a player's character that
+  carries an item, only where the battle's rules have `RALLY_CHOICE`. It travels
+  with the fighter, so as visible as `item` itself is: an opponent in fog never
+  gets a fighter the viewer can't see.
+- **A wiped-out player still chooses.** `takesTurn` (RealmArenaLogic.ts) is the
+  one test `nextSeat` and `handOff` step past a seat by: someone standing, or
+  owing a choice with someone down. A seat that owes a choice isn't "next after
+  itself": `nextSeat` of it is the head of the table, since the turn that ended
+  was the last of the round before the wave, so the new round begins where it
+  always does and the wiped-out seat gets its turn in its place in it. If the
+  whole team is down the battle is over (`holdOutEnding`) and nothing is owed.
+  A seat that has chosen Rally with nobody standing has nothing to do but End
+  turn, and is stepped past from then on.
+- **A timed-out turn** (`turnTimeout.ts`) sends the Rally act first — or, with
+  nobody of theirs standing and a free square, Reinforce with the dearest downed
+  character (most points, then the lowest id) — and ends the turn on its next call.
+- **Command version 12** (`meta.ts`). The rule itself is read from the rules
+  version: a version-11 battle's End turn rallies everyone as before.
+- The log says "Bob's squad rallies", "Bob's Archer rejoins the fight" or "Bob's
+  squad is resupplied", to everyone (tokens, as every line). `WaveRecord` gains
+  `rallies?: { seat, choice, character? }[]` — the choices made after the wave
+  that landed, in order — filled by the recorder from a replay and stored on the
+  result's waves; absent in a battle before it.
+- The response carries `rallyOwed: true` for a viewer who owes one and never the
+  list; their own fighters carry `musteredItem` as far as they carry `item`.
+- *Open:* letting the player tap the square Reinforce places the character on,
+  with the muster's placing.
 
 **Screens.** While a choice is owed, the turn sheet shows it alone: three
 `BuildRow`s in an `.ag-build-list`, the unavailable ones disabled with their
 reason, and Reinforce opening a second list of the downed. The response
-carries `rallyOwed` for the viewer's seat. The guide's co-op section and the
-tutorial's Hold Out step are rewritten.
+carries `rallyOwed` for the viewer's seat. *Screens: to be written as built by
+the PR that builds them.* The guide's co-op section and the tutorial's Hold Out
+step describe the released rules, and version 12 is unreleased, so they are
+rewritten with the release (§39.9), not before.
 
 **The harness's team** needs a policy, since the planner scores battles, not
 menus: Reinforce when the downed character is worth more than half the HP a
 Rally would give back, Resupply never, Rally otherwise. It lives in the
-harness, not in `ai.ts`: warbands never rally.
+harness (`rallyChoiceFor`, `scripts/lib/realmArenaBalance.ts`), not in `ai.ts`:
+warbands never rally. As built, "worth" is the HP the best downed character
+returns with (half its max), "a Rally would give back" is what the player's own
+standing characters would regain, and a player with nobody standing Reinforces.
+`--rally policy|always` (the workflow's `rally` input) picks it; `always` is
+Rally every time, and is named in the scenario's key, the default leaves it as
+it was. It changes nothing under rules without the choice.
 
 **Tests.** Each choice's effect and its refusal when there is nothing to do;
 every other action refused while owed; a wiped-out seat gets its turn and
 only Reinforce; the timeout's pick; a version-11 End turn rallies as before; a
-replay; the null viewer's response in `hiddenHands.test.ts`.
+replay; the null viewer's response in `hiddenHands.test.ts`. All of it is built:
+`rallyChoice.test.ts` has the engine's, and also Undo refused after a choice, the
+record carrying each wave's choices and the harness's policy.
 
 **Measured.** Against the baseline, with the harness's policy and with Rally
 always. If Reinforce overshoots as restore did, the first levers are
 Reinforce at a quarter HP, and no turn for the returned character until the
-next round.
+next round. *Not yet measured:* neither Step 0's baseline nor this has been run.
 
 *Open:* the choice is made as each player's turn begins, so in a team of four
 the last player waits most of a round for their heal. It could be an

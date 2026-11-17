@@ -32,6 +32,9 @@ describe("the balance harness's scenarios", () => {
         expect(scenarioKey({ ...SOLO, players: 3, enemy: "realm", mission: "holdTheCentre", difficulty: "hard", size: "large", fog: true }))
             .toBe("3 players vs Realm · Hold the Centre · Hard, Large battle, fog");
         expect(scenarioKey({ ...SOLO, players: 2, team: "miners", enemy: "miners" })).toBe("2 players as Miners vs Miners · Hold Out (Sacked Fort)");
+        // The rally policy (§39.4) is the default and unsaid; Rally always is named.
+        expect(scenarioKey({ ...SOLO, rules: 12, rally: "policy" })).toBe("1 player (Solo) vs Swarm · Hold Out (Ruined Fort) · rules v12");
+        expect(scenarioKey({ ...SOLO, rules: 12, rally: "always" })).toBe("1 player (Solo) vs Swarm · Hold Out (Ruined Fort) · rules v12, rally always");
     });
 
     it("sets a battle up as the host's choices would", () => {
@@ -45,6 +48,16 @@ describe("the balance harness's scenarios", () => {
         // A team of another faction is the one faction its players may muster from.
         expect(settingsOf({ ...SOLO, team: "miners" })).toMatchObject({ factions: ["miners"] });
     });
+});
+
+describe("the balance harness's rally choice (§39.4)", () => {
+    it("fights a whole battle under rules 12, the team making each choice it owes, by either policy", async () => {
+        for (const rally of ["policy", "always"] as const) {
+            const battle = await simulateBattle({ ...SOLO, size: "small", rules: 12, rally }, 3);
+            expect(battle.endedRound).toBeGreaterThan(0);
+            expect(battle.waves.length).toBeGreaterThan(0);
+        }
+    }, 60_000);
 });
 
 describe("the balance harness's team planner", () => {

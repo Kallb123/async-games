@@ -96,6 +96,11 @@ export interface IRealmArenaSpecificGameStateResponse {
     scores: Record<string, number>;
     /** True when the viewer has an action of their own they can still take back (docs/undo.md). The undo stack itself is never sent. */
     canUndo: boolean;
+    /**
+     * True when the viewer owes a rally choice (§39.4): the turn sheet shows it
+     * alone until they make it. Absent otherwise, and never says who else owes one.
+     */
+    rallyOwed?: true;
 }
 
 export interface IRealmArenaGameDataResponse extends IGameDataResponse {

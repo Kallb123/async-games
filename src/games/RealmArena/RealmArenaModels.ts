@@ -20,6 +20,7 @@ import type { IRealmArenaGameDataResponse, IRealmArenaSpecificGameStateResponse,
 import type { Square } from "@/utils/games/battlefield/terrain";
 import { addRecords, NO_RECORD, RECORD_KEYS, type BattleRecord, type FightingRecord, type FightingRow, type WaveRecord } from "./battleRecord";
 import { CHARACTER_IDS } from "./roster";
+import { rallyTally } from "./rally";
 import { ENEMY_COLOUR, TEAM_COLOUR, TEAM_NAME } from "./ui";
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -131,6 +132,13 @@ export interface IRealmArenaSpecificGameState {
      * absent on a battle from before it, which plays by the old ones.
      */
     rulesVersion?: number;
+    /**
+     * The players of the team who owe a rally choice (§39.4), set as a Hold Out
+     * wave lands in a battle whose rules have `RALLY_CHOICE` and shrunk as each
+     * chooses. Absent when nobody owes one, and in every battle from before it.
+     * Never sent as a list: the viewer is told only whether they owe one.
+     */
+    rallyOwed?: string[];
     /** Battle rounds played to the end: 0 until the first round's last turn ends. The round being played is one more. */
     roundsPlayed: number;
     /**
@@ -459,6 +467,8 @@ var RealmArenaGameDataSchema = new Schema<IRealmArenaGameDataDocument>(
             rulesVersion: Number,
             phase: String,
             roundsPlayed: Number,
+            // Mixed, so a Hold Out wave setting it and the last choice deleting it are both saved by `markDirty` (§39.4).
+            rallyOwed: Schema.Types.Mixed,
             fighters: Schema.Types.Mixed,
             sightings: Schema.Types.Mixed,
             blasted: [Number],
@@ -566,6 +576,8 @@ export function gameStateToModel(
         // Absent (`?? []`) on a game that predates the stack; false for every
         // viewer but the actor, and for a viewerless replay.
         canUndo: viewerId !== null && (gs.undoStack ?? []).at(-1)?.by === viewerId && gs.undoAnchorId === lastCommandId,
+        // Whether the viewer owes a rally choice (§39.4), never who else does.
+        ...(viewerId !== null && gs.rallyOwed?.includes(viewerId) ? { rallyOwed: true as const } : {}),
     };
 }
 
@@ -762,7 +774,8 @@ export const realmArenaGameResultStatsSchemaDef = {
     squadHpPerRound: [{ type: Schema.Types.Map, of: Number }],
     losses: [gameResultEventSchemaDef],
     // Hold Out's alone (§30.10): absent from any other battle, and from a result recorded before them.
-    waves: { type: [{ _id: false, round: Number, arrived: Number, downed: { type: Schema.Types.Map, of: Number } }], default: undefined },
+    // `rallies` (§39.4) is absent from a wave in a battle whose rally wasn't a choice.
+    waves: { type: [{ _id: false, round: Number, arrived: Number, downed: { type: Schema.Types.Map, of: Number }, rallies: { type: [{ _id: false, seat: String, choice: String, character: String }], default: undefined } }], default: undefined },
     standingPerRound: { type: [{ type: Schema.Types.Map, of: Number }], default: undefined },
     battleRounds: Number,
 };
@@ -897,6 +910,8 @@ function holdOutGroup(stats: IRealmArenaGameResultStats): GameResultStatGroup | 
                 : lasted >= rounds ? `Held out for all ${rounds} rounds`
                 : `Beat the last wave in round ${lasted} of ${rounds}`,
             `Faced ${pluralize(waves.length, "wave")}: ${arrived} of the enemy took the field, and the team downed ${downed}`,
+            // Every choice is public in the log (§39.4); absent for a battle whose rally wasn't one.
+            ...(rallyTally(waves.flatMap(wave => [...(wave.rallies ?? [])])) ?? []),
             ...waves.map((wave, index) => `Wave ${index + 1}, round ${wave.round + 1}: ${wave.arrived} arrived, ${downedIn(wave)} downed`),
         ],
     };

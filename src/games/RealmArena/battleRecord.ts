@@ -19,6 +19,7 @@ import type { IReplayStep } from "@/utils/games/replay";
 import { type CharacterId } from "./characters";
 import type { IRealmArenaSpecificGameState } from "./RealmArenaModels";
 import { CHARACTER_IDS } from "./roster";
+import { isRallyAction, type RallyChoice } from "./rally";
 import { areaDamage, allied, battleRounds, ENEMY_SIDE, isStanding, isWarband, knockoutPoints, sideOf, squadHp, TEAM_SIDE, waveArrives, type BattleEvent, type BattleState, type Fighter } from "./rules";
 
 /** What one player's characters of one kind did in a battle, pooled as their mastery is (§23.1). */
@@ -95,6 +96,20 @@ export interface WaveRecord {
     round: number;
     arrived: number;
     downed: Map<string, number>;
+    /**
+     * What each player of the team chose as this wave landed (§39.4), in the
+     * order they chose. Only in a battle whose rules make the rally a choice,
+     * and absent on a result recorded before it; `character` is the one a
+     * Reinforce brought back.
+     */
+    rallies?: RallyRecord[];
+}
+
+/** One player's rally choice, as a wave record keeps it (§39.4). */
+export interface RallyRecord {
+    seat: string;
+    choice: RallyChoice;
+    character?: CharacterId;
 }
 
 /**
@@ -265,6 +280,13 @@ export function battleRecorder(seats: readonly string[], sides?: BattleState["si
             if (className === "RealmArenaUndo") {
                 records = undoable.pop() ?? records;
             } else {
+                // A rally choice (§39.4) belongs to the wave that landed before it.
+                const action = (step.command as { action?: unknown }).action;
+                if (className === "RealmArenaAct" && isRallyAction(action)) {
+                    const wave = waves.at(-1);
+                    const character = action.choice === "reinforce" && action.fighter !== undefined ? known.get(action.fighter)?.character : undefined;
+                    if (wave) wave.rallies = [...wave.rallies ?? [], { seat: (step.command as { senderId: string }).senderId, choice: action.choice, ...(character ? { character } : {}) }];
+                }
                 // Only an action can push the game's undo stack.
                 const before = className === "RealmArenaAct" ? copyOf(records) : undefined;
                 tell((step.outcome as { events?: BattleEvent[] }).events ?? []);
@@ -333,7 +355,7 @@ export function battleRecorder(seats: readonly string[], sides?: BattleState["si
                 squadHpPerRound: [...squadHpPerRound],
                 losses: [...losses],
                 ...(holdOut ? {
-                    waves: waves.map(wave => ({ ...wave, downed: new Map(wave.downed) })),
+                    waves: waves.map(wave => ({ ...wave, downed: new Map(wave.downed), ...(wave.rallies ? { rallies: wave.rallies.map(rally => ({ ...rally })) } : {}) })),
                     standingPerRound: [...standingPerRound],
                     battleRounds: lastRound + 1,
                 } : {}),

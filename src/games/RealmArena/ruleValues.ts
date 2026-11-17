@@ -40,5 +40,12 @@ export interface RealmArenaRuleValues {
      * version 10, which played without it.
      */
     ANGLED_SIGHT?: boolean;
+    /**
+     * Whether a Hold Out wave heals nobody as it lands, each player of the team
+     * owing a rally choice instead (realm-arena.md §39.4): Rally, Reinforce or
+     * Resupply, made as their next turn begins. Absent in the catalogues
+     * before version 12, where the wave rallies the whole team by itself.
+     */
+    RALLY_CHOICE?: boolean;
     BATTLE_ROUNDS: Readonly<Record<PlayerCount, number>>;
 }
