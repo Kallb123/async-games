@@ -1064,8 +1064,9 @@ export function waveStrength(squad: readonly CharacterId[], round: number, growi
  * What a themed wave landing as `round` begins has to spend (§39.6): the
  * warband's own budget and `WAVE_GROWTH_POINTS` for every wave landed by then,
  * the warbands' own muster counted as the first (as `WaveRecord` counts it), so
- * the round-4 wave has 15 more than the squad cost. (§39.7's nests will take
- * points off it.)
+ * the round-4 wave has 15 more than the squad cost; less 15 for each of the
+ * warband's nests the team has destroyed since its last wave (§39.7), never
+ * below half. Without an owner, the whole budget: fog's ceiling.
  */
 export function waveBudgetOf(gs: IRealmArenaSpecificGameState, round: number, owner?: string): number {
     const grown = warbandBudgetOf(gs) + (ruleValuesOf(gs).WAVE_GROWTH_POINTS ?? 0) * wavesLanded(round);
