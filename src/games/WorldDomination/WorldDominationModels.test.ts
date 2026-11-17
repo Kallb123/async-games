@@ -13,7 +13,7 @@ import { undoEntryFor } from "@/utils/games/undo";
 // and `territoryId` and throwing a CastError the moment real card objects are
 // assigned — exactly the bug this guards against.
 describe("World Domination Mongoose schema", () => {
-    it("keeps card objects (id/type/territoryId) intact through schema casting", () => {
+    it("keeps card objects (id/type/territoryId) intact through schema casting", async () => {
         const cardDeck = buildWorldDominationCardDeck();
         const territories = Array.from({ length: TERRITORY_COUNT }, () => ({ owner: "u1", armies: 1 }));
 
@@ -55,7 +55,7 @@ describe("World Domination Mongoose schema", () => {
             },
         });
 
-        expect(doc.validateSync()).toBeUndefined();
+        await expect(doc.validate()).resolves.toBeUndefined();
 
         const firstCard = doc.specificGameState.cardDeck[0];
         expect(firstCard.id).toBe(cardDeck[0].id);
@@ -89,7 +89,7 @@ describe("World Domination Mongoose schema", () => {
         expect(doc.specificGameState.autoEndTurnAt ?? null).toBeNull();
     });
 
-    it("stores a snapshot whole, Map and all, on the undo stack", () => {
+    it("stores a snapshot whole, Map and all, on the undo stack", async () => {
         const gs = makeState();
         const doc = new WorldDominationGameDataModel({
             gameId: "11111111-1111-1111-1111-111111111111",
@@ -105,7 +105,7 @@ describe("World Domination Mongoose schema", () => {
                 undoAnchorId: "last-command",
             },
         });
-        expect(doc.validateSync()).toBeUndefined();
+        await expect(doc.validate()).resolves.toBeUndefined();
         expect(doc.specificGameState.undoStack[0].by).toBe("u1");
         expect(doc.specificGameState.undoStack[0].state.phase).toBe("reinforce");
     });

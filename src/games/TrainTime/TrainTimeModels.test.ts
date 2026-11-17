@@ -36,14 +36,14 @@ describe("Train Time Mongoose schema", () => {
     // live state — and silently, since nothing reads the snapshot until someone
     // opens a recap. World Domination shipped exactly that bug (see
     // WorldDominationModels.test.ts); this is the same guard one game later.
-    it("keeps both game-state paths intact through schema casting", () => {
+    it("keeps both game-state paths intact through schema casting", async () => {
         const state = buildInitialTrainTimeState(["u1", "u2"]);
         // A claimed route and an unclaimed one: routeOwners is a Mixed array
         // whose entries are nullable, which is the part a schema can mangle.
         state.routeOwners[0] = "u1";
 
         const doc = gameDoc(state);
-        expect(doc.validateSync()).toBeUndefined();
+        await expect(doc.validate()).resolves.toBeUndefined();
 
         for (const path of [doc.specificGameState, doc.initialSpecificGameState!]) {
             expect(path.deck).toEqual(state.deck);
@@ -83,7 +83,7 @@ describe("Train Time Mongoose schema", () => {
         expect(ps.routesClaimed).toBe(1);
     });
 
-    it("casts the per-turn chart series on the result document", () => {
+    it("casts the per-turn chart series on the result document", async () => {
         const result = new TrainTimeGameResultModel({
             gameId: "22222222-2222-2222-2222-222222222222",
             gameType: "TrainTime",
@@ -99,7 +99,7 @@ describe("Train Time Mongoose schema", () => {
             ),
         });
 
-        expect(result.validateSync()).toBeUndefined();
+        await expect(result.validate()).resolves.toBeUndefined();
         expect(result.stats.pointsPerTurn).toHaveLength(2);
         expect(result.stats.pointsPerTurn[1].get("u1")).toBe(7);
         expect(result.stats.longestRunPerTurn[1].get("u2")).toBe(3);

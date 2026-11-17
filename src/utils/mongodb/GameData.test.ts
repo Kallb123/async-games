@@ -24,7 +24,7 @@ describe("legacy string history heals on load", () => {
     // uncast primitives stayed on the path and made the next save throw a
     // ValidationError, which surfaced as a 500 on the first command played in
     // any pre-existing game.
-    it("does not throw on save after a command appends to it", () => {
+    it("does not throw on save after a command appends to it", async () => {
         const game = hydrate(["u1 rolled a 6", "u2 drew a card"]);
 
         // The legacy strings are dropped — as docs/dynamic-names.md §4d accepts.
@@ -34,20 +34,20 @@ describe("legacy string history heals on load", () => {
         game.gameState.history.unshift({ text: "{{u1}} claimed a route", actorId: "u1" });
 
         // The crux: this validation ran on save() and used to reject the game.
-        expect(game.validateSync()).toBeFalsy();
+        await expect(game.validate()).resolves.toBeUndefined();
         expect(game.gameState.history.map(h => ({ text: h.text, actorId: h.actorId }))).toEqual([
             { text: "{{u1}} claimed a route", actorId: "u1" },
         ]);
     });
 
-    it("leaves a converted game's log untouched", () => {
+    it("leaves a converted game's log untouched", async () => {
         const stored = [
             { text: "{{u2}} drew a card", actorId: "u2" },
             { text: "Setup: running order is {{u1}} → {{u2}}" },
         ];
         const game = hydrate(stored);
 
-        expect(game.validateSync()).toBeFalsy();
+        await expect(game.validate()).resolves.toBeUndefined();
         expect(game.gameState.history.map(h => ({ text: h.text, actorId: h.actorId }))).toEqual([
             { text: "{{u2}} drew a card", actorId: "u2" },
             { text: "Setup: running order is {{u1}} → {{u2}}", actorId: undefined },

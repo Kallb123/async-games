@@ -66,14 +66,14 @@ function docFor(specificGameState: ISACSpecificGameState) {
 // about it depend on Mongoose behaving a particular way, and each of them is a
 // real bug if it doesn't — hence this file rather than trusting the cast.
 describe("Settlements & Cities' roll payout through Mongoose", () => {
-    it("stays absent on a game played before the field existed, rather than becoming []", () => {
+    it("stays absent on a game played before the field existed, rather than becoming []", async () => {
         // A Mongoose array path defaults to `[]`, which here would be a claim —
         // "this roll paid nobody" — about a roll that simply never recorded one.
         // `default: undefined` in the schema is what keeps the two apart, and the
         // screens show no payout line at all for the absent case.
         const doc = docFor(stateWith(undefined));
 
-        expect(doc.validateSync()).toBeUndefined();
+        await expect(doc.validate()).resolves.toBeUndefined();
         expect(doc.specificGameState.lastRollChanges).toBeUndefined();
         expect(gameStateToResponse(doc.specificGameState, NAMES, "u1").lastRollChanges).toBeUndefined();
     });
