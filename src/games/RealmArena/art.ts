@@ -17,6 +17,31 @@ import { FACING_COUNT, FULL_HEIGHT, TERRAIN, type Facing, type TerrainLetter } f
 import { ISO_HALF_HEIGHT, ISO_HALF_WIDTH, ISO_STEP, type IsoRotation } from "@/utils/ui/isometric";
 import { EFFECT_IDS, ITEM_IDS, type CharacterId, type ItemId } from "./characters";
 import { CHARACTER_IDS } from "./roster";
+import { registeredRulesets } from "./rulesets";
+
+/**
+ * Every character any registered catalogue knows, which is more than
+ * `CHARACTER_IDS` (the current ruleset's) while a release is unreleased: a
+ * battle on the newest version must find art for every fighter. The current
+ * roster keeps its order and the rest follow, in the order the catalogues
+ * introduced them, so a character's row never moves when a release lands.
+ * The sheets, `characters.json` and the sheet script are all laid out from it.
+ */
+export const ART_CHARACTER_IDS: readonly CharacterId[] = [...new Set([
+    ...CHARACTER_IDS,
+    ...registeredRulesets.flatMap(ruleset => Object.keys(ruleset.CHARACTERS) as CharacterId[]),
+])];
+
+/** The poses a character is drawn in, in the order their rows come down the characters' sheet. */
+export const CHARACTER_POSES = ["standing", "fallen"] as const;
+
+export type CharacterPose = typeof CHARACTER_POSES[number];
+
+/** The height of a character's cell, in the sheets' pixels. */
+const CHARACTER_CELL_HEIGHT = 160;
+
+/** The characters' sheets: a row of cells per character per pose, so they grow as the roster does. */
+const CHARACTER_SHEET = { width: 1024, height: ART_CHARACTER_IDS.length * CHARACTER_POSES.length * CHARACTER_CELL_HEIGHT };
 
 export const ART_SHEETS = {
     /** Grass, rock, water and trees. */
@@ -59,9 +84,9 @@ export const ART_SHEETS = {
      * facings. Rendered from the models in `art-masters/realmarena/characters`
      * by `npm run ra-characters`.
      */
-    characters: { href: "/art/realmarena/characters.png", width: 1024, height: 5120 },
+    characters: { href: "/art/realmarena/characters.png", ...CHARACTER_SHEET },
     /** The owner's colour on the characters, grey and shaded, cell for cell with `characters`: tinted per seat. */
-    charactersTeam: { href: "/art/realmarena/characters-team.png", width: 1024, height: 5120 },
+    charactersTeam: { href: "/art/realmarena/characters-team.png", ...CHARACTER_SHEET },
 } as const;
 
 export type ArtSheet = keyof typeof ART_SHEETS;
@@ -269,13 +294,8 @@ export const BURST_ART: Readonly<Record<BurstKind, Sprite>> = {
     smoke: SMOKE_ART,
 };
 
-/** The poses a character is drawn in, in the order their rows come down the characters' sheet. */
-export const CHARACTER_POSES = ["standing", "fallen"] as const;
-
-export type CharacterPose = typeof CHARACTER_POSES[number];
-
 /** A character's cell: a square's diamond twice the tile sheets' across, so a figure stays sharp zoomed in, and room above it for what it holds up. */
-export const CHARACTER_CELL = { tile: 2 * TILE_PX, width: 2 * TILE_PX, height: 160 } as const;
+export const CHARACTER_CELL = { tile: 2 * TILE_PX, width: 2 * TILE_PX, height: CHARACTER_CELL_HEIGHT } as const;
 
 /** One character in one pose: its figure from each facing, in `Facing` order as the board is drawn, and the owner's colour on each. */
 export interface CharacterArt {
@@ -291,14 +311,14 @@ const characterCells = (sheet: ArtSheet, row: number) => Array.from({ length: FA
 
 /**
  * Every character in every pose (`CHARACTER_POSES`): a row of the
- * characters' sheet each — every character standing, in `CHARACTERS` order,
- * then every one fallen — and a cell a facing along it. The team sheet
+ * characters' sheet each — every character standing, in `ART_CHARACTER_IDS`
+ * order, then every one fallen — and a cell a facing along it. The team sheet
  * holds the owner's colour in the same cells.
  */
-export const CHARACTER_ART = Object.fromEntries(CHARACTER_IDS.map((character, index) => {
+export const CHARACTER_ART = Object.fromEntries(ART_CHARACTER_IDS.map((character, index) => {
     const poses = {} as Record<CharacterPose, CharacterArt>;
     CHARACTER_POSES.forEach((pose, p) => {
-        const row = p * CHARACTER_IDS.length + index;
+        const row = p * ART_CHARACTER_IDS.length + index;
         poses[pose] = { body: characterCells("characters", row), team: characterCells("charactersTeam", row) };
     });
     return [character, poses];

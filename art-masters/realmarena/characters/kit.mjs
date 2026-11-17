@@ -211,3 +211,24 @@ export function dynamiteStick(from, to, { lit = false } = {}) {
         ...(lit ? [{ ball: { at: fuse, r: 0.022 }, mat: 'spark' }] : []),
     ];
 }
+
+/**
+ * A model made `k` times larger about its origin — the middle of its square
+ * on the ground — so a bigger kin of a character is its base's parts scaled,
+ * plus what it adds. Positions, radii and sizes scale; a `rot` or `roll`,
+ * which are angles, doesn't.
+ */
+export function scaled(parts, k) {
+    const point = p => p.map(n => n * k);
+    const solid = body => {
+        const out = { ...body };
+        for (const key of ['at', 'from', 'to', 'size']) if (body[key]) out[key] = point(body[key]);
+        if (body.r !== undefined) out.r = typeof body.r === 'number' ? body.r * k : point(body.r);
+        if (body.r2 !== undefined) out.r2 = body.r2 * k;
+        return out;
+    };
+    return parts.map(part => {
+        const shape = ['box', 'ball', 'taper', 'capsule'].find(key => part[key]);
+        return { ...part, [shape]: solid(part[shape]) };
+    });
+}

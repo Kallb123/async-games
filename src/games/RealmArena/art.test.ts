@@ -2,8 +2,9 @@ import { existsSync, readFileSync } from "node:fs";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
 import { FACING_COUNT, TERRAIN, type Facing, type TerrainLetter } from "@/utils/games/battlefield/terrain";
-import { CHARACTERS, EFFECT_IDS, ITEM_IDS, type CharacterId } from "./characters";
-import { ART_SHEETS, BLOCK_SKIN, BURST_ART, CHARACTER_ART, CHARACTER_CELL, CHARACTER_POSES, CLIPS, EFFECT_ART, facingCell, GRASS, ITEM_ART, MISSILE_ART, SLASH_ART, SMOKE_ART, grassOf, SPRITES, spriteBox, TERRAIN_ART, variantOf } from "./art";
+import { EFFECT_IDS, ITEM_IDS } from "./characters";
+import { registeredRulesets } from "./rulesets";
+import { ART_CHARACTER_IDS, ART_SHEETS, BLOCK_SKIN, BURST_ART, CHARACTER_ART, CHARACTER_CELL, CHARACTER_POSES, CLIPS, EFFECT_ART, facingCell, GRASS, ITEM_ART, MISSILE_ART, SLASH_ART, SMOKE_ART, grassOf, SPRITES, spriteBox, TERRAIN_ART, variantOf } from "./art";
 import { FLIGHT_PACE } from "./ui";
 
 /** A PNG's size, read off its header: the served sheet is the one the sprites are cut from. */
@@ -40,13 +41,19 @@ describe("the art sheets", () => {
 });
 
 describe("CHARACTER_ART", () => {
-    const characters = Object.keys(CHARACTERS) as CharacterId[];
+    const characters = ART_CHARACTER_IDS;
 
     it("is drawn from a model for every character, a row of the sheets each per pose and a cell per facing", () => {
         for (const character of characters) expect(existsSync(path.join("art-masters", "realmarena", "characters", `${character}.mjs`))).toBe(true);
         const size = { width: FACING_COUNT * CHARACTER_CELL.width, height: characters.length * CHARACTER_POSES.length * CHARACTER_CELL.height };
         expect(ART_SHEETS.characters).toMatchObject(size);
         expect(ART_SHEETS.charactersTeam).toMatchObject(size);
+    });
+
+    it("has art for every character of every registered catalogue, including a release still being built", () => {
+        for (const ruleset of registeredRulesets) {
+            for (const character of Object.keys(ruleset.CHARACTERS)) expect(characters, character).toContain(character);
+        }
     });
 
     it("gives every character, pose and facing a cell of its own, and its owner's colour the same cell of the team sheet", () => {

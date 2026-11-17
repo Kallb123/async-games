@@ -2,8 +2,7 @@ import { readFileSync } from "node:fs";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
 import { describe, expect, it } from "vitest";
-import { CHARACTER_MODELS_HREF } from "@/games/RealmArena/art";
-import { CHARACTER_IDS } from "@/games/RealmArena/roster";
+import { ART_CHARACTER_IDS, CHARACTER_MODELS_HREF } from "@/games/RealmArena/art";
 import { modelsJson } from "../../../../scripts/lib/characterModels.mjs";
 import { characterGeometry, type CharacterModels } from "./characterModels";
 
@@ -17,12 +16,12 @@ describe("the 3D board's characters", () => {
     it("serves every master as it stands: run npm run ra-characters after changing one", async () => {
         const master = (name: string) => import(pathToFileURL(path.join(MASTERS, `${name}.mjs`)).href);
         const { MATERIALS } = await master("kit");
-        const parts = Object.fromEntries(await Promise.all(CHARACTER_IDS.map(async id => [id, (await master(id)).parts])));
+        const parts = Object.fromEntries(await Promise.all(ART_CHARACTER_IDS.map(async id => [id, (await master(id)).parts])));
         expect(file).toBe(modelsJson(MATERIALS, parts));
     });
 
     it("builds every character's model from what's served", () => {
-        for (const id of CHARACTER_IDS) {
+        for (const id of ART_CHARACTER_IDS) {
             const geometry = characterGeometry(served, id);
             expect(geometry.getAttribute("position").count, id).toBeGreaterThan(100);
             expect(geometry.getAttribute("color").count, id).toBe(geometry.getAttribute("position").count);
