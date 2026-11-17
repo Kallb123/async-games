@@ -109,10 +109,10 @@ describe("Realm Arena ruleset compatibility", () => {
         const before = real.rulesetFor(11), after = real.rulesetFor(12);
         expect(before.ABILITIES.taunt?.radius).toBeUndefined();
         expect(after.ABILITIES.taunt).toEqual({ ...before.ABILITIES.taunt, radius: 3, description: expect.stringContaining("within 3 squares") });
-        const { taunt: _before, ...rest } = before.ABILITIES, { taunt: _after, ...restAfter } = after.ABILITIES;
+        // Only the elites' abilities are added besides (§39.5).
+        const { taunt: _before, ...rest } = before.ABILITIES, { taunt: _after, hatch: _hatch, carapace: _carapace, bile: _bile, ...restAfter } = after.ABILITIES;
         expect(restAfter).toEqual(rest);
-        // The Bloater's burst-when-downed is the one character change so far (§39.3).
-        for (const id of ["OPTIONS", "ITEMS", "EFFECTS", "FACTIONS"] as const) expect(after[id]).toBe(before[id]);
+        for (const id of ["OPTIONS", "ITEMS", "EFFECTS"] as const) expect(after[id]).toBe(before[id]);
         // Not released until §39.9: nobody creates a version-12 battle yet.
         expect(real.CURRENT_RULESET_VERSION).toBe(11);
     });
@@ -132,8 +132,33 @@ describe("Realm Arena ruleset compatibility", () => {
         expect(before.bloater.burstsWhenDowned).toBeUndefined();
         expect(real.rulesetFor(10).CHARACTERS.bloater.burstsWhenDowned).toBeUndefined();
         expect(after.bloater).toEqual({ ...before.bloater, burstsWhenDowned: true });
-        const { bloater: _before, ...rest } = before, { bloater: _after, ...restAfter } = after;
+        // Only the elites (§39.5) are added besides.
+        const { bloater: _before, ...rest } = before, { bloater: _after, broodQueen: _queen, carapaceBrute: _brute, bileLobber: _lobber, ...restAfter } = after;
         expect(restAfter).toEqual(rest);
+    });
+
+    it("adds the Swarm's three elites in v12, apart from its roster, and changes nothing else of v11 (§39.5)", async () => {
+        const real = await vi.importActual<typeof import("./rulesets")>("./rulesets");
+        const before = real.rulesetFor(11), after = real.rulesetFor(12);
+        for (const id of ["broodQueen", "carapaceBrute", "bileLobber"] as const) expect(Object.hasOwn(before.CHARACTERS, id)).toBe(false);
+        expect(after.CHARACTERS.broodQueen).toMatchObject({ name: "Brood Queen", plural: "Brood Queens", points: 60, hp: 20, movement: 4, sight: 25, abilities: ["hatch"],
+            weapon: { kind: "melee", damage: 3 } });
+        expect(after.CHARACTERS.carapaceBrute).toMatchObject({ name: "Carapace Brute", plural: "Carapace Brutes", points: 50, hp: 22, movement: 4, armour: 1, abilities: ["carapace"],
+            weapon: { kind: "melee", damage: 5 } });
+        expect(after.CHARACTERS.bileLobber).toMatchObject({ name: "Bile Lobber", plural: "Bile Lobbers", points: 40, hp: 12, movement: 4, abilities: ["bile"],
+            weapon: { kind: "ranged", accuracy: 70, range: 12, damage: 2, effect: "corroded" } });
+        expect(after.CHARACTERS.broodQueen.armour).toBeUndefined();
+        expect(after.ABILITIES.hatch).toMatchObject({ ap: 2, cooldown: 2, hatches: "skitterling", cap: 3 });
+        expect(after.ABILITIES.carapace).toMatchObject({ ap: 0, cooldown: 0, passive: true });
+        expect(after.ABILITIES.bile).toMatchObject({ ap: 3, cooldown: 2, range: 10, damage: 2, effect: "corroded" });
+        // The elites stand beside the roster, which a muster is checked against, and no other faction's changes.
+        expect(after.FACTIONS.swarm.elites).toEqual(["broodQueen", "carapaceBrute", "bileLobber"]);
+        expect(before.FACTIONS.swarm.elites).toBeUndefined();
+        expect(after.FACTIONS.swarm).toEqual({ ...before.FACTIONS.swarm, elites: ["broodQueen", "carapaceBrute", "bileLobber"] });
+        expect(after.FACTIONS.swarm.characters).toBe(before.FACTIONS.swarm.characters);
+        expect(after.FACTIONS.realm).toBe(before.FACTIONS.realm);
+        expect(after.FACTIONS.miners).toBe(before.FACTIONS.miners);
+        expect(Object.isFrozen(after.FACTIONS.swarm.elites)).toBe(true);
     });
 
     it("pins HP, movement and available abilities to the game, including an added ability", () => {

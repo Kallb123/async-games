@@ -11,10 +11,10 @@ import { reachShading } from "./ui";
 /** What the board is armed for: a tap on a square or a character lines up one of these. */
 export type Aim =
     | "move" | "sneak" | "attack" | "aimedShot" | "cleave" | "fireball" | "dynamite" | "heal" | "raise" | "throw" | "draught"
-    | "shieldBash" | "cripplingShot" | "huntersMark" | "demolish" | "rend" | "regrowth" | "leap" | "iceBall" | "shove" | "poisonArrow" | "bouncingArrow" | "splittingArrow" | "shootDodge" | "thunder" | "beckon" | "ward" | "runeRaise" | "taunt" | "blessing";
+    | "shieldBash" | "cripplingShot" | "huntersMark" | "demolish" | "rend" | "regrowth" | "leap" | "iceBall" | "bile" | "shove" | "poisonArrow" | "bouncingArrow" | "splittingArrow" | "shootDodge" | "thunder" | "beckon" | "ward" | "runeRaise" | "taunt" | "blessing";
 
 /** The actions that need nothing aimed, and go the moment they're tapped. */
-export const INSTANT_KINDS = ["hunker", "watch", "shieldWall", "purify", "burst", "slashAndDash", "bulwark", "taunt", "focus", "blessing"] as const;
+export const INSTANT_KINDS = ["hunker", "watch", "shieldWall", "purify", "burst", "slashAndDash", "bulwark", "taunt", "focus", "blessing", "hatch", "carapace"] as const;
 export type InstantKind = typeof INSTANT_KINDS[number];
 
 /**
@@ -72,7 +72,7 @@ export function targetOptions(battle: BattleState, fighter: Fighter, aim: Aim, c
 }
 
 const isMoving = (aim: Aim) => ACTION_AIMS[aim].at === "path";
-type AtSquare = "fireball" | "dynamite" | "throw" | "demolish" | "leap" | "iceBall";
+type AtSquare = "fireball" | "dynamite" | "throw" | "demolish" | "leap" | "iceBall" | "bile";
 
 /** A fireball, dynamite, a throw or a Demolish is aimed at a square, whoever stands on it. */
 export const isAtSquare = (aim: Aim): aim is AtSquare => ACTION_AIMS[aim].at === "square";
@@ -85,7 +85,7 @@ export const isAtSquare = (aim: Aim): aim is AtSquare => ACTION_AIMS[aim].at ===
  */
 export function landing(state: BattleState, fighter: Fighter, aim: AtSquare, at: Square): Square[] {
     if (aim === "leap") return leapSplash(state.field, at);
-    if (aim === "iceBall") return areaAround(state.field, at);
+    if (aim === "iceBall" || aim === "bile") return areaAround(state.field, at);
     if (aim === "demolish") return demolishArea(state.field, fighter.square, at);
     return aim === "throw" ? (itemOf(fighter, state)?.area ? areaAround(state.field, at) : [at]) : rulesetOf(state).ABILITIES[aim]!.blasts === "area" ? areaAround(state.field, at) : [at];
 }
@@ -103,6 +103,7 @@ function actionOf(fighter: Fighter, { aim, square, targets }: Draft, path: Squar
         case "throw":
         case "leap":
         case "iceBall":
+        case "bile":
         case "demolish": return square === null ? null : { kind: aim, fighter: fighter.id, at: square };
         case "taunt":
         case "blessing": return { kind: aim, fighter: fighter.id };

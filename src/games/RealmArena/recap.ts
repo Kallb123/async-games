@@ -45,7 +45,7 @@ import { enemyTurnsOf, unnamed, type EnemyTurn, type IRealmArenaOutcome, type Re
 import { battlefieldOf } from "./maps";
 import { enemyNameOf, UNKNOWN_ENEMY, type CharacterId, type ItemId } from "./characters";
 import { battleFrom, centreHolders, ENEMY_SIDE, isStanding, isWarband, sideOf, sideScore, TEAM_SIDE, type BattleEvent, type Fighter } from "./rules";
-import { AREA_BLAST, centreInSight } from "./ui";
+import { AREA_BLAST, centreInSight, HATCH_MARK } from "./ui";
 import { isRallyAction, RALLY_LOOK } from "./rally";
 
 type RAState = IRealmArenaSpecificGameStateResponse;
@@ -145,6 +145,7 @@ function actionKind(events: readonly BattleEvent[]): { type: string; glyph: stri
     // A Bloater downs itself as it bursts (§31.2): that's no knock-out. One downed by someone else (§39.3) is, by that someone.
     if (has(event => event.kind === "downed" && event.by !== event.fighter)) return { type: RA_KNOCKOUT, glyph: "✕" };
     if (has(event => event.kind === "iceBall")) return { type: RA_FIREBALL, glyph: AREA_BLAST.iceBall.icon };
+    if (has(event => event.kind === "bile")) return { type: RA_FIREBALL, glyph: AREA_BLAST.bile.icon };
     if (has(event => event.kind === "fireball")) return { type: RA_FIREBALL, glyph: AREA_BLAST.fireball.icon };
     if (has(event => event.kind === "dynamite")) return { type: RA_DYNAMITE, glyph: AREA_BLAST.dynamite.icon };
     const thrown = events.find((event): event is Extract<BattleEvent, { kind: "thrown" }> => event.kind === "thrown");
@@ -157,6 +158,7 @@ function actionKind(events: readonly BattleEvent[]): { type: string; glyph: stri
     if (has(event => event.kind === "raised")) return { type: RA_RAISED, glyph: "✚" };
     const healed = events.find((event): event is Extract<BattleEvent, { kind: "healed" }> => event.kind === "healed");
     if (healed) return { type: RA_HEALED, glyph: healed.via === "draught" ? ITEM_GLYPH.healingDraught : "✚" };
+    if (has(event => event.kind === "hatched")) return { type: RA_MANOEUVRE, glyph: HATCH_MARK };
     return { type: RA_MANOEUVRE, glyph: "👣" };
 }
 
@@ -171,6 +173,7 @@ function hurt(events: readonly BattleEvent[], fighters: readonly Fighter[]): str
             case "struck": return event.damage > 0 ? [event.target] : [];
             case "fireball":
             case "iceBall":
+            case "bile":
             case "dynamite":
             case "thrown":
             case "demolished":

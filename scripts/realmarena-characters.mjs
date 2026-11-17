@@ -3,7 +3,7 @@
 // out of simple solids, in code (see kit.mjs there) — into the sheets the
 // board draws them from in `public/art/realmarena`:
 //
-//   characters.png       a row per character, in `CHARACTERS` order, for each
+//   characters.png       a row per character, in `ART_CHARACTER_IDS` order, for each
 //                        pose in `CHARACTER_POSES` order (every character
 //                        standing, then every character fallen), and a column
 //                        per facing, in `FACINGS` order (se, s, sw, w, nw, n,
@@ -37,8 +37,7 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 import { parseArgs } from 'node:util';
 import sharp from 'sharp';
 
-import { ART_SHEETS, CHARACTER_ART, CHARACTER_CELL, CHARACTER_MODELS_HREF, CHARACTER_POSES } from '../src/games/RealmArena/art.ts';
-import { CHARACTER_IDS } from '../src/games/RealmArena/roster.ts';
+import { ART_CHARACTER_IDS, ART_SHEETS, CHARACTER_ART, CHARACTER_CELL, CHARACTER_MODELS_HREF, CHARACTER_POSES } from '../src/games/RealmArena/art.ts';
 import { FACING_COUNT } from '../src/utils/games/battlefield/terrain.ts';
 import { PLAYER_COLOURS } from '../src/utils/ui/playerColours.ts';
 import { modelsJson } from './lib/characterModels.mjs';
@@ -55,8 +54,8 @@ const CELL = { width: CHARACTER_CELL.width, height: CHARACTER_CELL.height };
 const { values: options } = parseArgs({ options: { only: { type: 'string' }, preview: { type: 'string' } } });
 
 if (FACINGS.length !== FACING_COUNT) throw new Error(`The renderer draws ${FACINGS.length} facings, and the board has ${FACING_COUNT}`);
-const ids = CHARACTER_IDS.filter(id => !options.only || id === options.only);
-if (ids.length === 0) throw new Error(`No character "${options.only}": pick one of ${CHARACTER_IDS.join(', ')}`);
+const ids = ART_CHARACTER_IDS.filter(id => !options.only || id === options.only);
+if (ids.length === 0) throw new Error(`No character "${options.only}": pick one of ${ART_CHARACTER_IDS.join(', ')}`);
 const { MATERIALS, OUTLINE, POSES } = await import(pathToFileURL(path.join(MASTERS, 'kit.mjs')).href);
 
 const { width: sheetWidth, height: sheetHeight } = ART_SHEETS.characters;
@@ -71,7 +70,7 @@ function place(pixels, into, sprite) {
     }
 }
 
-/** Each character's parts, in `CHARACTER_IDS` order, for characters.json. */
+/** Each character's parts, in `ART_CHARACTER_IDS` order, for characters.json. */
 const models = {};
 
 for (const id of ids) {
@@ -125,7 +124,7 @@ function preview() {
     const half = { w: CELL.width / 2, h: CELL.width / 4 };
     for (let y = 0; y < sheetHeight; y++) {
         const row = Math.floor(y / CELL.height), cy = y % CELL.height;
-        const tint = hexToRgb(PLAYER_COLOURS[(row % CHARACTER_IDS.length) % PLAYER_COLOURS.length]);
+        const tint = hexToRgb(PLAYER_COLOURS[(row % ART_CHARACTER_IDS.length) % PLAYER_COLOURS.length]);
         for (let x = 0; x < sheetWidth; x++) {
             const cx = x % CELL.width, i = (y * sheetWidth + x) * 4;
             const onSquare = Math.abs(cx - half.w) / half.w + Math.abs(cy - (CELL.height - half.h)) / half.h <= 1;

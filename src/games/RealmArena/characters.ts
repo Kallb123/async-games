@@ -22,7 +22,9 @@ export type CharacterId =
     // The Swarm's (§31).
     | "skitterling" | "ravager" | "spitter" | "bloater" | "broodmother"
     // The Miners' (§33).
-    | "miner" | "stonewarden" | "prospector" | "sapper" | "runepriest";
+    | "miner" | "stonewarden" | "prospector" | "sapper" | "runepriest"
+    // The Swarm's elites (§39.5): the computer's alone, in rules version 12.
+    | "broodQueen" | "carapaceBrute" | "bileLobber";
 
 export type AbilityId =
     | "cleave" | "shieldWall" | "aimedShot" | "sneak" | "fireball" | "heal" | "raise"
@@ -34,7 +36,9 @@ export type AbilityId =
     | "dynamite"
     | "leap" | "slashAndDash" | "bulwark" | "taunt" | "shove"
     | "poisonArrow" | "bouncingArrow" | "splittingArrow" | "shootDodge"
-    | "iceBall" | "thunder" | "focus" | "beckon" | "blessing" | "ward" | "runeRaise";
+    | "iceBall" | "thunder" | "focus" | "beckon" | "blessing" | "ward" | "runeRaise"
+    // The Swarm's elites' (§39.5).
+    | "hatch" | "carapace" | "bile";
 
 /**
  * Something that happens to a character for a few of its owner's turns
@@ -158,6 +162,13 @@ export interface Ability {
      * at (`target`, Demolish).
      */
     blasts?: "area" | "target";
+    /**
+     * The character it stands up on a free square next to its user (Hatch, §39.5),
+     * a new fighter of its user's owner that can't act until that owner's next turn.
+     */
+    hatches?: CharacterId;
+    /** How many of what it hatches its user may have standing at once (Hatch). */
+    cap?: number;
     description: string;
 }
 
@@ -192,6 +203,12 @@ export interface Character {
      * (the Bloater from rules version 12, §39.3). Absent, it falls quietly.
      */
     burstsWhenDowned?: true;
+    /**
+     * Taken off every blow it takes, with any other armour (Braced's), never
+     * leaving less than 1 (the Carapace Brute from rules version 12, §39.5).
+     * Burning and poison ticks aren't blows, so it doesn't reduce them.
+     */
+    armour?: number;
 }
 
 
@@ -381,6 +398,12 @@ export interface Faction {
     /** The characters it musters from, in the order the muster lists them; each in no other faction's roster. */
     characters: readonly CharacterId[];
     /**
+     * The characters only the computer fields, beyond the roster (§39.5): a
+     * player never musters one, so `characters` stays what a muster is checked
+     * against. Absent, the faction has none.
+     */
+    elites?: readonly CharacterId[];
+    /**
      * The squad a muster that runs out of time gets, and every warband
      * musters, by budget — each spending the whole of it (§17.2, §30.5). The
      * 70-, 80- and 100-point squads are what every battle before battle sizes
@@ -406,7 +429,7 @@ export type FactionId = "realm" | "swarm" | "miners";
 /** The faction a character is mustered from: each is in one roster alone (§29.3). */
 export function factionOf(character: CharacterId, context?: RulesContext): FactionId {
     const { FACTIONS } = rulesetOf(context);
-    return FACTION_IDS.find(id => FACTIONS[id].characters.includes(character))!;
+    return FACTION_IDS.find(id => FACTIONS[id].characters.includes(character) || FACTIONS[id].elites?.includes(character))!;
 }
 
 /** The Realm: the first faction, and the one every player fought as before a squad could choose its own (B6). */

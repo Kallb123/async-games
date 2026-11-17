@@ -11,7 +11,7 @@ import Stat from '@/components/ui/Stat';
 import { EFFECTS, type AbilityId, type Affliction } from '@/games/RealmArena/characters';
 import { ITEM_ART } from '@/games/RealmArena/art';
 import { ATTACK_AP, HUNKER_AP, REACTION_COST, bankedAp, abilitiesOf, allied, check, damageTo, fighterById, hasEffect, healedEffects, isStanding, itemOf, maxHpOf, shotEffect, shotOdds, smokeSquares, strikeChance, weaponOf, type Action, type BattleState, type Fighter, type OddsBreakdown } from '@/games/RealmArena/rules';
-import { abilityWait, AREA_BLAST, FLANKED_WORD, ODDS_FLANK_WORD, oddsLines, whoseName } from '@/games/RealmArena/ui';
+import { abilityWait, AREA_BLAST, FLANKED_WORD, HATCH_MARK, ODDS_FLANK_WORD, oddsLines, whoseName } from '@/games/RealmArena/ui';
 import { rangeSquares, shotOf, targetsOf, type TargetKind } from '@/games/RealmArena/tactics';
 import { ABILITY_MARK, CHARACTER_MARK, weaponLine, weaponMark } from '@/games/RealmArena/roster';
 import { healingHp, isInstantIn, isInstantKind, isAtSquare, landsOf, type Aim, type InstantKind, type TurnDraft } from '@/games/RealmArena/useTurnDraft';
@@ -30,6 +30,7 @@ export function actTarget(action: Action, battle: BattleState): string {
 const AIM_HINT: Readonly<Record<Aim, string>> = {
     leap: 'Tap a clear square in sight within 4 squares to jump beside enemies.',
     iceBall: 'Tap a square: Ice Ball hits and slows everyone in the 3×3, friend or foe.',
+    bile: 'Tap a square in sight within 10 squares: bile hits and corrodes everyone in the 3×3, friend or foe.',
     shove: 'Tap an enemy next to the Knight. A hit pushes it away; collisions hurt.',
     poisonArrow: 'Tap an enemy. A hit poisons it.',
     bouncingArrow: 'Tap an enemy. A hit bounces to a random other enemy within 4 squares.',
@@ -64,6 +65,7 @@ const AIM_HINT: Readonly<Record<Aim, string>> = {
 const SEND_LABEL: Readonly<Record<Aim, string>> = {
     leap: 'Leap',
     iceBall: 'Cast Ice Ball',
+    bile: 'Spit bile',
     shove: 'Shove',
     poisonArrow: 'Fire Poison Arrow',
     bouncingArrow: 'Fire Bouncing Arrow',
@@ -101,6 +103,9 @@ const SEND_LABEL: Readonly<Record<Aim, string>> = {
 const ABILITY_ROW: Readonly<Record<AbilityId, { icon: string; tag: string; needs?: TargetKind | 'cover'; least?: number }>> = {
     leap: { icon: ABILITY_MARK, tag: 'Aim' },
     iceBall: { icon: AREA_BLAST.iceBall.icon, tag: 'Aim' },
+    bile: { icon: AREA_BLAST.bile.icon, tag: 'Aim' },
+    hatch: { icon: HATCH_MARK, tag: 'Use' },
+    carapace: { icon: ABILITY_MARK, tag: 'Use' },
     shove: { icon: ABILITY_MARK, tag: 'Aim', needs: 'shove' },
     poisonArrow: { icon: ABILITY_MARK, tag: 'Aim', needs: 'poisonArrow' },
     bouncingArrow: { icon: ABILITY_MARK, tag: 'Aim', needs: 'bouncingArrow' },

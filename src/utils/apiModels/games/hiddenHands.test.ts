@@ -998,3 +998,69 @@ describe("Realm Arena's rally choice in fog of war (§39.4)", () => {
         expect((await wire(game, "a")).fighters.find(one => one.id === teammate.id)?.musteredItem).toBe("smokePot");
     });
 });
+
+describe("Realm Arena's Hatch in fog of war (§39.5)", () => {
+    // a's Brood Queen hatches beside itself; b's Knight is 7 squares east and sees it, c's Mage is at the far edge and sees nothing of it.
+    const field = realmArenaFieldOf(...Array(4).fill(".".repeat(60)));
+    const make = (id: number, owner: string, character: "broodQueen" | "carapaceBrute" | "bileLobber" | "knight" | "mage" | "skitterling", col: number, extra = {}) =>
+        ({ ...realmArenaNewFighter(id, owner, character, realmArenaSquareAt(field, col, 1), null, undefined, false, { rulesVersion: 12 }), ap: 4, ...extra });
+    // A sentinel id for the hatchling, so nothing can carry it unseen.
+    const SENTINEL = 4242;
+    const battle = { field, fighters: [make(0, "a", "broodQueen", 3), make(1, "b", "knight", 10), make(SENTINEL - 1, "c", "mage", 58)], rulesVersion: 12, fog: true as const };
+    const { events, fighters } = realmArenaActRules(battle, "a", { kind: "hatch", fighter: 0 }, realmArenaFixedRolls([]));
+    const after = { ...battle, fighters };
+
+    it("stands a hatchling up, which only the viewers who see it are told of", () => {
+        expect(events).toEqual([{ kind: "hatched", fighter: 0, target: SENTINEL, at: realmArenaSquareAt(field, 4, 1) }]);
+        for (const viewer of ["a", "b"]) expect(realmArenaToldTo(events, after, viewer), viewer).toEqual(events);
+        expect(realmArenaToldTo(events, after, "c")).toEqual([]);
+        expect(realmArenaToldTo(events, after, null)).toEqual([]);
+        for (const viewer of ["c", null]) expect(JSON.stringify(realmArenaToldTo(events, after, viewer))).not.toContain(String(SENTINEL));
+    });
+
+    it("tells a viewer that sees only the hatchling's square nothing: not the Queen's id, and not that anything hatched", () => {
+        // A Knight sees 15 squares: the square at 19 from 4, but not the Queen beside it at 20.
+        const QUEEN = 4343;
+        const edge = { field, fighters: [make(QUEEN, "a", "broodQueen", 20), make(1, "b", "knight", 4), { ...make(SENTINEL, "a", "skitterling", 19), hatchedBy: QUEEN }], rulesVersion: 12, fog: true as const };
+        const event = { kind: "hatched" as const, fighter: QUEEN, target: SENTINEL, at: realmArenaSquareAt(field, 19, 1) };
+        expect(realmArenaToldTo([event], edge, "b")).toEqual([]);
+        const told = JSON.stringify(realmArenaToldTo([event], edge, "b"));
+        expect(told).not.toContain(String(QUEEN));
+        expect(told).not.toContain("hatch");
+    });
+
+    it("keeps a Queen's tally, which counts its hatches, to its own side", () => {
+        const gs = makeRealmArenaGame(["a", "b"], {}, { fog: true, rulesVersion: 12 }).specificGameState;
+        gs.phase = "battle";
+        gs.fighters = [make(0, "a", "broodQueen", 3, { tally: { attacks: 0, abilities: 5, items: 0 } }), make(1, "b", "knight", 10, { tally: { attacks: 7, abilities: 0, items: 0 } })];
+        const tallyOf = (viewer: string | null, id: number) => realmArenaStateToModel(gs, viewer, null).fighters.find(one => one.id === id)?.tally;
+        expect(tallyOf("a", 0)).toEqual({ attacks: 0, abilities: 5, items: 0 });
+        expect(tallyOf("b", 1)).toEqual({ attacks: 7, abilities: 0, items: 0 });
+        expect(tallyOf("b", 0)).toBeUndefined();
+        expect(tallyOf("a", 1)).toBeUndefined();
+        expect(tallyOf(null, 0)).toBeUndefined();
+    });
+
+    it("keeps an armoured Brute's reduced damage off a blast told without it", () => {
+        // c's Lobber and a's Brute stand out of b's Knight's sight; its Skitterling on the 15th square is in it. Bile deals 2 to the Skitterling and 1 to the Brute.
+        const lobber = make(0, "c", "bileLobber", 18);
+        const bile = { field, fighters: [lobber, make(1, "b", "knight", 0), make(2, "a", "skitterling", 15), make(3, "a", "carapaceBrute", 16)], rulesVersion: 12, fog: true as const };
+        const blast = realmArenaActRules(bile, "c", { kind: "bile", fighter: 0, at: realmArenaSquareAt(field, 16, 1) }, realmArenaFixedRolls([]));
+        const landed = blast.events.find(event => event.kind === "bile");
+        expect(landed).toMatchObject({ targets: [2, 3], damage: 2, damages: { 2: 2, 3: 1 } });
+        const told = realmArenaToldTo(blast.events, { ...bile, fighters: blast.fighters }, "b").find(event => event.kind === "bile");
+        expect(told).toMatchObject({ targets: [2] });
+        expect(told).not.toHaveProperty("damages");
+    });
+
+    it("keeps the hatchling off the response of a viewer that doesn't see it, and the Queen's id off every response", () => {
+        const gs = makeRealmArenaGame(["a", "b"], {}, { fog: true, rulesVersion: 12 }).specificGameState;
+        gs.phase = "battle";
+        gs.fighters = fighters;
+        const sees = (viewer: string | null) => realmArenaStateToModel(gs, viewer, null).fighters.map(one => one.id);
+        expect(sees("a")).toContain(SENTINEL);
+        expect(sees("b")).toContain(SENTINEL);
+        expect(sees(null)).not.toContain(SENTINEL);
+        for (const viewer of ["a", "b", null]) expect(JSON.stringify(realmArenaStateToModel(gs, viewer, null)), String(viewer)).not.toContain("hatchedBy");
+    });
+});

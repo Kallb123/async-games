@@ -48,7 +48,7 @@ current maps:
   effect marks and the AP pips. A fog ghost carries a CSS `grayscale` filter.
 - **Every sprite** is a `<use>` of a `<symbol>` whose content is the *whole*
   sheet as an `<image>`, cropped by the symbol's `viewBox`. The character
-  sheets are 1024 × 5120 each (body and team), which is about 20 MB apiece
+  sheets are 1024 × 6080 each (body and team), which is about 24 MB apiece
   decoded.
 
 So a Hold Out board with a full wave is about 2,000 to 3,000 SVG nodes, with
@@ -346,7 +346,7 @@ hypothesis in §1.2:
 | b | **Take the pulses out of the board SVG.** Draw the wave zones and the HP-change flash in a small SVG of their own, stacked like `.ag-ra-fx-layer`, and animate the opacity of that *root* element. A root element can be composited, so the animation costs no repaint. | 2 |
 | c | **Pre-tint the team sheet per seat.** Once per seat colour, multiply `characters-team.png` by the colour on an `OffscreenCanvas` and hand the board a blob URL. The figure then draws a plain `<use>` with no filter. `TintDefs` goes. | 3 |
 | d | **Bake the remaining filters.** Put the item marks' drop shadow into `items.png` via `npm run ra-marks`, and give fog ghosts opacity only, with no `grayscale`. | 3 |
-| e | **Smaller images per sprite.** Slice each sprite cell actually used into its own small bitmap at load (canvas → blob), or emit a tighter atlas from the art scripts, so a `<use>` no longer crops a 1024 × 5120 sheet. | 4 |
+| e | **Smaller images per sprite.** Slice each sprite cell actually used into its own small bitmap at load (canvas → blob), or emit a tighter atlas from the art scripts, so a `<use>` no longer crops a 1024 × 6080 sheet. | 4 |
 | f | **Memoise the static parts.** Put the raised squares in a memoised `TerrainLayer` keyed by the field, the rotation and the shades. Memoise `FighterNode`. Compute the fog sweep once per state the board actually shows, not once per render, and drop the per-`HpBar` frame subscriptions an action doesn't touch. | 5, 6 |
 
 - **Pros.** It's small and local, and it keeps every behaviour in §3 for free:
@@ -470,7 +470,7 @@ instead of Canvas 2D.
   visual ambitions get much cheaper.
 - **Cons.** It adds a sizeable dependency and its upgrades. It must handle
   WebGL context loss (iOS drops contexts under memory pressure, and the two
-  1024 × 5120 sheets are within the 8192 texture limit but take real GPU
+  1024 × 6080 sheets are within the 8192 texture limit but take real GPU
   memory). Pixi's text rendering differs from the DOM's. It still needs all of
   Option 3's `BoardZoom`, input and accessibility work, which is most of the
   cost. Pixi's own accessibility module covers less than our button layer

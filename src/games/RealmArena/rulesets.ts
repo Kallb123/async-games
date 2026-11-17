@@ -15,7 +15,9 @@ export const CURRENT_RULESET_VERSION = 11;
 type Table<T, Shape> = { readonly [Id in keyof T]: Readonly<Shape & { [Key in Exclude<keyof T[Id], "oncePerTurn" | "oncePerBattle">]: Key extends keyof Shape ? NonNullable<Shape[Key]> : never }> };
 export interface RealmArenaRuleset {
     readonly RULES: Readonly<RealmArenaRuleValues>;
-    readonly CHARACTERS: Readonly<Partial<Record<CharacterId, Character>>> & Readonly<Record<keyof typeof catalogueV7.CHARACTERS, Character>>;
+    // Every id, though an elite (§39.5) is in no catalogue before version 12: no battle
+    // before it ever holds one, so a lookup by a fighter's character always finds it.
+    readonly CHARACTERS: Readonly<Record<CharacterId, Character>>;
     readonly ABILITIES: Readonly<Partial<Record<AbilityId, Ability>>> & Table<typeof catalogueV7.ABILITIES, Ability>;
     readonly OPTIONS: Readonly<Partial<Record<OptionId, CharacterOption>>> & { readonly [Id in keyof typeof catalogueV7.OPTIONS]: typeof catalogueV7.OPTIONS[Id] extends { weapon: Weapon }
         ? CharacterOption & { replaces: "weapon"; weapon: Weapon }
@@ -34,17 +36,22 @@ function freeze<T>(value: T): T {
     return value;
 }
 
-const rulesetV7: RealmArenaRuleset = freeze(catalogueV7);
-const rulesetV8: RealmArenaRuleset = freeze(catalogueV8);
-const rulesetV9: RealmArenaRuleset = freeze(catalogueV9);
-const rulesetV10: RealmArenaRuleset = freeze(catalogueV10);
-const rulesetV11: RealmArenaRuleset = freeze(catalogueV11);
+type CatalogueBeforeElites = Omit<RealmArenaRuleset, "CHARACTERS"> & { CHARACTERS: Readonly<Record<keyof typeof catalogueV7.CHARACTERS, Character>> };
+
+/** No battle before version 12 holds an elite (§39.5), so its catalogue may be typed as holding every id. */
+const registered = (catalogue: CatalogueBeforeElites): RealmArenaRuleset => freeze(catalogue) as RealmArenaRuleset;
+
+const rulesetV7: RealmArenaRuleset = registered(catalogueV7);
+const rulesetV8: RealmArenaRuleset = registered(catalogueV8);
+const rulesetV9: RealmArenaRuleset = registered(catalogueV9);
+const rulesetV10: RealmArenaRuleset = registered(catalogueV10);
+const rulesetV11: RealmArenaRuleset = registered(catalogueV11);
 // Registered but not current: version 12 is built across §39 and released by its last PR.
 const rulesetV12: RealmArenaRuleset = freeze(catalogueV12);
 
 // Games created before the balance release had no stamp, or one below 7.
 // These are complete definitions, including the old descriptions and limits.
-const legacyRuleset: RealmArenaRuleset = freeze({
+const legacyRuleset: RealmArenaRuleset = registered({
     ...catalogueV7,
     RULES: { ...catalogueV7.RULES, MELEE_ROLLS: false, MELEE_ACCURACY: 100, FAR_SHOT_DISTANCE: null,
         TEAM_HP_FACTOR: 1, ARMOUR: 0, HOLD_OUT_ENEMY_STEPS: 0, HOLD_OUT_PAIR_ROUNDS: 15 },
@@ -63,6 +70,9 @@ const RULESETS: Readonly<Record<number, RealmArenaRuleset>> = Object.freeze({
     0: legacyRuleset, 1: legacyRuleset, 2: legacyRuleset, 3: legacyRuleset,
     4: legacyRuleset, 5: legacyRuleset, 6: legacyRuleset, 7: rulesetV7, 8: rulesetV8, 9: rulesetV9, 10: rulesetV10, 11: rulesetV11, 12: rulesetV12,
 });
+
+/** Every registered catalogue once, oldest first, whether or not a match can still start on it. */
+export const registeredRulesets: readonly RealmArenaRuleset[] = Object.freeze([...new Set(Object.values(RULESETS))]);
 
 // The last version asked for, read before the checks: the planner asks
 // millions of times a battle, nearly always for one version.
