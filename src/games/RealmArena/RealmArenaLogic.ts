@@ -1137,8 +1137,7 @@ function regrowNests(gs: IRealmArenaSpecificGameState, owner: string): void {
     const { field } = battleOf(gs);
     for (const nest of gs.fighters.filter(fighter => fighter.owner === owner && isStructure(fighter, gs) && !isStanding(fighter))) {
         // Every structure's square is kept, so two regrowing at once never share one.
-        const taken = new Set(gs.fighters.filter(fighter => isStanding(fighter) || isStructure(fighter, gs)).map(fighter => fighter.square));
-        taken.delete(nest.square);
+        const taken = new Set(gs.fighters.filter(fighter => fighter.id !== nest.id && (isStanding(fighter) || isStructure(fighter, gs))).map(fighter => fighter.square));
         const roomy = (square: Square) => field.tiles[square].terrain.standable && !taken.has(square);
         const square = roomy(nest.square) ? nest.square
             : field.tiles.map((_, at) => at).filter(roomy)

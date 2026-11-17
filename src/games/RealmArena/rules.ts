@@ -2110,7 +2110,7 @@ export function endTurn(state: BattleState, player: string, round: number, keepS
     const run = resolver(state, fixedRolls([]));
     tickEffects(run, player, "end");
     const fighters = run.fighters.map(fighter => {
-        if (fighter.owner !== player || !isStanding(fighter)) return fighter;
+        if (fighter.owner !== player || !isCombatant(fighter, state)) return fighter;
         const watching = fighter.ap >= REACTION_COST && !still.includes(fighter.id) && !reactionsBlocked(fighter, state);
         const banked = watching ? bankedAp(fighter.ap, state) : fighter.banked;
         if (watching) run.events.push({ kind: "watching", fighter: fighter.id, banked });
