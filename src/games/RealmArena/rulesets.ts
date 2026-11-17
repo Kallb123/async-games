@@ -74,9 +74,6 @@ const RULESETS: Readonly<Record<number, RealmArenaRuleset>> = Object.freeze({
 /** Every registered catalogue once, oldest first, whether or not a match can still start on it. */
 export const registeredRulesets: readonly RealmArenaRuleset[] = Object.freeze([...new Set(Object.values(RULESETS))]);
 
-/** The highest registered version's catalogue: current once released, and ahead of `currentRuleset` while a release is still being built. */
-export const latestRuleset: RealmArenaRuleset = registeredRulesets[registeredRulesets.length - 1];
-
 // The last version asked for, read before the checks: the planner asks
 // millions of times a battle, nearly always for one version.
 let lastVersion: number | undefined;
