@@ -15,7 +15,7 @@ import type { GameResultEvent } from "@/utils/apiModels/GameDataApi";
 // unrevealed POI — the schema fix (FiresOutModels.ts's firesOutStateSchemaDef)
 // is `default: undefined` on the wrapped nested type.
 describe("Fires Out Mongoose schema", () => {
-    it("keeps a space's poi genuinely null through schema casting when there isn't one", () => {
+    it("keeps a space's poi genuinely null through schema casting when there isn't one", async () => {
         const { specificGameState } = buildInitialFiresOutState(["u1", "u2"], "family", "recruit");
         const poiCount = specificGameState.spaces.filter(s => s.poi).length;
         expect(poiCount).toBe(3); // §6.1 step 4 / the family setup this test seeds
@@ -35,7 +35,7 @@ describe("Fires Out Mongoose schema", () => {
             initialSpecificGameState: specificGameState,
         });
 
-        expect(doc.validateSync()).toBeUndefined();
+        await expect(doc.validate()).resolves.toBeUndefined();
 
         // Direct property access on the freshly-cast document — the same
         // access gameStateToModel makes off a document requireLiveGame just
@@ -53,7 +53,7 @@ describe("Fires Out Mongoose schema", () => {
         expect(response.spaces.length).toBe(INTERIOR_SPACE_COUNT + 32); // + the exterior perimeter ring
     });
 
-    it("keeps a firefighter's restrictedAp genuinely null once dealt a specialist without one", () => {
+    it("keeps a firefighter's restrictedAp genuinely null once dealt a specialist without one", async () => {
         const { specificGameState } = buildInitialFiresOutState(["u1", "u2"], "experienced", "recruit");
 
         const doc = new FiresOutGameDataModel({
@@ -71,7 +71,7 @@ describe("Fires Out Mongoose schema", () => {
             initialSpecificGameState: specificGameState,
         });
 
-        expect(doc.validateSync()).toBeUndefined();
+        await expect(doc.validate()).resolves.toBeUndefined();
 
         const response = gameStateToModel(doc.specificGameState, {}, null);
         for (const ff of response.firefighters) {
@@ -175,7 +175,7 @@ describe("buildInitialFiresOutState for a solo crew", () => {
         expect(specificGameState.firefighters.map(ff => ff.ownerId)).toEqual(["u1", "u2", "u3"]);
     });
 
-    it("survives schema casting with the whole crew intact", () => {
+    it("survives schema casting with the whole crew intact", async () => {
         const { specificGameState } = buildInitialFiresOutState(["u1"], "family", "recruit", MAX_SOLO_CREW);
 
         const doc = new FiresOutGameDataModel({
@@ -193,7 +193,7 @@ describe("buildInitialFiresOutState for a solo crew", () => {
             initialSpecificGameState: cloneFiresOutState(specificGameState),
         });
 
-        expect(doc.validateSync()).toBeUndefined();
+        await expect(doc.validate()).resolves.toBeUndefined();
         const response = gameStateToModel(doc.specificGameState, { u1: "Alice" }, "u1");
         expect(response.firefighters).toHaveLength(MAX_SOLO_CREW);
         expect(response.firefighters.every(ff => ff.ownerId === "u1")).toBe(true);
