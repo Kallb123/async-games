@@ -136,8 +136,6 @@ const copyOf = (records: ReadonlyMap<string, FightingRecord>) => new Map([...rec
  * one column. Absent in a free-for-all. `rounds` is how long the battle lasts
  * (`battleRoundsOf`), which depends on more than the seats.
  *
- * `observe`'s `themed` is whether the step's End turn lands its wave by themes (command version `THEMED_WAVES_VERSION`), true as `waveOf`'s is.
- *
  * Undo: the one thing an undoable action can add to a record is healing — it
  * hurts nobody and rolls nothing (docs/undo.md). So the recorder keeps the
  * records as they stood before each action the game's own undo stack still
@@ -280,7 +278,7 @@ export function battleRecorder(seats: readonly string[], sides?: BattleState["si
 
     return {
         /** One step of the replay: its command and outcome, and the game's own state after it. */
-        observe(step: Pick<IReplayStep, "command" | "outcome">, gs: IRealmArenaSpecificGameState, themed = true): void {
+        observe(step: Pick<IReplayStep, "command" | "outcome">, gs: IRealmArenaSpecificGameState): void {
             if (gs.phase !== "battle") return;
             const { className, id } = step.command as { className?: string; id?: string };
             if (className === "RealmArenaUndo") {
@@ -311,8 +309,8 @@ export function battleRecorder(seats: readonly string[], sides?: BattleState["si
                 if (waves.length === 0) waves.push({ round: 0, arrived: 0, downed: new Map() });
                 for (let begun = round + 1; begun <= Math.min(gs.roundsPlayed, lastRound); begun++) {
                     if (!waveArrives(begun + 1, lastRound + 1)) continue;
-                    // `themed`: the step's End turn landed the wave by its themes (§39.6), so the theme's name is its.
-                    const name = themed ? waveThemeOf(factionById(gs.coop?.enemy, gs), begun + 1)?.name : undefined;
+                    // A faction with themes (§39.6) names its waves.
+                    const name = waveThemeOf(factionById(gs.coop?.enemy, gs), begun + 1)?.name;
                     waves.push({ round: begun, arrived: 0, downed: new Map(), ...(name ? { name } : {}) });
                 }
                 // A hatchling (§39.5) stands up in the middle of a turn: nobody brought it as a wave.

@@ -1025,14 +1025,6 @@ function holdOutEnding(gs: IRealmArenaSpecificGameState): { won: boolean; detail
 const GROWING_WAVES_VERSION = 5;
 
 /**
- * The command version from which an End turn lands a wave by its faction's
- * themes where it has them (§39.6): bought with points (`wavePurchase`), told
- * by name. An End turn played before it lands the squad-and-growth wave
- * (`waveStrength`), on a replay too. Never moves once shipped.
- */
-export const THEMED_WAVES_VERSION = 13;
-
-/**
  * The strength a warband is brought up to by the wave landing as `round`
  * begins (§30.3, §30.10): its squad, and one character more for every wave
  * landed so far — the squad's own characters again, in its order, the first
@@ -1058,25 +1050,23 @@ export function waveBudgetOf(gs: IRealmArenaSpecificGameState, round: number): n
 
 /**
  * What a wave brings a warband up to, landing as `round` begins (§30.10, §39.6):
- * its faction's themed purchase where it has themes and `themed` says the End
- * turn lands by them, otherwise `waveStrength`'s squad and growth.
+ * its faction's themed purchase where its catalogue gives it themes, otherwise `waveStrength`'s squad and growth.
  */
-function waveBuyOf(gs: IRealmArenaSpecificGameState, round: number, growing: boolean, themed = true): CharacterId[] {
+function waveBuyOf(gs: IRealmArenaSpecificGameState, round: number, growing: boolean): CharacterId[] {
     const faction = factionById(gs.coop?.enemy, gs);
-    return themed && faction.waves ? wavePurchase(faction, waveBudgetOf(gs, round), round, gs) : waveStrength(warbandSquad(gs), round, growing);
+    return faction.waves ? wavePurchase(faction, waveBudgetOf(gs, round), round, gs) : waveStrength(warbandSquad(gs), round, growing);
 }
 
 /**
  * The reinforcements one warband can place in its deployment zone in the wave
  * landing as `round` begins: the one landing now, unless told otherwise.
- * `themed` false lands a faction's themed wave (§39.6) as `waveStrength`'s.
  */
-export function waveOf(gs: IRealmArenaSpecificGameState, owner: string, growing: boolean, round = gs.roundsPlayed + 1, themed = true): Fighter[] {
+export function waveOf(gs: IRealmArenaSpecificGameState, owner: string, growing: boolean, round = gs.roundsPlayed + 1): Fighter[] {
     if (gs.coop?.mission !== "holdOut") return [];
     const warband = warbandsFor(gs.seats).indexOf(owner);
     if (warband < 0) return [];
     const field = battlefieldById(gs.map);
-    const planned = readyMadeMuster(field, gs.seats.length + warband, waveBuyOf(gs, round, growing, themed));
+    const planned = readyMadeMuster(field, gs.seats.length + warband, waveBuyOf(gs, round, growing));
     const missing = [...planned];
     // A hatchling (§39.5) is a body on top of the squad, not one the wave would have brought.
     for (const fighter of gs.fighters.filter(one => one.owner === owner && isStanding(one) && one.hatchedBy === undefined)) {
@@ -1084,7 +1074,7 @@ export function waveOf(gs: IRealmArenaSpecificGameState, owner: string, growing:
         if (index >= 0) missing.splice(index, 1);
     }
     // A themed wave never takes a warband past the cap, survivors and hatchlings counted (§39.6).
-    if (themed && factionById(gs.coop?.enemy, gs).waves) {
+    if (factionById(gs.coop?.enemy, gs).waves) {
         missing.splice(Math.max(0, (ruleValuesOf(gs).WAVE_CAP ?? Infinity) - gs.fighters.filter(one => one.owner === owner && isStanding(one)).length));
     }
     const preferred = planned.map(pick => pick.square);
@@ -1113,16 +1103,15 @@ function rally(gs: IRealmArenaSpecificGameState): void {
 function landWave(data: IRealmArenaGameData, version: number): void {
     const gs = data.specificGameState;
     if (gs.coop?.mission !== "holdOut" || !waveArrives(gs.roundsPlayed + 1, battleRoundsOf(gs))) return;
-    const themed = version >= THEMED_WAVES_VERSION;
     for (const owner of warbandsFor(gs.seats)) {
-        const fresh = waveOf(gs, owner, version >= GROWING_WAVES_VERSION, undefined, themed);
+        const fresh = waveOf(gs, owner, version >= GROWING_WAVES_VERSION);
         if (fresh.length === 0) continue;
         gs.fighters.push(...fresh);
     }
     // The scheduled wave is public even when every deployment square is
     // blocked; its line must not reveal which hidden warbands found room.
     // A themed wave is told by name once the team knows whom it fights: the name would give a hidden enemy away.
-    const theme = themed && enemyKnown(gs.coop) ? waveThemeOf(factionById(gs.coop?.enemy, gs), gs.roundsPlayed + 1) : undefined;
+    const theme = enemyKnown(gs.coop) ? waveThemeOf(factionById(gs.coop?.enemy, gs), gs.roundsPlayed + 1) : undefined;
     data.gameState.history.unshift({ text: theme ? `${theme.name} arrives` : `A fresh wave of ${enemyNameOf(enemyKnown(gs.coop) ? gs.coop.enemy : undefined, gs)} arrives` });
     if (ruleValuesOf(gs).RALLY_CHOICE) {
         // From rules version 12 nobody is healed by the wave itself: every

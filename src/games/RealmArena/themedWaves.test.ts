@@ -4,10 +4,9 @@ import { BUDGETS, REALM, type CharacterId } from "./characters";
 import { battlefieldById } from "./maps";
 import { computeRealmArenaResultStats, formatRealmArenaCharts, formatRealmArenaResultStats, gameStateToModel } from "./RealmArenaModels";
 import { recordBattle } from "./recordBattle";
-import { nextWaveOf, THEMED_WAVES_VERSION, warbandBudgetOf, waveBudgetOf, waveOf } from "./RealmArenaLogic";
+import { nextWaveOf, warbandBudgetOf, waveBudgetOf, waveOf } from "./RealmArenaLogic";
 import { isStanding, isWarband, newFighter, nextFighterId, wavePurchase, wavesLanded, waveThemeOf } from "./rules";
 import { ruleValuesOf, rulesetFor } from "./rulesets";
-import { meta } from "./meta";
 import { endTurnBy, makeGame, musterAll, play, playScriptedBattle, seedRolls, warbandsOf, type RealmArenaTestGame } from "./testFixtures";
 import type { GameResultBarChart } from "@/utils/apiModels/GameDataApi";
 
@@ -93,14 +92,13 @@ describe("a themed wave in a battle (§39.6)", () => {
     const text = (game: RealmArenaTestGame) => game.gameState.history.map(entry => entry.text);
 
     /** Clears the enemy off the field, so the warbands' turns can't change who stands, then ends the round whose wave lands next. */
-    async function landWave(game: RealmArenaTestGame, round: number, version?: number): Promise<void> {
+    async function landWave(game: RealmArenaTestGame, round: number): Promise<void> {
         const gs = game.specificGameState;
         gs.roundsPlayed = round - 2;
         // The rally the last wave left owed (§39.4) isn't this test's business.
         gs.rallyOwed = undefined;
         gs.fighters.forEach(fighter => { if (isWarband(fighter.owner)) fighter.hp = 0; });
         const a = endTurnBy("a"), b = endTurnBy("b");
-        if (version !== undefined) Object.assign(a, { version }), Object.assign(b, { version });
         await play(game, a);
         await play(game, b);
         expect(gs.roundsPlayed).toBe(round - 1);
@@ -160,18 +158,6 @@ describe("a themed wave in a battle (§39.6)", () => {
         for (const owner of warbandsOf(game)) expect(standingOf(game, owner).map(one => one.character).sort()).toEqual([...squad, squad[0]].sort());
         expect(text(game)).toContain("A fresh wave of the Renegades arrives");
         expect(nextWaveOf(gs)).not.toHaveProperty("name");
-    });
-
-    it("lands the old wave under an End turn from before themed waves, on a replay too", async () => {
-        expect(THEMED_WAVES_VERSION).toBe(13);
-        expect(meta.commandVersion).toBeGreaterThanOrEqual(THEMED_WAVES_VERSION);
-        const game = holdOut();
-        await musterAll(game);
-        const squad = SWARM.readyMade[warbandBudgetOf(game.specificGameState)];
-        await landWave(game, 4, THEMED_WAVES_VERSION - 1);
-        for (const owner of warbandsOf(game)) expect(standingOf(game, owner).map(one => one.character).sort()).toEqual([...squad, squad[0]].sort());
-        expect(text(game)).toContain("A fresh wave of the Swarm arrives");
-        expect(text(game).some(line => line.includes("The Rush"))).toBe(false);
     });
 
     it("tells the next wave by name and count, and in fog the most it could bring", async () => {

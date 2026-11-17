@@ -3,11 +3,10 @@
 // of battleRecord.ts because the replay engine imports RealmArenaModels.ts,
 // which imports that file. Server-only.
 
-import { commandVersion } from "@/utils/apiModels/gameCommand";
 import { replayTurnByTurn } from "@/utils/games/replay";
 import { withTimeout } from "@/utils/withTimeout";
 import { battleRecorder, type BattleRecord } from "./battleRecord";
-import { battleOf, battleRoundsOf, THEMED_WAVES_VERSION } from "./RealmArenaLogic";
+import { battleOf, battleRoundsOf } from "./RealmArenaLogic";
 import type { IRealmArenaGameData, IRealmArenaSpecificGameState } from "./RealmArenaModels";
 
 /**
@@ -29,7 +28,7 @@ export async function recordBattle(gameData: IRealmArenaGameData): Promise<Battl
         const gs = gameData.specificGameState;
         const recorder = battleRecorder(gs.seats, battleOf(gs).sides, battleRoundsOf(gs), gs);
         const replayed = await replayTurnByTurn(gameData, (step, _turnIndex, _isFirstStepOfTurn, specificGameState) =>
-            recorder.observe(step, specificGameState as IRealmArenaSpecificGameState, commandVersion(step.command) >= THEMED_WAVES_VERSION), "battle record");
+            recorder.observe(step, specificGameState as IRealmArenaSpecificGameState), "battle record");
         return replayed ? recorder.result() : undefined;
     }, RECORD_BUDGET_MS, undefined, `Recording Realm Arena battle ${gameData.gameId}`);
 }
