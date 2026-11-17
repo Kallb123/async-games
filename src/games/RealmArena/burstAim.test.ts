@@ -1,11 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { at } from "@/utils/games/battlefield/testFixtures";
-import { buildBattlefield } from "@/utils/games/battlefield/terrain";
+import { at, fieldOf } from "@/utils/games/battlefield/testFixtures";
 import { ACTION_POINTS, newFighter, type BattleState, type Fighter } from "./rules";
 import { burstPreview, hpPreview, type Draft } from "./useTurnDraft";
 
 // Aiming anything at a Bloater shades where it would burst and who it would catch (§39.3).
-const field = buildBattlefield({ name: "Open", rows: ["..........", "..........", "..........", "..........", ".........."], deployments: [], objectives: {} });
+const field = fieldOf(...Array(5).fill(".........."));
 const ready = (id: number, owner: string, character: "knight" | "archer" | "bloater", col: number, row: number): Fighter =>
     ({ ...newFighter(id, owner, character, at(field, col, row)), ap: ACTION_POINTS });
 

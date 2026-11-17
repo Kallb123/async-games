@@ -29,8 +29,7 @@ import { buildInitialDiceCitiesState } from "@/games/DiceCities/DiceCitiesModels
 import { DiceCitiesCardIds } from "@/games/DiceCities/cards";
 import { AMBULANCE_START, EDGE_COUNT, ENGINE_START, INTERIOR_SPACE_COUNT, SPACE_COUNT, spaceIndex } from "@/games/FiresOut/board";
 import { buildTimeline } from "@/utils/games/replay";
-import { buildBattlefield as buildRealmArenaField } from "@/utils/games/battlefield/terrain";
-import { at as realmArenaSquareAt } from "@/utils/games/battlefield/testFixtures";
+import { at as realmArenaSquareAt, fieldOf as realmArenaFieldOf } from "@/utils/games/battlefield/testFixtures";
 import { REALM } from "@/games/RealmArena/characters";
 import { gameStateToModel as realmArenaStateToModel, stepOutcomeToModel as realmArenaStepOutcome } from "@/games/RealmArena/RealmArenaModels";
 import { RealmArenaGameType, toldTo as realmArenaToldTo, type IRealmArenaOutcome, type RealmArenaEndTurn } from "@/games/RealmArena/RealmArenaLogic";
@@ -880,7 +879,7 @@ describe("Realm Arena's random co-op enemy", () => {
 
 describe("Realm Arena's death burst in fog of war (§39.3)", () => {
     // a's Archer shoots b's Bloater, which bursts on b's Knight beside it; c's Mage is at the far edge.
-    const field = buildRealmArenaField({ name: "Open", rows: Array(4).fill("..............................."), deployments: [], objectives: {} });
+    const field = realmArenaFieldOf(...Array(4).fill("..............................."));
     const make = (id: number, owner: string, character: "archer" | "bloater" | "knight" | "mage", col: number, extra = {}) =>
         ({ ...realmArenaNewFighter(id, owner, character, realmArenaSquareAt(field, col, 1), null, undefined, false, { rulesVersion: 12 }), ap: 4, ...extra });
     const fighters = [make(0, "a", "archer", 1), make(1, "b", "bloater", 3, { hp: 1 }), make(2, "b", "knight", 4), make(3, "c", "mage", 30)];

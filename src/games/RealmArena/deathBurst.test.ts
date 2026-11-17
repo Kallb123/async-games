@@ -1,7 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { buildTimeline } from "@/utils/games/replay";
-import { buildBattlefield } from "@/utils/games/battlefield/terrain";
-import { at } from "@/utils/games/battlefield/testFixtures";
+import { at, fieldOf } from "@/utils/games/battlefield/testFixtures";
 import { type CharacterId } from "./characters";
 import { gameStateToModel } from "./RealmArenaModels";
 import { playScriptedBattle } from "./testFixtures";
@@ -13,7 +12,7 @@ vi.mock("@/utils/users/clerk", () => ({ userIdListToNamesAndMap: async (ids: str
 // A Bloater downed by anything but its own Burst bursts where it falls, from
 // rules version 12 (§39.3): Burst's area, damage and Corroded, friend or foe.
 
-const field = buildBattlefield({ name: "Open", rows: Array(10).fill("................"), deployments: [], objectives: {} });
+const field = fieldOf(...Array(10).fill("................"));
 const point = (col: number, row = 3) => at(field, col, row);
 const BURST_DAMAGE = 3;
 

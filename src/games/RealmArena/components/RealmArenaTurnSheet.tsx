@@ -419,8 +419,7 @@ function Detail({ draft, battle, name, ap, target }: DetailProps) {
         const { damage = 0, effect } = (isAtSquare(aim) ? landsOf(fighter, aim, battle) : undefined) ?? {};
         const nobody = aim === 'leap' ? 'No enemy is next to the landing.' : `Nobody is ${draft.area.length > 1 ? 'in the blast' : 'there'}.`;
         return hint(<>
-            {caught.length === 0 ? nobody : landsOn(caught.map(one => name(one.id)).join(', '), damage, effect)}
-            {caught.some(one => allied(battle, one.owner, fighter.owner)) ? ' That includes your own.' : ''}
+            {caught.length === 0 ? nobody : landsOnCaught(battle, fighter, caught, name, damage, effect)}
             {draft.blasts?.length ? ` Blasts away ${pluralize(draft.blasts.length, 'square')} of low cover.` : ''}
         </>);
     }
@@ -480,9 +479,14 @@ function BurstDetail({ draft, battle, name }: Pick<DetailProps, 'draft' | 'battl
     const falls = `If ${bloaters} ${burst.bloaters.length > 1 ? 'fall' : 'falls'}, ${burst.bloaters.length > 1 ? 'they burst' : 'it bursts'}`;
     if (burst.caught.length === 0) return <p className="ag-hint">{falls} on nobody.</p>;
     return <p className="ag-hint">
-        {falls}: {landsOn(andList(burst.caught.map(one => name(one.id))), damage, effect)}
-        {burst.caught.some(one => allied(battle, one.owner, fighter.owner)) ? ' That includes your own.' : ''}
+        {falls}: {landsOnCaught(battle, fighter, burst.caught, name, damage, effect)}
     </p>;
+}
+
+/** What landing does to the fighters it caught, and a warning when some are the player's own side. */
+function landsOnCaught(battle: BattleState, fighter: Fighter, caught: readonly Fighter[], name: (id: number) => string, damage: number, effect: Affliction | undefined): string {
+    return landsOn(andList(caught.map(one => name(one.id))), damage, effect)
+        + (caught.some(one => allied(battle, one.owner, fighter.owner)) ? ' That includes your own.' : '');
 }
 
 /** What something landing does to everyone it catches: "3 damage to your Knight, and leaves them burning". */

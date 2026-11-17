@@ -913,11 +913,12 @@ export function eventLines(events: readonly ToldEvent[], fighters: readonly Figh
             case "demolished":
             case "burst": {
                 const names = event.targets.map(name);
+                const burst = `burst${event.kind === "burst" && event.downed ? " as it fell" : ""}`;
                 return [{
                     icon: "💥",
-                    title: `${event.kind === "burst" ? `${Name(event.fighter)} burst${event.downed ? " as it fell" : ""}` : ABILITIES.demolish.name}: ${event.targets.length === 0 ? "nobody hit" : names.join(", ")}`,
+                    title: `${event.kind === "burst" ? `${Name(event.fighter)} ${burst}` : ABILITIES.demolish.name}: ${event.targets.length === 0 ? "nobody hit" : names.join(", ")}`,
                     ...(event.targets.length > 0 ? { sub: `${event.damage} damage each` } : {}),
-                    sentence: `${Name(event.fighter)} ${event.kind === "burst" ? `burst${event.downed ? " as it fell" : ""}` : `used ${ABILITIES.demolish.name}`} and hit ${caught(names)}${event.targets.length > 0 ? ` for ${event.damage} each` : ""}`,
+                    sentence: `${Name(event.fighter)} ${event.kind === "burst" ? burst : `used ${ABILITIES.demolish.name}`} and hit ${caught(names)}${event.targets.length > 0 ? ` for ${event.damage} each` : ""}`,
                 }];
             }
             case "marked":

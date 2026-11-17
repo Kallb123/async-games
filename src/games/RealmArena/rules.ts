@@ -1567,6 +1567,17 @@ function resolver(state: BattleState, roll: Roll) {
     };
 
     /**
+     * A Bloater's burst: everyone next to it, friend or foe, hit and corroded.
+     * Given a `scorer`, it is the burst of a Bloater that was downed, told as
+     * such, and any knock-out it makes scores for that scorer (§39.3).
+     */
+    const burst = (bloater: Fighter, scorer?: Pick<Fighter, "id" | "owner">) => {
+        const { damage, effect } = rulesetOf(state).ABILITIES.burst;
+        land(bloater, burstArea(state.field, bloater.square), damage, effect,
+            targets => ({ kind: "burst", fighter: bloater.id, targets, damage, ...(scorer ? { downed: true as const } : {}) }), "ability", scorer);
+    };
+
+    /**
      * Bursts every Bloater that has fallen since the last call, in the order
      * they fell, until none is left: a burst that downs another Bloater queues
      * it. Each is Burst's own blast with the Bloater's own damage, and any
@@ -1577,9 +1588,7 @@ function resolver(state: BattleState, roll: Roll) {
             const bloater = get(next.id);
             if (!burstsWhenDowned(bloater, state)) continue;
             bloater.spent.push("burst");
-            const { damage, effect } = rulesetOf(state).ABILITIES.burst;
-            land(bloater, burstArea(state.field, bloater.square), damage, effect,
-                targets => ({ kind: "burst", fighter: bloater.id, targets, damage, downed: true }), "ability", next.by);
+            burst(bloater, next.by);
         }
     };
 
@@ -1620,7 +1629,7 @@ function resolver(state: BattleState, roll: Roll) {
         mover.facing = facingTowards(state.field, path[path.length - 2], path[path.length - 1]);
         mover.square = path[path.length - 1];
     };
-    return { fighters, battle, events, get, shoot, strike, wound, afflict, land, settle, blast, mend, hit, relocate };
+    return { fighters, battle, events, get, shoot, strike, wound, afflict, land, burst, settle, blast, mend, hit, relocate };
 }
 
 /**
@@ -1774,9 +1783,7 @@ export function act(state: BattleState, player: string, action: Action, roll: Ro
             // Everyone next to it, friend or foe, hit and corroded; then the
             // Bloater itself is spent, downed by its own hand, which scores
             // nobody anything (§31.2).
-            const { damage, effect } = ABILITIES.burst;
-            run.land(actor, burstArea(state.field, actor.square), damage, effect,
-                targets => ({ kind: "burst", fighter: actor.id, targets, damage }));
+            run.burst(actor);
             run.wound(actor, actor, actor.hp);
             break;
         }
