@@ -393,6 +393,13 @@ export function squadPoints(squad: readonly CharacterId[], context?: RulesContex
  * Character ids are unique across every faction, so a fighter needs only its
  * `character` to be known, and every rule reads `CHARACTERS` whoever it's for.
  */
+/** One Hold Out wave's theme (§39.6): its name, an elite it buys first if it can, and the order it buys the rest in, round and round. */
+export interface WaveTheme {
+    name: string;
+    elite?: CharacterId;
+    buys: readonly CharacterId[];
+}
+
 export interface Faction {
     name: string;
     /** The characters it musters from, in the order the muster lists them; each in no other faction's roster. */
@@ -403,6 +410,12 @@ export interface Faction {
      * against. Absent, the faction has none.
      */
     elites?: readonly CharacterId[];
+    /**
+     * The themes of its Hold Out waves (§39.6), the first wave's first: each wave
+     * is bought with points (`wavePurchase`) rather than being the squad again.
+     * Absent, the faction's waves are `waveStrength`'s.
+     */
+    waves?: readonly WaveTheme[];
     /**
      * The squad a muster that runs out of time gets, and every warband
      * musters, by budget — each spending the whole of it (§17.2, §30.5). The

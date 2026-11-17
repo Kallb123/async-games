@@ -19,6 +19,15 @@ import type { FactionId } from "./characters";
 // is derived from anyone else's (`fighters` stays empty until the battle
 // begins, so not even a count or a fighter id gives a squad away).
 
+/** Hold Out's next wave as the team is told of it (§30.11, §39.6). */
+export interface NextWave {
+    round: number;
+    /** The wave's theme, for a faction whose waves have them. */
+    name?: string;
+    arriving?: number;
+    upTo?: true;
+}
+
 export interface IRealmArenaSpecificGameStateResponse {
     map: RealmArenaMapId;
     phase: RealmArenaPhase;
@@ -53,7 +62,7 @@ export interface IRealmArenaSpecificGameStateResponse {
      * outside Hold Out's battle, once the last wave has landed, and once the
      * battle is over.
      */
-    nextWave?: { round: number; arriving?: number; upTo?: true };
+    nextWave?: NextWave;
     /** How strong the co-op warbands are (§30.5); absent is Normal. */
     difficulty?: StoredDifficulty;
     /** The warbands take their turns in a block after all the players', not one after each; absent is the alternating order. */

@@ -8,6 +8,7 @@ import { markDirty } from "@/utils/games/markDirty";
 import { recordedRolls } from "@/utils/games/recordedRolls";
 import { isDropped, nextActivePlayer, registerPlayerDropoutAdapter } from "@/utils/games/playerDropout";
 import { v4 as uuidv4, NIL as NIL_UUID } from 'uuid';
+import type { NextWave } from "@/games/RealmArena/apiModels";
 import type { IRealmArenaCoop, IRealmArenaGameData, IRealmArenaSpecificGameState } from "@/games/RealmArena/RealmArenaModels";
 import { DIFFICULTY_NAMES, enemyNameOf, factionById, musterBudget, readyMadeSquad, REALM_ONLY, warbandBudget, type Budget, type CharacterId, type FactionId, type OptionId } from "@/games/RealmArena/characters";
 import { battlefieldById, battlefieldOf } from "@/games/RealmArena/maps";
@@ -57,7 +58,9 @@ import {
     warbandOwner,
     warbandsFor,
     waveArrives,
+    wavePurchase,
     wavesLanded,
+    waveThemeOf,
     type Action,
     type BattleEvent,
     type BattleState,
@@ -1035,6 +1038,26 @@ export function waveStrength(squad: readonly CharacterId[], round: number, growi
 }
 
 /**
+ * What a themed wave landing as `round` begins has to spend (§39.6): the
+ * warband's own budget and `WAVE_GROWTH_POINTS` for every wave landed by then,
+ * the warbands' own muster counted as the first (as `WaveRecord` counts it), so
+ * the round-4 wave has 15 more than the squad cost. (§39.7's nests will take
+ * points off it.)
+ */
+export function waveBudgetOf(gs: IRealmArenaSpecificGameState, round: number): number {
+    return warbandBudgetOf(gs) + (ruleValuesOf(gs).WAVE_GROWTH_POINTS ?? 0) * wavesLanded(round);
+}
+
+/**
+ * What a wave brings a warband up to, landing as `round` begins (§30.10, §39.6):
+ * its faction's themed purchase where its catalogue gives it themes, otherwise `waveStrength`'s squad and growth.
+ */
+function waveBuyOf(gs: IRealmArenaSpecificGameState, round: number, growing: boolean): CharacterId[] {
+    const faction = factionById(gs.coop?.enemy, gs);
+    return faction.waves ? wavePurchase(faction, waveBudgetOf(gs, round), round, gs) : waveStrength(warbandSquad(gs), round, growing);
+}
+
+/**
  * The reinforcements one warband can place in its deployment zone in the wave
  * landing as `round` begins: the one landing now, unless told otherwise.
  */
@@ -1043,12 +1066,16 @@ export function waveOf(gs: IRealmArenaSpecificGameState, owner: string, growing:
     const warband = warbandsFor(gs.seats).indexOf(owner);
     if (warband < 0) return [];
     const field = battlefieldById(gs.map);
-    const planned = readyMadeMuster(field, gs.seats.length + warband, waveStrength(warbandSquad(gs), round, growing));
+    const planned = readyMadeMuster(field, gs.seats.length + warband, waveBuyOf(gs, round, growing));
     const missing = [...planned];
     // A hatchling (§39.5) is a body on top of the squad, not one the wave would have brought.
     for (const fighter of gs.fighters.filter(one => one.owner === owner && isStanding(one) && one.hatchedBy === undefined)) {
         const index = missing.findIndex(pick => pick.character === fighter.character);
         if (index >= 0) missing.splice(index, 1);
+    }
+    // A themed wave never takes a warband past the cap, survivors and hatchlings counted (§39.6).
+    if (factionById(gs.coop?.enemy, gs).waves) {
+        missing.splice(Math.max(0, (ruleValuesOf(gs).WAVE_CAP ?? Infinity) - gs.fighters.filter(one => one.owner === owner && isStanding(one)).length));
     }
     const preferred = planned.map(pick => pick.square);
     const zone = freeSquares(gs, [...preferred, ...field.deployments[gs.seats.length + warband].filter(square => !preferred.includes(square))]);
@@ -1083,7 +1110,9 @@ function landWave(data: IRealmArenaGameData, version: number): void {
     }
     // The scheduled wave is public even when every deployment square is
     // blocked; its line must not reveal which hidden warbands found room.
-    data.gameState.history.unshift({ text: `A fresh wave of ${enemyNameOf(enemyKnown(gs.coop) ? gs.coop.enemy : undefined, gs)} arrives` });
+    // A themed wave is told by name once the team knows whom it fights: the name would give a hidden enemy away.
+    const theme = enemyKnown(gs.coop) ? waveThemeOf(factionById(gs.coop?.enemy, gs), gs.roundsPlayed + 1) : undefined;
+    data.gameState.history.unshift({ text: theme ? `${theme.name} arrives` : `A fresh wave of ${enemyNameOf(enemyKnown(gs.coop) ? gs.coop.enemy : undefined, gs)} arrives` });
     if (ruleValuesOf(gs).RALLY_CHOICE) {
         // From rules version 12 nobody is healed by the wave itself: every
         // player of the team still in the battle owes a choice (§39.4), made
@@ -1105,24 +1134,27 @@ function landWave(data: IRealmArenaGameData, version: number): void {
  * nothing at all while a random enemy is unseen: its size would name the
  * faction. Undefined outside Hold Out's battle, and once the last has landed.
  */
-export function nextWaveOf(gs: IRealmArenaSpecificGameState): { round: number; arriving?: number; upTo?: true } | undefined {
+export function nextWaveOf(gs: IRealmArenaSpecificGameState): NextWave | undefined {
     if (gs.coop?.mission !== "holdOut" || gs.phase !== "battle") return undefined;
     const rounds = battleRoundsOf(gs);
     const round = nextWaveRound(gs.roundsPlayed + 1, rounds);
     if (round === undefined) return undefined;
     if (enemyHidden(gs.coop)) return { round };
+    // A themed wave (§39.6) is named, in fog too: once the enemy is known its themes are no secret.
+    const name = waveThemeOf(factionById(gs.coop?.enemy, gs), round)?.name;
+    const named = name === undefined ? {} : { name };
     // Growing: every End turn played from here on is the current version's.
     // A count the placement can't work out costs the line its count, never
     // the board its response.
     if (!gs.fog) {
         try {
-            return { round, arriving: warbandsFor(gs.seats).reduce((sum, owner) => sum + waveOf(gs, owner, true, round).length, 0) };
+            return { round, ...named, arriving: warbandsFor(gs.seats).reduce((sum, owner) => sum + waveOf(gs, owner, true, round).length, 0) };
         } catch (error) {
             console.error("Realm Arena: the next wave couldn't be counted", error);
-            return { round };
+            return { round, ...named };
         }
     }
-    return { round, arriving: warbandsFor(gs.seats).length * waveStrength(warbandSquad(gs), round).length, upTo: true };
+    return { round, ...named, arriving: warbandsFor(gs.seats).length * waveBuyOf(gs, round, true).length, upTo: true };
 }
 
 // ─── Commands ───────────────────────────────────────────────────────────────

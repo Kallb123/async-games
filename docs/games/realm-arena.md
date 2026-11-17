@@ -4862,7 +4862,7 @@ two different arrows in one turn, but never the same one twice running.
 
 ## 39. Hold Out against the Swarm: the next seven PRs (plan)
 
-*Planned; PRs 1, 2, 3 and 4 (§39.2, §39.3, §39.4, §39.5) are built, in a catalogue not yet released.* Hold Out with the players as the Realm against the
+*Planned; PRs 1, 2, 3, 4 and 5 (§39.2, §39.3, §39.4, §39.5, §39.6) are built, in a catalogue not yet released.* Hold Out with the players as the Realm against the
 computer's Swarm is the game's main mode, which is why the Realm's kit was
 rebuilt first (§34). This section plans what makes the Swarm worth using that
 kit on: a Taunt with a reach, Bloaters that burst when they fall, a rally each
@@ -4889,8 +4889,10 @@ Every value marked *Proposed* is a starting point for the balance harness
   the old behaviour. The Renegades and the Miners have none of the new fields,
   so Hold Out against them plays as it does today.
 - **A command version where one is due** (`docs/command-versions.md`): for the
-  rally's new action (§39.4), and for the End turn landing a wave by the new
-  rules (§39.6, §39.7).
+  rally's new action (§39.4) only. The End turn landing a wave by the new rules
+  (§39.6, §39.7) needs none: version 12 is unreleased, no battle can be created
+  under it until §39.9, and by then every client sends command version 12 or
+  later, so the catalogue is the only gate those waves need.
 - **One "What's new" line**, written by the last PR, for the lot.
 - **Step 0: a baseline.** Before PR 1, run the harness at version 11: Hold Out
   against the Swarm, teams of one to four, on the gate forts, the Sacked Fort
@@ -4904,7 +4906,7 @@ Every value marked *Proposed* is a starting point for the balance harness
 | 2 | A Bloater bursts when it's downed (§39.3) — **built** | — |
 | 3 | The rally is each player's choice (§39.4) — **built** | — |
 | 4 | Elite Swarm characters (§39.5) — **built** | — |
-| 5 | Waves that differ, bought with points (§39.6) | 4 |
+| 5 | Waves that differ, bought with points (§39.6) — **built** | 4 |
 | 6 | Nests (§39.7) | 5 |
 | 7 | The Swarm plays like a swarm (§39.8) | 2, 4 |
 | 8 | Balance, copy and release (§39.9) | all |
@@ -5362,8 +5364,10 @@ its waves, and each is bought with points.
   be brought up to; the other is `wavePurchase(faction, budget, round)`, pure
   and in `rules.ts`. `waveOf`, the placement and `nextWaveOf` are otherwise as
   they are.
-- An End turn lands a wave by its command version, as growing waves did
-  (§30.10): version 13.
+- **No command version.** Rules version 12 is unreleased and every End turn in
+  a version-12 battle is command version 12 or later, so a faction's `waves` is
+  the only gate: a battle whose catalogue has them lands them, and one that
+  doesn't lands `waveStrength`'s wave.
 - **The wave is told by name.** The log says "The Bile arrives". The
   scoreboard's next-wave line (§30.11) names it: "Round 7: The Bile, 9
   arriving". In fog the count stays a ceiling, and while a random enemy is
@@ -5377,6 +5381,76 @@ dropped when the budget can't cover it; the cap; every faction's strongest
 last wave still fits every zone on every Hold Out battlefield (the existing
 test, widened); a version-12 End turn against the Renegades lands
 `waveStrength`'s wave; the null viewer's response; a replay.
+
+**Engine, as built.** All of it is in rules version 12 (`catalogues/v12.ts`);
+`CURRENT_RULESET_VERSION` stays 11, so no battle lands a themed wave outside tests.
+
+- **Rules are data.** `Faction.waves?: readonly WaveTheme[]` (`name`, optional
+  `elite`, `buys`), set only on `FACTIONS.swarm` in version 12 with the table's
+  four themes; and two new optional values in `RULES`, `WAVE_GROWTH_POINTS: 15`
+  and `WAVE_CAP: 12`, read through `ruleValuesOf`. Absent in every earlier
+  catalogue, so the Renegades, the Miners and the Swarm before version 12 land
+  `waveStrength`'s waves as they did.
+- **A theme is matched to its wave by how many have landed**: `waveThemeOf(faction,
+  round)` takes `waves[wavesLanded(round) - 1]`, so the wave of round 4 is the
+  first theme, 7 the second, and so on. Hold Out's waves land in rounds 4, 7, 10
+  and 13 for every team size, so each wave has a theme. A round that would have
+  none (nothing in Hold Out) reads as the nearest, the first before it and the
+  last after it, so a list shorter than a battle's waves repeats its last theme
+  rather than failing.
+- **`wavePurchase(faction, budget, round, context)`** is pure and in `rules.ts`:
+  the elite if `budget` covers it, then `buys` round and round, each character
+  bought if what's left pays for it, until a whole round buys nothing, or
+  `WAVE_CAP` characters are bought. Empty for a faction without `waves`. The
+  elite is never bought twice, and a faction's `buys` never hold one.
+- **The budget** is `waveBudgetOf(gs, round)`: `warbandBudgetOf` plus 15 for
+  every wave landed by then, the warbands' own muster counted as the first, as
+  `WaveRecord` counts it. So the round-4 wave has 15 more than the squad cost
+  (the one character more §30.10 brings today), round 7's 30 more, round 10's 45
+  and round 13's 60. The "less what the team has taken off it" of §39.7 isn't
+  here: nests are not.
+- **`waveOf`** asks `waveBuyOf`, the one helper that picks `wavePurchase` for a
+  faction with themes and `waveStrength` for one without (or for a wave landed by
+  an older End turn, below); `nextWaveOf`'s fog count asks it too. The refill is as it was: what the purchase lists that the warband
+  doesn't have standing, hatchlings not counted as the warband's own. The cap
+  then trims it: a themed wave brings no more than `WAVE_CAP` less the warband's
+  standing characters of any sort, hatchlings included, so survivors of an
+  earlier theme count and a warband never stands past 12 after a wave. Placement
+  and `readyMadeMuster` are untouched; the purchase is at most 12, so it fits
+  every zone a ready-made squad of 8 and 4 more already did.
+- **No command version.** The catalogue is the gate (above): `landWave` and
+  `nextWaveOf` ask `waveBuyOf`, which reads the enemy's `waves`, with no version
+  of the End turn consulted. `meta.commandVersion` stays 12.
+- **Told by name.** The log says "The Bile arrives" in place of "A fresh wave of
+  the Swarm arrives" — only once the team knows its enemy: while a random enemy
+  is unseen the old line stands, as the name would give the faction away. `nextWave`
+  on the wire has an optional `name`; `waveLineOf` reads "Round 7: The Bile, 9
+  arriving" (or "…, up to 12 arriving" in fog, and "Round 7: The Bile" with no
+  count). The count is the sum of what each warband's `waveOf` would bring now, or
+  in fog a ceiling, the purchase's length for every warband. While a random enemy
+  is unseen (`enemyHidden`) the response is `{ round }` alone, name and count both
+  left out, for every viewer including the null one. A wave with no theme has no
+  `name` and the line as it was.
+- **The record.** `WaveRecord.name?` (and `name: String` on the stored schema) is
+  the theme of the wave the replay saw land, read from the battle's catalogue
+  (`waveThemeOf`), absent on the first wave, which is the muster, on any wave of a
+  faction without themes and on results recorded before. The result's Hold Out
+  lines read "Wave 2 · The Rush, round 4: …", and the *Enemies downed by wave* bars and the
+  standing chart's wave marks use the same label ("Wave 2 · The Rush: 6 arrived").
+- **The harness** already takes `--rules <version>` (§39.1), so it needed nothing.
+
+**Tests.** `themedWaves.test.ts`: the theme by waves landed; the purchase at
+every theme and every budget on the ladder plus its growth (never over budget,
+the elite first only when it's covered, nothing on the list left affordable, the
+cap, no draw) and pinned examples; the elite dropped when its points aren't
+there; the budget's growth; a whole battle's End turns landing each theme by
+name, the refill, the cap with a warband already at 11 and 12, the Renegades'
+`waveStrength` wave in a version-12 battle, the next wave's name and count (and a ceiling in fog), a replay and its
+record. `coop.test.ts`'s zone test also checks the strongest purchase of the Swarm
+at version 12 on every battlefield, size and difficulty; `rulesets.test.ts` pins
+the themes, the two values and that nothing else of version 11 changed;
+`hiddenHands.test.ts` pins the next wave's name and count for an unseen random
+enemy and a known one in fog; `ui.test.ts` the scoreboard line.
 
 *Open:* a fixed order is learnable, and the same every battle. Drawing the
 order of the first three as the battle is created, with the Queen always
@@ -5428,8 +5502,8 @@ is never to leave the keep. Nests give it a reason to.
   has none.
 - `nestsDestroyed` per warband on the state, cleared as a wave lands, read by
   the wave's budget.
-- The End turn's command version 13 (§39.6) covers the regrowth, if PRs 5 and
-  6 ship close together; else 14.
+- No command version: as for §39.6, version 12 is unreleased, so the catalogue
+  is the only gate the regrowth needs.
 
 **Screens.** The scoreboard's next-wave line says what the nests have cost
 it: "Round 7: The Bile, 6 arriving (1 nest destroyed)". The nests' squares are

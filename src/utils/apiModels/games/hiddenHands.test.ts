@@ -877,6 +877,27 @@ describe("Realm Arena's random co-op enemy", () => {
     });
 });
 
+describe("Realm Arena's themed next wave in fog of war (§39.6)", () => {
+    const swarm = (coop: { random?: true }) => makeRealmArenaGame(["a", "b"], {}, { fog: true, rulesVersion: 12, coop: { enemy: "swarm", mission: "holdOut", ...coop } });
+
+    it("sends neither the name nor the count while a random enemy is unseen, to the null viewer too", async () => {
+        const game = swarm({ random: true });
+        await realmArenaMusterAll(game);
+        for (const viewer of ["a", "b", null]) expect(realmArenaStateToModel(game.specificGameState, viewer, null).nextWave).toEqual({ round: 4 });
+    });
+
+    it("names the wave and counts a ceiling once the enemy is known, for every viewer", async () => {
+        const game = swarm({});
+        await realmArenaMusterAll(game);
+        for (const viewer of ["a", "b", null]) {
+            const { nextWave } = realmArenaStateToModel(game.specificGameState, viewer, null);
+            expect(nextWave).toMatchObject({ round: 4, name: "The Rush", upTo: true });
+            // A ceiling for both warbands, the same for every viewer: never a count of who is down or where there's room.
+            expect(nextWave?.arriving).toBe(2 * 6);
+        }
+    });
+});
+
 describe("Realm Arena's death burst in fog of war (§39.3)", () => {
     // a's Archer shoots b's Bloater, which bursts on b's Knight beside it; c's Mage is at the far edge.
     const field = realmArenaFieldOf(...Array(4).fill("..............................."));

@@ -16,10 +16,10 @@
 import { rulesetOf, type RulesContext } from "./rulesets";
 import type { GameResultEvent } from "@/utils/apiModels/GameDataApi";
 import type { IReplayStep } from "@/utils/games/replay";
-import { type CharacterId } from "./characters";
+import { factionById, type CharacterId } from "./characters";
 import type { IRealmArenaSpecificGameState } from "./RealmArenaModels";
 import { isRallyAction, type RallyChoice } from "./rally";
-import { areaDamage, allied, battleRounds, BLAST_EVENT_KINDS, ENEMY_SIDE, isStanding, isWarband, knockoutPoints, sideOf, squadHp, TEAM_SIDE, waveArrives, type BattleEvent, type BattleState, type Fighter } from "./rules";
+import { areaDamage, allied, battleRounds, BLAST_EVENT_KINDS, ENEMY_SIDE, isStanding, isWarband, knockoutPoints, sideOf, squadHp, TEAM_SIDE, waveArrives, waveThemeOf, type BattleEvent, type BattleState, type Fighter } from "./rules";
 
 /** What one player's characters of one kind did in a battle, pooled as their mastery is (§23.1). */
 export interface FightingRecord {
@@ -95,6 +95,8 @@ export interface WaveRecord {
     round: number;
     arrived: number;
     downed: Map<string, number>;
+    /** The wave's theme (§39.6), for a faction whose waves have them: absent on the first, which is the muster, and on a result recorded before them. */
+    name?: string;
     /**
      * What each player of the team chose as this wave landed (§39.4), in the
      * order they chose. Only in a battle whose rules make the rally a choice,
@@ -306,7 +308,10 @@ export function battleRecorder(seats: readonly string[], sides?: BattleState["si
             if (holdOut) {
                 if (waves.length === 0) waves.push({ round: 0, arrived: 0, downed: new Map() });
                 for (let begun = round + 1; begun <= Math.min(gs.roundsPlayed, lastRound); begun++) {
-                    if (waveArrives(begun + 1, lastRound + 1)) waves.push({ round: begun, arrived: 0, downed: new Map() });
+                    if (!waveArrives(begun + 1, lastRound + 1)) continue;
+                    // A faction with themes (§39.6) names its waves.
+                    const name = waveThemeOf(factionById(gs.coop?.enemy, gs), begun + 1)?.name;
+                    waves.push({ round: begun, arrived: 0, downed: new Map(), ...(name ? { name } : {}) });
                 }
                 // A hatchling (§39.5) stands up in the middle of a turn: nobody brought it as a wave.
                 waves.at(-1)!.arrived += fighters.filter(fighter => isWarband(fighter.owner) && !known.has(fighter.id) && fighter.hatchedBy === undefined).length;

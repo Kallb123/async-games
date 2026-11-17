@@ -4,13 +4,14 @@ import { buildAllEvents, buildEventFeed } from "@/utils/games/recap";
 import { stripRecordedRandomness } from "@/utils/apiModels/gameCommand";
 import { CHARACTERS, FACTION_IDS, FACTIONS, musterBudget, REALM, warbandBudget, type BattleSize, type Difficulty } from "./characters";
 import { battlefieldById, COOP_MAPS, mapFor } from "./maps";
+import { rulesetFor } from "./rulesets";
 import {
     computeRealmArenaResultStats, coopInviteOf, formatRealmArenaCharts, formatRealmArenaResultStats, gameStateToModel, RealmArenaInvitationModel, stepOutcomeToModel, type IRealmArenaGameData, type RealmArenaSettings,
 } from "./RealmArenaModels";
 import { recordBattle } from "./recordBattle";
 import { battleOf as battleOfState, battleRoundsOf, enemyEvents, nextWaveOf, RealmArenaGameType, warbandBudgetOf, waveOf, waveStrength, type IRealmArenaOutcome, type RealmArenaEndTurn } from "./RealmArenaLogic";
 import {
-    battleRounds, ENEMY_SIDE, isStanding, isWarband, lastWaveRound, maxHpOf, nextWaveRound, readyMadeMuster, squadSight, standings, TEAM_SIDE, warbandOwner, waveArrives, wavesLanded, type BattleEvent,
+    battleRounds, ENEMY_SIDE, isStanding, isWarband, lastWaveRound, maxHpOf, nextWaveRound, readyMadeMuster, squadSight, standings, TEAM_SIDE, warbandOwner, waveArrives, wavePurchase, wavesLanded, type BattleEvent,
 } from "./rules";
 import type { IRealmArenaStepOutcome, RealmArenaPartState } from "./apiModels";
 import type { GameResultBarChart, GameResultChart, GameResultTable } from "@/utils/apiModels/GameDataApi";
@@ -211,6 +212,16 @@ describe("Hold Out's growing waves (§30.10)", () => {
                         const strongest = waveStrength(squad, lastWaveRound(battleRounds(players.length, { mission: "holdOut" })));
                         for (let k = 0; k < players.length; k++) {
                             expect(() => readyMadeMuster(field, players.length + k, strongest), `${field.name}, ${faction}, ${size}, ${difficulty}`).not.toThrow();
+                        }
+                        // And from version 12 (§39.6), the strongest a themed wave buys: the last wave's budget, up to the cap.
+                        const last = lastWaveRound(battleRounds(players.length, { mission: "holdOut" }));
+                        const faction12 = rulesetFor(12).FACTIONS[faction];
+                        const budget = warbandBudget(players.length, size, difficulty);
+                        const strongest12 = faction12.waves
+                            ? wavePurchase(faction12, budget + 15 * wavesLanded(last), last, { rulesVersion: 12 })
+                            : waveStrength(faction12.readyMade[budget], last);
+                        for (let k = 0; k < players.length; k++) {
+                            expect(() => readyMadeMuster(field, players.length + k, strongest12), `${field.name}, ${faction} (v12), ${size}, ${difficulty}`).not.toThrow();
                         }
                     }
                 }

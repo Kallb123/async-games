@@ -199,7 +199,7 @@ describe("melee rolls to hit (§13.3)", () => {
     });
 
     it("keeps a strike's roll out of the review a viewer is sent, as it does a shot's", async () => {
-        const { game, attacker, target } = await knightsBeside(meta.commandVersion!);
+        const { game, attacker, target } = await knightsBeside(CURRENT_RULESET_VERSION);
         const command = Object.assign(actBy("a", { kind: "attack", fighter: attacker.id, target: target.id }), { recordedRolls: [100] });
         const { outcome } = await play(game, command);
         const events = (outcome as IRealmArenaOutcome).events;
@@ -517,7 +517,7 @@ describe("a battle begun before the rebalance", () => {
     }, 60_000);
 
     it("keeps its melee un-rolled through the command, where the same fight rolls in a new one", async () => {
-        for (const [version, rolls] of [[LEGACY, undefined], [meta.commandVersion!, [100]]] as const) {
+        for (const [version, rolls] of [[LEGACY, undefined], [CURRENT_RULESET_VERSION, [100]]] as const) {
             const { game, attacker, target } = await knightsBeside(version);
             const command = Object.assign(actBy("a", { kind: "attack", fighter: attacker.id, target: target.id }), rolls ? { recordedRolls: [...rolls] } : {});
             expect((await play(game, command)).outcome.validMove).toBe(true);

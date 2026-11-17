@@ -34,7 +34,7 @@ import { DEFAULT_CLIMB, pathCost, pathTo, reachFrom, stepCost, type MoveRules, t
 import { coordsOf, distance, facingTowards, FULL_HEIGHT, isNeighbour, riseOf, squareAt, type Area, type Battlefield, type Cover, type Facing, type Square } from "@/utils/games/battlefield/terrain";
 import {
     afflictionsOf, factionOf, isCharacterId, isItemId, isOptionId, kitOf, LINE_COOP_MAX, squadPoints,
-    type Ability, type AbilityId, type Affliction, type CharacterId, type Effect, type EffectId, type Faction, type FactionId, type Item, type ItemId, type OptionId, type PlayerCount, type Weapon,
+    type Ability, type AbilityId, type Affliction, type CharacterId, type Effect, type EffectId, type Faction, type FactionId, type Item, type ItemId, type OptionId, type PlayerCount, type Weapon, type WaveTheme,
 } from "./characters";
 import { currentRuleset, ruleValuesOf, rulesetOf, type RulesContext } from "./rulesets";
 import { addTally, NO_TALLY, type Ranks, type Tally } from "./mastery";
@@ -2137,6 +2137,43 @@ export function waveArrives(round: number, rounds: number): boolean {
 /** How many Hold Out waves have landed by the start of `round` (counted from 1), the warbands' own muster not counted (§30.3). */
 export function wavesLanded(round: number): number {
     return Math.max(0, Math.floor((round - 1) / WAVE_EVERY));
+}
+
+/**
+ * The theme of the Hold Out wave landing as `round` begins (§39.6), by how many
+ * waves have landed: the first wave takes the faction's first theme. A round
+ * past the last theme's takes the last, which no Hold Out reaches. Undefined
+ * for a faction whose waves aren't themed.
+ */
+export function waveThemeOf(faction: Faction, round: number): WaveTheme | undefined {
+    const { waves } = faction;
+    return waves?.length ? waves[Math.min(waves.length - 1, Math.max(0, wavesLanded(round) - 1))] : undefined;
+}
+
+/**
+ * What a themed wave buys with `budget` points (§39.6), for the wave landing as
+ * `round` begins: its elite first if the points cover it, then its buy list
+ * round and round, skipping whatever the points left can't buy, until nothing
+ * on it can be — or until `WAVE_CAP` characters are bought. No draw, so the same
+ * every time. Empty for a faction whose waves aren't themed.
+ */
+export function wavePurchase(faction: Faction, budget: number, round: number, context?: RulesContext): CharacterId[] {
+    const theme = waveThemeOf(faction, round);
+    if (!theme) return [];
+    const { CHARACTERS } = rulesetOf(context);
+    const cap = ruleValuesOf(context).WAVE_CAP ?? Infinity;
+    const bought: CharacterId[] = [];
+    let left = budget;
+    const buy = (character: CharacterId): boolean => {
+        const cost = CHARACTERS[character].points;
+        if (cost > left || bought.length >= cap) return false;
+        bought.push(character);
+        left -= cost;
+        return true;
+    };
+    if (theme.elite) buy(theme.elite);
+    while (theme.buys.map(buy).some(Boolean)) { /* round again while anything was bought */ }
+    return bought;
 }
 
 /** The round the next Hold Out wave arrives in after `round`, or undefined once the last has landed (§30.3). */
