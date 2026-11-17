@@ -140,7 +140,7 @@ function toldOf(told: Told | undefined, events: readonly BattleEvent[], viewerId
  */
 function actionKind(events: readonly BattleEvent[]): { type: string; glyph: string } {
     const has = (match: (event: BattleEvent) => boolean) => events.some(match);
-    // A Bloater downs itself as it bursts (§31.2): that's no knock-out.
+    // A Bloater downs itself as it bursts (§31.2): that's no knock-out. One downed by someone else (§39.3) is, by that someone.
     if (has(event => event.kind === "downed" && event.by !== event.fighter)) return { type: RA_KNOCKOUT, glyph: "✕" };
     if (has(event => event.kind === "iceBall")) return { type: RA_FIREBALL, glyph: AREA_BLAST.iceBall.icon };
     if (has(event => event.kind === "fireball")) return { type: RA_FIREBALL, glyph: AREA_BLAST.fireball.icon };

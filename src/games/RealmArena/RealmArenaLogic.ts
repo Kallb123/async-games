@@ -540,7 +540,7 @@ function clause(event: BattleEvent, fighters: readonly Fighter[], actor: string,
         case "marked": return `used ${ABILITIES.huntersMark.name} with ${name(event.fighter)}`;
         case "burst": {
             const hit = hitIn(event.targets).length === 0 ? "" : `, hitting ${pluralize(hitIn(event.targets).length, "character")}${event.damages ? "" : ` for ${event.damage}`}`;
-            return `burst ${name(event.fighter)}${hit}`;
+            return `burst ${name(event.fighter)}${event.downed ? " as it fell" : ""}${hit}`;
         }
         case "raised": return `raised ${name(event.target)} with ${name(event.fighter)}`;
         case "hunkered": return `hunkered ${name(event.fighter)} down`;
@@ -570,7 +570,10 @@ function veiledClause(event: BattleEvent, name: (id: number) => string, hitIn: (
         case "iceBall":
         case "dynamite":
         case "demolished":
-        case "burst": return `used an ability with ${name(event.fighter)}${hit(event.targets, event.damage)}`;
+        case "burst":
+            // A Bloater's death burst names no ability: it was downed, and the blast is what it did as it fell (§39.3).
+            if (event.kind === "burst" && event.downed) return `released a blast as ${name(event.fighter)} fell${hit(event.targets, event.damage)}`;
+            return `used an ability with ${name(event.fighter)}${hit(event.targets, event.damage)}`;
         case "healed": return event.via === "draught" ? undefined : `used an ability on ${name(event.target)} with ${name(event.fighter)}`;
         case "raised": return `used an ability on ${name(event.target)} with ${name(event.fighter)}`;
         case "ability":
@@ -740,6 +743,14 @@ export function witnessed(events: readonly BattleEvent[], battle: BattleState, v
     return id => saw.has(id);
 }
 
+/** An area event without the characters the viewer didn't see it catch: no id, and no damage keyed by one. */
+function unseenOut<E extends { targets: number[]; damages?: Record<number, number> }>(event: E, saw: (id: number) => boolean): E {
+    if (event.targets.every(saw)) return event;
+    const { damages, ...rest } = event;
+    const targets = event.targets.filter(saw);
+    return { ...rest, targets, ...(damages ? { damages: Object.fromEntries(targets.map(id => [id, damages[id]])) } : {}) } as E;
+}
+
 /**
  * The events of a command in a fogged battle as one viewer is told them
  * (§27.2) — in their log, their recap and their review. Their own side's
@@ -788,9 +799,9 @@ export function toldTo(events: readonly BattleEvent[], battle: BattleState, view
             case "dynamite":
             case "thrown":
             case "demolished":
-                return keep(saw(event.fighter) || event.targets.some(saw) || areaAround(battle.field, event.at).some(seen));
+                return saw(event.fighter) || event.targets.some(saw) || areaAround(battle.field, event.at).some(seen) ? [unseenOut(event, saw)] : [];
             case "burst":
-                return keep(saw(event.fighter) || event.targets.some(saw));
+                return saw(event.fighter) || event.targets.some(saw) ? [unseenOut(event, saw)] : [];
             case "shot":
             case "struck":
             case "healed":
@@ -1344,7 +1355,7 @@ function beginTurn(data: IRealmArenaGameData, owner: string): { events: BattleEv
     gs.fighters = fighters;
     addScores(gs, events);
     const told = writeLine(data, events, (said, seen) => said.length === 0 ? undefined : { text: capitalise(narrate(said, battle.fighters, "", gs.coop, seen, gs)) });
-    noteSighting(gs);
+    noteSighting(gs, events);
     return { events, told };
 }
 
@@ -1361,7 +1372,7 @@ function applyEndTurn(data: IRealmArenaGameData, owner: string, keepStill: reado
     addScores(gs, events);
     // Told to everyone, whatever they saw of it: that a turn ended is no secret.
     writeLine(data, events, (said, seen) => lineBy(owner, ["ended their turn", ...said.map(event => clause(event, battle.fighters, owner, gs.coop, seen, gs))].join("; "), gs.coop, gs));
-    noteSighting(gs);
+    noteSighting(gs, events);
     return events;
 }
 

@@ -4,7 +4,7 @@ import { useResettingState } from "@/utils/hooks/useResettingState";
 import { pathTo, type Reach } from "@/utils/games/battlefield/pathfinding";
 import type { Square } from "@/utils/games/battlefield/terrain";
 import { type Ability, type Item } from "./characters";
-import { alliesWithin, allied, blastedBy, beckonPath, shovePath, leapSplash, leapTargets, dodgeReach, check, demolishArea, fighterById, areaAround, isStanding, itemOf, oddsBreakdown, reachOf, damageTo, shotOdds, type Action, type BattleState, type Check, type Fighter, type OddsBreakdown } from "./rules";
+import { alliesWithin, allied, burstArea, burstsWhenDowned, blastedBy, beckonPath, shovePath, leapSplash, leapTargets, dodgeReach, check, demolishArea, fighterById, areaAround, isStanding, itemOf, oddsBreakdown, reachOf, damageTo, shotOdds, type Action, type BattleState, type Check, type Fighter, type OddsBreakdown } from "./rules";
 import { ACTION_AIMS, attackOptions, rangeKindOf, rangeSquares, squaresWithin, reactionPreviews, rollsToHit, shotOf, targetKindOf, targetsOf, type AttackOption } from "./tactics";
 import { reachShading } from "./ui";
 
@@ -148,6 +148,31 @@ export function hpPreview(battle: BattleState, fighter: Fighter, { aim, square, 
         const shot = shotOf(aim);
         return [[id, -((shot && shotOdds(battle, fighter, target, shot)?.damage) ?? damageTo(battle, fighter, target))]];
     }));
+}
+
+/** What a downed Bloater would burst on, if the lined-up action is aimed at one (rules version 12, §39.3). */
+export interface BurstPreview {
+    /** The Bloaters the action would hurt: each bursts where it falls, if the blow downs it. */
+    bloaters: Fighter[];
+    /** Every square their bursts would reach, shaded like a fireball's 3×3. */
+    area: Square[];
+    /** The standing characters in them, friend or foe, that a burst would catch: not the Bloaters that burst. */
+    caught: Fighter[];
+}
+
+/**
+ * The bursts a lined-up action risks: for every Bloater `hpChange` says it
+ * hurts (so a shot, a strike or a blast's area alike) that would burst when
+ * downed, its `burstArea` and who stands in it. Conditional on the blow
+ * downing it, so none of it is a definite HP change. Null when no such
+ * Bloater is hit — always, before rules version 12.
+ */
+export function burstPreview(battle: BattleState, hpChange: ReadonlyMap<number, number>): BurstPreview | null {
+    const bloaters = battle.fighters.filter(one => isStanding(one) && (hpChange.get(one.id) ?? 0) < 0 && burstsWhenDowned(one, battle));
+    if (bloaters.length === 0) return null;
+    const area = [...new Set(bloaters.flatMap(one => burstArea(battle.field, one.square)))];
+    const bursting = new Set(bloaters.map(one => one.id));
+    return { bloaters, area, caught: battle.fighters.filter(one => isStanding(one) && !bursting.has(one.id) && area.includes(one.square)) };
 }
 
 /** Where a character would stand once the move lined up is made, and the AP it would have left there. */
@@ -300,6 +325,9 @@ export function useTurnDraft(battle: BattleState, player: string, fighter: Fight
     // Who an armed Taunt or Blessing would reach: the board rings them as aimed.
     const area = isAtSquare(aim) && draft.square !== null ? landing(battle, fighter, aim, draft.square) : null;
 
+    const hpChange = hpPreview(battle, fighter, draft, area);
+    const burst = burstPreview(battle, hpChange);
+
     const send = () => {
         if (action && verdict && !("refused" in verdict)) onAct(action);
     };
@@ -338,7 +366,13 @@ export function useTurnDraft(battle: BattleState, player: string, fighter: Fight
         /** Every square a lined-up fireball, throw or Demolish lands on. */
         area,
         /** What the action lined up would do to the HP of each character it touches: less on a hit, more for a heal. */
-        hpChange: hpPreview(battle, fighter, draft, area),
+        hpChange,
+        /** A Bloater the action would hurt bursts if it falls: where, and on whom. Conditional, so apart from `hpChange` and `area`. */
+        burst,
+        /** `area` and the squares a Bloater's burst would reach: the ground the board shades as a blast. */
+        shaded: burst ? [...area ?? [], ...burst.area] : area,
+        /** Who a Bloater's burst would catch, for the board to ring as at risk. */
+        atRisk: burst ? burst.caught.map(one => one.id) : [],
         /** The low cover a lined-up fireball, fire flask or Demolish would blast away (§22). */
         blasts: isAtSquare(aim) && draft.square !== null ? blastedBy(battle.field, landsOf(fighter, aim, battle), draft.square) : null,
         action,

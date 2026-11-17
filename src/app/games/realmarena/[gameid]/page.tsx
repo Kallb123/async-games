@@ -650,12 +650,12 @@ export default function GameRealmArena({ params }: { params: Promise<{ gameid: u
                                 reach: turn.reach,
                                 range: turn.range,
                                 path: turn.path ?? turn.forcedPath,
-                                area: turn.area,
+                                area: turn.shaded,
                                 blasts: turn.blasts,
                                 candidates: turn.candidates,
                                 aimed: turn.aimed,
                                 hpChange: turn.hpChange,
-                                flagged: turn.reactions.map(reaction => reaction.watcher.id),
+                                flagged: [...turn.reactions.map(reaction => reaction.watcher.id), ...turn.atRisk],
                                 onSquare: turn.tapSquare,
                             }}
                             refocus={refocus}

@@ -2,7 +2,7 @@
 // that answer it. NOT yet released: `CURRENT_RULESET_VERSION` stays 11, so no
 // battle is created under it and each PR of §39 may still edit this file, until
 // §39.9 releases it. Then it is shipped and never edited; see ../rulesets.ts.
-import type { Ability, AbilityId } from "../characters";
+import type { Ability, AbilityId, Character, CharacterId } from "../characters";
 import { catalogueV11 } from "./v11";
 
 const ABILITIES = {
@@ -11,7 +11,14 @@ const ABILITIES = {
     taunt: { ...catalogueV11.ABILITIES.taunt, radius: 3, description: "Allies within 3 squares, itself included, gain 1 armour until their owner's next turn" },
 } satisfies Partial<Record<AbilityId, Ability>>;
 
+const CHARACTERS = {
+    ...catalogueV11.CHARACTERS,
+    // §39.3: a Bloater downed by anything but its own Burst bursts where it falls.
+    bloater: { ...catalogueV11.CHARACTERS.bloater, burstsWhenDowned: true },
+} satisfies Partial<Record<CharacterId, Character>>;
+
 export const catalogueV12 = {
     ...catalogueV11,
+    CHARACTERS,
     ABILITIES,
 };

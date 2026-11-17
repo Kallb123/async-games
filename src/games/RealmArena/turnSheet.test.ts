@@ -18,7 +18,7 @@ it("shows Shoot + Dodge's hit, graze and damage stats alongside dodge guidance",
         aimed: [1], arm: noop, clear: noop, now: noop, send: noop, pick: noop,
         tapSquare: noop, tapFighter: () => false,
         reach: null, range: null, path, forcedPath: null, after: { square: 1, ap: 1 },
-        reactions: [], area: null, hpChange: new Map(), blasts: null,
+        reactions: [], area: null, hpChange: new Map(), blasts: null, burst: null, shaded: null, atRisk: [],
         action: { kind: "shootDodge", fighter: 0, target: 1, path }, verdict: { ap: 3 },
     };
     const markup = renderToStaticMarkup(React.createElement(RealmArenaAim, {

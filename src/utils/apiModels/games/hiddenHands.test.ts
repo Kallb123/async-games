@@ -29,12 +29,13 @@ import { buildInitialDiceCitiesState } from "@/games/DiceCities/DiceCitiesModels
 import { DiceCitiesCardIds } from "@/games/DiceCities/cards";
 import { AMBULANCE_START, EDGE_COUNT, ENGINE_START, INTERIOR_SPACE_COUNT, SPACE_COUNT, spaceIndex } from "@/games/FiresOut/board";
 import { buildTimeline } from "@/utils/games/replay";
+import { at as realmArenaSquareAt, fieldOf as realmArenaFieldOf } from "@/utils/games/battlefield/testFixtures";
 import { REALM } from "@/games/RealmArena/characters";
 import { gameStateToModel as realmArenaStateToModel, stepOutcomeToModel as realmArenaStepOutcome } from "@/games/RealmArena/RealmArenaModels";
-import { RealmArenaGameType, type IRealmArenaOutcome, type RealmArenaEndTurn } from "@/games/RealmArena/RealmArenaLogic";
+import { RealmArenaGameType, toldTo as realmArenaToldTo, type IRealmArenaOutcome, type RealmArenaEndTurn } from "@/games/RealmArena/RealmArenaLogic";
 import { buildAllEvents } from "@/utils/games/recap";
 import type { IRealmArenaSpecificGameStateResponse } from "@/games/RealmArena/apiModels";
-import { areaAround as realmArenaAreaAround, check as realmArenaCheck, isStanding as isRealmArenaStanding, warbandOwner } from "@/games/RealmArena/rules";
+import { act as realmArenaActRules, fixedRolls as realmArenaFixedRolls, newFighter as realmArenaNewFighter, areaAround as realmArenaAreaAround, check as realmArenaCheck, isStanding as isRealmArenaStanding, warbandOwner } from "@/games/RealmArena/rules";
 import {
     actBy as realmArenaAct,
     battleOf as realmArenaBattle,
@@ -873,5 +874,50 @@ describe("Realm Arena's random co-op enemy", () => {
         expect(complete.enemy).toBe("realm");
         expect(complete.fighters).toHaveLength(game.specificGameState.fighters.length);
         expect(complete.ghosts).toEqual([]);
+    });
+});
+
+describe("Realm Arena's death burst in fog of war (§39.3)", () => {
+    // a's Archer shoots b's Bloater, which bursts on b's Knight beside it; c's Mage is at the far edge.
+    const field = realmArenaFieldOf(...Array(4).fill("..............................."));
+    const make = (id: number, owner: string, character: "archer" | "bloater" | "knight" | "mage", col: number, extra = {}) =>
+        ({ ...realmArenaNewFighter(id, owner, character, realmArenaSquareAt(field, col, 1), null, undefined, false, { rulesVersion: 12 }), ap: 4, ...extra });
+    const fighters = [make(0, "a", "archer", 1), make(1, "b", "bloater", 3, { hp: 1 }), make(2, "b", "knight", 4), make(3, "c", "mage", 30)];
+    const battle = { field, fighters, rulesVersion: 12, fog: true as const };
+    const { events } = realmArenaActRules(battle, "a", { kind: "attack", fighter: 0, target: 1 }, realmArenaFixedRolls([1]));
+    const bursts = (viewer: string) => realmArenaToldTo(events, battle, viewer).filter(event => event.kind === "burst");
+
+    it("bursts on the Knight beside the Bloater when it is downed", () => {
+        expect(events.some(event => event.kind === "burst" && event.downed === true && event.targets.includes(2))).toBe(true);
+    });
+
+    it("is told, as a blast is, to whoever it hit and whoever saw it, and to nobody else", () => {
+        expect(bursts("b")).toHaveLength(1);
+        expect(bursts("a")).toHaveLength(1);
+        expect(bursts("c")).toEqual([]);
+    });
+
+    describe("catching someone the viewer can't see", () => {
+        // The Bloater stands in the open at the wall's foot; b's Knight, with a sentinel id, is just behind the wall.
+        const wall = realmArenaFieldOf(...Array(4).fill("..........#" + ".".repeat(29)), ".".repeat(40));
+        const SENTINEL = 7777;
+        const cast = [make2(0, "a", "archer", 6), make2(1, "b", "bloater", 10, 4, { hp: 1 }), make2(SENTINEL, "b", "knight", 11, 3), make2(3, "c", "mage", 39, 0)];
+        function make2(id: number, owner: string, character: "archer" | "bloater" | "knight" | "mage", col: number, row = 4, extra = {}) {
+            return { ...realmArenaNewFighter(id, owner, character, realmArenaSquareAt(wall, col, row), null, undefined, false, { rulesVersion: 12 }), ap: 4, ...extra };
+        }
+        const walled = { field: wall, fighters: cast, rulesVersion: 12, fog: true as const };
+        const { events: walledEvents } = realmArenaActRules(walled, "a", { kind: "attack", fighter: 0, target: 1 }, realmArenaFixedRolls([1]));
+
+        it("bursts on the hidden Knight", () => {
+            expect(walledEvents.some(event => event.kind === "burst" && event.targets.includes(SENTINEL))).toBe(true);
+        });
+
+        it.each(["a", "c", null])("never names it to %s", viewer => {
+            expect(JSON.stringify(realmArenaToldTo(walledEvents, walled, viewer)), String(viewer)).not.toContain(String(SENTINEL));
+        });
+
+        it("still tells a the burst it saw", () => {
+            expect(realmArenaToldTo(walledEvents, walled, "a").filter(event => event.kind === "burst")).toHaveLength(1);
+        });
     });
 });

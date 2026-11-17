@@ -187,6 +187,11 @@ export interface Character {
     weapon: Weapon;
     abilities: readonly AbilityId[];
     points: number;
+    /**
+     * Goes off as its Burst does when anything else downs it, where it falls
+     * (the Bloater from rules version 12, §39.3). Absent, it falls quietly.
+     */
+    burstsWhenDowned?: true;
 }
 
 

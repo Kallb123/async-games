@@ -661,6 +661,26 @@ describe("the team's armour against the Realm in Hold Out", () => {
         expect(burned.fighters.find(one => one.id === 2)!.hp).toBe(CHARACTERS.knight.hp - 1);
     });
 
+    it("names the enemy once a warband Bloater burning down at its own turn start bursts on the team (§39.3)", async () => {
+        const game = makeGame(["a", "b"], {}, { rulesVersion: 12, fog: true, coop: { enemy: "realm", random: true, mission: "holdOut" } });
+        await musterAll(game);
+        const gs = game.specificGameState;
+        expect(gs.coop?.enemySeen).toBeUndefined();
+        const { field } = battleOf(game);
+        const victim = gs.fighters.find(one => one.owner === "a")!;
+        const far = gs.fighters.find(one => one.owner === "b")!;
+        const bloater = gs.fighters.find(one => one.owner === warbandOwner(0))!;
+        const beside = [[1, 0], [-1, 0], [0, 1], [0, -1]].map(([dc, dr]) => (Math.floor(victim.square / field.width) + dr) * field.width + (victim.square % field.width) + dc)
+            .find(square => field.tiles[square]?.terrain.standable && !gs.fighters.some(one => one.square === square))!;
+        gs.fighters = gs.fighters.map(one => one.id === bloater.id ? { ...one, character: "bloater" as const, square: beside, hp: 1, spent: [], effects: { burning: 2 }, burnedBy: victim.id } : one.id === victim.id || one.id === far.id ? one : { ...one, hp: 0 });
+
+        const { outcome } = await play(game, Object.assign(endTurnBy(game.currentTurn), { recordedEnemyActions: [], recordedRolls: [] }));
+        expect(outcome.validMove).toBe(true);
+        const events = (outcome as IRealmArenaOutcome).events;
+        expect(events).toContainEqual(expect.objectContaining({ kind: "burst", fighter: bloater.id, downed: true, targets: expect.arrayContaining([victim.id]) }));
+        expect(gs.coop?.enemySeen).toBe(true);
+    });
+
     it("is none at all against the Swarm, in Hold the Centre, or in a battle from before it", () => {
         const plain = balanced(OPEN, [knight, team]);
         expect(run(plain, warbandOwner(0), { kind: "attack", fighter: 2, target: 1 }, [1]).byId(1).hp).toBe(CHARACTERS.archer.hp - 4);
