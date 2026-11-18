@@ -5876,11 +5876,19 @@ for the squad, and Blessing, the one that helps everyone.
 ### 40.5 Measured
 
 The harness at version 12 against the Swarm on every Hold Out battlefield,
-teams of one to four, Normal, the same seeds before and after, temperaments on
+teams of one to four, Normal, seeds 1–40 before and after, temperaments on
 (and once off, `--temperaments off`, to see what they now do). The tables are
-in `realm-arena-balance.md`, *Loadouts*. §34.9's worry — the Realm weaker,
-with each Archer's arrows on cooldown more often — is what to read off it;
-balancing it waits for §39.9, which tunes the whole of version 12 at once.
+in `realm-arena-balance.md`, *Loadouts*.
+
+*As built:* the team's wins fell from 232 of 240 battles to 188, and the
+characters it lost, summed over the six cells, from 18.8 to 44.9 — §34.9's
+worry, the Realm weaker with each figure's specials on cooldown more often.
+It takes version 12 out of the saturation §39.8's run met, so §39.9's levers
+can now be read: one cell is inside its target band, three just above it,
+and the two- and four-player Sacked Fort still too easy.
+With the temperaments off the team won 189 and lost 40.8, so they stay on,
+as the default. Balancing waits for §39.9, which tunes the whole of version
+12 at once.
 
 ### 40.6 Copy
 
