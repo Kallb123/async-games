@@ -32,7 +32,7 @@ export const tutorial: GameTutorial<RealmArenaSignal> = {
         {
             anchor: "board",
             title: "Muster your squad",
-            body: `Spend your points below on characters, as many of each as they buy, and items for them to carry — then place them in your zone on the board. Nobody sees anyone's squad until every player has mustered.`,
+            body: `Spend your points below on characters, as many of each as they buy, and items for them to carry — then place them in your zone on the board. Tap a Realm character to choose its abilities: any it always has are marked Always, and it takes two more from its list (marked Taken), or its usual pair if you leave it. Nobody sees anyone's squad until every player has mustered.`,
             when: "mustering",
         },
         {
