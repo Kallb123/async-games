@@ -36,7 +36,7 @@ import { gameStateToModel as realmArenaStateToModel, stepOutcomeToModel as realm
 import { RealmArenaGameType, toldTo as realmArenaToldTo, type IRealmArenaOutcome, type RealmArenaEndTurn } from "@/games/RealmArena/RealmArenaLogic";
 import { buildAllEvents } from "@/utils/games/recap";
 import type { IRealmArenaSpecificGameStateResponse } from "@/games/RealmArena/apiModels";
-import { act as realmArenaActRules, fixedRolls as realmArenaFixedRolls, newFighter as realmArenaNewFighter, areaAround as realmArenaAreaAround, check as realmArenaCheck, afflicted as realmArenaAfflicted, isStanding as isRealmArenaStanding, warbandOwner, warbandsFor as realmArenaWarbandsFor } from "@/games/RealmArena/rules";
+import { act as realmArenaActRules, fixedRolls as realmArenaFixedRolls, newFighter as realmArenaNewFighter, areaAround as realmArenaAreaAround, check as realmArenaCheck, afflicted as realmArenaAfflicted, isStanding as isRealmArenaStanding, lastWaveRound, warbandOwner, warbandsFor as realmArenaWarbandsFor } from "@/games/RealmArena/rules";
 import {
     actBy as realmArenaAct,
     battleOf as realmArenaBattle,
@@ -875,6 +875,52 @@ describe("Realm Arena's random co-op enemy", () => {
         expect(complete.enemy).toBe("realm");
         expect(complete.fighters).toHaveLength(game.specificGameState.fighters.length);
         expect(complete.ghosts).toEqual([]);
+    });
+});
+
+describe("Realm Arena's Regicide and Scorched Earth read the finished view alone (§39.9)", () => {
+    const VIEWERS = ["a", "b", null];
+    const swarm = () => makeRealmArenaGame(["a", "b"], {}, { fog: true, rulesVersion: 12, coop: { enemy: "swarm", mission: "holdOut" } });
+
+    /** Burns down `howMany` nests, all but the rest, at the warbands' turn after round `roundsPlayed` + 1's players, lit by someone no longer there. */
+    const burnNests = async (howMany: number | "all", roundsPlayed: (rounds: number) => number) => {
+        const game = swarm();
+        await realmArenaMusterAll(game);
+        const gs = game.specificGameState;
+        const nests = gs.fighters.filter(fighter => fighter.character === "nest");
+        const doomed = new Set(nests.slice(0, howMany === "all" ? nests.length : howMany).map(nest => nest.id));
+        gs.fighters = gs.fighters.map(fighter => doomed.has(fighter.id) ? { ...realmArenaAfflicted({ ...fighter, hp: 1 }, "burning", 9999, { rulesVersion: 12 })!.fighter, hp: 1 } : fighter);
+        gs.roundsPlayed = roundsPlayed(realmArenaStateToModel(gs, null, null).battleRounds);
+        gs.rallyOwed = undefined;
+        for (const player of ["a", "b"]) expect((await playRealmArena(game, realmArenaEndTurn(player))).outcome.validMove).toBe(true);
+        for (const id of doomed) expect(gs.fighters.find(fighter => fighter.id === id)!.hp).toBe(0);
+        return game;
+    };
+
+    it("sets nestsCleared when the last nest falls with a wave to come, and sends it only once the battle is over", async () => {
+        const game = await burnNests("all", () => 0);
+        const gs = game.specificGameState;
+        expect(gs.nestsCleared).toBe(true);
+        for (const viewer of VIEWERS) {
+            expect(realmArenaStateToModel(gs, viewer, null), `${viewer}`).not.toHaveProperty("nestsCleared");
+            expect(realmArenaStateToModel(gs, viewer, null, true).nestsCleared).toBe(true);
+        }
+    });
+
+    it("does not set it while a nest still stands, or once the last wave has landed", async () => {
+        expect((await burnNests(1, () => 0)).specificGameState.nestsCleared).toBeUndefined();
+        const late = await burnNests("all", rounds => lastWaveRound(rounds) - 1);
+        expect(late.specificGameState.nestsCleared).toBeUndefined();
+        for (const viewer of VIEWERS) expect(realmArenaStateToModel(late.specificGameState, viewer, null, true)).not.toHaveProperty("nestsCleared");
+    });
+
+    it("shows the null viewer no fighter, so no Queen and no nest, until the battle is over; then the nests are on the field", async () => {
+        const game = makeRealmArenaGame(["a", "b"], {}, { fog: true, rulesVersion: 12, coop: { enemy: "swarm", mission: "holdOut", random: true } });
+        await realmArenaMusterAll(game);
+        expect(realmArenaStateToModel(game.specificGameState, null, null).fighters).toEqual([]);
+        const complete = realmArenaStateToModel(game.specificGameState, null, null, true);
+        expect(complete.fighters.some(fighter => fighter.character === "nest")).toBe(true);
+        expect(complete.fighters).toHaveLength(game.specificGameState.fighters.length);
     });
 });
 

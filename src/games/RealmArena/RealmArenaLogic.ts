@@ -221,6 +221,11 @@ function addScores(gs: IRealmArenaSpecificGameState, events: readonly BattleEven
     }
     gs.scores = scores;
     if (nests !== gs.nestsDestroyed) gs.nestsDestroyed = nests;
+    // Every nest down at once with a wave still to land (§39.9): kept for good, though they regrow.
+    if (nests !== undefined && !gs.nestsCleared && gs.coop?.mission === "holdOut" && nextWaveRound(gs.roundsPlayed + 1, battleRoundsOf(gs)) !== undefined) {
+        const structures = gs.fighters.filter(fighter => isStructure(fighter, gs));
+        if (structures.length > 0 && !structures.some(isStanding)) gs.nestsCleared = true;
+    }
     if (seenFall !== (gs.nestsSeenDestroyed ?? 0)) gs.nestsSeenDestroyed = seenFall;
 }
 
@@ -430,6 +435,7 @@ export function cloneRealmArenaState(gs: IRealmArenaSpecificGameState): IRealmAr
         ...(gs.rallyOwed ? { rallyOwed: [...gs.rallyOwed] } : {}),
         ...(gs.nestsDestroyed ? { nestsDestroyed: { ...gs.nestsDestroyed } } : {}),
         ...(gs.nestsSeenDestroyed ? { nestsSeenDestroyed: gs.nestsSeenDestroyed } : {}),
+        ...(gs.nestsCleared ? { nestsCleared: true as const } : {}),
         musters: (gs.musters ?? []).map(({ owner, faction, picks }) => ({ owner, ...(faction ? { faction } : {}), picks: picks.map(pickOf) })),
         // Written once as the battle is created and never changed, so shared.
         mastery: gs.mastery ?? {},
@@ -1721,6 +1727,7 @@ export class RealmArenaUndo implements IGameCommand {
         // A snapshot without the nest tallies had none, and a key it lacks wouldn't have been assigned: put back by hand, `undefined` and never `delete`, as `forgiveRally` clears (§39.7).
         gs.nestsDestroyed = restored.nestsDestroyed;
         gs.nestsSeenDestroyed = restored.nestsSeenDestroyed;
+        gs.nestsCleared = restored.nestsCleared;
         gs.undoStack = undoStack;
         gs.undoAnchorId = this.id;
 

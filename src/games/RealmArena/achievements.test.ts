@@ -105,4 +105,25 @@ describe("Realm Arena achievements", () => {
         expect(check("realmarena.unbroken", view({ mission: "holdOut", fighters: [fighter("a"), fighter("b", 0), fighter("ai:0")] }), "win")).toBe(false);
         expect(check("realmarena.unbroken", view(), "win")).toBe(false);
     });
+
+    it("awards Regicide only for a Hold Out won with a Brood Queen down", () => {
+        const queen = (hp: number): Fighter => ({ ...fighter("ai:0", hp), character: "broodQueen" });
+        const downed = [fighter("a"), fighter("b"), queen(0), fighter("ai:1")];
+        expect(check("realmarena.regicide", view({ mission: "holdOut", fighters: downed }), "win")).toBe(true);
+        expect(check("realmarena.regicide", view({ mission: "holdOut", fighters: downed }), "loss")).toBe(false);
+        // A Queen still standing, no Queen at all, or not Hold Out.
+        expect(check("realmarena.regicide", view({ mission: "holdOut", fighters: [fighter("a"), queen(20)] }), "win")).toBe(false);
+        expect(check("realmarena.regicide", view({ mission: "holdOut" }), "win")).toBe(false);
+        expect(check("realmarena.regicide", view({ fighters: downed }), "win")).toBe(false);
+        // A fallen Queen on the team's side of the board is no one's regicide.
+        expect(check("realmarena.regicide", view({ mission: "holdOut", fighters: [{ ...fighter("a", 0), character: "broodQueen" }] }), "win")).toBe(false);
+    });
+
+    it("awards Scorched Earth only for a Hold Out won after every nest was down at once", () => {
+        const cleared = view({ mission: "holdOut", nestsCleared: true });
+        expect(check("realmarena.scorched-earth", cleared, "win")).toBe(true);
+        expect(check("realmarena.scorched-earth", cleared, "loss")).toBe(false);
+        expect(check("realmarena.scorched-earth", view({ mission: "holdOut" }), "win")).toBe(false);
+        expect(check("realmarena.scorched-earth", view({ nestsCleared: true }), "win")).toBe(false);
+    });
 });

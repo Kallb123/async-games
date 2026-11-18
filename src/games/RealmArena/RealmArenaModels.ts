@@ -156,6 +156,13 @@ export interface IRealmArenaSpecificGameState {
      * out of its sight too. Cleared with it as the wave lands. The server's alone.
      */
     nestsSeenDestroyed?: number;
+    /**
+     * Whether, at some point, every nest (§39.7) of the Swarm was down at once
+     * with a wave still to land: set as the last one falls, and never cleared,
+     * though the nests regrow. It says whether nests stand, so it is sent only
+     * once the battle is over (`nestsCleared` on the response). Absent otherwise.
+     */
+    nestsCleared?: true;
     /** Battle rounds played to the end: 0 until the first round's last turn ends. The round being played is one more. */
     roundsPlayed: number;
     /**
@@ -489,6 +496,7 @@ var RealmArenaGameDataSchema = new Schema<IRealmArenaGameDataDocument>(
             // Mixed, so `markDirty` saves it whole; replaced, never mutated, as `scores` is (`addScores`).
             nestsDestroyed: Schema.Types.Mixed,
             nestsSeenDestroyed: Number,
+            nestsCleared: Boolean,
             fighters: Schema.Types.Mixed,
             sightings: Schema.Types.Mixed,
             blasted: [Number],
@@ -578,6 +586,8 @@ export function gameStateToModel(
         ...(gs.coop?.mission ? { mission: gs.coop.mission } : {}),
         ...(nextWave ? { nextWave } : {}),
         ...(nestSquares ? { nestSquares } : {}),
+        // Whether nests stand is unseen in fog until the battle is over, so this waits for it too.
+        ...(complete && gs.nestsCleared ? { nestsCleared: true as const } : {}),
         ...(gs.coop?.mission === "holdOut" && gs.phase !== "muster" ? { enemiesDefeated: gs.fighters.filter(fighter => isWarband(fighter.owner) && fighter.hp <= 0 && !isStructure(fighter, gs)).length } : {}),
         ...(gs.coop?.difficulty ? { difficulty: gs.coop.difficulty } : {}),
         ...(gs.coop?.teamBlocks ? { teamBlocks: true as const } : {}),
