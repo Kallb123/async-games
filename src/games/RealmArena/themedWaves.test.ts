@@ -105,11 +105,13 @@ describe("a themed wave in a battle (§39.6)", () => {
         expect(gs.roundsPlayed).toBe(round - 1);
     }
 
-    it("has a wave's budget grow by 15 for every wave landed, the warbands' own muster counting as the first", async () => {
+    it("has a wave's budget grow by the growth value for every wave landed, the warbands' own muster counting as the first", async () => {
         const game = holdOut();
         const gs = game.specificGameState;
         const base = warbandBudgetOf(gs);
-        expect(WAVE_ROUNDS.map(round => waveBudgetOf(gs, round))).toEqual([base + 15, base + 30, base + 45, base + 60]);
+        const growth = ruleValuesOf({ rulesVersion: 12 }).WAVE_GROWTH_POINTS!;
+        expect(growth).toBe(25);
+        expect(WAVE_ROUNDS.map(round => waveBudgetOf(gs, round))).toEqual([1, 2, 3, 4].map(waves => base + growth * waves));
         // A catalogue without the number grows nothing.
         const old = makeGame(["a", "b"], {}, { rulesVersion: 11, coop: { enemy: "swarm", mission: "holdOut" } });
         expect(waveBudgetOf(old.specificGameState, 13)).toBe(warbandBudgetOf(old.specificGameState));

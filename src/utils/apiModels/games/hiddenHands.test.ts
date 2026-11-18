@@ -940,7 +940,7 @@ describe("Realm Arena's themed next wave in fog of war (§39.6)", () => {
             const { nextWave } = realmArenaStateToModel(game.specificGameState, viewer, null);
             expect(nextWave).toMatchObject({ round: 4, name: "The Rush", upTo: true });
             // A ceiling for both warbands, the same for every viewer: never a count of who is down or where there's room.
-            expect(nextWave?.arriving).toBe(2 * 6);
+            expect(nextWave?.arriving).toBe(2 * 7);
         }
     });
 });
@@ -1019,7 +1019,7 @@ describe("Realm Arena's nests in fog of war (§39.7)", () => {
         for (const viewer of VIEWERS) {
             const { nextWave, nestSquares } = realmArenaStateToModel(game.specificGameState, viewer, null);
             expect(nestSquares).toEqual(nestSquaresOn(game));
-            expect(nextWave).toMatchObject({ round: 4, name: "The Rush", upTo: true, arriving: 2 * 6 });
+            expect(nextWave).toMatchObject({ round: 4, name: "The Rush", upTo: true, arriving: 2 * 7 });
             // At nothing destroyed, no note.
             expect(nextWave).not.toHaveProperty("nestsDestroyed");
         }
@@ -1027,7 +1027,7 @@ describe("Realm Arena's nests in fog of war (§39.7)", () => {
         for (const viewer of VIEWERS) {
             const { nextWave } = realmArenaStateToModel(game.specificGameState, viewer, null);
             // The note is told, the count stays the ceiling of what a wave could bring: never taken down by where a nest fell.
-            expect(nextWave).toEqual({ round: 4, name: "The Rush", upTo: true, arriving: 2 * 6, nestsDestroyed: 2 });
+            expect(nextWave).toEqual({ round: 4, name: "The Rush", upTo: true, arriving: 2 * 7, nestsDestroyed: 2 });
         }
     });
 

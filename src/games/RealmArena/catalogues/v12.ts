@@ -68,9 +68,9 @@ const FACTIONS = {
 } satisfies Partial<Record<FactionId, Faction>>;
 
 // §39.4: the rally is each player's choice, not a heal the wave hands out.
-// §39.6: a themed wave's budget grows 15 points a wave, and a wave never takes a warband past 12.
+// §39.6: a themed wave's budget grows 25 points a wave, and a wave never takes a warband past 12.
 // §39.7: each nest destroyed since a warband's last wave takes 15 points off the next one's budget.
-const RULES = { ...catalogueV11.RULES, RALLY_CHOICE: true, WAVE_GROWTH_POINTS: 15, WAVE_CAP: 12, NEST_POINTS: 15 };
+const RULES = { ...catalogueV11.RULES, RALLY_CHOICE: true, WAVE_GROWTH_POINTS: 25, WAVE_CAP: 12, NEST_POINTS: 15 };
 
 export const catalogueV12 = {
     ...catalogueV11,

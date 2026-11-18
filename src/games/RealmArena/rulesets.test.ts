@@ -144,7 +144,7 @@ describe("Realm Arena ruleset compatibility", () => {
         expect(before.RALLY_CHOICE).toBeUndefined();
         expect(after.RALLY_CHOICE).toBe(true);
         // Only the themed waves' two numbers (§39.6) and what a nest takes off a wave (§39.7) are added besides.
-        expect(after).toEqual({ ...before, RALLY_CHOICE: true, WAVE_GROWTH_POINTS: 15, WAVE_CAP: 12, NEST_POINTS: 15 });
+        expect(after).toEqual({ ...before, RALLY_CHOICE: true, WAVE_GROWTH_POINTS: 25, WAVE_CAP: 12, NEST_POINTS: 15 });
         expect(before.NEST_POINTS).toBeUndefined();
         expect(real.rulesetFor(11).RULES).toBe(real.rulesetFor(10).RULES);
     });
@@ -200,7 +200,7 @@ describe("Realm Arena ruleset compatibility", () => {
         // Every id names a character the catalogue has, and a buy is never an elite.
         for (const theme of FACTIONS.swarm.waves ?? []) for (const id of [...theme.elite ? [theme.elite] : [], ...theme.buys]) expect(CHARACTERS[id]).toBeDefined();
         expect((FACTIONS.swarm.waves ?? []).flatMap(theme => theme.buys).some(id => FACTIONS.swarm.elites?.includes(id))).toBe(false);
-        expect(RULES.WAVE_GROWTH_POINTS).toBe(15);
+        expect(RULES.WAVE_GROWTH_POINTS).toBe(25);
         expect(RULES.WAVE_CAP).toBe(12);
         expect(FACTIONS.realm.waves).toBeUndefined();
         expect(FACTIONS.miners.waves).toBeUndefined();
