@@ -31,11 +31,12 @@ import { AMBULANCE_START, EDGE_COUNT, ENGINE_START, INTERIOR_SPACE_COUNT, SPACE_
 import { buildTimeline } from "@/utils/games/replay";
 import { at as realmArenaSquareAt, fieldOf as realmArenaFieldOf } from "@/utils/games/battlefield/testFixtures";
 import { REALM } from "@/games/RealmArena/characters";
+import { battlefieldById as realmArenaBattlefieldById } from "@/games/RealmArena/maps";
 import { gameStateToModel as realmArenaStateToModel, stepOutcomeToModel as realmArenaStepOutcome } from "@/games/RealmArena/RealmArenaModels";
 import { RealmArenaGameType, toldTo as realmArenaToldTo, type IRealmArenaOutcome, type RealmArenaEndTurn } from "@/games/RealmArena/RealmArenaLogic";
 import { buildAllEvents } from "@/utils/games/recap";
 import type { IRealmArenaSpecificGameStateResponse } from "@/games/RealmArena/apiModels";
-import { act as realmArenaActRules, fixedRolls as realmArenaFixedRolls, newFighter as realmArenaNewFighter, areaAround as realmArenaAreaAround, check as realmArenaCheck, isStanding as isRealmArenaStanding, warbandOwner } from "@/games/RealmArena/rules";
+import { act as realmArenaActRules, fixedRolls as realmArenaFixedRolls, newFighter as realmArenaNewFighter, areaAround as realmArenaAreaAround, check as realmArenaCheck, afflicted as realmArenaAfflicted, isStanding as isRealmArenaStanding, warbandOwner, warbandsFor as realmArenaWarbandsFor } from "@/games/RealmArena/rules";
 import {
     actBy as realmArenaAct,
     battleOf as realmArenaBattle,
@@ -895,6 +896,100 @@ describe("Realm Arena's themed next wave in fog of war (§39.6)", () => {
             // A ceiling for both warbands, the same for every viewer: never a count of who is down or where there's room.
             expect(nextWave?.arriving).toBe(2 * 6);
         }
+    });
+});
+
+describe("Realm Arena's nests in fog of war (§39.7)", () => {
+    const VIEWERS = ["a", "b", null];
+    const swarm = (coop: { random?: true; enemy?: "swarm" | "realm" } = {}) => makeRealmArenaGame(["a", "b"], {}, { fog: true, rulesVersion: 12, coop: { enemy: "swarm", mission: "holdOut", ...coop } });
+    const nestSquaresOn = (game: ReturnType<typeof swarm>) => realmArenaBattlefieldById(game.specificGameState.map).nests!.flat();
+    const costing = (game: ReturnType<typeof swarm>, count: number) => {
+        const [one, two] = realmArenaWarbandsFor(game.specificGameState.seats);
+        game.specificGameState.nestsDestroyed = count === 0 ? undefined : { [one]: 1, ...(count > 1 ? { [two]: count - 1 } : {}) };
+        game.specificGameState.nestsSeenDestroyed = count === 0 ? undefined : count;
+    };
+    /**
+     * A battle in which the team burns a warband's nest down at the start of the warband's turn from `round`'s end turns:
+     * with the team's scout beside it (so it sees it fall), or the whole battlefield away.
+     */
+    const burnedDown = async (seen: boolean, roundsPlayed = 0) => {
+        const game = swarm();
+        await realmArenaMusterAll(game);
+        const gs = game.specificGameState;
+        const nest = gs.fighters.find(fighter => fighter.character === "nest")!;
+        const scout = gs.fighters.find(fighter => fighter.owner === "a")!;
+        const { field } = realmArenaBattle(game);
+        const sees = (square: number) => realmArenaAreaAround(field, nest.square).includes(square);
+        if (seen) scout.square = realmArenaAreaAround(field, nest.square).find(square => square !== nest.square && field.tiles[square].terrain.standable && !gs.fighters.some(one => isRealmArenaStanding(one) && one.square === square))!;
+        else expect(gs.fighters.filter(fighter => fighter.owner === "a").some(fighter => sees(fighter.square))).toBe(false);
+        gs.fighters = gs.fighters.map(fighter => fighter.id === nest.id ? { ...realmArenaAfflicted({ ...fighter, hp: 1 }, "burning", scout.id, { rulesVersion: 12 })!.fighter, hp: 1 } : fighter);
+        gs.roundsPlayed = roundsPlayed;
+        gs.rallyOwed = undefined;
+        for (const player of ["a", "b"]) expect((await playRealmArena(game, realmArenaEndTurn(player))).outcome.validMove).toBe(true);
+        expect(gs.fighters.find(fighter => fighter.id === nest.id)!.hp).toBe(roundsPlayed === 0 ? 0 : 10);
+        return game;
+    };
+
+    it("sends neither the nest squares nor what the nests cost the next wave while a random enemy is unseen, to the null viewer too", async () => {
+        const game = swarm({ random: true });
+        for (const phase of ["muster", "battle"]) {
+            if (phase === "battle") await realmArenaMusterAll(game);
+            costing(game, 2);
+            for (const viewer of VIEWERS) {
+                const response = realmArenaStateToModel(game.specificGameState, viewer, null);
+                expect(response, `${phase} for ${viewer}`).not.toHaveProperty("nestSquares");
+                expect(response).not.toHaveProperty("enemy");
+                if (phase === "battle") expect(response.nextWave).toEqual({ round: 4 });
+                expect(JSON.stringify(response)).not.toContain("nestsDestroyed");
+            }
+        }
+    });
+
+    it("marks the nest squares from the muster once the enemy is known, to every viewer, and says what the nests cost the wave", async () => {
+        const game = swarm();
+        for (const viewer of VIEWERS) expect(realmArenaStateToModel(game.specificGameState, viewer, null).nestSquares).toEqual(nestSquaresOn(game));
+        await realmArenaMusterAll(game);
+        for (const viewer of VIEWERS) {
+            const { nextWave, nestSquares } = realmArenaStateToModel(game.specificGameState, viewer, null);
+            expect(nestSquares).toEqual(nestSquaresOn(game));
+            expect(nextWave).toMatchObject({ round: 4, name: "The Rush", upTo: true, arriving: 2 * 6 });
+            // At nothing destroyed, no note.
+            expect(nextWave).not.toHaveProperty("nestsDestroyed");
+        }
+        costing(game, 2);
+        for (const viewer of VIEWERS) {
+            const { nextWave } = realmArenaStateToModel(game.specificGameState, viewer, null);
+            // The note is told, the count stays the ceiling of what a wave could bring: never taken down by where a nest fell.
+            expect(nextWave).toEqual({ round: 4, name: "The Rush", upTo: true, arriving: 2 * 6, nestsDestroyed: 2 });
+        }
+    });
+
+    it("tells the team of a nest's fall only if it saw it: one burned down out of its sight is sent to nobody, and one it watched is", async () => {
+        const unseen = await burnedDown(false);
+        expect(unseen.specificGameState.nestsDestroyed).toBeDefined();
+        for (const viewer of VIEWERS) {
+            const response = realmArenaStateToModel(unseen.specificGameState, viewer, null);
+            expect(JSON.stringify(response), `${viewer}`).not.toContain("nestsDestroyed");
+            expect(JSON.stringify(response)).not.toContain("nestsSeenDestroyed");
+        }
+        const seen = await burnedDown(true);
+        for (const viewer of VIEWERS) expect(realmArenaStateToModel(seen.specificGameState, viewer, null).nextWave).toMatchObject({ nestsDestroyed: 1 });
+    });
+
+    it("keeps the regrowing of nests out of the log when the team saw none fall, and tells it when it saw one", async () => {
+        const regrows = (game: ReturnType<typeof swarm>) => game.gameState.history.some(entry => entry.text === "The nests regrow" || entry.perViewer?.some(line => line.text === "The nests regrow"));
+        // Round 3's end lands the wave, and the burn at the start of the warband's turn before it.
+        const unseen = await burnedDown(false, 2);
+        expect(unseen.gameState.history.some(entry => /arrives/.test(entry.text))).toBe(true);
+        expect(regrows(unseen)).toBe(false);
+        expect(unseen.specificGameState.nestsSeenDestroyed).toBeUndefined();
+        expect(regrows(await burnedDown(true, 2))).toBe(true);
+    });
+
+    it("sends no nest squares against a faction with none", async () => {
+        const game = swarm({ enemy: "realm" });
+        await realmArenaMusterAll(game);
+        for (const viewer of VIEWERS) expect(realmArenaStateToModel(game.specificGameState, viewer, null)).not.toHaveProperty("nestSquares");
     });
 });
 

@@ -24,7 +24,9 @@ export type CharacterId =
     // The Miners' (§33).
     | "miner" | "stonewarden" | "prospector" | "sapper" | "runepriest"
     // The Swarm's elites (§39.5): the computer's alone, in rules version 12.
-    | "broodQueen" | "carapaceBrute" | "bileLobber";
+    | "broodQueen" | "carapaceBrute" | "bileLobber"
+    // The Swarm's nest (§39.7): a structure, not a character anyone fields.
+    | "nest";
 
 export type AbilityId =
     | "cleave" | "shieldWall" | "aimedShot" | "sneak" | "fireball" | "heal" | "raise"
@@ -209,6 +211,15 @@ export interface Character {
      * Burning and poison ticks aren't blows, so it doesn't reduce them.
      */
     armour?: number;
+    /**
+     * A thing to destroy rather than someone fighting (the Swarm's nest, rules
+     * version 12, §39.7): it stands on the field as any character does, and is
+     * hurt as one, but never moves, acts or reacts, takes no effect but those
+     * that do damage over time (burning and poison), is shoved without being
+     * pushed, and doesn't count as someone standing (`isCombatant`) — so a side
+     * with only structures standing is wiped out. Absent, a character.
+     */
+    structure?: true;
 }
 
 
@@ -416,6 +427,13 @@ export interface Faction {
      * Absent, the faction's waves are `waveStrength`'s.
      */
     waves?: readonly WaveTheme[];
+    /**
+     * The structure each of the faction's Hold Out warbands stands on its map's
+     * nest squares from the first muster (§39.7): a character with `structure`,
+     * in no roster or elite list, so no muster accepts it. Absent, the faction
+     * has no nests.
+     */
+    nest?: CharacterId;
     /**
      * The squad a muster that runs out of time gets, and every warband
      * musters, by budget — each spending the whole of it (§17.2, §30.5). The

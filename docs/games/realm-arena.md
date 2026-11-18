@@ -4907,7 +4907,7 @@ Every value marked *Proposed* is a starting point for the balance harness
 | 3 | The rally is each player's choice (§39.4) — **built** | — |
 | 4 | Elite Swarm characters (§39.5) — **built** | — |
 | 5 | Waves that differ, bought with points (§39.6) — **built** | 4 |
-| 6 | Nests (§39.7) | 5 |
+| 6 | Nests (§39.7) — **built** | 5 |
 | 7 | The Swarm plays like a swarm (§39.8) | 2, 4 |
 | 8 | Balance, copy and release (§39.9) | all |
 
@@ -5524,6 +5524,91 @@ to reach and never walk to one, so the harness measures nests twice: ignored
 **Art.** One nest, as an SVG master rendered by `npm run ra-marks`, standing
 and destroyed.
 
+**Engine, as built.** All of it is in rules version 12; `CURRENT_RULESET_VERSION`
+stays 11. The open point is settled as planned: nests **regrow** with each wave.
+
+- **Rules are data.** A `nest` character in `catalogues/v12.ts` (10 HP, no
+  armour, movement 0, no abilities, a weapon that does nothing, 20 points so a
+  knock-out scores as §13.7's would) with `structure: true`, in no roster and no
+  `elites`, so no muster accepts one; `FACTIONS.swarm.nest: "nest"`; and
+  `RULES.NEST_POINTS: 15`. Absent in every earlier catalogue.
+- **`isStructure` and `isCombatant`** beside `isStanding` in `rules.ts`, both
+  read from the battle's own catalogue. A structure has no AP, can't act
+  (`canAct`, `check`: "A nest can't act"), sees nothing for its side, takes only
+  an effect that does damage (burning, poison), is struck but not moved by a
+  Shove, gets no cover from Bulwark, and can't be Hunter's-marked.
+- **The audit.** `isCombatant` replaces `isStanding` in the team's and the
+  enemy's endings and the tie-break, Broken Tide, which squads take a turn and
+  the warband turn's AP cap, the wave's refill and cap (and so the next-wave
+  count), the centre, Taunt's and Blessing's reach, the reaction watchers,
+  squad sight, the standing-per-round chart, the wave record's arrivals and
+  downs, `enemiesDefeated`, the scoreboard's standing line, and the planner's
+  hunt targets and Threat and Exposure. Everything that asks whether a square
+  is taken, or whom a blow, blast, burst, bile or splash lands on, still uses
+  `isStanding`: a nest blocks its square and can be hurt by anything, the
+  Swarm's own blasts included.
+- **Where they stand is the map's.** `BattlefieldMap.nests`, a pair of squares
+  per warband zone, validated by `buildBattlefield`. The gate forts and the
+  Ruined Fort put them on the row just past the warbands' zones; the
+  middle-out maps (the Sacked Fort and the Sunken Village) on the zone's outer
+  edge, built in `middleOut.ts` by the same turn as the zones. For a team of
+  three, each warband's zone is its own under the quarter turn, so its pair is
+  half-turn symmetric instead. `maps/holdOut.test.ts` holds every map and team
+  size to: two to a warband, near the edge, reachable from every team zone, out
+  of sight (at 25) of every team square on the first turn, and clear of every
+  wave placement. `nestSitesOf(gs)` reads them for the muster, the response and
+  the regrowth.
+- **Destroying one shrinks the next wave.** `gs.nestsDestroyed` (per warband,
+  server-only) counts the nests **the team** downs; one downed by the Swarm's
+  own burst, bile or burn counts for nobody. `waveBudgetOf(gs, round, owner)`
+  takes `NEST_POINTS` off for each, never below half; `wavePurchase` still buys
+  the elite first, and at the smallest budget two nests never cost a wave its
+  elite.
+- **A nest regrows** at full HP as its warband's wave lands, on its map square,
+  or the nearest free one if something stands there (and home again the next
+  time it regrows, once that square is free); the tallies clear at the same
+  moment.
+- **Planner.** A warband counts a nest's worth in full, not at
+  `HOLD_OUT_OWN_WORTH`; nothing plans a nest. The scripted team in
+  `testFixtures` hits a nest it reaches and never walks to one.
+- **Accepted:** a warband with only its nests standing takes no turn, so a burn
+  on them ticks again only once its wave lands.
+- **No command version**, as for §39.6.
+
+**Screens, as built.**
+
+- **The note.** `nextWave.nestsDestroyed`, omitted at 0, summed over the
+  warbands: "Round 7: The Bile, 6 arriving (1 nest destroyed)". Without fog the
+  count is the reduced wave's; in fog it stays the unreduced ceiling, so it
+  doesn't say which warband lost one.
+- **The squares** reach the board only as `nestSquares` on the response, never
+  from the map by id, so they can be withheld; both boards draw them as a
+  dashed outline in the warband's colour (`.ag-ra-deployment--nest`, through
+  the zones' own loop, and the 3D board's `outlines`).
+- **The log** says "The nests regrow" after the wave's line when one did.
+- **Art.** `art-masters/realmarena/nest.svg`, rendered by `npm run ra-marks` to
+  `public/art/realmarena/nest.png`: a resin mound with glowing egg sacs, and
+  the same burst and slumped. `STRUCTURE_ART`/`structureArt` in `art.ts`; the
+  isometric board draws it through `figureSprites` (no team tint), the 3D board
+  as a billboard on `MarkLayer`. The character sprite sheets are untouched
+  (`ART_CHARACTER_IDS` leaves structures out). The fighter card shows no AP,
+  weapon or info for one.
+
+**Hidden information, as built** (croupier pass done). While a random enemy is
+unseen, `nestSquares`, the note and the regrow line are all withheld for every
+viewer, null included, as `enemy` is. In fog with a known enemy a nest is a
+fighter, so `viewOf` hides it out of sight and remembers it as a ghost. The note
+and the regrow line count only the nests whose fall the team was told of
+(`nestsSeenDestroyed`, from `toldTo`), so a nest downed out of sight is never
+announced. `hiddenHands.test.ts` pins all three.
+
+**Tests.** `nests.test.ts` (muster, damage and effects, Shove, Hunter's mark,
+every audited reader, the budget and its floor, regrowth and its home square,
+who counts, the note, the log line, scoring, undo, and a replay that compares the
+raw state's tallies and nests); `nestArt.test.ts`; `maps/holdOut.test.ts`;
+`rulesets.test.ts`; `hiddenHands.test.ts`. `elitesReplay.test.ts` moved seed, as
+nests change which battle the planner plays out.
+
 ### 39.8 PR 7: The Swarm plays like a swarm
 
 Every term of the planner's score has one weight for every character (§29.7),
@@ -5709,3 +5794,4 @@ Realm, its sibling in the same world.
 | 1.66 | §39 PR 1 builds Taunt's radius (§39.2): `catalogues/v12.ts`, registered and not current, where Taunt braces allies within 3 squares of the Knight; the planner lists Taunt only with an ally in that reach; the balance harness and its workflow take a rules version (`--rules`). On the board, an ability with a radius — Blessing today, Taunt in version 12 — is armed before it's sent, shading its reach and naming who it would touch. Its balance is not yet measured. |
 | 1.67 | §39 PR 2 builds the Bloater's death burst (§39.3): in rules version 12, still not current, a Bloater downed by a blow, a blast, burning or poison bursts where it falls, as its Burst does, each Bloater once and chains in the order they fell, its knock-outs scoring for whoever downed it. The event is `burst` with `downed: true`. Aiming at a Bloater shades its burst and rings whoever it would catch. |
 | 1.68 | §39 PR 4 builds the Swarm's three elites (§39.5) in the unreleased rules version 12: the Brood Queen (Hatch stands a Skitterling on a free square next to it, nearest an enemy it sees, at most three at a time, acting from its owner's next turn), the Carapace Brute (armour 1, added to Braced's and never reducing a blow under 1) and the Bile Lobber (Bile: 2 and Corroded to a 3×3 within 10, friend or foe, no roll). `Faction.elites` keeps them out of every muster; `Character.armour`, `Fighter.hatchedBy` and the `hatched` and `bile` events are new, and absent means the old behaviour. Art for each is its base master scaled with an addition, and the sprite sheets grow to 1024 × 6080, laid out from `ART_CHARACTER_IDS`. |
+| 1.69 | §39 PR 6 builds the nests (§39.7) in the unreleased rules version 12: two to each Swarm warband from the first muster, on squares each Hold Out map lists, structures that can be hurt but never act; each the team destroys takes 15 points off its warband's next wave, never below half, and regrows as that wave lands. The scoreboard's next-wave line notes them, the board marks their squares, and both, with the regrow line, are withheld for an unseen random enemy and in fog count only falls the team saw. |

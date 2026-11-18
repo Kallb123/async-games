@@ -9,15 +9,19 @@
 // units: `figureMarks`, below, is the pure part — which marks, and where from
 // its feet — using the same `EFFECT_MARK_*`, `AP_PIP_*` and `ITEM_MARK_*` the
 // isometric board is drawn by (ui.ts). `MarkLayer` draws them: three draws of
-// marks (the effects' sheet, the items' sheet, the pips' atlas) and one of rings.
+// marks (the effects' sheet, the items' sheet, the pips' atlas) and one of rings,
+// and a fourth of structures (§39.7): the Swarm's nest has no model among the
+// characters' (characters.json is figures), so it stands on its square as the
+// isometric board draws it, its sprite (`STRUCTURE_ART`) a quad facing the camera.
 
 import { Color, Group } from "three";
-import { EFFECT_ART, ITEM_ART, WATCH_ART, type Sprite } from "@/games/RealmArena/art";
+import { EFFECT_ART, ITEM_ART, spriteBox, WATCH_ART, type Sprite } from "@/games/RealmArena/art";
 import type { EffectId, ItemId } from "@/games/RealmArena/characters";
 import type { Fighter } from "@/games/RealmArena/rules";
 import {
     AP_PIP_OFFSET, AP_PIP_RADIUS, AP_PIP_STEP, apPips, EFFECT_MARK_OFFSET, EFFECT_MARK_SIZE, EFFECT_MARK_STEP, effectsOn, FIGURE_RISE, ITEM_MARK_OFFSET, ITEM_MARK_SIZE, MARK_SHADOW,
 } from "@/games/RealmArena/ui";
+import { ISO_HALF_HEIGHT } from "@/utils/ui/isometric";
 import { Billboards, CanvasAtlas, sheetTexture, spriteRect, type BillboardAxes, type TexRect } from "./billboards";
 import { DISC_BOX, discRect, type RingColours } from "./canvasShapes";
 import type { Vec3 } from "./iso3d";
@@ -65,6 +69,18 @@ export function figureMarks({ effects, watching, item, pips = [] }: FigureMarkIn
 }
 
 /**
+ * A structure's sprite as a quad `Billboards` takes, hung from the square's
+ * middle: where its middle is, right and down, and its size. Placed in the
+ * isometric board's own units from the box `spriteBox` gives the sprite there,
+ * so it stands the same size on the same spot.
+ */
+export function structureQuad(sprite: Sprite): { x: number; y: number; width: number; height: number } {
+    const box = spriteBox(sprite);
+    // The isometric board puts the box's frame half a diamond above the square's middle.
+    return { x: box.x + box.width / 2, y: box.y - ISO_HALF_HEIGHT + box.height / 2, width: box.width, height: box.height };
+}
+
+/**
  * How much of its marks a figure wears just now. A figure at rest wears them
  * all; one walking an action's path wears its item and nothing else, as the
  * isometric board draws a walker, and until it has walked there its effects
@@ -88,6 +104,8 @@ export function marksOf(level: MarkLevel, drawn: Fighter, acting: boolean): Figu
 const MARKS_ORDER = 4;
 /** How far a mark is drawn towards the camera from where it hangs, in the world's units, so the figure beside it never cuts into it. */
 const MARK_LIFT = 0.5;
+/** Drawn over the ground's outlines and rings (1) and under the HP bars (2 and 3, board3d.ts). */
+const STRUCTURE_ORDER = 1.5;
 /** The width of a pip's edge, as `.ag-ra-ap` strokes it. */
 const PIP_EDGE = 0.25;
 /** The side of the box a pip is drawn in: its diameter and its edge. */
@@ -106,6 +124,7 @@ export class MarkLayer {
     private readonly effects: Billboards;
     private readonly items: Billboards;
     private readonly pips: Billboards;
+    private readonly structures: Billboards;
     private readonly rings = new GroundRings();
     private readonly pipAtlas = new CanvasAtlas(24, 256);
     /** A pip is a disc for its fill, and a ring over it for its edge, each tinted when it's added. */
@@ -120,6 +139,8 @@ export class MarkLayer {
         this.effects = new Billboards(sheetTexture(sheets, WATCH_ART.sheet), axes, shadowed);
         this.items = new Billboards(sheetTexture(sheets, "items"), axes, shadowed);
         this.pips = new Billboards(this.pipAtlas.texture, axes, options);
+        // Hidden by whatever stands in front of it, as a figure is, and drawn under the bars.
+        this.structures = new Billboards(sheetTexture(sheets, "nest"), axes, { ...options, order: STRUCTURE_ORDER });
         const edge = this.pipAtlas.rect("pip-edge", PIP_BOX, PIP_BOX, context => {
             context.beginPath();
             context.arc(PIP_BOX / 2, PIP_BOX / 2, AP_PIP_RADIUS, 0, 2 * Math.PI);
@@ -128,7 +149,7 @@ export class MarkLayer {
             context.stroke();
         });
         this.pipShapes = { disc: discRect(this.pipAtlas), edge };
-        this.group.add(this.effects.mesh, this.items.mesh, this.pips.mesh, this.rings.mesh);
+        this.group.add(this.effects.mesh, this.items.mesh, this.pips.mesh, this.structures.mesh, this.rings.mesh);
     }
 
     /** Starts laying out afresh, in `colours`: until the board has any, nothing is drawn. */
@@ -137,6 +158,7 @@ export class MarkLayer {
         this.effects.begin();
         this.items.begin();
         this.pips.begin();
+        this.structures.begin();
         this.rings.begin();
     }
 
@@ -155,6 +177,11 @@ export class MarkLayer {
         }
     }
 
+    /** One structure drawn as `sprite`, standing with its foot at `feet`, `opacity` there. */
+    structure(feet: Vec3, sprite: Sprite, opacity = 1): void {
+        this.structures.add({ at: feet, ...structureQuad(sprite), rect: spriteRect(sprite), opacity });
+    }
+
     /** A ring of `kind` round a figure whose feet are at `feet`. */
     ring(feet: Vec3, kind: RingKind): void {
         if (this.colours) this.rings.add(feet, kind, this.colours);
@@ -164,6 +191,7 @@ export class MarkLayer {
         this.effects.end();
         this.items.end();
         this.pips.end();
+        this.structures.end();
         this.rings.end();
     }
 
@@ -171,6 +199,7 @@ export class MarkLayer {
         this.effects.dispose();
         this.items.dispose();
         this.pips.dispose();
+        this.structures.dispose();
         this.rings.dispose();
         this.pipAtlas.dispose();
     }

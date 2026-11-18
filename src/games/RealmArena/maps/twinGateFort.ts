@@ -85,6 +85,8 @@ export const TWIN_GATE_FORT_MAP: BattlefieldMap = {
     objectives: {
         centre: { col: 21, row: 21, width: 6, height: 6 },
     },
+    // The Swarm's nests (§39.7), two to a warband beside its zone, on the row inside it.
+    nests: [[{ col: 4, row: 44 }, { col: 17, row: 44 }], [{ col: 30, row: 44 }, { col: 43, row: 44 }]],
 };
 
 export const TWIN_GATE_FORT = buildBattlefield(TWIN_GATE_FORT_MAP);

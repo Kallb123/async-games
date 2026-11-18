@@ -19,7 +19,7 @@ import type { IReplayStep } from "@/utils/games/replay";
 import { factionById, type CharacterId } from "./characters";
 import type { IRealmArenaSpecificGameState } from "./RealmArenaModels";
 import { isRallyAction, type RallyChoice } from "./rally";
-import { areaDamage, allied, battleRounds, BLAST_EVENT_KINDS, ENEMY_SIDE, isStanding, isWarband, knockoutPoints, sideOf, squadHp, TEAM_SIDE, waveArrives, waveThemeOf, type BattleEvent, type BattleState, type Fighter } from "./rules";
+import { areaDamage, allied, battleRounds, BLAST_EVENT_KINDS, ENEMY_SIDE, isCombatant, isStructure, isWarband, knockoutPoints, sideOf, squadHp, TEAM_SIDE, waveArrives, waveThemeOf, type BattleEvent, type BattleState, type Fighter } from "./rules";
 
 /** What one player's characters of one kind did in a battle, pooled as their mastery is (§23.1). */
 export interface FightingRecord {
@@ -144,7 +144,8 @@ const copyOf = (records: ReadonlyMap<string, FightingRecord>) => new Map([...rec
 export function battleRecorder(seats: readonly string[], sides?: BattleState["sides"], rounds = battleRounds(seats.length), context?: RulesContext) {
     const { CHARACTERS } = rulesetOf(context);
     // The battle's own catalogue, so an elite (§39.5) has its row as the muster's characters do.
-    const characterIds = Object.keys(CHARACTERS) as CharacterId[];
+    // A structure (the Swarm's nest, §39.7) isn't a kind of character that fights, so has no row.
+    const characterIds = (Object.keys(CHARACTERS) as CharacterId[]).filter(id => !CHARACTERS[id].structure);
     const lastRound = rounds - 1;
     const sided = { sides };
     /** The record's columns, and the one an owner's deeds go in. */
@@ -261,7 +262,8 @@ export function battleRecorder(seats: readonly string[], sides?: BattleState["si
                         downer.knockouts += 1;
                         downer.knockoutPoints += knockoutPoints(fallen.character, context);
                         const wave = waves.at(-1);
-                        if (wave && isWarband(fallen.owner)) wave.downed.set(by.owner, (wave.downed.get(by.owner) ?? 0) + 1);
+                        // A nest is no one of the enemy that arrived, so it isn't one the wave's players downed (§39.7).
+                        if (wave && isWarband(fallen.owner) && !isStructure(fallen, context)) wave.downed.set(by.owner, (wave.downed.get(by.owner) ?? 0) + 1);
                     }
                     const how = !by ? "" : ` by ${by.owner === fallen.owner ? "its own" : ally ? "an allied" : "an enemy"} ${CHARACTERS[by.character].name}`;
                     losses.push({ turnIndex: round, icon: "knockout", title: `${CHARACTERS[fallen.character].name} downed${how}`, seriesKey: columnOf(fallen.owner) });
@@ -314,7 +316,7 @@ export function battleRecorder(seats: readonly string[], sides?: BattleState["si
                     waves.push({ round: begun, arrived: 0, downed: new Map(), ...(name ? { name } : {}) });
                 }
                 // A hatchling (§39.5) stands up in the middle of a turn: nobody brought it as a wave.
-                waves.at(-1)!.arrived += fighters.filter(fighter => isWarband(fighter.owner) && !known.has(fighter.id) && fighter.hatchedBy === undefined).length;
+                waves.at(-1)!.arrived += fighters.filter(fighter => isWarband(fighter.owner) && !known.has(fighter.id) && fighter.hatchedBy === undefined && !isStructure(fighter, context)).length;
             }
             for (const fighter of fighters) {
                 known.set(fighter.id, { owner: fighter.owner, character: fighter.character });
@@ -345,7 +347,7 @@ export function battleRecorder(seats: readonly string[], sides?: BattleState["si
             squadHpPerRound[index] = new Map(columns.map(column => [column, left(column) ? before?.get(column) ?? 0
                 : squadHp(fighters.filter(ours(column)), context).remaining]));
             if (holdOut) {
-                const standing = (enemy: boolean) => fighters.filter(fighter => isStanding(fighter) && isWarband(fighter.owner) === enemy).length;
+                const standing = (enemy: boolean) => fighters.filter(fighter => isCombatant(fighter, context) && isWarband(fighter.owner) === enemy).length;
                 standingPerRound[index] = new Map([[TEAM_SIDE, standing(false)], [ENEMY_SIDE, standing(true)]]);
             }
             round = gs.roundsPlayed;

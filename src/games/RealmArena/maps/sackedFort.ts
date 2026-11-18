@@ -19,7 +19,7 @@
 // tower), each at its own height (§25). The map is flat ground.
 
 import { buildBattlefield, type BattlefieldMap } from "@/utils/games/battlefield/terrain";
-import { edgeStrips, FOUR_IN_THE_MIDDLE, MIDDLE_CENTRE, TEAM_ROWS, THREE_IN_THE_MIDDLE } from "./middleOut";
+import { edgeStrips, FOUR_IN_THE_MIDDLE, MIDDLE_CENTRE, NESTS_FOR_FOUR, NESTS_FOR_THREE, NESTS_FOR_TWO, TEAM_ROWS, THREE_IN_THE_MIDDLE } from "./middleOut";
 
 const ROWS = [
     "......................................................",
@@ -96,6 +96,7 @@ export const SACKED_FORT_TWO_MAP: BattlefieldMap = {
         [WHOLE[1], WHOLE[3]],
     ],
     objectives: { centre: MIDDLE_CENTRE },
+    nests: NESTS_FOR_TWO,
 };
 
 /**
@@ -107,6 +108,7 @@ export const SACKED_FORT_THREE_MAP: BattlefieldMap = {
     rows: ROWS,
     deployments: THREE_IN_THE_MIDDLE,
     objectives: { centre: MIDDLE_CENTRE },
+    nests: NESTS_FOR_THREE,
 };
 
 /**
@@ -118,6 +120,7 @@ export const SACKED_FORT_FOUR_MAP: BattlefieldMap = {
     rows: ROWS,
     deployments: FOUR_IN_THE_MIDDLE,
     objectives: { centre: MIDDLE_CENTRE },
+    nests: NESTS_FOR_FOUR,
 };
 
 export const SACKED_FORT_TWO = buildBattlefield(SACKED_FORT_TWO_MAP);

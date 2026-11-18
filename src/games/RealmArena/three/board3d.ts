@@ -17,6 +17,7 @@
 // placed in the world rather than on the isometric board.
 
 import { Color, Matrix4, OrthographicCamera, Scene, Vector3, WebGLRenderer, type ShaderMaterial } from "three";
+import { structureArt } from "@/games/RealmArena/art";
 import type { CharacterId } from "@/games/RealmArena/characters";
 import { isStanding, type Fighter, type FogGhost, type MusterPick } from "@/games/RealmArena/rules";
 import { CLIMB_LEG, endOf, fadeOutAt, FALLEN_OPACITY, shakeAt, shovesOf, toldAt, toldOf, walkerAt, walkFacing, walkLift, type BattleCue, type FallCue, type Ring, type ScorchCue, type Shove, type Told, type WalkCue } from "@/games/RealmArena/ui";
@@ -152,7 +153,7 @@ export class Board3D {
     private still = false;
     /** The effects an action plays over the battlefield, and the smoke that stands on it. */
     private readonly fx: BattleFx;
-    /** What hangs round the figures: marks, pips, items and rings. Made with the art it draws from. */
+    /** What hangs round the figures: marks, pips, items and rings — and the structures (§39.7) that stand in their place. Made with the art it draws from. */
     private marks: MarkLayer | null = null;
     private marking: Marking | null = null;
     /** The viewer's sealed squad while the muster lasts, and which of them is picked up. Their ids in `placed` are `-(index + 1)`. */
@@ -585,8 +586,13 @@ export class Board3D {
         const bars: BarSpec[] = [];
         const playing = ms === null ? null : this.playing;
         this.marks?.begin(this.look);
-        /** One figure of `character`, fully there or, with an `opacity` under 1, faint: fading, or a body lying (`FALLEN_OPACITY`) as the isometric board draws it. */
+        /** One figure of `character`, fully there or, with an `opacity` under 1, faint: fading, or a body lying (`FALLEN_OPACITY`) as the isometric board draws it. A nest has no model: it is its sprite, destroyed where a body would lie. */
         const lay = (character: CharacterId, at: Vec3, facing: Facing, fallen: boolean, tint: Color | null, opacity = 1) => {
+            const structure = structureArt(character, fallen ? "fallen" : "standing");
+            if (structure) {
+                this.marks?.structure(at, structure, opacity);
+                return;
+            }
             matrix.fromArray(figureMatrix(at, facing, fallen));
             if (opacity < 1) this.pools.place(models, character, "faint", matrix, tint, opacity);
             else this.pools.place(models, character, "solid", matrix, tint);
@@ -654,7 +660,7 @@ export class Board3D {
             // On the ground the figure stands on, not where it bobs or is knocked to.
             this.shadows.add(feet);
             // Standing figures only: a body on the ground is never the faint figure a wall hides.
-            if (standing && mayBeHidden(field, this.basis, body, this.top)) this.pools.place(models, fighter.character, "hidden", matrix, spec.tint);
+            if (standing && !structureArt(fighter.character, "standing") && mayBeHidden(field, this.basis, body, this.top)) this.pools.place(models, fighter.character, "hidden", matrix, spec.tint);
             this.placed.push({ id: fighter.id, feet: at, standing });
             if (standing) bars.push({ feet: at, ...barLevels(drawn, fighter, chip, this.hpChange?.get(fighter.id)), tint: spec.tint });
             this.layMarks(at, fighter, drawn, level);

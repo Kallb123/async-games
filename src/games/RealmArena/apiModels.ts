@@ -26,6 +26,12 @@ export interface NextWave {
     name?: string;
     arriving?: number;
     upTo?: true;
+    /**
+     * How many nests (§39.7) the team has destroyed, over every warband, since
+     * the last wave landed: each has taken points off this wave. Absent at 0,
+     * and while a random enemy is unseen.
+     */
+    nestsDestroyed?: number;
 }
 
 export interface IRealmArenaSpecificGameStateResponse {
@@ -63,6 +69,14 @@ export interface IRealmArenaSpecificGameStateResponse {
      * battle is over.
      */
     nextWave?: NextWave;
+    /**
+     * The squares of the enemy's nests (§39.7), every warband's, which the
+     * board marks as it marks deployment zones: they're the map's, so they
+     * are there from the muster, whether a nest stands being seen only in
+     * sight. Absent where the enemy has none, and while a random enemy is
+     * unseen — a nest names the Swarm.
+     */
+    nestSquares?: Square[];
     /** How strong the co-op warbands are (§30.5); absent is Normal. */
     difficulty?: StoredDifficulty;
     /** The warbands take their turns in a block after all the players', not one after each; absent is the alternating order. */

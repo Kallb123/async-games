@@ -40,20 +40,22 @@ export default function RealmArenaFighterCard({ fighter, battle, label, children
     const weapon = weaponOf(battle, fighter);
     const passives = abilitiesOf(fighter, battle).filter(id => ABILITIES[id]!.passive);
     const effects = effectsOn(fighter);
+    // A structure (the Swarm's nest, §39.7) has no AP, no weapon and no sheet of stats: its HP and what it is.
+    const structure = character.structure === true;
     return (
-        <Section label={label} action={<InfoButton label={`Info about ${character.name}`} onClick={() => setInfo(true)} />}>
+        <Section label={label} action={structure ? undefined : <InfoButton label={`Info about ${character.name}`} onClick={() => setInfo(true)} />}>
             {info && <RealmArenaUnitInfo context={battle} unit={{ kind: 'character', id: fighter.character }} onClose={() => setInfo(false)} />}
             <div className="ag-stack">
                 <div className="ag-stat-row">
                     <Stat value={`${fighter.hp}/${maxHpOf(fighter, battle)}`} label="HP" />
-                    <Stat value={fighter.ap} label="AP left" />
-                    <Stat value={fighter.banked} label="AP banked" />
+                    {!structure && <Stat value={fighter.ap} label="AP left" />}
+                    {!structure && <Stat value={fighter.banked} label="AP banked" />}
                     {armourOf(battle, fighter) > 0 && <Stat value={armourOf(battle, fighter)} label="Armour" />}
                 </div>
                 <p className="ag-hint">{isStanding(fighter) ? watchStatus(fighter) ?? character.role : 'Down'}</p>
                 {children ?? (
                     <div className="ag-list">
-                        <ListRow icon={weaponMark(fighter.character, fighter.option)} title={weapon.name} sub={weaponLine(weapon, battle)} />
+                        {!structure && <ListRow icon={weaponMark(fighter.character, fighter.option)} title={weapon.name} sub={weaponLine(weapon, battle)} />}
                         {abilitiesOf(fighter, battle).filter(id => !ABILITIES[id]!.passive).map(id => {
                             const ability = ABILITIES[id]!;
                             return (

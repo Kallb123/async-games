@@ -26,7 +26,7 @@
 // and a ramp at `1` where the path from each inn's back door comes down to it.
 
 import { buildBattlefield, type BattlefieldMap } from "@/utils/games/battlefield/terrain";
-import { FOUR_IN_THE_MIDDLE, MIDDLE_CENTRE, THREE_IN_THE_MIDDLE } from "./middleOut";
+import { FOUR_IN_THE_MIDDLE, MIDDLE_CENTRE, NESTS_FOR_FOUR, NESTS_FOR_THREE, THREE_IN_THE_MIDDLE } from "./middleOut";
 
 const ROWS = [
     "..........................==..........................",
@@ -153,6 +153,7 @@ export const SUNKEN_VILLAGE_THREE_MAP: BattlefieldMap = {
     elevation: ELEVATION,
     deployments: THREE_IN_THE_MIDDLE,
     objectives: { centre: MIDDLE_CENTRE },
+    nests: NESTS_FOR_THREE,
 };
 
 /**
@@ -166,6 +167,7 @@ export const SUNKEN_VILLAGE_FOUR_MAP: BattlefieldMap = {
     elevation: ELEVATION,
     deployments: FOUR_IN_THE_MIDDLE,
     objectives: { centre: MIDDLE_CENTRE },
+    nests: NESTS_FOR_FOUR,
 };
 
 export const SUNKEN_VILLAGE_THREE = buildBattlefield(SUNKEN_VILLAGE_THREE_MAP);

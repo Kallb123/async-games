@@ -23,7 +23,7 @@ afterEach(() => vi.restoreAllMocks());
 
 describe("a replay of a Hold Out against a Swarm of elites (§39.5)", () => {
     it.each([false, true])("hatches and spits bile as the planner chose, and lands on exactly the live state without rolling anything again (fog of war: %s)", async fog => {
-        seedRolls(1);
+        seedRolls(4);
         const game = await playScriptedBattle({ rulesVersion: 12, fog, coop: { enemy: "swarm", mission: "holdOut" } });
         const history = game.gameState.commandHistory;
         const recorded = history.flatMap(command => (command as RealmArenaEndTurn).recordedEnemyActions ?? []);

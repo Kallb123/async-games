@@ -43,6 +43,8 @@ const STROKES = {
     waveDue: { alpha: 0.75, width: 1, dash: [2, 1.5] },
     wave: { alpha: 1, width: 1 },
     centre: { alpha: 1, width: 0.9, dash: [3, 1.5] },
+    /** `.ag-ra-deployment--nest`: a nest's square. */
+    nestSite: { alpha: 0.6, width: 0.6, dash: [1, 1.2] },
 } as const satisfies Record<string, Pick<Outline, 'alpha' | 'width' | 'dash'>>;
 
 /** Hands the board the time of the playback with `playKey`, a frame at a time, inside the `PlaybackProvider` it reads. */
@@ -113,7 +115,7 @@ function BoardCamera({ board, rotation, glide, layout }: { board: Board3D | null
  * nobody walks, nothing flies, bursts, slashes or shakes the board, and the hit
  * text only appears and fades.
  */
-export default function RealmArenaBoard3D({ field, fighters, fogGhosts = [], unseen, sides, rulesVersion, sealed, owners, waveDue = false, showCentre = true, viewerId, colourFor, nameFor, selected, onSelect, placing, aiming, acting, refocus = 0, follow, home, odds, coverAt, overlay, playback, onPlayed, unplaced, clouds }: RealmArenaBoard3DProps) {
+export default function RealmArenaBoard3D({ field, fighters, fogGhosts = [], unseen, sides, rulesVersion, sealed, owners, waveDue = false, showCentre = true, nestSquares, viewerId, colourFor, nameFor, selected, onSelect, placing, aiming, acting, refocus = 0, follow, home, odds, coverAt, overlay, playback, onPlayed, unplaced, clouds }: RealmArenaBoard3DProps) {
     const [board, setBoard] = useState<Board3D | null>(null);
     // Made when its box mounts and gone with it.
     const host = useCallback((element: HTMLDivElement | null) => {
@@ -193,6 +195,11 @@ export default function RealmArenaBoard3D({ field, fighters, fogGhosts = [], uns
                 if (due) waveOutlines.push({ squares: part, colour, ...STROKES.wave });
             }
         });
+        // A nest's square is outlined in the warbands' colour, as `.ag-ra-deployment--nest` draws it (§39.7).
+        const warband = owners.find(isWarband);
+        for (const square of nestSquares ?? []) {
+            outlines.push({ squares: new Set([square]), colour: warband ? cssColour(scope, colourFor(warband)) : token('--ag-ink-softer'), ...STROKES.nestSite });
+        }
         const layers: ShadingLayer[] = [square => zone.get(square) ?? null];
         const centre = new Set(showCentre ? field.objectives[CENTRE] ?? [] : []);
         if (centre.size > 0) {
@@ -208,7 +215,7 @@ export default function RealmArenaBoard3D({ field, fighters, fogGhosts = [], uns
         }
         board.setShading(square => overlaid(layers, square), wave.size > 0 ? wave : null);
         board.setOutlines(outlines, waveOutlines);
-    }, [board, field, smoke, owners, colourFor, waveDue, showCentre, aiming, unseen, placing, sealed]);
+    }, [board, field, smoke, owners, colourFor, waveDue, showCentre, nestSquares, aiming, unseen, placing, sealed]);
 
     // What an action lined up and the map show over the figures: the path, the
     // chance to hit, the cover, the centre's name; and the colours they, the marks and the bars wear.

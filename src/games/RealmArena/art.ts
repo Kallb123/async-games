@@ -15,7 +15,7 @@
 
 import { FACING_COUNT, FULL_HEIGHT, TERRAIN, type Facing, type TerrainLetter } from "@/utils/games/battlefield/terrain";
 import { ISO_HALF_HEIGHT, ISO_HALF_WIDTH, ISO_STEP, type IsoRotation } from "@/utils/ui/isometric";
-import { EFFECT_IDS, ITEM_IDS, type CharacterId, type ItemId } from "./characters";
+import { EFFECT_IDS, ITEM_IDS, type Character, type CharacterId, type ItemId } from "./characters";
 import { registeredRulesets } from "./rulesets";
 
 /**
@@ -25,8 +25,11 @@ import { registeredRulesets } from "./rulesets";
  * roster keeps its order and the rest follow, in the order the catalogues
  * introduced them, so a character's row never moves when a release lands.
  * The sheets, `characters.json` and the sheet script are all laid out from it.
+ * A structure (the Swarm's nest, §39.7) isn't one: it's no figure with eight
+ * facings and a fallen pose, but a mark of its own, so it has no row.
  */
-export const ART_CHARACTER_IDS: readonly CharacterId[] = [...new Set(registeredRulesets.flatMap(ruleset => Object.keys(ruleset.CHARACTERS) as CharacterId[]))];
+export const ART_CHARACTER_IDS: readonly CharacterId[] = [...new Set(registeredRulesets.flatMap(ruleset =>
+    Object.entries(ruleset.CHARACTERS).flatMap(([id, character]) => (character as Character).structure ? [] : [id as CharacterId])))];
 
 /** The poses a character is drawn in, in the order their rows come down the characters' sheet. */
 export const CHARACTER_POSES = ["standing", "fallen"] as const;
@@ -81,6 +84,12 @@ export const ART_SHEETS = {
      * by `npm run ra-characters`.
      */
     characters: { href: "/art/realmarena/characters.png", ...CHARACTER_SHEET },
+    /**
+     * The Swarm's nest (§39.7): standing, then destroyed, a character's cell
+     * (`CHARACTER_CELL`) each. Rendered from `art-masters/realmarena/nest.svg`
+     * by `npm run ra-marks`.
+     */
+    nest: { href: "/art/realmarena/nest.png", width: 256, height: CHARACTER_CELL_HEIGHT },
     /** The owner's colour on the characters, grey and shaded, cell for cell with `characters`: tinted per seat. */
     charactersTeam: { href: "/art/realmarena/characters-team.png", ...CHARACTER_SHEET },
 } as const;
@@ -321,6 +330,31 @@ export const CHARACTER_ART = Object.fromEntries(ART_CHARACTER_IDS.map((character
 })) as Readonly<Record<CharacterId, Readonly<Record<CharacterPose, CharacterArt>>>>;
 
 /**
+ * The structures (§39.7), each in every pose, by character: a structure has no
+ * row of the characters' sheet, no facing and no body to fall — its `fallen`
+ * pose is the structure destroyed. A cell the size of a character's, and with
+ * no team layer, since the owner's colour is its HP bar's and ring's. The one
+ * answer to which characters are drawn as one, so a new one is a line here.
+ */
+export const STRUCTURE_ART: Partial<Record<CharacterId, Readonly<Record<CharacterPose, Sprite>>>> = {
+    nest: {
+        standing: { sheet: "nest", x: 0, y: 0, width: CHARACTER_CELL.width, height: CHARACTER_CELL.height, tile: CHARACTER_CELL.tile },
+        fallen: { sheet: "nest", x: CHARACTER_CELL.width, y: 0, width: CHARACTER_CELL.width, height: CHARACTER_CELL.height, tile: CHARACTER_CELL.tile },
+    },
+};
+
+/** The sprite for `pose` where `character` is a structure drawn as one (`STRUCTURE_ART`), and nothing for a character drawn as a figure. */
+export const structureArt = (character: CharacterId, pose: CharacterPose): Sprite | undefined => STRUCTURE_ART[character]?.[pose];
+
+/** What a fighter is drawn with on the isometric board: its body, and the layer its owner's colour is laid on, which a structure has none of. */
+export function figureSprites(character: CharacterId, pose: CharacterPose, cell: number): { body: Sprite; team: Sprite | null } {
+    const structure = structureArt(character, pose);
+    if (structure) return { body: structure, team: null };
+    const art = CHARACTER_ART[character][pose];
+    return { body: art.body[cell], team: art.team[cell] };
+}
+
+/**
  * Which of a character's cells a figure facing `facing` on the grid is drawn
  * with, on a board turned `rotation` quarters: the cells go round as the
  * facings do, and a quarter turn of the board is two of them.
@@ -334,6 +368,7 @@ export const SPRITES: ReadonlyMap<Sprite, number> = new Map(
     [...new Set([
         ...GRASS, ...LAYERS.flatMap(layer => layer.sprites), ...Object.values(EFFECT_ART), WATCH_ART, ...Object.values(ITEM_ART), SMOKE_ART,
         ...Object.values(MISSILE_ART), SLASH_ART, ...Object.values(BURST_ART),
+        ...Object.values(STRUCTURE_ART).flatMap(poses => Object.values(poses!)),
         ...Object.values(CHARACTER_ART).flatMap(poses => Object.values(poses).flatMap(art => [...art.body, ...art.team])),
     ])].map((sprite, index) => [sprite, index]),
 );

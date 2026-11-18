@@ -1,0 +1,71 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  The Swarm's nest (docs/games/realm-arena.md §39.7): two 128x160 cells, left
+  to right — standing, then destroyed — each the size of a character's cell
+  (`CHARACTER_CELL`), so the board stands it on a square as it stands a figure:
+  the square's diamond is the bottom 32px of the cell, its middle at (64, 128).
+
+  A nest has no facing and no body to fall, so it is one drawing a pose and
+  not eight a pose: a mound of dried resin and chitin with a dark mouth, egg
+  sacs glowing in it; and, destroyed, the same mound broken open, the sacs
+  burst and spilled, the glow gone out. It carries no owner's colour: the board
+  draws its HP bar and ring in the warband's.
+
+  `npm run ra-marks` renders this to public/art/realmarena/nest.png.
+-->
+<svg xmlns="http://www.w3.org/2000/svg" width="256" height="160" viewBox="0 0 256 160">
+  <defs>
+    <radialGradient id="resin" cx="0.38" cy="0.3" r="0.85">
+      <stop offset="0" stop-color="#b08a5a"/>
+      <stop offset="0.55" stop-color="#7a5a3a"/>
+      <stop offset="1" stop-color="#4a3322"/>
+    </radialGradient>
+    <radialGradient id="ruin" cx="0.4" cy="0.3" r="0.85">
+      <stop offset="0" stop-color="#8a7358"/>
+      <stop offset="1" stop-color="#4f4030"/>
+    </radialGradient>
+    <radialGradient id="sac" cx="0.35" cy="0.3" r="0.8">
+      <stop offset="0" stop-color="#f4ffb0"/>
+      <stop offset="0.5" stop-color="#b7d93a"/>
+      <stop offset="1" stop-color="#6b8f1c"/>
+    </radialGradient>
+    <radialGradient id="glow" cx="0.5" cy="0.5" r="0.5">
+      <stop offset="0" stop-color="#c7e84a" stop-opacity="0.55"/>
+      <stop offset="1" stop-color="#c7e84a" stop-opacity="0"/>
+    </radialGradient>
+    <ellipse id="shadow" cx="64" cy="124" rx="52" ry="22" fill="#24150f" fill-opacity="0.28" stroke="none"/>
+  </defs>
+
+  <g stroke="#24150f" stroke-width="3" stroke-linejoin="round" stroke-linecap="round">
+    <!-- Standing: a ridged mound, its mouth dark at the top, three egg sacs bulging from its flanks. -->
+    <g>
+      <use href="#shadow"/>
+      <ellipse cx="64" cy="108" rx="64" ry="48" fill="url(#glow)" stroke="none"/>
+      <path d="M16 124 C14 100 26 82 38 70 C44 52 56 40 64 40 C74 40 84 52 90 68 C104 80 114 100 112 124 C96 134 32 134 16 124 Z" fill="url(#resin)"/>
+      <!-- Ridges of hardened resin. -->
+      <path d="M30 112 C40 102 52 100 64 104 M76 100 C88 98 98 102 104 112 M38 90 C46 84 54 82 60 84 M70 82 C78 80 86 82 92 88" fill="none" stroke="#3b281a" stroke-width="3"/>
+      <!-- The mouth. -->
+      <ellipse cx="64" cy="50" rx="15" ry="7" fill="#1c100a"/>
+      <path d="M52 48 L56 56 M64 50 L64 58 M76 48 L72 56" fill="none" stroke="#7a5a3a" stroke-width="3"/>
+      <!-- Egg sacs. -->
+      <ellipse cx="38" cy="102" rx="11" ry="13" fill="url(#sac)"/>
+      <ellipse cx="90" cy="98" rx="10" ry="12" fill="url(#sac)"/>
+      <ellipse cx="64" cy="114" rx="13" ry="10" fill="url(#sac)"/>
+      <path d="M34 98 C36 94 40 94 42 97 M86 94 C88 90 92 91 94 94 M58 111 C61 108 66 108 69 111" fill="none" stroke="#f4ffb0" stroke-width="2.5" opacity="0.8"/>
+    </g>
+
+    <!-- Destroyed: the mound split and slumped, sacs burst, the glow gone. -->
+    <g transform="translate(128 0)">
+      <use href="#shadow"/>
+      <ellipse cx="64" cy="122" rx="46" ry="16" fill="#2f3a14" fill-opacity="0.55" stroke="none"/>
+      <path d="M18 124 C18 112 28 104 38 100 L46 108 L52 92 L62 104 L72 90 L82 102 C96 104 108 112 110 124 C94 132 34 132 18 124 Z" fill="url(#ruin)"/>
+      <!-- Cracks and a few shards of broken shell standing from it. -->
+      <path d="M34 118 C44 112 54 114 62 118 M72 116 C82 112 92 114 100 118" fill="none" stroke="#2f2418" stroke-width="3"/>
+      <path d="M26 112 L20 96 L34 106 Z M98 108 L106 94 L108 112 Z M58 96 L56 82 L66 94 Z" fill="#8a7358"/>
+      <!-- Burst sacs: dull shells and a spill of goo. -->
+      <path d="M40 120 C34 112 42 106 50 110 C54 114 50 122 40 120 Z" fill="#8c9a4c"/>
+      <path d="M78 122 C74 114 84 110 90 114 C94 120 86 126 78 122 Z" fill="#8c9a4c"/>
+      <ellipse cx="64" cy="124" rx="10" ry="4" fill="#6b8f1c" fill-opacity="0.7" stroke="none"/>
+    </g>
+  </g>
+</svg>

@@ -163,6 +163,13 @@ export interface BattlefieldMap {
     deployments: readonly (Area | readonly Area[])[];
     /** The named areas a mission scores, e.g. the centre of Hold the Centre (§13.7). */
     objectives: Readonly<Record<string, Area>>;
+    /**
+     * Where a faction that has nests (Realm Arena's Swarm, §39.7) stands them,
+     * for each warband of a Hold Out battlefield, in the order of the warbands'
+     * zones: the squares as a column and a row each. Left out, the map has no
+     * nests. Every square must be standable, and none is in two lists.
+     */
+    nests?: readonly (readonly { col: number; row: number }[])[];
 }
 
 /** A square, by its index: `row * width + col`. A plain number, so it keys a Set and persists as itself. */
@@ -179,6 +186,8 @@ export interface Battlefield {
     /** Each seat's deployment as the areas it was drawn as: what the board outlines, and what a ready-made squad is spread over. */
     deploymentAreas: readonly (readonly Area[])[];
     objectives: Readonly<Record<string, readonly Square[]>>;
+    /** Each warband's nests, as `BattlefieldMap.nests` lists them, read into squares: absent on a map without them. */
+    nests?: readonly (readonly Square[])[];
     /**
      * Sees by the rule from before sight had angles (`lineOfSight.ts`): blocked
      * by anything a full height above both ends, by trees, and by low hedges
@@ -240,7 +249,14 @@ export function buildBattlefield(map: BattlefieldMap): Battlefield {
         return [id, squares];
     }));
 
-    return { name: map.name, width, height, tiles, deployments, deploymentAreas, objectives };
+    const nests = map.nests?.map((cells, warband) => cells.map(({ col, row }) => {
+        const [at] = squaresIn({ col, row, width: 1, height: 1 }, `warband ${warband}'s nest`);
+        if (!tiles[at].terrain.standable) throw new Error(`${map.name}: warband ${warband}'s nest is on a square nobody can stand on`);
+        return at;
+    }));
+    if (nests && new Set(nests.flat()).size < nests.flat().length) throw new Error(`${map.name}: two nests share a square`);
+
+    return { name: map.name, width, height, tiles, deployments, deploymentAreas, objectives, ...(nests ? { nests } : {}) };
 }
 
 /**

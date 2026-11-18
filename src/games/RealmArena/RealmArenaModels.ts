@@ -7,7 +7,7 @@ import { mongoMap } from "@/utils/games/mongoMaps";
 import { capitalise, pluralize } from "@/utils/ui/text";
 import { userIdListToNamesAndMap } from "@/utils/users/clerk";
 import { RealmArenaGameType, type IGameCommand } from "@/utils/apiModels/GameLogic";
-import { battleOf, battleRoundsOf, budgetOf, enemyEvents, enemyHidden, enemyTurnsOf, nextWaveOf, toldTo, unnamed, warbandBudgetOf, type IRealmArenaOutcome, type RealmArenaBoard, type Told } from "./RealmArenaLogic";
+import { battleOf, battleRoundsOf, budgetOf, enemyEvents, enemyHidden, enemyTurnsOf, nestSquaresOf, nextWaveOf, toldTo, unnamed, warbandBudgetOf, type IRealmArenaOutcome, type RealmArenaBoard, type Told } from "./RealmArenaLogic";
 import { rollOffTurnOrder } from "@/utils/games/rollOff";
 import { CURRENT_RULESET_VERSION, registeredRulesets } from "./rulesets";
 import { ART_CHARACTER_IDS } from "./art";
@@ -16,7 +16,7 @@ import { userToken } from "@/utils/games/history";
 import { BATTLE_SIZE_NAMES, CHARACTERS, COOP_PLAYERS, coopTeamMax, DIFFICULTY_NAMES, FACTION_IDS, factionById, FACTIONS, fitsCoop, isFactionId, playableFactionsOf, RANDOM_ENEMY, REALM_ONLY, UNKNOWN_ENEMY, type BattleSize, type CharacterId, type Difficulty, type FactionId } from "./characters";
 import { addTally, NO_TALLY, xpOf, type MasterySnapshot, type Tally } from "./mastery";
 import { battlefieldById, COOP_MAPS, DEPLOYMENT_NAMES, mapFor, type CoopMap, type RealmArenaMapId } from "./maps";
-import { allied, ENEMY_SIDE, fighterById, fogGhost, isWarband, pickOf, squadSight, storedFighter, TEAM_SIDE, viewOf, warbandsFor, maxHpOf, actionPointsOf, type BattleEvent, type Fighter, type FogGhost, type MusterPick, type ToldEvent } from "./rules";
+import { allied, ENEMY_SIDE, fighterById, fogGhost, isStructure, isWarband, pickOf, squadSight, storedFighter, TEAM_SIDE, viewOf, warbandsFor, maxHpOf, actionPointsOf, type BattleEvent, type Fighter, type FogGhost, type MusterPick, type ToldEvent } from "./rules";
 import type { IRealmArenaGameDataResponse, IRealmArenaSpecificGameStateResponse, IRealmArenaStepOutcome, IRealmArenaStepPart, RealmArenaPartState } from "./apiModels";
 import type { Square } from "@/utils/games/battlefield/terrain";
 import { addRecords, NO_RECORD, RECORD_KEYS, type BattleRecord, type FightingRecord, type FightingRow, type WaveRecord } from "./battleRecord";
@@ -140,6 +140,21 @@ export interface IRealmArenaSpecificGameState {
      * Never sent as a list: the viewer is told only whether they owe one.
      */
     rallyOwed?: string[];
+    /**
+     * How many of each warband's nests (§39.7) the team has destroyed since that
+     * warband's last wave landed, by warband owner: each takes points off the
+     * warband's next wave's budget, and the count is cleared as the wave lands
+     * and the nests regrow. Absent while there are none, and in every battle
+     * whose enemy has no nests. The server's alone: never sent.
+     */
+    nestsDestroyed?: Record<string, number>;
+    /**
+     * How many nests (§39.7) the team was told fell since the last wave landed —
+     * those it saw go down, in fog of war: the only count of them a fogged
+     * response may send (`nextWaveOf`), since `nestsDestroyed` counts the ones
+     * out of its sight too. Cleared with it as the wave lands. The server's alone.
+     */
+    nestsSeenDestroyed?: number;
     /** Battle rounds played to the end: 0 until the first round's last turn ends. The round being played is one more. */
     roundsPlayed: number;
     /**
@@ -470,6 +485,9 @@ var RealmArenaGameDataSchema = new Schema<IRealmArenaGameDataDocument>(
             roundsPlayed: Number,
             // Mixed, so `markDirty` saves it whole. It is cleared by assigning `undefined` (`forgiveRally`), never `delete`: a deleted path stays cached on a document, and the save still writes the old list (§39.4).
             rallyOwed: Schema.Types.Mixed,
+            // Mixed, so `markDirty` saves it whole; replaced, never mutated, as `scores` is (`addScores`).
+            nestsDestroyed: Schema.Types.Mixed,
+            nestsSeenDestroyed: Number,
             fighters: Schema.Types.Mixed,
             sightings: Schema.Types.Mixed,
             blasted: [Number],
@@ -542,6 +560,8 @@ export function gameStateToModel(
     const own = gs.phase === "muster" ? musters.find(muster => muster.owner === viewerId) : undefined;
     const view = viewOf(battleOf(gs, complete), viewerId);
     const nextWave = complete ? undefined : nextWaveOf(gs);
+    // A nest names the Swarm: its squares wait for the enemy to be known, as `enemy` does.
+    const nestSquares = !enemyHidden(gs.coop) || complete ? nestSquaresOf(gs) : undefined;
     return {
         map: gs.map,
         phase: gs.phase,
@@ -556,7 +576,8 @@ export function gameStateToModel(
         ...(gs.phase === "muster" ? { factions: [...gs.factions ?? REALM_ONLY] } : {}),
         ...(gs.coop?.mission ? { mission: gs.coop.mission } : {}),
         ...(nextWave ? { nextWave } : {}),
-        ...(gs.coop?.mission === "holdOut" && gs.phase !== "muster" ? { enemiesDefeated: gs.fighters.filter(fighter => isWarband(fighter.owner) && fighter.hp <= 0).length } : {}),
+        ...(nestSquares ? { nestSquares } : {}),
+        ...(gs.coop?.mission === "holdOut" && gs.phase !== "muster" ? { enemiesDefeated: gs.fighters.filter(fighter => isWarband(fighter.owner) && fighter.hp <= 0 && !isStructure(fighter, gs)).length } : {}),
         ...(gs.coop?.difficulty ? { difficulty: gs.coop.difficulty } : {}),
         ...(gs.coop?.teamBlocks ? { teamBlocks: true as const } : {}),
         // A random enemy stays off the wire until it's seen (§29.3), and the

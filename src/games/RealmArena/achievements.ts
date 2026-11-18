@@ -7,7 +7,7 @@
 // response contains the battlefield that these checks read.
 import type { FinishedSeat, GameAchievement } from "@/utils/games/achievements";
 import type { IRealmArenaSpecificGameStateResponse } from "./apiModels";
-import { isStanding, isWarband } from "./rules";
+import { isStanding, isStructure, isWarband } from "./rules";
 
 function wholeTeamStanding(view: IRealmArenaSpecificGameStateResponse): boolean {
     const team = view.fighters.filter(fighter => !isWarband(fighter.owner));
@@ -24,9 +24,12 @@ function isSolo(view: IRealmArenaSpecificGameStateResponse): boolean {
     return new Set(view.fighters.filter(fighter => !isWarband(fighter.owner)).map(fighter => fighter.owner)).size === 1;
 }
 
-/** Whether the warbands fielded anyone and nobody of theirs is standing: the last wave beaten before the rounds ran out (§30.3). */
+/**
+ * Whether the warbands fielded anyone and nobody of theirs is standing: the last wave beaten before the rounds ran out (§30.3).
+ * A nest standing is no one (§39.7): the Swarm's characters are what Broken Tide asks to be downed.
+ */
 function enemyWipedOut(view: IRealmArenaSpecificGameStateResponse): boolean {
-    const enemy = view.fighters.filter(fighter => isWarband(fighter.owner));
+    const enemy = view.fighters.filter(fighter => isWarband(fighter.owner) && !isStructure(fighter, view));
     return enemy.length > 0 && !enemy.some(isStanding);
 }
 

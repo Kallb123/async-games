@@ -35,7 +35,7 @@ import { costsFrom, DEFAULT_CLIMB, reachFrom, pathTo, type Reach } from "@/utils
 import { battlefieldWith, coordsOf, type Battlefield, type Square } from "@/utils/games/battlefield/terrain";
 import { type AbilityId } from "./characters";
 import {
-    abilitiesOf, alliesWithin, activeEffects, act, canAct, allied, areaAround, blastedIn, CENTRE, centrePoints, check, fighterById, isStanding, landedSmoke,
+    abilitiesOf, alliesWithin, activeEffects, act, canAct, allied, areaAround, blastedIn, CENTRE, centrePoints, check, fighterById, isCombatant, isStanding, isStructure, landedSmoke,
     damageTo, dodgeReach, leapTargets, maxHpOf, moveAp, movementOf, reachOf, ROLL_SIDES, shotOdds, squadSight, strikeChance, watchedSquares, weaponOf, weaponReaches,
     type Action, type BattleEvent, type BattleState, type Fighter, type FogGhost, type ShotOdds,
 } from "./rules";
@@ -173,7 +173,8 @@ function planFor(view: BattleState, owner: string, round: number, memo: TurnMemo
     // all. It keeps the keep's urgency, so a warband closes in gently in the
     // first rounds and in earnest from round CENTRE_SCORES_FROM_ROUND on
     // (`standingTerms`).
-    const seenEnemies = state.fighters.filter(fighter => isStanding(fighter) && !allied(state, fighter.owner, owner));
+    // A nest (§39.7) is nobody to hunt: the team's planner may hit one it reaches, and never walks to one.
+    const seenEnemies = state.fighters.filter(fighter => isCombatant(fighter, state) && !allied(state, fighter.owner, owner));
     const hunted = hunt === undefined ? []
         : seenEnemies.length > 0 ? seenEnemies.map(fighter => fighter.square)
         : hunt.length > 0 ? hunt.map(ghost => ghost.square)
@@ -471,8 +472,11 @@ function score(plan: Plan, battle: BattleState, events: readonly BattleEvent[]):
         const focus = effects.reduce((sum, { effect }) => sum + (effect.abilityDamageBonus ?? 0), 0);
         const readyAbility = focus > 0 && abilitiesOf(fighter, battle).some(id => (catalogue.ABILITIES[id]?.damage ?? 0) > 0 && (fighter.cooldowns[id] ?? 0) <= 1);
         if (readyAbility) total += side(fighter.owner) * focus * WEIGHTS.threat;
-        total += side(fighter.owner) * worthOf(fighter, fighter.hp, plan.state) * WEIGHTS.strength * (side(fighter.owner) > 0 ? ownWorth : 1);
-        if (fighter.owner === owner) total += standingTerms(plan, battle, fighter, enemies);
+        // A wave brings a warband's characters back, but a nest only conditionally: it counts its worth in full (§39.7).
+        const structure = isStructure(fighter, battle);
+        total += side(fighter.owner) * worthOf(fighter, fighter.hp, plan.state) * WEIGHTS.strength * (side(fighter.owner) > 0 && !structure ? ownWorth : 1);
+        // Where a structure stands is not its to choose.
+        if (fighter.owner === owner && !structure) total += standingTerms(plan, battle, fighter, enemies);
     }
     return total;
 }
@@ -534,7 +538,7 @@ function harmKnown(plan: Plan, fighter: Fighter, enemies: readonly Fighter[]): M
 
 /** The enemies of a player standing in a battle: whoever its characters' Exposure and Threat are read against. */
 function enemiesOf(battle: BattleState, player: string): Fighter[] {
-    return battle.fighters.filter(enemy => isStanding(enemy) && !allied(battle, enemy.owner, player));
+    return battle.fighters.filter(enemy => isCombatant(enemy, battle) && !allied(battle, enemy.owner, player));
 }
 
 /**

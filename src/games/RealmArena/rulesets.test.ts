@@ -122,8 +122,9 @@ describe("Realm Arena ruleset compatibility", () => {
         const before = real.rulesetFor(11).RULES, after = real.rulesetFor(12).RULES;
         expect(before.RALLY_CHOICE).toBeUndefined();
         expect(after.RALLY_CHOICE).toBe(true);
-        // Only the themed waves' two numbers are added besides (§39.6).
-        expect(after).toEqual({ ...before, RALLY_CHOICE: true, WAVE_GROWTH_POINTS: 15, WAVE_CAP: 12 });
+        // Only the themed waves' two numbers (§39.6) and what a nest takes off a wave (§39.7) are added besides.
+        expect(after).toEqual({ ...before, RALLY_CHOICE: true, WAVE_GROWTH_POINTS: 15, WAVE_CAP: 12, NEST_POINTS: 15 });
+        expect(before.NEST_POINTS).toBeUndefined();
         expect(real.rulesetFor(11).RULES).toBe(real.rulesetFor(10).RULES);
     });
 
@@ -133,8 +134,8 @@ describe("Realm Arena ruleset compatibility", () => {
         expect(before.bloater.burstsWhenDowned).toBeUndefined();
         expect(real.rulesetFor(10).CHARACTERS.bloater.burstsWhenDowned).toBeUndefined();
         expect(after.bloater).toEqual({ ...before.bloater, burstsWhenDowned: true });
-        // Only the elites (§39.5) are added besides.
-        const { bloater: _before, ...rest } = before, { bloater: _after, broodQueen: _queen, carapaceBrute: _brute, bileLobber: _lobber, ...restAfter } = after;
+        // Only the elites (§39.5) and the nest (§39.7) are added besides.
+        const { bloater: _before, ...rest } = before, { bloater: _after, broodQueen: _queen, carapaceBrute: _brute, bileLobber: _lobber, nest: _nest, ...restAfter } = after;
         expect(restAfter).toEqual(rest);
     });
 
@@ -155,7 +156,7 @@ describe("Realm Arena ruleset compatibility", () => {
         // The elites stand beside the roster, which a muster is checked against, and no other faction's changes.
         expect(after.FACTIONS.swarm.elites).toEqual(["broodQueen", "carapaceBrute", "bileLobber"]);
         expect(before.FACTIONS.swarm.elites).toBeUndefined();
-        expect(after.FACTIONS.swarm).toEqual({ ...before.FACTIONS.swarm, elites: ["broodQueen", "carapaceBrute", "bileLobber"], waves: after.FACTIONS.swarm.waves });
+        expect(after.FACTIONS.swarm).toEqual({ ...before.FACTIONS.swarm, elites: ["broodQueen", "carapaceBrute", "bileLobber"], waves: after.FACTIONS.swarm.waves, nest: "nest" });
         expect(after.FACTIONS.swarm.characters).toBe(before.FACTIONS.swarm.characters);
         expect(after.FACTIONS.realm).toBe(before.FACTIONS.realm);
         expect(after.FACTIONS.miners).toBe(before.FACTIONS.miners);
@@ -183,6 +184,28 @@ describe("Realm Arena ruleset compatibility", () => {
             expect(real.rulesetFor(version).RULES.WAVE_GROWTH_POINTS).toBeUndefined();
         }
         expect(Object.isFrozen(FACTIONS.swarm.waves)).toBe(true);
+    });
+
+    it("adds the Swarm's nest in v12 as a structure that no roster or elite list holds, and gives no other faction or version one (§39.7)", async () => {
+        const real = await vi.importActual<typeof import("./rulesets")>("./rulesets");
+        const { CHARACTERS, FACTIONS, RULES } = real.rulesetFor(12);
+        expect(CHARACTERS.nest).toMatchObject({ name: "Nest", hp: 10, movement: 0, abilities: [], points: 20, structure: true, weapon: { damage: 0 } });
+        expect(CHARACTERS.nest.armour).toBeUndefined();
+        expect(FACTIONS.swarm.nest).toBe("nest");
+        expect(RULES.NEST_POINTS).toBe(15);
+        // Nobody musters one, and nobody else has one.
+        for (const faction of Object.values(FACTIONS)) {
+            expect(faction.characters).not.toContain("nest");
+            expect(faction.elites ?? []).not.toContain("nest");
+        }
+        expect(FACTIONS.realm.nest).toBeUndefined();
+        expect(FACTIONS.miners.nest).toBeUndefined();
+        // Nothing but the nest is a structure.
+        expect(Object.entries(CHARACTERS).filter(([, character]) => character.structure).map(([id]) => id)).toEqual(["nest"]);
+        for (const version of [7, 8, 9, 10, 11]) {
+            expect(Object.hasOwn(real.rulesetFor(version).CHARACTERS, "nest")).toBe(false);
+            expect(real.rulesetFor(version).FACTIONS.swarm.nest).toBeUndefined();
+        }
     });
 
     it("pins HP, movement and available abilities to the game, including an added ability", () => {
