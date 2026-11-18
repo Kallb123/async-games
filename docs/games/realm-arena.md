@@ -5572,8 +5572,10 @@ stays 11. The open point is settled as planned: nests **regrow** with each wave.
   wave placement. `nestSitesOf(gs)` reads them for the muster, the response and
   the regrowth.
 - **Destroying one shrinks the next wave.** `gs.nestsDestroyed` (per warband,
-  server-only) counts the nests **the team** downs; one downed by the Swarm's
-  own burst, bile or burn counts for nobody. `waveBudgetOf(gs, round, owner)`
+  server-only) counts **every** nest destroyed, whoever downed it: one the Swarm
+  downs itself (its own burst, bile or burn, or a burn whose setter is gone) is
+  a forced error of the AI team and shrinks its warband's next wave all the
+  same (#966). Scoring is unchanged: only a nest the team downs scores. `waveBudgetOf(gs, round, owner)`
   takes `NEST_POINTS` off for each, never below half; `wavePurchase` still buys
   the elite first, and at the smallest budget two nests never cost a wave its
   elite.

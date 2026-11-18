@@ -482,22 +482,32 @@ describe("destroying a nest thins the next wave (§39.7)", () => {
         expect(nestsOf(game)).toHaveLength(4);
     });
 
-    it("counts only the nests the team destroys: not one the Swarm's own burn, its own Bile or a burn whose setter is gone downs", async () => {
+    it("counts every nest destroyed, the Swarm's own burn, its own Bile or a burn whose setter is gone included, and scores only the team's", async () => {
         const burnt = async (setter: (game: RealmArenaTestGame, nest: Fighter) => number) => {
             const { game, gs, nest } = await mustered();
+            const budget = waveBudgetOf(gs, 4, nest.owner);
+            const before = { ...gs.scores };
             gs.fighters = gs.fighters.map(one => one.id === nest.id ? { ...afflicted({ ...one, hp: 1 }, "burning", setter(game, one), CONTEXT)!.fighter, hp: 1 } : one);
             // The warband's turn, which begins with the burn, is played out after the last of the team's.
             await play(game, endTurnBy("a"));
             await play(game, endTurnBy("b"));
             expect(fighters(game).find(one => one.id === nest.id)!.hp).toBe(0);
-            return gs.nestsDestroyed;
+            // It shrinks that warband's next wave, however it fell.
+            expect(waveBudgetOf(gs, 4, nest.owner)).toBe(budget - 15);
+            return { counted: gs.nestsDestroyed, scores: gs.scores, before };
         };
-        // Lit by the team: counted against the nest's warband.
+        // Lit by the team: counted against the nest's warband, and scored.
         const ownerOf = (await mustered()).nest.owner;
-        expect(await burnt(game => fighters(game).find(one => one.owner === "a")!.id)).toEqual({ [ownerOf]: 1 });
-        // Lit by one of the warband's own characters, or by someone no longer there (so the burn is the nest's own): nobody's to count.
-        expect(await burnt((game, nest) => fighters(game).find(one => one.owner === nest.owner && !isStructure(one, CONTEXT))!.id)).toBeUndefined();
-        expect(await burnt(() => 9999)).toBeUndefined();
+        const team = await burnt(game => fighters(game).find(one => one.owner === "a")!.id);
+        expect(team.counted).toEqual({ [ownerOf]: 1 });
+        expect(team.scores.a).toBe((team.before.a ?? 0) + knockoutPoints("nest", CONTEXT));
+        // Lit by one of the warband's own characters, or by someone no longer there (so the burn is the nest's own): counted all the same, never scored.
+        const own = await burnt((game, nest) => fighters(game).find(one => one.owner === nest.owner && !isStructure(one, CONTEXT))!.id);
+        expect(own.counted).toEqual({ [ownerOf]: 1 });
+        expect(own.scores).toEqual(own.before);
+        const gone = await burnt(() => 9999);
+        expect(gone.counted).toEqual({ [ownerOf]: 1 });
+        expect(gone.scores).toEqual(gone.before);
     });
 
     it("regrows a nest on the free square nearest its own when someone stands there, each on a square of its own", async () => {

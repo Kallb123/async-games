@@ -976,6 +976,25 @@ describe("Realm Arena's nests in fog of war (§39.7)", () => {
         for (const viewer of VIEWERS) expect(realmArenaStateToModel(seen.specificGameState, viewer, null).nextWave).toMatchObject({ nestsDestroyed: 1 });
     });
 
+    it("counts a nest the Swarm itself burns down out of the team's sight, and tells the team nothing of it", async () => {
+        const game = swarm();
+        await realmArenaMusterAll(game);
+        const gs = game.specificGameState;
+        const nest = gs.fighters.find(fighter => fighter.character === "nest")!;
+        // Lit by someone no longer there, so the burn is the nest's own: the Swarm downs it itself.
+        gs.fighters = gs.fighters.map(fighter => fighter.id === nest.id ? { ...realmArenaAfflicted({ ...fighter, hp: 1 }, "burning", 9999, { rulesVersion: 12 })!.fighter, hp: 1 } : fighter);
+        gs.rallyOwed = undefined;
+        for (const player of ["a", "b"]) expect((await playRealmArena(game, realmArenaEndTurn(player))).outcome.validMove).toBe(true);
+        expect(gs.fighters.find(fighter => fighter.id === nest.id)!.hp).toBe(0);
+        expect(gs.nestsDestroyed).toEqual({ [nest.owner]: 1 });
+        expect(gs.nestsSeenDestroyed).toBeUndefined();
+        for (const viewer of VIEWERS) {
+            const response = realmArenaStateToModel(gs, viewer, null);
+            expect(JSON.stringify(response), `${viewer}`).not.toContain("nestsDestroyed");
+            expect(JSON.stringify(response)).not.toContain("nestsSeenDestroyed");
+        }
+    });
+
     it("keeps the regrowing of nests out of the log when the team saw none fall, and tells it when it saw one", async () => {
         const regrows = (game: ReturnType<typeof swarm>) => game.gameState.history.some(entry => entry.text === "The nests regrow" || entry.perViewer?.some(line => line.text === "The nests regrow"));
         // Round 3's end lands the wave, and the burn at the start of the warband's turn before it.

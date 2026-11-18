@@ -141,7 +141,8 @@ export interface IRealmArenaSpecificGameState {
      */
     rallyOwed?: string[];
     /**
-     * How many of each warband's nests (§39.7) the team has destroyed since that
+     * How many of each warband's nests (§39.7) have been destroyed, whoever downed
+     * them (the team, or the Swarm's own burst, bile or burn), since that
      * warband's last wave landed, by warband owner: each takes points off the
      * warband's next wave's budget, and the count is cleared as the wave lands
      * and the nests regrow. Absent while there are none, and in every battle

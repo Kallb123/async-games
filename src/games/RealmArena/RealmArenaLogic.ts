@@ -195,12 +195,15 @@ function takesTurn(gs: IRealmArenaSpecificGameState, battle: BattleState, userId
 }
 
 /**
- * Adds what a run of events scored to the scores (§13.7), and counts the nests
- * (§39.7) the team downed against the warband they stand for, which its next
- * wave's budget reads (`waveBudgetOf`) — a nest downed by the Swarm's own burst,
- * bile or burn is no one's to count — and the ones whose fall the team was told
- * of (`nestsSeenDestroyed`), the only count a fogged response may send. Each is
- * replaced rather than changed in place.
+ * Adds what a run of events scored to the scores (§13.7), and counts every
+ * nest (§39.7) destroyed against the warband they stand for, which its next
+ * wave's budget reads (`waveBudgetOf`) — whoever downed it: the team, or the
+ * Swarm itself by a burst, bile or burn, or a burn whose setter is gone, a
+ * forced error of the AI team. Only the team's own downings score (the `scored`
+ * events, untouched here). The ones whose fall the team was told of
+ * (`nestsSeenDestroyed`) are counted apart, the only count a fogged response
+ * may send: a nest falling out of its sight never reaches it. Each is replaced
+ * rather than changed in place.
  */
 function addScores(gs: IRealmArenaSpecificGameState, events: readonly BattleEvent[]): void {
     const scores = { ...gs.scores };
@@ -210,8 +213,7 @@ function addScores(gs: IRealmArenaSpecificGameState, events: readonly BattleEven
         if (event.kind === "scored") scores[event.player] = (scores[event.player] ?? 0) + event.points;
         if (event.kind !== "downed") continue;
         const nest = gs.fighters.find(fighter => fighter.id === event.fighter);
-        const downer = gs.fighters.find(fighter => fighter.id === event.by);
-        if (!nest || !downer || !isStructure(nest, gs) || isWarband(downer.owner)) continue;
+        if (!nest || !isStructure(nest, gs)) continue;
         nests = { ...nests, [nest.owner]: (nests?.[nest.owner] ?? 0) + 1 };
         // The team shares its sight, so any seat's view is its own.
         if (!gs.fog || toldTo([event], battleOf(gs), gs.seats[0]).length > 0) seenFall++;
