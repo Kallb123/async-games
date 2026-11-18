@@ -2,7 +2,8 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { buildTimeline } from "@/utils/games/replay";
 import { gameStateToModel } from "./RealmArenaModels";
 import type { RealmArenaEndTurn } from "./RealmArenaLogic";
-import { seedRolls, playScriptedBattle, battleOf } from "./testFixtures";
+import { playScriptedBattle, battleOf } from "./testFixtures";
+import { seedRolls } from "./seedRolls";
 import { isWarband } from "./rules";
 
 // docs/games/realm-arena.md §39.5: a battle in which the Swarm's warband fields

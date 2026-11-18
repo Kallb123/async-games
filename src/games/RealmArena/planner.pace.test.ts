@@ -5,7 +5,8 @@ import { act, endTurn, newFighter, readyMadeMuster, startTurn, viewOf, type Batt
 import { nextAction, turnMemo } from "./ai";
 import type { RealmArenaEndTurn } from "./RealmArenaLogic";
 import { COOP_MAPS } from "./maps";
-import { battleOf, coopBattle, FOUR_TEAM, seedRolls, TEAMS, warbandsOf } from "./testFixtures";
+import { battleOf, coopBattle, FOUR_TEAM, TEAMS, warbandsOf } from "./testFixtures";
+import { seedRolls } from "./seedRolls";
 
 // docs/games/realm-arena.md §29.7, §29.11: the planner held to its time. A
 // pace file of its own (vitest.config.ts), run once every other file is done

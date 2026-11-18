@@ -15,7 +15,8 @@ import {
 } from "./rules";
 import { ruleValuesOf, rulesetFor } from "./rulesets";
 import { targetsOf } from "./tactics";
-import { actBy, addFighter, battleOf, endTurnBy, makeGame, musterAll, play, playScriptedBattle, readyMadePicks, seedRolls, warbandsOf, type RealmArenaTestGame } from "./testFixtures";
+import { actBy, addFighter, battleOf, endTurnBy, makeGame, musterAll, play, playScriptedBattle, readyMadePicks, warbandsOf, type RealmArenaTestGame } from "./testFixtures";
+import { seedRolls } from "./seedRolls";
 import type { RealmArenaEndTurn } from "./RealmArenaLogic";
 
 // docs/games/realm-arena.md §39.7: nests. The Swarm's warbands stand two nests each

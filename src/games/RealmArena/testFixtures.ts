@@ -3,8 +3,11 @@
 // pipeline the command route runs them through. No Mongo, no Clerk.
 //
 // Test-only. Nothing under src/app imports this.
+//
+// Must not import vitest (directly or through a helper): the balance harness
+// (scripts/lib/realmArenaBalance.ts) loads this file under tsx, outside a test
+// run, where importing vitest throws. Mock-based helpers live in seedRolls.ts.
 
-import { vi } from "vitest";
 import type { IGameCommand } from "@/utils/apiModels/gameCommand";
 import { runCommand } from "@/utils/games/commandPipeline";
 import { gameCommandVersion } from "@/utils/ui/games";
@@ -203,22 +206,6 @@ export const TEAMS = [["a", "b"], ["a", "b", "c"]];
 
 /** A team of four, which only Hold Out on a battlefield of its own seats (§37): the Sacked Fort or the Sunken Village. */
 export const FOUR_TEAM = ["a", "b", "c", "d"];
-
-/** Every roll from here on drawn from a seed, so a battle plays the same each run (mulberry32). */
-export function seedRolls(seed: number): void {
-    let state = seed >>> 0;
-    vi.spyOn(globalThis.crypto, "getRandomValues").mockImplementation(<T extends ArrayBufferView | null>(array: T): T => {
-        const values = array as unknown as Uint32Array;
-        for (let i = 0; i < values.length; i++) {
-            state = (state + 0x6d2b79f5) >>> 0;
-            let t = state;
-            t = Math.imul(t ^ (t >>> 15), t | 1);
-            t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
-            values[i] = (t ^ (t >>> 14)) >>> 0;
-        }
-        return array;
-    });
-}
 
 /** Adds a fighter of any character to the battle at full AP, and returns it: the state is shared, so a later `battleOf` sees it. */
 export function addFighter(game: RealmArenaTestGame, owner: string, character: CharacterId, square: Square): Fighter {
