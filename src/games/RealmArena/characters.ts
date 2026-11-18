@@ -220,6 +220,15 @@ export interface Character {
      * with only structures standing is wiped out. Absent, a character.
      */
     structure?: true;
+    /**
+     * The character's pool of abilities to pick from at muster (rules version 12,
+     * §40.3): `fixed` are always its own, `picks` more are taken from the rest of
+     * its `abilities` and the abilities its options add (`loadoutPoolOf`), and
+     * `defaults` is the pick a figure musters with unless its player picks another
+     * (ready-made squads, warbands, waves). Absent, it has no pool and fights with
+     * its whole kit, as every character does before version 12.
+     */
+    loadout?: { fixed: readonly AbilityId[]; picks: number; defaults: readonly AbilityId[] };
 }
 
 
@@ -255,14 +264,101 @@ export interface Kit {
     abilities: readonly AbilityId[];
 }
 
-/** Kits are reused, starter and swapped alike: the planner reads them thousands of times a turn. */
+/** One ability a character with a pool (§40.3) can pick, and the mastery rank that unlocks it: 0 for its own kit's. */
+export interface LoadoutEntry { ability: AbilityId; rank: 0 | 1 | 2 | 3 }
+
+/** A character's whole pool (§40.3): what it always carries, how many it picks, what it takes by default, and everything it can pick. */
+export interface LoadoutPool {
+    fixed: readonly AbilityId[];
+    picks: number;
+    defaults: readonly AbilityId[];
+    entries: readonly LoadoutEntry[];
+}
+
+/** Pools are read by the muster check, `kitOf` and undo: built once per catalogue's options and character. */
+const POOLS = new WeakMap<object, Map<CharacterId, LoadoutPool>>();
+
+/**
+ * Whether an option is one of its character's pool entries (§40.2) rather than
+ * a swap: an ability option of a character that has a pool. A weapon option is
+ * always a swap.
+ */
+export function isPoolEntry(option: OptionId, context?: RulesContext): boolean {
+    const { CHARACTERS, OPTIONS } = rulesetOf(context);
+    const entry = OPTIONS[option];
+    return "ability" in entry && CHARACTERS[entry.character]?.loadout !== undefined;
+}
+
+/**
+ * A character's pool (§40.3): its `abilities` but the `fixed`, at rank 0 and in
+ * their order, then each ability option it has (a weapon option isn't a pick,
+ * §40.2) at the option's rank. Undefined for a character with no pool, which
+ * fights with its whole kit.
+ */
+export function loadoutPoolOf(character: CharacterId, context?: RulesContext): LoadoutPool | undefined {
+    const { CHARACTERS, OPTIONS } = rulesetOf(context);
+    const loadout = CHARACTERS[character]?.loadout;
+    if (!loadout) return undefined;
+    let pools = POOLS.get(OPTIONS);
+    if (!pools) POOLS.set(OPTIONS, pools = new Map());
+    let pool = pools.get(character);
+    if (!pool) {
+        pool = Object.freeze({
+            ...loadout,
+            entries: Object.freeze([
+                ...CHARACTERS[character].abilities.filter(id => !loadout.fixed.includes(id)).map((ability): LoadoutEntry => ({ ability, rank: 0 })),
+                ...(Object.keys(OPTIONS) as OptionId[]).filter(id => OPTIONS[id].character === character && isPoolEntry(id, context))
+                    .map((id): LoadoutEntry => ({ ability: (OPTIONS[id] as { ability: AbilityId }).ability, rank: OPTIONS[id].rank })),
+            ]),
+        });
+        pools.set(character, pool);
+    }
+    return pool;
+}
+
+/**
+ * The abilities a figure with a pool carries besides its fixed ones (§40.3), in
+ * its pool's order: the loadout it was mustered with, or its character's
+ * defaults. Undefined for a character with no pool, which fights with its
+ * whole kit.
+ */
+export function loadoutOf(subject: { character: CharacterId; loadout?: readonly AbilityId[] }, context?: RulesContext): readonly AbilityId[] | undefined {
+    const pool = loadoutPoolOf(subject.character, context);
+    if (!pool) return undefined;
+    const picked = Array.isArray(subject.loadout) ? subject.loadout : pool.defaults;
+    return pool.entries.map(entry => entry.ability).filter(id => picked.includes(id));
+}
+
+/** Kits are reused, starter, swapped and picked alike: the planner reads them thousands of times a turn. */
 const STARTER_KITS = new WeakMap<Character, Kit>();
 const SWAPPED_KITS = new WeakMap<Character, WeakMap<CharacterOption, Kit>>();
-export function kitOf(character: CharacterId, option?: OptionId, context?: RulesContext): Kit {
+/** A character with a pool: its kits by weapon option and the loadout as stored (a fighter's is in pool order, §40.3). */
+const LOADOUT_KITS = new WeakMap<Character, Map<string, Kit>>();
+/** The planner's hot path: the default kit per character, with nothing picked and no weapon swapped. */
+const DEFAULT_LOADOUT_KITS = new WeakMap<Character, Kit>();
+export function kitOf(character: CharacterId, option?: OptionId, context?: RulesContext, loadout?: readonly AbilityId[]): Kit {
     const { CHARACTERS, OPTIONS } = rulesetOf(context);
     const starter = CHARACTERS[character];
     const { weapon, abilities } = starter;
     const swap: CharacterOption | undefined = option ? OPTIONS[option] : undefined;
+    if (starter.loadout) {
+        // Only a muster's checked list is ever stored; anything else reads as the defaults, never a throw.
+        if (loadout !== undefined && !Array.isArray(loadout)) loadout = undefined;
+        // §40.2: an ability option isn't a swap here, it's a pool entry; only a weapon swaps.
+        const weaponSwap = swap && swap.character === character && "weapon" in swap ? swap : undefined;
+        const plain = weaponSwap || loadout ? undefined : DEFAULT_LOADOUT_KITS.get(starter);
+        if (plain) return plain;
+        const key = `${weaponSwap ? option : ""}|${loadout ? loadout.join() : ""}`;
+        let kits = LOADOUT_KITS.get(starter);
+        if (!kits) LOADOUT_KITS.set(starter, kits = new Map());
+        let kit = kits.get(key);
+        if (!kit) {
+            kit = Object.freeze({ weapon: weaponSwap ? weaponSwap.weapon : weapon, abilities: Object.freeze([...starter.loadout.fixed, ...loadoutOf({ character, loadout }, context)!]) });
+            kits.set(key, kit);
+        }
+        if (!weaponSwap && !loadout) DEFAULT_LOADOUT_KITS.set(starter, kit);
+        return kit;
+    }
     if (!swap || swap.character !== character) {
         let kit = STARTER_KITS.get(starter);
         if (!kit) {

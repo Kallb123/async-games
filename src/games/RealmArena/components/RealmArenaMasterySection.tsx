@@ -4,7 +4,7 @@ import ListRow from '@/components/ui/ListRow';
 import ListSection from '@/components/ui/ListSection';
 import { CHARACTERS, OPTIONS } from '@/games/RealmArena/characters';
 import { rankOf, type PlayerMastery } from '@/games/RealmArena/mastery';
-import { masteryRoster, CHARACTER_MARK, masteryLine, optionsFor, optionView } from '@/games/RealmArena/roster';
+import { masteryRoster, CHARACTER_MARK, masteryLine, unlocksFor, optionView } from '@/games/RealmArena/roster';
 
 interface RealmArenaMasterySectionProps {
     /** The player's record with each character they've fought with; empty, or absent, for one who never has. */
@@ -33,7 +33,7 @@ export default function RealmArenaMasterySection({ mastery = {}, isLoading, isRe
             {fought ? masteryRoster(mastery).map(({ id, retired }) => {
                 const xp = mastery[id]?.xp ?? 0;
                 const rank = rankOf(xp);
-                const unlocked = retired ? [] : optionsFor(id).filter(option => OPTIONS[option].rank <= rank).map(option => optionView(option).name);
+                const unlocked = retired ? [] : unlocksFor(id).filter(option => OPTIONS[option].rank <= rank).map(option => optionView(option).name);
                 return (
                     <ListRow
                         key={id}

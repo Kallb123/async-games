@@ -33,7 +33,7 @@ function warbandTurns(squad: readonly CharacterId[], rulesVersion?: number, dres
     const context = rulesVersion === undefined ? undefined : { rulesVersion };
     let id = 0;
     const fighters = dressed(owners.flatMap((owner, seat) => readyMadeMuster(FOUR_GATE_FORT, seat, owner === AI ? squad : FACTIONS.realm.readyMade[80])
-        .map(pick => newFighter(id++, owner, pick.character, pick.square, null, undefined, false, context))));
+        .map(pick => newFighter(id++, owner, pick.character, pick.square, null, undefined, undefined, false, context))));
     let state: BattleState = { field: FOUR_GATE_FORT, fighters, ...context, sides: { a: "team", b: "team", c: "team", [AI]: "enemy" } };
     const turn = (owner: string, round: number) => {
         state = { ...state, fighters: startTurn(state, owner).fighters };

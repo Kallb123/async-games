@@ -377,7 +377,7 @@ describe("the team's HP in Hold Out", () => {
             .toEqual({ manAtArms: 12, knight: 18, archer: 9, scout: 9, mage: 8, cleric: 11 });
         expect(maxHpOf({ character: "knight" })).toBe(CHARACTERS.knight.hp);
         expect(maxHpOf({ character: "knight", maxHp: 18 })).toBe(18);
-        expect(newFighter(1, "a", "knight", 0, null, undefined, true)).toMatchObject({ hp: 18, maxHp: 18 });
+        expect(newFighter(1, "a", "knight", 0, null, undefined, undefined, true)).toMatchObject({ hp: 18, maxHp: 18 });
         expect(musterHp("knight", true)).toBe(18);
         expect(musterHp("knight", false)).toBe(12);
         expect(newFighter(1, "a", "knight", 0)).not.toHaveProperty("maxHp");

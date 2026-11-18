@@ -2,10 +2,10 @@ import { rulesetOf, type RulesContext } from "./rulesets";
 import { useResettingState } from "@/utils/hooks/useResettingState";
 import type { Battlefield, Square } from "@/utils/games/battlefield/terrain";
 import { pluralize } from "@/utils/ui/text";
-import { readyMadeSquad, squadPoints, type FactionId, type ItemId, type OptionId } from "./characters";
+import { loadoutPoolOf, readyMadeSquad, squadPoints, type AbilityId, type FactionId, type ItemId, type OptionId } from "./characters";
 import type { Ranks } from "./mastery";
 import { itemsPoints, musterRefusal, pickOf, readyMadeMuster, type MusterPick } from "./rules";
-import { handItem, handOut, itemsOf, NO_ITEMS, placeTap, squadCounts, squadOf, type ItemCounts, type Placement, type SquadCounts } from "./ui";
+import { handItem, handOut, itemsOf, NO_ITEMS, placeTap, squadCounts, squadOf, withPick, type ItemCounts, type Placement, type SquadCounts } from "./ui";
 
 /**
  * A squad being mustered, before it's sent (docs/games/realm-arena.md §17.3
@@ -83,6 +83,12 @@ export function useMusterDraft(field: Battlefield, seat: number, budget: number,
         /** Musters the character picked up with `option`, or as the starter character. */
         choose: (option: OptionId | null) => outfit((all, selected) =>
             all.map((pick, i) => i === selected ? pickOf({ ...pick, option: option ?? undefined }) : pick)),
+        /** Takes `ability` into battle with the character picked up (§40.4), dropping the one it took first: in pick order, which the kit sorts itself. */
+        pickAbility: (ability: AbilityId) => outfit((all, selected) =>
+            all.map((pick, i) => {
+                const pool = loadoutPoolOf(pick.character, context);
+                return i === selected && pool ? pickOf({ ...pick, loadout: withPick(pick.loadout ?? pool.defaults, ability, pool.picks) }) : pick;
+            })),
     };
 }
 

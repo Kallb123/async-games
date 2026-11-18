@@ -19,6 +19,14 @@ const ABILITIES = {
 
 const CHARACTERS = {
     ...catalogueV11.CHARACTERS,
+    // §40.1: the Realm's figures pick two abilities at muster beside the one they always have. The
+    // pool is the character's other abilities and its ability options (§40.2); `defaults` are
+    // *Proposed*, a starting point for the balance harness (§40.5).
+    manAtArms: { ...catalogueV11.CHARACTERS.manAtArms, loadout: { fixed: [], picks: 2, defaults: ["cleave", "leap"] } },
+    knight: { ...catalogueV11.CHARACTERS.knight, loadout: { fixed: ["bulwark"], picks: 2, defaults: ["taunt", "shove"] } },
+    archer: { ...catalogueV11.CHARACTERS.archer, loadout: { fixed: [], picks: 2, defaults: ["aimedShot", "poisonArrow"] } },
+    mage: { ...catalogueV11.CHARACTERS.mage, loadout: { fixed: [], picks: 2, defaults: ["fireball", "thunder"] } },
+    cleric: { ...catalogueV11.CHARACTERS.cleric, loadout: { fixed: ["heal"], picks: 2, defaults: ["raise", "blessing"] } },
     // §39.3: a Bloater downed by anything but its own Burst bursts where it falls.
     bloater: { ...catalogueV11.CHARACTERS.bloater, burstsWhenDowned: true },
     // §39.5: the Swarm's elites, the computer's alone (`FACTIONS.swarm.elites`).

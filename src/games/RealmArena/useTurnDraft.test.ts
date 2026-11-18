@@ -207,7 +207,7 @@ describe("hpPreview", () => {
         const version = { rulesVersion: 9 };
         const walled = buildBattlefield({ name: "Pinched", rows: ["..........", "..........", "....#.....", "...#......", ".........."], deployments: [], objectives: {} });
         const made = (id: number, owner: string, character: CharacterId, square: number, extra: Partial<Fighter> = {}): Fighter =>
-            ({ ...newFighter(id, owner, character, square, null, undefined, false, version), ap: ACTION_POINTS, ...extra });
+            ({ ...newFighter(id, owner, character, square, null, undefined, undefined, false, version), ap: ACTION_POINTS, ...extra });
         // The leaper starts beside its landing (a one-square leap), with a mate and a downed enemy there too.
         const leaper = made(0, "a", "manAtArms", at(walled, 2, 2)), mate = made(1, "a", "cleric", at(walled, 2, 3));
         const hit = made(2, "b", "knight", at(walled, 3, 1)), hitToo = made(3, "b", "archer", at(walled, 4, 1));

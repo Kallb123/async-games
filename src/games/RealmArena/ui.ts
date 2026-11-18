@@ -697,6 +697,14 @@ export function handItem(picks: MusterPick[], selected: number, item: ItemId): M
     return picks.map((pick, i) => i === selected ? pickOf({ ...pick, item }) : i === from ? pickOf({ ...pick, item: mine }) : pick);
 }
 
+/**
+ * The loadout after taking `ability` (§40.4): it goes last, and the one taken
+ * longest ago falls off the front so the list stays `picks` long.
+ */
+export function withPick(current: readonly AbilityId[], ability: AbilityId, picks: number): AbilityId[] {
+    return [...current.filter(id => id !== ability), ability].slice(-picks);
+}
+
 /** A squad being placed: where each pick stands, and the one picked up to move, if any. */
 export interface Placement {
     picks: MusterPick[];

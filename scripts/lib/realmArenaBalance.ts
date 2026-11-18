@@ -13,7 +13,7 @@
 // play another (`TeamPlanner`, an older one) while the warbands play this
 // checkout's, so the change shows as the warbands' alone.
 
-import { nextAction, turnMemo } from "../../src/games/RealmArena/ai";
+import { nextAction, temperamentSwitch, turnMemo } from "../../src/games/RealmArena/ai";
 import { DIFFICULTY_NAMES, BATTLE_SIZE_NAMES, FACTIONS, type BattleSize, type Difficulty, type FactionId } from "../../src/games/RealmArena/characters";
 import type { RealmArenaSettings } from "../../src/games/RealmArena/RealmArenaModels";
 import { battlefieldById, mapFor, type CoopMap } from "../../src/games/RealmArena/maps";
@@ -49,6 +49,13 @@ export interface BalanceScenario {
      * was; it changes nothing under rules that have no choice.
      */
     rally?: RallyPolicy;
+    /**
+     * Whether the Swarm's temperaments (§39.8) shape the planner's choices
+     * (`--temperaments`): set on `temperamentSwitch` as each battle begins.
+     * Absent is on, as in the game, and leaves the scenario's name as it was;
+     * `"off"` is named in it, to see what they do (§40.5).
+     */
+    temperaments?: "off";
 }
 
 /** How the harness's team makes a rally choice (`--rally`). */
@@ -137,6 +144,7 @@ export function scenarioKey(s: BalanceScenario): string {
         s.fog ? "fog" : undefined,
         s.rules !== undefined ? `rules v${s.rules}` : undefined,
         s.rally === "always" ? "rally always" : undefined,
+        s.temperaments === "off" ? "temperaments off" : undefined,
     ].filter(Boolean);
     return `${team} vs ${factionName(s.enemy)} · ${mission}${extras.length ? ` · ${extras.join(", ")}` : ""}`;
 }
@@ -180,6 +188,8 @@ const seatsFor = (players: number) => Array.from({ length: players }, (_, k) => 
  * checkout's otherwise; the warbands always play this checkout's.
  */
 export async function simulateBattle(scenario: BalanceScenario, seed: number, team?: TeamPlanner): Promise<BattleSample> {
+    // The switch is the planner module's, so each worker (or a run in this process) sets its own before it plays.
+    temperamentSwitch.on = scenario.temperaments !== "off";
     const started = performance.now();
     const planner: Planner = team?.planner ?? { nextAction, turnMemo };
     seedRolls(seed);

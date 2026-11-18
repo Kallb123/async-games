@@ -10,7 +10,7 @@ import { isDropped, nextActivePlayer, registerPlayerDropoutAdapter } from "@/uti
 import { v4 as uuidv4, NIL as NIL_UUID } from 'uuid';
 import type { NextWave } from "@/games/RealmArena/apiModels";
 import type { IRealmArenaCoop, IRealmArenaGameData, IRealmArenaSpecificGameState } from "@/games/RealmArena/RealmArenaModels";
-import { DIFFICULTY_NAMES, enemyNameOf, factionById, musterBudget, readyMadeSquad, REALM_ONLY, warbandBudget, type Budget, type CharacterId, type FactionId, type OptionId } from "@/games/RealmArena/characters";
+import { DIFFICULTY_NAMES, enemyNameOf, factionById, loadoutPoolOf, musterBudget, readyMadeSquad, REALM_ONLY, warbandBudget, type Budget, type CharacterId, type FactionId, type OptionId } from "@/games/RealmArena/characters";
 import { battlefieldById, battlefieldOf } from "@/games/RealmArena/maps";
 import { addTally, NO_TALLY, type Tally } from "@/games/RealmArena/mastery";
 import {
@@ -340,7 +340,8 @@ const UNDO_DEPTHS = new WeakMap<object, number>();
  * character's whole turn of one-AP moves, for the character with the most AP
  * it could have — its turn's (`actionPointsOf`, every bonus included) and what
  * its abilities add when used (`Ability.bonusAp`), with any option it could be
- * mustered with. A turn spread over the squad can hold more undoable actions
+ * mustered with. A character with a pool (§40) counts every ability it could pick,
+ * so a bonus a default loadout leaves out is still reached. A turn spread over the squad can hold more undoable actions
  * than that, which only costs reach — the anchor decides what can be restored.
  */
 export function undoDepthOf(context: RulesContext): number {
@@ -350,7 +351,7 @@ export function undoDepthOf(context: RulesContext): number {
         const { CHARACTERS, OPTIONS, ABILITIES } = catalogue;
         const options = Object.keys(OPTIONS) as OptionId[];
         const kits = (Object.keys(CHARACTERS) as CharacterId[]).flatMap(character =>
-            [undefined, ...options.filter(id => OPTIONS[id]?.character === character)].map(option => ({ character, option })));
+            [undefined, ...options.filter(id => OPTIONS[id]?.character === character)].map(option => ({ character, option, loadout: loadoutPoolOf(character, context)?.entries.map(entry => entry.ability) })));
         const onUse = (fighter: (typeof kits)[number]) => abilitiesOf(fighter, context).reduce((sum, id) => sum + (ABILITIES[id]?.passive ? 0 : ABILITIES[id]?.bonusAp ?? 0), 0);
         depth = Math.max(...kits.map(fighter => actionPointsOf(fighter, context) + onUse(fighter)));
         UNDO_DEPTHS.set(catalogue, depth);
@@ -1107,7 +1108,7 @@ export function waveOf(gs: IRealmArenaSpecificGameState, owner: string, growing:
     const preferred = planned.map(pick => pick.square);
     const zone = freeSquares(gs, [...preferred, ...field.deployments[gs.seats.length + warband].filter(square => !preferred.includes(square))]);
     let nextId = nextFighterId(gs.fighters);
-    return missing.slice(0, zone.length).map((pick, index) => newFighter(nextId++, owner, pick.character, zone[index], pick.item ?? null, pick.option, undefined, gs));
+    return missing.slice(0, zone.length).map((pick, index) => newFighter(nextId++, owner, pick.character, zone[index], pick.item ?? null, pick.option, undefined, undefined, gs));
 }
 
 /**
@@ -1148,7 +1149,7 @@ function nestFighters(gs: IRealmArenaSpecificGameState, fighters: readonly Fight
     const nest = sites && factionById(gs.coop?.enemy, gs).nest;
     if (!sites || !nest) return [];
     let nextId = nextFighterId(fighters);
-    return warbandsFor(gs.seats).flatMap((owner, k) => (sites[k] ?? []).map(square => newFighter(nextId++, owner, nest, square, null, undefined, false, gs)));
+    return warbandsFor(gs.seats).flatMap((owner, k) => (sites[k] ?? []).map(square => newFighter(nextId++, owner, nest, square, null, undefined, undefined, false, gs)));
 }
 
 /**
@@ -1328,7 +1329,7 @@ export class RealmArenaMuster implements IGameCommand {
             const holdOut = gs.coop?.mission === "holdOut";
             gs.fighters = musters.flatMap(({ owner, picks }) => picks.map(pick => ({ owner, pick })))
                 .map(({ owner, pick }, id) => {
-                    const fighter = newFighter(id, owner, pick.character, pick.square, pick.item ?? null, pick.option, stout && !isWarband(owner), gs);
+                    const fighter = newFighter(id, owner, pick.character, pick.square, pick.item ?? null, pick.option, pick.loadout, stout && !isWarband(owner), gs);
                     // Remembered for a Resupply (§39.4): Hold Out's team alone, so no other battle holds, or sends, what a sealed muster bought.
                     return fighter.item && holdOut && !isWarband(owner) && ruleValuesOf(gs).RALLY_CHOICE ? { ...fighter, musteredItem: fighter.item } : fighter;
                 });

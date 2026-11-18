@@ -20,7 +20,7 @@ const AI = "ai:0";
 const SIDES = { a: "team", b: "team", [AI]: "enemy" };
 
 function ready(id: number, owner: string, character: CharacterId, square: Square, extra: Partial<Fighter> = {}, context?: RulesContext): Fighter {
-    return { ...newFighter(id, owner, character, square, null, undefined, false, context), ap: ACTION_POINTS, ...extra };
+    return { ...newFighter(id, owner, character, square, null, undefined, undefined, false, context), ap: ACTION_POINTS, ...extra };
 }
 
 type Area = { col: number; row: number; width: number; height: number };

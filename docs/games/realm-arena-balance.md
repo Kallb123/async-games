@@ -432,6 +432,47 @@ their values left *Proposed*: they are tuned with the rest once characters
 choose two abilities each, which changes what every side fights with.
 `temperamentSwitch.on` in `ai.ts` turns them off for that run.
 
+### Loadouts (§40)
+
+§40's loadouts: each of the Realm's figures fights with its fixed abilities
+and two picked from its pool, here always the defaults (the harness musters
+ready-made squads, and nobody in it is ranked). Measured at rules version 12
+against the Swarm, Hold Out, Normal, no fog, seeds 1–40, with the same seeds
+before and after: before is the branch's base (the §39 catalogue with whole
+kits), after is the loadouts with the Swarm's temperaments on — the default —
+and once more with them off (`--temperaments off`). The team is the Realm, so
+the temperaments change only how the warbands play. Six cells, 240 battles a
+run:
+
+| Cell | Team wins: whole kits → loadouts → loadouts, temperaments off | Team characters lost |
+|---|---:|---:|
+| Solo, Ruined Fort | 36 → 28 → 24 of 40 | 1.8 → 2.8 → 2.9 |
+| 2 players, Sacked Fort | 40 → 40 → 38 | 1.1 → 3.0 → 3.3 |
+| 3 players, Sacked Fort | 40 → 30 → 31 | 2.1 → 8.1 → 7.5 |
+| 3 players, Sunken Village | 36 → 25 → 27 | 4.9 → 9.4 → 8.4 |
+| 4 players, Sacked Fort | 40 → 36 → 40 | 2.6 → 8.8 → 6.0 |
+| 4 players, Sunken Village | 40 → 29 → 29 | 6.3 → 12.8 → 12.7 |
+| **All** | **232 → 188 → 189 of 240** | **18.8 → 44.9 → 40.8** |
+
+**What it says.** The loadout is the biggest single change to version 12's
+balance so far. With whole kits the team won 97% and lost about three
+characters a battle in the bigger cells; with two picks each it wins 78%, and
+loses two to three times as many. That's §34.9's worry measured: an Archer
+with two arrows is on cooldown more, and plain attacks carry more of the
+fight. It also takes version 12 out of saturation, so the levers of §39.9 can
+now be read. Against its target (a half to two thirds on Normal, no cell
+under a quarter or over three quarters), the three-player Sunken Village is
+inside it at 63%, three cells sit just above at 70–75%, and the two-player
+and four-player Sacked Fort, at 100% and 90%, are still too easy.
+
+The temperaments still show little: the same wins (188 against 189), and the
+team loses about four characters more in all with them on, most of it in the
+four-player Sacked Fort — a hint that the Swarm plays better by them, inside
+the noise of 40 battles a cell. They stay on, as the game's default.
+
+Nothing is tuned here: the defaults (§40.1) and the levers are §39.9's to
+balance, with the rest of version 12.
+
 ## How each lever was built
 
 For re-running: each was an environment switch in a scratch worktree.

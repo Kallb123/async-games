@@ -1,12 +1,13 @@
 // Realm Arena's characters, their kits and their mastery as the screens word
 // them (docs/games/realm-arena.md §13.6, §23): each one's mark, a weapon in a
-// line, the options and where XP stands against the ranks. Readings of the
-// data in characters.ts and mastery.ts, and nothing of the rules, so a screen
-// outside the game — the profile's mastery section — can import them without
-// carrying the whole of rules.ts into its bundle. The board's own readings of
+// line, the options, the abilities a loadout takes (§40) and where XP stands
+// against the ranks. Readings of the data in characters.ts and mastery.ts, and
+// nothing of the rules, so a screen outside the game — the profile's mastery
+// section — can import them without carrying the whole of rules.ts into its
+// bundle. The board's own readings of
 // the battle are ui.ts's.
 
-import { CHARACTERS, type AbilityId, type CharacterId, type FactionId, type OptionId, type Weapon } from "./characters";
+import { CHARACTERS, isPoolEntry, kitOf, loadoutPoolOf, type AbilityId, type CharacterId, type FactionId, type OptionId, type Weapon } from "./characters";
 import { ruleValuesOf, rulesetOf, type RulesContext } from "./rulesets";
 import { nextRankXp, rankOf, type PlayerMastery } from "./mastery";
 
@@ -55,13 +56,34 @@ export function weaponLine(weapon: Weapon, context?: RulesContext): string {
     return `${weapon.accuracy}% · range ${weapon.range} · ${weapon.damage} damage${leaves}`;
 }
 
-/** A character's options (§23.2), lowest rank first: what its muster row offers, locked or not. */
-export function optionsFor(character: CharacterId, context?: RulesContext): OptionId[] {
+/** Every option a character has unlocked by mastery (§23.2), lowest rank first: what the profile lists, an ability option of a character with a pool included. */
+export function unlocksFor(character: CharacterId, context?: RulesContext): OptionId[] {
     const { OPTIONS } = rulesetOf(context);
     return (Object.keys(OPTIONS) as OptionId[])
         .filter(id => OPTIONS[id].character === character)
         .sort((a, b) => OPTIONS[a].rank - OPTIONS[b].rank);
 }
+
+/**
+ * A character's options (§23.2), lowest rank first: what its muster row
+ * offers, locked or not. Where it has a pool of abilities (§40) an ability
+ * option is one of the pool's entries, not a swap, so only the weapon ones
+ * are options there.
+ */
+export function optionsFor(character: CharacterId, context?: RulesContext): OptionId[] {
+    return unlocksFor(character, context).filter(id => !isPoolEntry(id, context));
+}
+
+/** The names of what a figure with a pool took into battle, in its pool's order: "Aimed shot · Poison arrow". Undefined with no pool. */
+export function loadoutLine(subject: { character: CharacterId; loadout?: readonly AbilityId[] }, context?: RulesContext): string | undefined {
+    const pool = loadoutPoolOf(subject.character, context);
+    if (!pool) return undefined;
+    const { ABILITIES } = rulesetOf(context);
+    return kitOf(subject.character, undefined, context, subject.loadout).abilities.slice(pool.fixed.length).map(id => ABILITIES[id]!.name).join(" · ");
+}
+
+/** How a screen says a rank with a character is what unlocks something (§23.2, §40.3): a pick in its loadout, an option. */
+export const unlockNote = (rank: number): string => `Unlocked at rank ${rank}`;
 
 /** The glyph an ability's row leads with, where a weapon's leads with `weaponMark`. */
 export const ABILITY_MARK = "✦";

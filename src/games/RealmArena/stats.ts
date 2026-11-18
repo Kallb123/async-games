@@ -10,8 +10,8 @@ import { ruleValuesOf, rulesetOf, type RulesContext } from "./rulesets";
 import { DEFAULT_CLIMB } from "@/utils/games/battlefield/pathfinding";
 import { FULL_HEIGHT } from "@/utils/games/battlefield/terrain";
 import { pluralize } from "@/utils/ui/text";
-import { kitOf, ITEM_IDS, STRIKING_ABILITIES, type Ability, type AbilityId, type EffectId, type CharacterId, type Item, type ItemId, type OptionId, type Weapon } from "./characters";
-import { CHARACTER_IDS, optionsFor } from "./roster";
+import { kitOf, loadoutPoolOf, ITEM_IDS, STRIKING_ABILITIES, type Ability, type AbilityId, type EffectId, type CharacterId, type Item, type ItemId, type OptionId, type Weapon } from "./characters";
+import { CHARACTER_IDS, optionsFor, unlockNote } from "./roster";
 import { ROLL_SIDES, sightOf } from "./rules";
 
 /** One thing a character can do, or an item it can use, as a row of the stats table. */
@@ -202,6 +202,7 @@ export function characterStats(id: CharacterId, context?: RulesContext): UnitSta
     const character = CHARACTERS[id];
     const { weapon } = kitOf(id, undefined, context);
     const climb = character.climb ?? DEFAULT_CLIMB;
+    const pool = loadoutPoolOf(id, context);
     return {
         name: character.name,
         summary: character.role,
@@ -215,7 +216,13 @@ export function characterStats(id: CharacterId, context?: RulesContext): UnitSta
         ],
         actions: [
             weaponStats(weapon, "Weapon", "weapon", context),
-            ...character.abilities.map(ability => abilityStats(ability, weapon, "Ability", ability, context)),
+            ...(pool
+                // §40.4: its own abilities as always carried, then what it picks from and how many.
+                ? [
+                    ...pool.fixed.map(ability => abilityStats(ability, weapon, "Always", ability, context)),
+                    ...pool.entries.map(({ ability, rank }) => abilityStats(ability, weapon, rank > 0 ? unlockNote(rank) : `Pick ${pool.picks}`, ability, context)),
+                ]
+                : character.abilities.map(ability => abilityStats(ability, weapon, "Ability", ability, context))),
         ],
         options: optionsFor(id, context).map(option => optionStats(option, context)),
     };

@@ -154,7 +154,7 @@ describe("Realm Arena replay", () => {
     it("tells a death burst's fields, and a Burst action's without the downed key (§39.3)", () => {
         const field = fieldOf(...Array(3).fill("........"));
         const piece = (id: number, owner: string, character: "archer" | "bloater" | "knight", col: number, extra = {}) =>
-            ({ ...newFighter(id, owner, character, at(field, col, 1), null, undefined, false, { rulesVersion: 12 }), ap: 4, ...extra });
+            ({ ...newFighter(id, owner, character, at(field, col, 1), null, undefined, undefined, false, { rulesVersion: 12 }), ap: 4, ...extra });
         const battle = { field, fighters: [piece(0, "a", "archer", 0), piece(1, "b", "bloater", 2, { hp: 1 }), piece(2, "b", "knight", 3), piece(3, "a", "archer", 1)], rulesVersion: 12 };
         const keys = (events: readonly ToldEvent[]) => events.filter(event => event.kind === "burst").map(({ kind: _kind, ...rest }) => Object.keys(rest).sort());
         expect(keys(act(battle, "a", { kind: "attack", fighter: 0, target: 1 }, () => 1).events)).toEqual([["damage", "downed", "fighter", "targets"]]);

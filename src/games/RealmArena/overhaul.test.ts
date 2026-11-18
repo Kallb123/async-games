@@ -21,7 +21,7 @@ const field = buildBattlefield({ name: "Open", rows: Array(10).fill("...........
 const point = (col: number, row = 3) => at(field, col, row);
 const version = { rulesVersion: 9 };
 function fighter(id: number, character: CharacterId, col: number, owner = "a", row = 3, extra: Partial<Fighter> = {}): Fighter {
-    return { ...newFighter(id, owner, character, point(col, row), null, undefined, false, version), ap: 4, ...extra };
+    return { ...newFighter(id, owner, character, point(col, row), null, undefined, undefined, false, version), ap: 4, ...extra };
 }
 const battle = (...fighters: Fighter[]): BattleState => ({ field, fighters, ...version });
 function run(state: BattleState, action: Action, rolls: number[] = []) {
@@ -113,7 +113,7 @@ describe("Knight", () => {
 
     it("from v12 Taunt braces allies within 3 squares of the Knight, itself included, and no further (§39.2)", () => {
         const v12 = { rulesVersion: 12 };
-        const at12 = (id: number, character: CharacterId, col: number, owner = "a") => ({ ...newFighter(id, owner, character, point(col), null, undefined, false, v12), ap: 4 });
+        const at12 = (id: number, character: CharacterId, col: number, owner = "a") => ({ ...newFighter(id, owner, character, point(col), null, undefined, undefined, false, v12), ap: 4 });
         const knight = at12(0, "knight", 3), near = at12(1, "archer", 6), far = at12(2, "archer", 7), enemy = at12(3, "manAtArms", 4, "b");
         const state = { ...battle(knight, near, far, enemy), ...v12, sides: { a: "team", b: "enemy" } };
         const result = run(state, { kind: "taunt", fighter: 0 });

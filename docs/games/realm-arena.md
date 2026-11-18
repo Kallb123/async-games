@@ -1,10 +1,10 @@
 # Realm Arena — Game Design Document
 
-**Status:** v1.65. The Realm troop overhaul (§34) is implemented for new
+**Status:** v1.71. The Realm troop overhaul (§34) is implemented for new
 battles in rules version 9, using §34.10's proposed defaults for playtesting,
 sight with angles (§36) in rules version 10, co-op for a team of four in
 Hold Out (§37), and every Archer shot at 2 AP (§38) in rules version 11. Battles already created keep their original rules.
-§39 plans what comes next for Hold Out against the Swarm; its first PR, Taunt's radius (§39.2), is built in the unreleased rules version 12.
+§39 plans what comes next for Hold Out against the Swarm; its first seven PRs (§39.2–§39.8) are built, six of them in the unreleased rules version 12, which also holds the ability loadouts (§40).
 Earlier implementation
 notes and revision history describe the game before this overhaul wherever
 they conflict with §34.
@@ -1486,6 +1486,9 @@ first, so mastery moved from C4 to C5.
   or one ability. It's picked per figure at muster, like an item, and costs
   the same points as the kit it replaces. A character with no option picked
   is the starter character of §13.6.
+  *From rules version 12 (§40.2):* for the Realm's five, an ability option
+  joins the character's pool of abilities to pick from rather than swapping
+  one out; Frost bolt still swaps the Mage's weapon.
 - **An option is a sidegrade.** It never adds HP, accuracy or AP outright.
   Anything it adds, it pays for by giving something else up.
 - **The options picked are public once the battle starts**, like items (in
@@ -4871,7 +4874,7 @@ two different arrows in one turn, but never the same one twice running.
 
 ## 39. Hold Out against the Swarm: the next seven PRs (plan)
 
-*Planned; PRs 1, 2, 3, 4 and 5 (§39.2, §39.3, §39.4, §39.5, §39.6) are built, in a catalogue not yet released.* Hold Out with the players as the Realm against the
+*Planned; PRs 1–7 (§39.2–§39.8) are built, PRs 1–6 in a catalogue not yet released.* Hold Out with the players as the Realm against the
 computer's Swarm is the game's main mode, which is why the Realm's kit was
 rebuilt first (§34). This section plans what makes the Swarm worth using that
 kit on: a Taunt with a reach, Bloaters that burst when they fall, a rally each
@@ -4899,9 +4902,10 @@ Every value marked *Proposed* is a starting point for the balance harness
   so Hold Out against them plays as it does today.
 - **A command version where one is due** (`docs/command-versions.md`): for the
   rally's new action (§39.4) only. The End turn landing a wave by the new rules
-  (§39.6, §39.7) needs none: version 12 is unreleased, no battle can be created
-  under it until §39.9, and by then every client sends command version 12 or
-  later, so the catalogue is the only gate those waves need.
+  (§39.6, §39.7) and the loadout a muster's picks carry (§40.3) need none:
+  version 12 is unreleased, no battle can be created under it until §39.9, and
+  by then every client sends command version 12 or later, so the catalogue is
+  the only gate they need.
 - **One "What's new" line**, written by the last PR, for the lot.
 - **Step 0: a baseline.** Before PR 1, run the harness at version 11: Hold Out
   against the Swarm, teams of one to four, on the gate forts, the Sacked Fort
@@ -5706,12 +5710,14 @@ the Knight beside her rather than trading blows with it.
   everything version 12 changes and that nothing else of version 11 did.
 - **Copy.** The guide's co-op section (the rally's choices, the themed waves,
   the nests, the Bloater), the tutorial's Hold Out steps, and the setup
-  screen's line for Hold Out.
+  screen's line for Hold Out; and the loadouts (§40.6): the guide's first
+  section, where a rank-1 option is still a swap, and the tutorial's muster.
 - **Achievements** (§30.4, ids permanent): *Regicide*, for downing a Brood
   Queen, and *Scorched Earth*, for destroying every nest before one wave.
   Both judged at the end from the public response, with their null views in
   `hiddenHands.test.ts`.
-- **What's new.** One line, under enhancements.
+- **What's new.** One line, under enhancements, the loadouts (§40) among
+  what it names.
 - **The crew.** `croupier` for PRs 2, 5 and 6 (bursts in fog, the wave's name,
   the nests); `locksmith` and `gremlin` for PR 3's new action; `rulebook` for
   PR 8; `caveman` for all of them.
@@ -5719,8 +5725,8 @@ the Knight beside her rather than trading blows with it.
 ### 39.10 What it leaves, and what it meets
 
 - **The loadout** ([issue 957](https://github.com/Kallb123/async-games/issues/957))
-  is a rules change of its own. If it lands in the same release it shares
-  version 12; if later, it's version 13. Either way it should be measured
+  is a rules change of its own. It shares rules version 12, built in §40,
+  and it should be measured
   after §39.5 and §39.6: the elites are what make a single-target pick worth
   taking, so a loadout tuned before them would be tuned against the wrong
   enemy.
@@ -5744,6 +5750,163 @@ the Knight beside her rather than trading blows with it.
    squad may ever muster one.
 7. **Does the rally's choice reach Hold Out against every enemy** (as planned),
    or the Swarm alone?
+
+---
+
+## 40. Ability loadouts (rules version 12)
+
+*Built, in the unreleased rules version 12, from
+[issue 957](https://github.com/Kallb123/async-games/issues/957).* At muster
+each of the Realm's figures keeps its signature ability, where it has one,
+and picks **two** more from its character's pool. It shares version 12 with
+§39 (§39.10): the loadout is measured against the elites and the themed waves
+it will meet, with the Swarm's temperaments (§39.8) on, as they are by default.
+
+Every value marked *Proposed* is a starting point for the balance harness
+(§30.12), not a decision; version 12 is unreleased, so `catalogues/v12.ts` may
+still change them until §39.9 releases it.
+
+### 40.1 The rule
+
+- **A figure fights with its signature ability, if it has one, and two picked
+  from its pool.** Nothing else of its kit changes: weapon, HP, movement and
+  points are its character's.
+- **The pick is per figure**, so two Archers can carry different arrows. It's
+  sealed with the squad during the muster, and public once the battle starts,
+  as a mastery option is (§23.2): in fog of war, on every character the viewer
+  can see.
+- **Points are unchanged by the pick.** A loadout costs what its character
+  does.
+- **Every character with a pool has a default loadout**, which a figure
+  musters with unless its player picks another: the ready-made squads, a
+  timed-out muster, the computer's warbands (the Renegades among them) and
+  Hold Out's waves all fight with it, and a new player never has to choose.
+- **Two picks for every Realm character** (*agreed*), the Archer and the
+  Cleric too (issue 957, question 2). Their pools are the largest, so the
+  choice is widest there; three would leave an Archer missing only two arrows
+  and barely a choice.
+- **The Knight and the Man-at-arms are cut to two as well** (*agreed*)
+  (question 1). One rule for the whole faction, and their pools grow with
+  mastery: a Knight's choice is empty at rank 0 (Taunt and Shove are its
+  whole pool) and real from rank 1, when Demolish joins it.
+- **The Cleric's Heal is fixed** (*agreed*) (question 4), as the Knight's
+  Bulwark is: a Cleric is the squad's healer, and a passive or a heal isn't
+  a pick worth weighing against an arrow.
+- **Other factions are unchanged.** Their kits are already one or two
+  abilities, and none of their characters has a pool.
+
+| Character | Always has | Pool | Default (*agreed*) |
+|---|---|---|---|
+| Man-at-arms | — | Cleave, Leap, Slash and Dash; *rank 1:* Shield bash | Cleave, Leap |
+| Knight | Bulwark | Taunt, Shove; *rank 1:* Demolish | Taunt, Shove |
+| Archer | — | Aimed shot, Poison Arrow, Bouncing Arrow, Splitting Arrow, Shoot + Dodge; *rank 1:* Crippling shot | Aimed shot, Poison Arrow |
+| Mage | — | Fireball, Ice Ball, Thunder, Focus | Fireball, Thunder |
+| Cleric | Heal | Raise, Beckon, Blessing, Ward; *rank 1:* Purify | Raise, Blessing |
+
+Why these defaults (question 3): each is the plainest pair that does the
+character's job. The Man-at-arms' avoids Slash and Dash with Cleave, the pair
+§34.9 already flags; the Mage's leaves out Ice Ball, which slows friends as
+well as foes and overlaps Frost bolt; the Cleric's keeps Raise, a second life
+for the squad, and Blessing, the one that helps everyone.
+
+### 40.2 Mastery adds to the pool
+
+- **An ability option joins its character's pool** rather than swapping out a
+  named ability (§23.2): Shield bash, Demolish, Crippling shot and Purify are
+  each one more to pick from, unlocked at the rank the option always had. It
+  keeps §23's "options, not power": a rank widens the choice, and a figure
+  still takes two.
+- **Frost bolt stays an option.** It swaps the Mage's weapon, not an ability,
+  so it's picked as it is today, beside the loadout.
+- **Ranks 2 and 3 have an obvious job now** (question 5): more pool entries,
+  one or two a rank. Which abilities they are is still open, and waits on
+  playing this (§23.2).
+- **Data.** Nothing new is stored for it: the options keep their `rank` and
+  `ability`, and a character with a pool reads an ability option as a pool
+  entry rather than a swap. A figure can't be mustered with an ability option
+  as its `option` in version 12; the muster refuses it.
+
+### 40.3 Engine
+
+- **`Character.loadout`** (`catalogues/v12.ts`): `{ fixed, picks, defaults }`.
+  The pool is the character's other abilities, in their order, and then its
+  ability options, each needing its rank (`loadoutPoolOf`). Absent, the
+  character has no pool and fights with its whole kit, as in every earlier
+  catalogue.
+- **The pick carries it** (`MusterPick.loadout`), and so does the fighter
+  (`Fighter.loadout`); absent on both means the default. `kitOf` reads it:
+  the fixed abilities, then those picked in the pool's order, so a loadout
+  sent in either order is the same kit and the same cached object.
+- **The muster is checked against the snapshot** (`musterRefusal`, through
+  `loadoutRefusal`): a loadout only for a character with a pool, a list of
+  exactly `picks` different abilities, each in that character's pool and,
+  for an option's, unlocked by the player's own rank. Nothing in the request
+  is trusted, and `pickOf` keeps only what was checked.
+- **The planner reads the fighter's kit** (`abilitiesOf`), so a smaller kit is
+  fewer actions to weigh; the turn memo's key names the loadout.
+- **Undo** sizes its stack by every ability in a character's pool
+  (`undoDepthOf`), so a Man-at-arms that picked Slash and Dash still has the
+  reach its bonus AP needs.
+- **No command version of its own** (§39.1): version 12 is unreleased, so no
+  battle holds a loadout until §39.9, and by then every client sends command
+  version 12 or later. An older catalogue refuses a loadout outright.
+- **Old battles keep their full kits**, and replay under the rules they were
+  created under: no catalogue before 12 has a `loadout`.
+
+### 40.4 Screens
+
+- **The muster** (§23.3 PR 3): a character picked up while placing the squad
+  shows its abilities above its items — its fixed ones as *Always*, then its
+  pool, a `BuildRow` each, the two it takes marked *Taken*. Tapping another
+  takes it and drops the one taken longest ago, so a figure always has its
+  two and the muster never waits on a half-made loadout. A pool entry its
+  rank hasn't unlocked is greyed, with the rank that does. Frost bolt is
+  still offered as the weapon swap.
+- **Telling figures apart.** The squad's list names each figure's picks under
+  it (`loadoutLine`), in the muster and in the battle, so a player's two
+  Archers read apart at a glance. That list is the viewer's own squad; an
+  opponent's figure, tapped, shows its card, which lists its kit — the loadout
+  it fights with — as it always has. A list of the opponent's squad would be a
+  new surface, not built.
+- **The stats sheet** shows a character's fixed abilities (*Always*), then its
+  pool (*Pick 2*, and *Rank 1 · pick* for an option's), with only Frost bolt
+  left among its options (`optionsFor`). The profile still lists every option
+  a rank has unlocked (`unlocksFor`), an ability one reading "Joins its
+  picks".
+
+### 40.5 Measured
+
+The harness at version 12 against the Swarm on every Hold Out battlefield,
+teams of one to four, Normal, seeds 1–40 before and after, temperaments on
+(and once off, `--temperaments off`, to see what they now do). The tables are
+in `realm-arena-balance.md`, *Loadouts*.
+
+*As built:* the team's wins fell from 232 of 240 battles to 188, and the
+characters it lost, summed over the six cells, from 18.8 to 44.9 — §34.9's
+worry, the Realm weaker with each figure's specials on cooldown more often.
+It takes version 12 out of the saturation §39.8's run met, so §39.9's levers
+can now be read: one cell is inside its target band, three just above it,
+and the two- and four-player Sacked Fort still too easy.
+With the temperaments off the team won 189 and lost 40.8, so they stay on,
+as the default. Balancing waits for §39.9, which tunes the whole of version
+12 at once.
+
+### 40.6 Copy
+
+The guide's first section, the tutorial and the setup screen describe the
+kits and the rank-1 option as a swap. They describe the released rules, so
+they change with version 12's release (§39.9), not before.
+
+### 40.7 Questions
+
+*Answered on review:* two picks for everyone, the Archer and the Cleric
+included; the Knight and the Man-at-arms cut to two as well; the Cleric's
+Heal fixed; the defaults as in §40.1; and no command version of its own
+(§40.3). Still open:
+
+1. **Ranks 2 and 3**: which abilities join each pool (§40.2)?
+2. **Slash and Dash with Cleave**: left to the balance run, or barred as a
+   pair?
 
 ---
 
@@ -5838,3 +6001,4 @@ Realm, its sibling in the same world.
 | 1.68 | §39 PR 4 builds the Swarm's three elites (§39.5) in the unreleased rules version 12: the Brood Queen (Hatch stands a Skitterling on a free square next to it, nearest an enemy it sees, at most three at a time, acting from its owner's next turn), the Carapace Brute (armour 1, added to Braced's and never reducing a blow under 1) and the Bile Lobber (Bile: 2 and Corroded to a 3×3 within 10, friend or foe, no roll). `Faction.elites` keeps them out of every muster; `Character.armour`, `Fighter.hatchedBy` and the `hatched` and `bile` events are new, and absent means the old behaviour. Art for each is its base master scaled with an addition, and the sprite sheets grow to 1024 × 6080, laid out from `ART_CHARACTER_IDS`. |
 | 1.69 | §39 PR 6 builds the nests (§39.7) in the unreleased rules version 12: two to each Swarm warband from the first muster, on squares each Hold Out map lists, structures that can be hurt but never act; each the team destroys takes 15 points off its warband's next wave, never below half, and regrows as that wave lands. The scoreboard's next-wave line notes them, the board marks their squares, and both, with the regrow line, are withheld for an unseen random enemy and in fog count only falls the team saw. |
 | 1.70 | §39 PR 7 builds the Swarm's temperaments (§39.8): a table in the planner, by character, of multipliers on Exposure and Threat and at most one extra term — a Skitterling's Pack, a Bloater's Burst threat, a Spitter's and Lobber's Range — which the Realm and the Miners don't have; not a rule, so no rules or command version changes. `temperamentSwitch` turns it off for planner experiments. |
+| 1.71 | Ability loadouts (§40, issue 957) in the unreleased rules version 12, with no command version of its own: each Realm figure keeps its signature ability (the Knight's Bulwark, the Cleric's Heal) and picks two more from its character's pool at muster, a default loadout for anyone who doesn't choose; ability options join the pool at their rank rather than swapping, and Frost bolt stays a weapon swap. `Character.loadout`, `MusterPick.loadout` and `Fighter.loadout` are new, absent meaning the whole kit before version 12 and the default in it. |

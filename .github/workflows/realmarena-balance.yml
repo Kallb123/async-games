@@ -48,6 +48,9 @@ on:
       rally:
         description: How the team answers the rally's choice under rules that have one (policy, or always to Rally every time)
         default: ''
+      temperaments:
+        description: Whether the Swarm's temperaments shape its planner's choices under rules that have them (blank or on, or off to fight without)
+        default: ''
       team_planner:
         description: Git ref whose planner plays the team, as main (blank for the branch's on both sides)
         default: ''
@@ -112,6 +115,7 @@ jobs:
           TEAM_PLANNER: ${{ inputs.team_planner }}
           RULES: ${{ inputs.rules }}
           RALLY: ${{ inputs.rally }}
+          TEMPERAMENTS: ${{ inputs.temperaments }}
           SHARD: ${{ matrix.shard }}/${{ inputs.shards }}
         # Each shard's own summary would repeat the merged one, so it's kept to the log.
         run: |
@@ -119,7 +123,7 @@ jobs:
             --runs "$RUNS" --players "$PLAYERS" --teams "$TEAMS" --enemies "$ENEMIES" --missions "$MISSIONS" \
             --maps "$MAPS" --difficulties "$DIFFICULTIES" --sizes "$SIZES" --fog "$FOG" \
             --seed "$SEED" --shard "$SHARD" --out "samples-${{ matrix.shard }}.json" \
-            ${TEAM_PLANNER:+--team-planner "$TEAM_PLANNER"} ${RULES:+--rules "$RULES"} ${RALLY:+--rally "$RALLY"}
+            ${TEAM_PLANNER:+--team-planner "$TEAM_PLANNER"} ${RULES:+--rules "$RULES"} ${RALLY:+--rally "$RALLY"} ${TEMPERAMENTS:+--temperaments "$TEMPERAMENTS"}
 
       - uses: actions/upload-artifact@v4
         if: always()

@@ -17,7 +17,7 @@ const point = (col: number, row = 3) => at(field, col, row);
 const BURST_DAMAGE = 3;
 
 function fighter(rulesVersion: number, id: number, character: CharacterId, col: number, owner: string, row = 3, extra: Partial<Fighter> = {}): Fighter {
-    return { ...newFighter(id, owner, character, point(col, row), null, undefined, false, { rulesVersion }), ap: 4, ...extra };
+    return { ...newFighter(id, owner, character, point(col, row), null, undefined, undefined, false, { rulesVersion }), ap: 4, ...extra };
 }
 const battleOf = (rulesVersion: number, ...fighters: Fighter[]): BattleState => ({ field, fighters, rulesVersion, sides: { a: "team", b: "enemy" } });
 const get = (state: Pick<BattleState, "fighters">, id: number) => state.fighters.find(one => one.id === id)!;

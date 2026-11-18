@@ -35,6 +35,8 @@ describe("the balance harness's scenarios", () => {
         // The rally policy (§39.4) is the default and unsaid; Rally always is named.
         expect(scenarioKey({ ...SOLO, rules: 12, rally: "policy" })).toBe("1 player (Solo) vs Swarm · Hold Out (Ruined Fort) · rules v12");
         expect(scenarioKey({ ...SOLO, rules: 12, rally: "always" })).toBe("1 player (Solo) vs Swarm · Hold Out (Ruined Fort) · rules v12, rally always");
+        // The temperaments (§39.8) are on by default and unsaid; off is named.
+        expect(scenarioKey({ ...SOLO, rules: 12, temperaments: "off" })).toBe("1 player (Solo) vs Swarm · Hold Out (Ruined Fort) · rules v12, temperaments off");
     });
 
     it("sets a battle up as the host's choices would", () => {

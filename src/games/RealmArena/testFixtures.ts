@@ -210,7 +210,7 @@ export const FOUR_TEAM = ["a", "b", "c", "d"];
 /** Adds a fighter of any character to the battle at full AP, and returns it: the state is shared, so a later `battleOf` sees it. */
 export function addFighter(game: RealmArenaTestGame, owner: string, character: CharacterId, square: Square): Fighter {
     const gs = game.specificGameState;
-    const fighter = { ...newFighter(nextFighterId(gs.fighters), owner, character, square, null, undefined, false, gs), ap: 4 };
+    const fighter = { ...newFighter(nextFighterId(gs.fighters), owner, character, square, null, undefined, undefined, false, gs), ap: 4 };
     gs.fighters.push(fighter);
     return fighter;
 }
