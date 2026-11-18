@@ -1,7 +1,6 @@
 // Rules version 12 (realm-arena.md §39): the Swarm's new kit and the changes
-// that answer it. NOT yet released: `CURRENT_RULESET_VERSION` stays 11, so no
-// battle is created under it and each PR of §39 may still edit this file, until
-// §39.9 releases it. Then it is shipped and never edited; see ../rulesets.ts.
+// that answer it. Released (§39.9) as `CURRENT_RULESET_VERSION`: every
+// battle created now is under it, so it is shipped and never edited; see ../rulesets.ts.
 import type { Ability, AbilityId, Character, CharacterId, Faction, FactionId } from "../characters";
 import { catalogueV11 } from "./v11";
 

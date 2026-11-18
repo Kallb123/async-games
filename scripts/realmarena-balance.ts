@@ -8,7 +8,7 @@
 //   npm run ra-balance -- --runs 300 --players 3 --enemies swarm --difficulties easy,normal,hard
 //   npm run ra-balance -- --teams realm,miners --enemies realm,swarm,miners # each team faction against each enemy
 //   npm run ra-balance -- --missions holdOut,holdTheCentre --maps gate --fog on,off
-//   npm run ra-balance -- --rules 12 --players 3 --enemies swarm # fight under a registered rules version (default: the current one, so an unreleased catalogue can be measured)
+//   npm run ra-balance -- --rules 12 --players 3 --enemies swarm # fight under a registered rules version (default: the current one)
 //   npm run ra-balance -- --rules 12 --rally always       # under a rules version where the rally is a choice, the team always Rallies (default: --rally policy, §39.4)
 //   npm run ra-balance -- --rules 12 --temperaments off   # the Swarm's temperaments (§39.8) on or off in the planner (default: on, as in the game)
 //   npm run ra-balance -- --team-planner main            # the team plays main's planner, the warbands this checkout's

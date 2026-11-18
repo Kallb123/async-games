@@ -20,8 +20,9 @@ import { registeredRulesets } from "./rulesets";
 
 /**
  * Every character any registered catalogue knows, which is more than
- * `CHARACTER_IDS` (the current ruleset's) while a release is unreleased: a
- * battle on the newest version must find art for every fighter. The current
+ * `CHARACTER_IDS` (the current ruleset's) because a catalogue still in play
+ * may hold a character the current one dropped, and a battle on any registered
+ * version must find art for every fighter. The current
  * roster keeps its order and the rest follow, in the order the catalogues
  * introduced them, so a character's row never moves when a release lands.
  * The sheets, `characters.json` and the sheet script are all laid out from it.

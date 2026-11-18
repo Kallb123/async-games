@@ -430,8 +430,9 @@ describe("the team's HP in Hold Out", () => {
         expect(ring.specificGameState.fighters.every(one => one.hp === CHARACTERS[one.character].hp)).toBe(true);
     });
 
+    // Version 11's rally, the wave healing the team itself; from version 12 the rally is a choice (§39.4).
     it("rallies to the bigger bar, and its muster sheet tells the same HP", async () => {
-        const game = makeGame(["a", "b"], {}, { coop: { enemy: "realm", mission: "holdOut" } });
+        const game = makeGame(["a", "b"], {}, { rulesVersion: 11, coop: { enemy: "realm", mission: "holdOut" } });
         await musterAll(game);
         const gs = game.specificGameState;
         expect(stoutTeam(gs.coop?.mission, gs.rulesVersion)).toBe(true);

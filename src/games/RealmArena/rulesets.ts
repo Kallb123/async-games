@@ -8,7 +8,7 @@ import { catalogueV12 } from "./catalogues/v12";
 import type { Ability, AbilityId, Character, CharacterId, CharacterOption, Effect, EffectId, Faction, FactionId, Item, ItemId, OptionId, Weapon } from "./characters";
 
 /** Independent of commandVersion: a protocol change need not change a match's rules. */
-export const CURRENT_RULESET_VERSION = 11;
+export const CURRENT_RULESET_VERSION = 12;
 
 // Keep each entry's required fields (e.g. Fireball's range) while allowing
 // later catalogues to change their values without copying the whole table.
@@ -46,7 +46,7 @@ const rulesetV8: RealmArenaRuleset = registered(catalogueV8);
 const rulesetV9: RealmArenaRuleset = registered(catalogueV9);
 const rulesetV10: RealmArenaRuleset = registered(catalogueV10);
 const rulesetV11: RealmArenaRuleset = registered(catalogueV11);
-// Registered but not current: version 12 is built across §39 and released by its last PR.
+// Version 12 is the current release (§39.9); it is the one catalogue not run through `registered`, which only types the pre-elite ones.
 const rulesetV12: RealmArenaRuleset = freeze(catalogueV12);
 
 // Games created before the balance release had no stamp, or one below 7.

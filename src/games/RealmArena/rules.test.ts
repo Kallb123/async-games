@@ -1159,17 +1159,20 @@ describe("options (§23.2)", () => {
     const with_ = (option: OptionId, id: number, owner: string, square: number, extra: Partial<Fighter> = {}) =>
         fighter(id, owner, OPTIONS[option].character, square, { option, ...extra });
 
+    // Version 11's options swap an ability or the weapon; from version 12 an ability option is a loadout pick (§40.2).
+    const V11 = { rulesVersion: 11 };
+
     describe("the kit", () => {
         it("swaps the one ability or the weapon each option replaces, and nothing else", () => {
-            expect(kitOf("manAtArms", "shieldBash").abilities).toEqual(["shieldBash", "leap", "slashAndDash"]);
-            expect(kitOf("knight", "demolish").abilities).toEqual(["bulwark", "taunt", "demolish"]);
-            expect(kitOf("archer", "cripplingShot").abilities).toEqual(["cripplingShot", "poisonArrow", "bouncingArrow", "splittingArrow", "shootDodge"]);
-            expect(kitOf("scout", "huntersMark").abilities).toEqual(["huntersMark"]);
-            expect(kitOf("cleric", "purify").abilities).toEqual(["heal", "purify", "beckon", "blessing", "ward"]);
-            expect(kitOf("mage", "frostBolt")).toEqual({ weapon: { name: "Frost bolt", kind: "ranged", damage: 2, accuracy: 70, range: 10, effect: "slowed" }, abilities: ["fireball", "iceBall", "thunder", "focus"] });
+            expect(kitOf("manAtArms", "shieldBash", V11).abilities).toEqual(["shieldBash", "leap", "slashAndDash"]);
+            expect(kitOf("knight", "demolish", V11).abilities).toEqual(["bulwark", "taunt", "demolish"]);
+            expect(kitOf("archer", "cripplingShot", V11).abilities).toEqual(["cripplingShot", "poisonArrow", "bouncingArrow", "splittingArrow", "shootDodge"]);
+            expect(kitOf("scout", "huntersMark", V11).abilities).toEqual(["huntersMark"]);
+            expect(kitOf("cleric", "purify", V11).abilities).toEqual(["heal", "purify", "beckon", "blessing", "ward"]);
+            expect(kitOf("mage", "frostBolt", V11)).toEqual({ weapon: { name: "Frost bolt", kind: "ranged", damage: 2, accuracy: 70, range: 10, effect: "slowed" }, abilities: ["fireball", "iceBall", "thunder", "focus"] });
             for (const option of Object.keys(OPTIONS) as OptionId[]) {
                 const { character } = OPTIONS[option];
-                if (option !== "frostBolt") expect(kitOf(character, option).weapon).toBe(CHARACTERS[character].weapon);
+                if (option !== "frostBolt") expect(kitOf(character, option, V11).weapon).toBe(CHARACTERS[character].weapon);
             }
         });
 
@@ -1180,7 +1183,7 @@ describe("options (§23.2)", () => {
 
         it("is what the rules read: a starter character can't use an option's ability, nor one with the option the ability it gave up", () => {
             const bash = with_("shieldBash", 1, "a", at(field, 0, 0));
-            expect(abilitiesOf(bash)).toEqual(["shieldBash", "leap", "slashAndDash"]);
+            expect(abilitiesOf(bash, V11)).toEqual(["shieldBash", "leap", "slashAndDash"]);
             const enemy = fighter(2, "b", "knight", at(field, 1, 0));
             const enemy2 = fighter(3, "b", "scout", at(field, 0, 1));
             expect(check({ field, fighters: [bash, enemy, enemy2] }, "a", { kind: "cleave", fighter: 1, targets: [2, 3] })).toEqual({ refused: "This Man-at-arms can't use Cleave" });
@@ -1195,10 +1198,10 @@ describe("options (§23.2)", () => {
         const pick = (character: CharacterId, option?: unknown): MusterPick => ({ character, square: zone[0], ...(option === undefined ? {} : { option }) } as MusterPick);
 
         it("needs the rank the battle snapshotted with that character", () => {
-            expect(musterRefusal(RUINED_FORT, 0, [pick("knight", "demolish")], budget, {}, REALM)).toBe("That option isn't unlocked yet");
-            expect(musterRefusal(RUINED_FORT, 0, [pick("knight", "demolish")], budget, { archer: 3 }, REALM)).toBe("That option isn't unlocked yet");
-            expect(musterRefusal(RUINED_FORT, 0, [pick("knight", "demolish")], budget, { knight: 1 }, REALM)).toBeUndefined();
-            expect(musterRefusal(RUINED_FORT, 0, [pick("knight", "demolish")], budget, { knight: 3 }, REALM)).toBeUndefined();
+            expect(musterRefusal(RUINED_FORT, 0, [pick("knight", "demolish")], budget, {}, REALM, V11)).toBe("That option isn't unlocked yet");
+            expect(musterRefusal(RUINED_FORT, 0, [pick("knight", "demolish")], budget, { archer: 3 }, REALM, V11)).toBe("That option isn't unlocked yet");
+            expect(musterRefusal(RUINED_FORT, 0, [pick("knight", "demolish")], budget, { knight: 1 }, REALM, V11)).toBeUndefined();
+            expect(musterRefusal(RUINED_FORT, 0, [pick("knight", "demolish")], budget, { knight: 3 }, REALM, V11)).toBeUndefined();
         });
 
         it("refuses another character's option, and anything that isn't one", () => {
@@ -1212,7 +1215,7 @@ describe("options (§23.2)", () => {
             const squad = REALM.readyMade[100].map((character, i) => ({ character, square: zone[i] }));
             const options = squad.map(one => ({ ...one, option: (Object.keys(OPTIONS) as OptionId[]).find(id => OPTIONS[id].character === one.character) }));
             expect(musterPoints(options)).toBe(musterPoints(squad));
-            expect(musterRefusal(RUINED_FORT, 0, options, budget, { knight: 1, manAtArms: 1, archer: 1, cleric: 1 }, REALM)).toBeUndefined();
+            expect(musterRefusal(RUINED_FORT, 0, options, budget, { knight: 1, manAtArms: 1, archer: 1, cleric: 1 }, REALM, V11)).toBeUndefined();
         });
 
         it("is kept on the pick, and carried onto the battlefield", () => {

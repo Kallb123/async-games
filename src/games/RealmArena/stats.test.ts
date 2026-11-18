@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { ABILITIES, CHARACTERS, ITEM_IDS, ITEMS, OPTIONS, THROW_RANGE } from "./characters";
 import { CHARACTER_IDS } from "./roster";
+import { rulesetFor } from "./rulesets";
 import { ATTACK_AP, MELEE_ACCURACY, sightOf } from "./rules";
 import { ALL_UNITS, characterStats, itemStats } from "./stats";
 
@@ -27,10 +28,12 @@ describe("characterStats", () => {
     });
 
     it("lists the weapon, then each ability, then each option", () => {
-        const { actions, options } = characterStats("cleric");
+        // Version 11's cleric: from version 12 Purify is a loadout pick, not an option (§40.2).
+        const { actions, options } = characterStats("cleric", { rulesVersion: 11 });
         expect(actions.map(one => one.name)).toEqual(["Staff", "Heal", "Raise", "Beckon", "Blessing", "Ward"]);
         expect(options.map(one => [one.name, one.kind])).toEqual([["Purify", `Rank ${OPTIONS.purify.rank} · in place of Raise`]]);
-        for (const id of CHARACTER_IDS) expect(characterStats(id).actions).toHaveLength(1 + CHARACTERS[id].abilities.length);
+        const v11 = rulesetFor(11).CHARACTERS;
+        for (const id of Object.keys(v11) as (keyof typeof v11)[]) expect(characterStats(id, { rulesVersion: 11 }).actions).toHaveLength(1 + v11[id].abilities.length);
     });
 
     it("gives a ranged weapon its range and odds, and a melee one the square next door at the melee 80%", () => {

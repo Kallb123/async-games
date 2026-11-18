@@ -4,7 +4,10 @@ import { masteryLine, optionsFor, optionView, starterView, weaponLine, weaponMar
 
 describe("optionsFor, starterView and optionView", () => {
     it("lists each character's own options, and nobody else's", () => {
-        expect(optionsFor("manAtArms")).toEqual(["shieldBash"]);
+        // Version 11's: from version 12 the Realm's ability options are loadout picks, not swaps (§40.2).
+        expect(optionsFor("manAtArms", { rulesVersion: 11 })).toEqual(["shieldBash"]);
+        expect(optionsFor("mage", { rulesVersion: 11 })).toEqual(["frostBolt"]);
+        expect(optionsFor("manAtArms")).toEqual([]);
         expect(optionsFor("mage")).toEqual(["frostBolt"]);
     });
 

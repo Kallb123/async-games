@@ -264,7 +264,8 @@ describe("a Taunt or Blessing with a radius (§39.2)", () => {
         // Judged by the battle's own rules, not the current catalogue.
         expect(radiusOf("taunt", { rulesVersion: 11 })).toBeUndefined();
         expect(isInstantIn("taunt", { rulesVersion: 11 })).toBe(true);
-        expect(isInstantIn("taunt")).toBe(true);
+        // The current catalogue is version 12's, where Taunt has its radius.
+        expect(isInstantIn("taunt")).toBe(false);
         for (const kind of ["hunker", "focus", "watch", "shieldWall"]) expect(isInstantIn(kind, { rulesVersion: 12 })).toBe(true);
         expect(isInstantIn("attack", { rulesVersion: 12 })).toBe(false);
     });
