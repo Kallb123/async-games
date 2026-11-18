@@ -1,10 +1,10 @@
 # Realm Arena — Game Design Document
 
-**Status:** v1.71. The Realm troop overhaul (§34) is implemented for new
+**Status:** v1.73. The Realm troop overhaul (§34) is implemented for new
 battles in rules version 9, using §34.10's proposed defaults for playtesting,
 sight with angles (§36) in rules version 10, co-op for a team of four in
 Hold Out (§37), and every Archer shot at 2 AP (§38) in rules version 11. Battles already created keep their original rules.
-§39 plans what comes next for Hold Out against the Swarm; its first seven PRs (§39.2–§39.8) are built, six of them in the unreleased rules version 12, which also holds the ability loadouts (§40).
+Hold Out against the Swarm (§39) and the ability loadouts (§40) are released in rules version 12 (§39.9).
 Earlier implementation
 notes and revision history describe the game before this overhaul wherever
 they conflict with §34.
@@ -3420,6 +3420,8 @@ first, written to `docs/achievements.md` §11's checklist: an
 | `realmarena.hold-the-keep` | Hold the Keep | Win a battle of Hold Out on the Sacked Fort | match, `end` |
 | `realmarena.broken-tide` | Broken Tide | Win a battle of Hold Out by downing the whole last wave before the last round is over | match, `end` |
 | `realmarena.unbroken` | Unbroken | Win a battle of Hold Out with every one of the team's characters standing at the end | match, `end` |
+| `realmarena.regicide` | Regicide | Win a battle of Hold Out in which a Brood Queen of the Swarm was downed (§39.5) | match, `end` |
+| `realmarena.scorched-earth` | Scorched Earth | Win a battle of Hold Out against the Swarm after destroying every nest at once, before a wave could grow them back (§39.7) | match, `end` |
 
 The titles may change; the ids never do (§11). PR 5 adds *Against the Odds*
 (§30.5). The four Hold Out rungs after Last Stand came later, so the mission
@@ -4874,7 +4876,7 @@ two different arrows in one turn, but never the same one twice running.
 
 ## 39. Hold Out against the Swarm: the next seven PRs (plan)
 
-*Planned; PRs 1–7 (§39.2–§39.8) are built, PRs 1–6 in a catalogue not yet released.* Hold Out with the players as the Realm against the
+*Built; released in rules version 12 by PR 8 (§39.9).* Hold Out with the players as the Realm against the
 computer's Swarm is the game's main mode, which is why the Realm's kit was
 rebuilt first (§34). This section plans what makes the Swarm worth using that
 kit on: a Taunt with a reach, Bloaters that burst when they fall, a rally each
@@ -4922,7 +4924,7 @@ Every value marked *Proposed* is a starting point for the balance harness
 | 5 | Waves that differ, bought with points (§39.6) — **built** | 4 |
 | 6 | Nests (§39.7) — **built** | 5 |
 | 7 | The Swarm plays like a swarm (§39.8) — **built** | 2, 4 |
-| 8 | Balance, copy and release (§39.9) | all |
+| 8 | Balance, copy and release (§39.9) — **built** | all |
 
 PRs 1–4 don't depend on each other and can be built in any order.
 
@@ -5774,7 +5776,7 @@ the Knight beside her rather than trading blows with it.
 
 ## 40. Ability loadouts (rules version 12)
 
-*Built, in the unreleased rules version 12, from
+*Built, and released in rules version 12 (§39.9), from
 [issue 957](https://github.com/Kallb123/async-games/issues/957).* At muster
 each of the Realm's figures keeps its signature ability, where it has one,
 and picks **two** more from its character's pool. It shares version 12 with
@@ -5782,8 +5784,8 @@ and picks **two** more from its character's pool. It shares version 12 with
 it will meet, with the Swarm's temperaments (§39.8) on, as they are by default.
 
 Every value marked *Proposed* is a starting point for the balance harness
-(§30.12), not a decision; version 12 is unreleased, so `catalogues/v12.ts` may
-still change them until §39.9 releases it.
+(§30.12), not a decision. §39.9 released version 12 with them as they stand,
+so `catalogues/v12.ts` no longer changes: a retune is a new version.
 
 ### 40.1 The rule
 
