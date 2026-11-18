@@ -50,6 +50,7 @@ import {
     sideScore,
     sidesStanding,
     squadsStanding,
+    structureBurning,
     standingPoints,
     standings,
     startTurn,
@@ -195,12 +196,15 @@ function takesTurn(gs: IRealmArenaSpecificGameState, battle: BattleState, userId
 }
 
 /**
- * Adds what a run of events scored to the scores (§13.7), and counts the nests
- * (§39.7) the team downed against the warband they stand for, which its next
- * wave's budget reads (`waveBudgetOf`) — a nest downed by the Swarm's own burst,
- * bile or burn is no one's to count — and the ones whose fall the team was told
- * of (`nestsSeenDestroyed`), the only count a fogged response may send. Each is
- * replaced rather than changed in place.
+ * Adds what a run of events scored to the scores (§13.7), and counts every
+ * nest (§39.7) destroyed against the warband they stand for, which its next
+ * wave's budget reads (`waveBudgetOf`) — whoever downed it: the team, or the
+ * Swarm itself by a burst, bile or burn, or a burn whose setter is gone, a
+ * forced error of the AI team. Only the team's own downings score (the `scored`
+ * events, untouched here). The ones whose fall the team was told of
+ * (`nestsSeenDestroyed`) are counted apart, the only count a fogged response
+ * may send: a nest falling out of its sight never reaches it. Each is replaced
+ * rather than changed in place.
  */
 function addScores(gs: IRealmArenaSpecificGameState, events: readonly BattleEvent[]): void {
     const scores = { ...gs.scores };
@@ -210,8 +214,7 @@ function addScores(gs: IRealmArenaSpecificGameState, events: readonly BattleEven
         if (event.kind === "scored") scores[event.player] = (scores[event.player] ?? 0) + event.points;
         if (event.kind !== "downed") continue;
         const nest = gs.fighters.find(fighter => fighter.id === event.fighter);
-        const downer = gs.fighters.find(fighter => fighter.id === event.by);
-        if (!nest || !downer || !isStructure(nest, gs) || isWarband(downer.owner)) continue;
+        if (!nest || !isStructure(nest, gs)) continue;
         nests = { ...nests, [nest.owner]: (nests?.[nest.owner] ?? 0) + 1 };
         // The team shares its sight, so any seat's view is its own.
         if (!gs.fog || toldTo([event], battleOf(gs), gs.seats[0]).length > 0) seenFall++;
@@ -1424,6 +1427,15 @@ export const enemyEvents = (turn: EnemyTurn): BattleEvent[] => [...turn.started,
 export const enemyTurnsOf = (recap: Pick<NonNullable<IRealmArenaOutcome["recap"]>, "enemy" | "thenEnemy"> | undefined): EnemyTurn[] =>
     recap?.enemy ? [recap.enemy, ...recap.thenEnemy ?? []] : [];
 
+/**
+ * The warband turns a viewer has anything of, from `turns` (§27.2): an empty
+ * turn — a nest-only warband's burn (§39.7) — that `said` tells them nothing
+ * of is left out, so neither its place nor the count of turns tells a fogged
+ * viewer it was taken. Every other turn is kept, as its end is told to all.
+ */
+export const toldTurns = (turns: readonly EnemyTurn[], said: (told: Told | undefined, events: readonly BattleEvent[]) => readonly BattleEvent[]): EnemyTurn[] =>
+    turns.filter(turn => turn.steps.length > 0 || turn.ended !== undefined || said(turn.startedTold, turn.started).length > 0);
+
 const ACTION_PHRASES: Readonly<Record<Action["kind"], string>> = {
     move: "moved",
     sneak: "sneaked",
@@ -1567,17 +1579,23 @@ function beginTurn(data: IRealmArenaGameData, owner: string): { events: BattleEv
 /**
  * The end of `owner`'s turn, a player's or a warband's (§29.8): every
  * character with AP enough goes on watch but those in `keepStill`, and the
- * centre scores. Returns what happened.
+ * centre scores. Returns what happened — or, for an empty turn (`emptyTurn`,
+ * a warband of only burning nests) that did nothing at its end, undefined, and
+ * says nothing.
  */
-function applyEndTurn(data: IRealmArenaGameData, owner: string, keepStill: readonly number[]): BattleEvent[] {
+function applyEndTurn(data: IRealmArenaGameData, owner: string, keepStill: readonly number[]): BattleEvent[];
+function applyEndTurn(data: IRealmArenaGameData, owner: string, keepStill: readonly number[], emptyTurn: boolean): BattleEvent[] | undefined;
+function applyEndTurn(data: IRealmArenaGameData, owner: string, keepStill: readonly number[], emptyTurn = false): BattleEvent[] | undefined {
     const gs = data.specificGameState;
     const battle = battleOf(gs);
     const { fighters, events } = endTurn(battle, owner, gs.roundsPlayed + 1, keepStill);
     gs.fighters = fighters;
     addScores(gs, events);
+    noteSighting(gs, events);
+    // An empty turn (a warband of only burning nests, §39.7) has no end to tell, unless the end itself did something.
+    if (emptyTurn && events.length === 0) return undefined;
     // Told to everyone, whatever they saw of it: that a turn ended is no secret.
     writeLine(data, events, (said, seen) => lineBy(owner, ["ended their turn", ...said.map(event => clause(event, battle.fighters, owner, gs.coop, seen, gs))].join("; "), gs.coop, gs));
-    noteSighting(gs, events);
     return events;
 }
 
@@ -1806,34 +1824,60 @@ interface WarbandMoves {
  */
 const WARBAND_DEADLINE_MS = 2_000;
 
+/** Whether warband `k` has someone standing: a turn to fight. */
+const warbandFights = (gs: IRealmArenaSpecificGameState, k: number): boolean => squadsStanding(battleOf(gs), [warbandOwner(k)]).length > 0;
+/** Whether warband `k` has only nests left, one of them burning or poisoned (§39.7): an empty turn to take, so the damage lands. */
+const nestsBurning = (gs: IRealmArenaSpecificGameState, k: number): boolean => !warbandFights(gs, k) && structureBurning(battleOf(gs), warbandOwner(k));
+
 /**
- * The next warband's turn in co-op (§29.4), straight after a player's: the
- * first, from `coop.nextWarband` on round, with someone standing. Its turn
- * begins as a player's does (`startTurn`), then it takes one action at a time
- * through `applyAction` — the next recorded one on a replay, otherwise the
- * planner's choice from its side's view — until there's none, or the battle
- * is over, and ends as a player's does, everyone with AP enough on watch.
+ * The warbands' turns in co-op (§29.4) straight after a player's, when they
+ * don't take theirs in a block: the first, from `coop.nextWarband` on round,
+ * with someone standing takes its turn (`warbandTurn`).
+ *
+ * A warband with only nests left, one of them burning or poisoned (§39.7),
+ * takes an empty turn so the damage lands: each the rotation passed over on
+ * its way, after the turn that was played, so a burning nest never takes the
+ * turn of a warband that has someone standing, nor leaves out the "ended
+ * their turn" line that turn writes (which, in fog, would say a nest is
+ * burning). With no warband standing, the next with a burning nest takes its
+ * turn alone. Empty in a free-for-all, and when there's no warband to play.
+ */
+function warbandTurns(data: IRealmArenaGameData, moves: { recorded: readonly unknown[] | undefined; roll: Roll }): EnemyTurn[] {
+    const gs = data.specificGameState;
+    const coop = gs.coop;
+    if (!coop) return [];
+    const count = gs.seats.length;
+    const rotation = Array.from({ length: count }, (_, step) => (coop.nextWarband + step) % count);
+    const k = rotation.find(one => warbandFights(gs, one)) ?? rotation.find(one => nestsBurning(gs, one));
+    if (k === undefined) return [];
+    gs.coop = { ...coop, nextWarband: (k + 1) % count };
+    const turns = [warbandTurn(data, moves, k)];
+    for (const one of rotation.slice(0, rotation.indexOf(k))) {
+        if (!battleIsOver(gs) && nestsBurning(gs, one)) turns.push(warbandTurn(data, { recorded: [], roll: moves.roll }, one));
+    }
+    return turns;
+}
+
+/**
+ * Warband `k`'s turn (§29.4). It begins as a player's does (`startTurn`),
+ * then it takes one action at a time through `applyAction` — the next
+ * recorded one on a replay, otherwise the planner's choice from its side's
+ * view — until there's none, or the battle is over, and ends as a player's
+ * does, everyone with AP enough on watch.
  *
  * Live, a turn is capped at four actions a character and at a deadline, and
  * an action `check` refuses or a planner that throws ends it there, logged
  * (§29.7): what it did before is kept and recorded, so a replay matches.
- * Undefined in a free-for-all, and when there's no warband left to play. A
- * block of turns (`IRealmArenaCoop.teamBlocks`) names the warband (`only`),
- * and gets nothing if that one has been wiped out.
+ *
+ * A warband with only nests standing (`nestsBurning`) takes an empty turn: no
+ * character to plan for, so the step loop breaks at once (its cap is 0, and a
+ * replay's recorded list is empty), what burning does to its nests is told as
+ * it is for any turn, and its end, which does nothing, isn't.
  */
-function warbandTurn(data: IRealmArenaGameData, moves: { recorded: readonly unknown[] | undefined; roll: Roll }, only?: number): EnemyTurn | undefined {
+function warbandTurn(data: IRealmArenaGameData, moves: { recorded: readonly unknown[] | undefined; roll: Roll }, k: number): EnemyTurn {
     const gs = data.specificGameState;
-    const coop = gs.coop;
-    if (!coop) return undefined;
-    const count = gs.seats.length;
-    const standing = squadsStanding(battleOf(gs), Array.from({ length: count }, (_, k) => warbandOwner(k)));
-    const k = only !== undefined
-        ? (standing.includes(warbandOwner(only)) ? only : undefined)
-        : Array.from({ length: count }, (_, step) => (coop.nextWarband + step) % count).find(one => standing.includes(warbandOwner(one)));
-    if (k === undefined) return undefined;
     const owner = warbandOwner(k);
-    gs.coop = { ...coop, nextWarband: (k + 1) % count };
-
+    const nestsOnly = !warbandFights(gs, k);
     const { events: started, told: startedTold } = beginTurn(data, owner);
     const turn: EnemyTurn = { owner, started, startedTold, startedAfter: boardOf(gs), steps: [] };
     const over = () => battleIsOver(gs);
@@ -1867,8 +1911,11 @@ function warbandTurn(data: IRealmArenaGameData, moves: { recorded: readonly unkn
         turn.steps.push({ action: applied.action, events: applied.events, told: applied.told, after: boardOf(gs) });
     }
     if (!over()) {
-        turn.ended = applyEndTurn(data, owner, []);
-        turn.endedTold = toldByViewer(data, turn.ended);
+        const ended = applyEndTurn(data, owner, [], nestsOnly);
+        if (ended) {
+            turn.ended = ended;
+            turn.endedTold = toldByViewer(data, ended);
+        }
     }
     return turn;
 }
@@ -1882,8 +1929,8 @@ function warbandBlock(data: IRealmArenaGameData, moves: WarbandMoves): EnemyTurn
     const gs = data.specificGameState;
     const turns: EnemyTurn[] = [];
     for (let k = 0; k < gs.seats.length && !battleIsOver(gs); k++) {
-        const turn = warbandTurn(data, { recorded: moves.recorded && (moves.recorded[turns.length] ?? []), roll: moves.roll }, k);
-        if (turn) turns.push(turn);
+        if (!warbandFights(gs, k) && !nestsBurning(gs, k)) continue;
+        turns.push(warbandTurn(data, { recorded: moves.recorded && (moves.recorded[turns.length] ?? []), roll: moves.roll }, k));
     }
     return turns;
 }
@@ -1910,8 +1957,7 @@ function handOff(data: IRealmArenaGameData, from: string, moves: WarbandMoves, v
     const blocks = gs.coop?.teamBlocks === true;
     const enemy: EnemyTurn[] = [];
     if (!blocks && !battleIsOver(gs)) {
-        const turn = warbandTurn(data, { recorded: moves.recorded?.[0], roll: moves.roll });
-        if (turn) enemy.push(turn);
+        enemy.push(...warbandTurns(data, { recorded: moves.recorded?.[0], roll: moves.roll }));
     }
     const started: BattleEvent[] = [];
     // In fog, what each player was told of it all, line by line (§27.2).

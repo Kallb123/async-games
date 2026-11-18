@@ -7,7 +7,7 @@ import { mongoMap } from "@/utils/games/mongoMaps";
 import { capitalise, pluralize } from "@/utils/ui/text";
 import { userIdListToNamesAndMap } from "@/utils/users/clerk";
 import { RealmArenaGameType, type IGameCommand } from "@/utils/apiModels/GameLogic";
-import { battleOf, battleRoundsOf, budgetOf, enemyEvents, enemyHidden, enemyTurnsOf, nestSquaresOf, nextWaveOf, toldTo, unnamed, warbandBudgetOf, type IRealmArenaOutcome, type RealmArenaBoard, type Told } from "./RealmArenaLogic";
+import { battleOf, battleRoundsOf, budgetOf, enemyEvents, enemyHidden, enemyTurnsOf, nestSquaresOf, nextWaveOf, toldTo, toldTurns, unnamed, warbandBudgetOf, type IRealmArenaOutcome, type RealmArenaBoard, type Told } from "./RealmArenaLogic";
 import { rollOffTurnOrder } from "@/utils/games/rollOff";
 import { CURRENT_RULESET_VERSION, registeredRulesets } from "./rulesets";
 import { ART_CHARACTER_IDS } from "./art";
@@ -141,7 +141,8 @@ export interface IRealmArenaSpecificGameState {
      */
     rallyOwed?: string[];
     /**
-     * How many of each warband's nests (§39.7) the team has destroyed since that
+     * How many of each warband's nests (§39.7) have been destroyed, whoever downed
+     * them (the team, or the Swarm's own burst, bile or burn), since that
      * warband's last wave landed, by warband owner: each takes points off the
      * warband's next wave's budget, and the count is cleared as the wave lands
      * and the nests regrow. Absent while there are none, and in every battle
@@ -710,8 +711,8 @@ const withoutRolls = (events: readonly BattleEvent[]): ToldEvent[] => events.map
  */
 function partsOf(outcome: IRealmArenaOutcome, viewerId: string | null, gs: IRealmArenaSpecificGameState, complete: boolean): IRealmArenaStepPart[] | undefined {
     const { events = [], recap } = outcome;
-    const turns = enemyTurnsOf(recap);
-    if (!recap || turns.length === 0) return undefined;
+    const all = enemyTurnsOf(recap);
+    if (!recap || all.length === 0) return undefined;
     const battle = battleOf(gs, complete);
     const hidden = battle.fog && enemyHidden(gs.coop);
     // What the viewer was told of some events: the record of it where there is
@@ -724,10 +725,13 @@ function partsOf(outcome: IRealmArenaOutcome, viewerId: string | null, gs: IReal
     // Two runs of events told in a row: nothing was recorded for one that had no events.
     const both = (first: Told | undefined, second: Told | undefined): Told | undefined =>
         first || second ? Object.fromEntries(Object.keys({ ...first, ...second }).map(viewer => [viewer, [...first?.[viewer] ?? [], ...second?.[viewer] ?? []]])) : undefined;
+    // An empty turn the viewer was told nothing of has no seam of its own (§39.7).
+    const turns = toldTurns(all, said);
+    if (turns.length === 0) return undefined;
     const started = recap.started ?? [];
     // The command's own events are the player's End turn, then the warband's
     // turn, then what happened as the next turn began (`RealmArenaEndTurn`).
-    const own = events.slice(0, events.length - turns.reduce((sum, turn) => sum + enemyEvents(turn).length, 0) - started.length);
+    const own = events.slice(0, events.length - all.reduce((sum, turn) => sum + enemyEvents(turn).length, 0) - started.length);
 
     const board = (after: RealmArenaBoard | undefined): RealmArenaPartState | undefined => {
         if (!after) return undefined;

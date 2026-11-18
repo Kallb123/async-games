@@ -41,7 +41,7 @@ import type { IGameCommand, ICommandOutcome } from "@/utils/apiModels/GameLogic"
 import type { IHistoryEntry } from "@/utils/games/history";
 import { andList, capitalise, numberWord, pluralize } from "@/utils/ui/text";
 import type { IRealmArenaSpecificGameStateResponse } from "./apiModels";
-import { enemyTurnsOf, unnamed, type EnemyTurn, type IRealmArenaOutcome, type RealmArenaAct, type Told } from "./RealmArenaLogic";
+import { enemyTurnsOf, toldTurns, unnamed, type EnemyTurn, type IRealmArenaOutcome, type RealmArenaAct, type Told } from "./RealmArenaLogic";
 import { battlefieldOf } from "./maps";
 import { enemyNameOf, UNKNOWN_ENEMY, type CharacterId, type ItemId } from "./characters";
 import { battleFrom, centreHolders, ENEMY_SIDE, isStanding, isWarband, sideOf, sideScore, TEAM_SIDE, type BattleEvent, type Fighter } from "./rules";
@@ -391,7 +391,8 @@ function toEvents(
             // scoring makes it news, so a bare one is `quiet` — and only the
             // sender's own, not a warband's in the enemy's turn after it (§29.4).
             const { events = [], recap } = outcome as Partial<IRealmArenaOutcome>;
-            const turns = enemyTurnsOf(recap);
+            // An empty turn the viewer was told nothing of (§39.7) writes no line, and takes no place among the keys.
+            const turns = toldTurns(enemyTurnsOf(recap), said);
             const points = centrePointsOf(events, command.senderId);
             if (points > 0) {
                 // Counted off the squad as the feed's viewer sees it, so not

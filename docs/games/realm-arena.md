@@ -5572,8 +5572,10 @@ stays 11. The open point is settled as planned: nests **regrow** with each wave.
   wave placement. `nestSitesOf(gs)` reads them for the muster, the response and
   the regrowth.
 - **Destroying one shrinks the next wave.** `gs.nestsDestroyed` (per warband,
-  server-only) counts the nests **the team** downs; one downed by the Swarm's
-  own burst, bile or burn counts for nobody. `waveBudgetOf(gs, round, owner)`
+  server-only) counts **every** nest destroyed, whoever downed it: one the Swarm
+  downs itself (its own burst, bile or burn, or a burn whose setter is gone) is
+  a forced error of the AI team and shrinks its warband's next wave all the
+  same (#966). Scoring is unchanged: only a nest the team downs scores. `waveBudgetOf(gs, round, owner)`
   takes `NEST_POINTS` off for each, never below half; `wavePurchase` still buys
   the elite first, and at the smallest budget two nests never cost a wave its
   elite.
@@ -5584,8 +5586,25 @@ stays 11. The open point is settled as planned: nests **regrow** with each wave.
 - **Planner.** A warband counts a nest's worth in full, not at
   `HOLD_OUT_OWN_WORTH`; nothing plans a nest. The scripted team in
   `testFixtures` hits a nest it reaches and never walks to one.
-- **Accepted:** a warband with only its nests standing takes no turn, so a burn
-  on them ticks again only once its wave lands.
+- **Nests burn between turns.** A warband with only nests standing still takes
+  a turn while one of them is burning or poisoned (`nestsBurning`, read from
+  `structureBurning`): an empty one, `beginTurn` then `applyEndTurn` with no
+  action between (its AP cap is 0, so the planner is never asked, and a replay's
+  recorded list is empty), so the damage lands as its turn begins and a burning
+  1-HP nest falls before the wave, which is then smaller. In a block of turns it
+  takes its place in the block. Otherwise (`warbandTurns`) it never takes the
+  turn of a warband with someone standing: that one plays as before, and each
+  nest-only warband the rotation passed over to reach it takes its empty turn
+  after, so every End turn still writes the one "ended their turn" line it did,
+  and the line's absence can't tell a fogged team a nest is burning. With no
+  warband standing, the next with a burning nest takes its turn alone. With
+  nothing burning it takes no turn, and drops out again once the effect has run
+  out or the nest has fallen. The empty turn writes no "ended their turn" line
+  (only what burning did, told as for any turn, and in fog only to those who saw
+  it), and `nestsSeenDestroyed` is still only what `toldTo` the team. An empty
+  turn a viewer was told nothing of is left out of what they get (`toldTurns`):
+  a review step's parts cut no seam for it, and recap rows are keyed without it,
+  so neither shows that it was taken.
 - **No command version**, as for §39.6.
 
 **Screens, as built.**
@@ -6002,3 +6021,4 @@ Realm, its sibling in the same world.
 | 1.69 | §39 PR 6 builds the nests (§39.7) in the unreleased rules version 12: two to each Swarm warband from the first muster, on squares each Hold Out map lists, structures that can be hurt but never act; each the team destroys takes 15 points off its warband's next wave, never below half, and regrows as that wave lands. The scoreboard's next-wave line notes them, the board marks their squares, and both, with the regrow line, are withheld for an unseen random enemy and in fog count only falls the team saw. |
 | 1.70 | §39 PR 7 builds the Swarm's temperaments (§39.8): a table in the planner, by character, of multipliers on Exposure and Threat and at most one extra term — a Skitterling's Pack, a Bloater's Burst threat, a Spitter's and Lobber's Range — which the Realm and the Miners don't have; not a rule, so no rules or command version changes. `temperamentSwitch` turns it off for planner experiments. |
 | 1.71 | Ability loadouts (§40, issue 957) in the unreleased rules version 12, with no command version of its own: each Realm figure keeps its signature ability (the Knight's Bulwark, the Cleric's Heal) and picks two more from its character's pool at muster, a default loadout for anyone who doesn't choose; ability options join the pool at their rank rather than swapping, and Frost bolt stays a weapon swap. `Character.loadout`, `MusterPick.loadout` and `Fighter.loadout` are new, absent meaning the whole kit before version 12 and the default in it. |
+| 1.72 | Two §39.7 follow-ups before rules version 12 ships. Every nest destroyed now counts against its warband's next wave, whoever downed it, the Swarm's own burst, bile or burn included (#966). Only a nest the team downs scores, and in fog `nestsSeenDestroyed` still counts only falls the team was told of. A warband with only nests standing still takes an empty turn while one of them is burning or poisoned, after the turn of any warband the rotation passed it over for, so the damage ticks and a dying nest falls before the wave (#967). |

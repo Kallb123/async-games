@@ -930,6 +930,27 @@ describe("Realm Arena's nests in fog of war (§39.7)", () => {
         return game;
     };
 
+    it("cuts no seam in a review step for a warband's empty turn the viewer was told nothing of", async () => {
+        const game = swarm({ teamBlocks: true } as never);
+        await realmArenaMusterAll(game);
+        const gs = game.specificGameState;
+        // The block of warband turns follows the last player's End turn.
+        await playRealmArena(game, realmArenaEndTurn("a"));
+        const played = (await playRealmArena(game, realmArenaEndTurn("b"))).outcome as IRealmArenaOutcome;
+        expect(played.recap?.enemy).toBeDefined();
+        // A centre score at a turn's end is told to everyone, so each turn has a seam to move.
+        const scored = { kind: "scored", player: played.recap!.enemy!.owner, points: 1, reason: "centre" } as unknown as NonNullable<IRealmArenaOutcome["events"]>[number];
+        const told = Object.fromEntries(gs.seats.map(seat => [seat, [scored]]));
+        const base: IRealmArenaOutcome = { ...played, recap: { ...played.recap!, enemy: { ...played.recap!.enemy!, ended: [scored], endedTold: told } } };
+        const empty = { owner: warbandOwner(1), started: [], startedTold: Object.fromEntries(gs.seats.map(seat => [seat, []])), steps: [] };
+        const parts = (outcome: IRealmArenaOutcome, viewer: string | null) => realmArenaStepOutcome(outcome, viewer, gs, false)?.parts;
+        for (const viewer of VIEWERS) {
+            const alone = parts(base, viewer);
+            expect(parts({ ...base, recap: { ...base.recap!, thenEnemy: [...base.recap!.thenEnemy ?? [], empty] } }, viewer), `after, for ${viewer}`).toEqual(alone);
+            expect(parts({ ...base, recap: { ...base.recap!, enemy: empty, thenEnemy: [base.recap!.enemy!, ...base.recap!.thenEnemy ?? []] } }, viewer), `before, for ${viewer}`).toEqual(alone);
+        }
+    });
+
     it("sends neither the nest squares nor what the nests cost the next wave while a random enemy is unseen, to the null viewer too", async () => {
         const game = swarm({ random: true });
         for (const phase of ["muster", "battle"]) {
@@ -974,6 +995,25 @@ describe("Realm Arena's nests in fog of war (§39.7)", () => {
         }
         const seen = await burnedDown(true);
         for (const viewer of VIEWERS) expect(realmArenaStateToModel(seen.specificGameState, viewer, null).nextWave).toMatchObject({ nestsDestroyed: 1 });
+    });
+
+    it("counts a nest the Swarm itself burns down out of the team's sight, and tells the team nothing of it", async () => {
+        const game = swarm();
+        await realmArenaMusterAll(game);
+        const gs = game.specificGameState;
+        const nest = gs.fighters.find(fighter => fighter.character === "nest")!;
+        // Lit by someone no longer there, so the burn is the nest's own: the Swarm downs it itself.
+        gs.fighters = gs.fighters.map(fighter => fighter.id === nest.id ? { ...realmArenaAfflicted({ ...fighter, hp: 1 }, "burning", 9999, { rulesVersion: 12 })!.fighter, hp: 1 } : fighter);
+        gs.rallyOwed = undefined;
+        for (const player of ["a", "b"]) expect((await playRealmArena(game, realmArenaEndTurn(player))).outcome.validMove).toBe(true);
+        expect(gs.fighters.find(fighter => fighter.id === nest.id)!.hp).toBe(0);
+        expect(gs.nestsDestroyed).toEqual({ [nest.owner]: 1 });
+        expect(gs.nestsSeenDestroyed).toBeUndefined();
+        for (const viewer of VIEWERS) {
+            const response = realmArenaStateToModel(gs, viewer, null);
+            expect(JSON.stringify(response), `${viewer}`).not.toContain("nestsDestroyed");
+            expect(JSON.stringify(response)).not.toContain("nestsSeenDestroyed");
+        }
     });
 
     it("keeps the regrowing of nests out of the log when the team saw none fall, and tells it when it saw one", async () => {

@@ -439,6 +439,21 @@ describe("Realm Arena feed, one row for a run of quiet deeds by different charac
         expect(titles(hidden)).toEqual(["Alice ended their turn", "The enemy moved three of its characters"]);
     });
 
+    it("keys and tells the turns of a block the same with or without an empty turn the viewer was told nothing of (§39.7)", () => {
+        const owner = warbandOwner(1);
+        const enemyMove = (fighter: number) => ({ action: { kind: "move", fighter }, events: [move(fighter)] });
+        const coop = () => state({ coop: true, enemy: "realm", fighters: [...squad, newFighter(5, owner, "knight", 30), newFighter(6, owner, "archer", 31)] });
+        const fighting = { owner, started: [], steps: [5, 6].map(enemyMove), ended: [] };
+        // A nest-only warband's burn, told to nobody: no steps, no end, nothing said as it began.
+        const empty = { owner: warbandOwner(0), started: [], steps: [] };
+        const lines = ["The Renegades moved their Knight", "The Renegades moved their Archer", "The Renegades ended their turn"];
+        const turn = (recap: object) => toEvents(snap(coop()), snap(coop(), [...lines.map(text => line(text)).reverse(), line("Alice ended their turn", "a")]),
+            cmd("RealmArenaEndTurn"), { ...valid(), turnOver: true, recap: { ...recap, started: [] } } as unknown as ICommandOutcome);
+        const alone = forFeed(turn({ enemy: fighting }));
+        expect(forFeed(turn({ enemy: empty, thenEnemy: [fighting] }))).toEqual(alone);
+        expect(forFeed(turn({ enemy: fighting, thenEnemy: [empty] }))).toEqual(alone);
+    });
+
     it("folds an enemy character that moved out of sight, which the viewer's snapshot no longer holds (§27.2)", () => {
         const owner = warbandOwner(0);
         const enemyMove = (fighter: number) => ({ action: { kind: "move", fighter }, events: [move(fighter)] });
