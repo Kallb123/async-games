@@ -2706,6 +2706,15 @@ next to an enemy, an Archer's is at range. If the playtest shows a character
 playing out of character — a Cleric in the front line — a weight per
 character is the first thing to add, not before.
 
+*Since built (§39.8):* that first thing is a **temperament**: a table in
+`ai.ts`, `TEMPERAMENTS`, by character id, of multipliers on a character's
+Exposure and Threat and at most one extra term (Pack, Burst or Range), applied
+by `standingTerms` after the turn's memo is read, so the memo still keeps the
+raw terms. Only the Swarm has any; no Renegade and no Miner has a row, so
+they plan by the one set of weights above, exactly as they did, which a test
+holds. `temperamentSwitch.on` turns the whole table off for planner
+experiments.
+
 **Thinking fast enough.** A warband's turn runs inside a player's request, so
 it has to be quick. A 48×48 map gives a character a few hundred squares it
 could reach:
@@ -4908,7 +4917,7 @@ Every value marked *Proposed* is a starting point for the balance harness
 | 4 | Elite Swarm characters (§39.5) — **built** | — |
 | 5 | Waves that differ, bought with points (§39.6) — **built** | 4 |
 | 6 | Nests (§39.7) — **built** | 5 |
-| 7 | The Swarm plays like a swarm (§39.8) | 2, 4 |
+| 7 | The Swarm plays like a swarm (§39.8) — **built** | 2, 4 |
 | 8 | Balance, copy and release (§39.9) | all |
 
 PRs 1–4 don't depend on each other and can be built in any order.
@@ -5629,6 +5638,33 @@ exactly as today, which a test holds for every Renegade and Miner.
 
 All values *Proposed*.
 
+**Built.** `TEMPERAMENTS` in `ai.ts` holds the table above, and
+`standingTerms` applies it through one function, `temperedHarm`, after the
+memo is read; a character with no row takes the old arithmetic unchanged.
+`temperamentSwitch.on` (default true) turns the table off for planner
+experiments, as the puzzles do to prove they fail without it. Pack counts the
+other standing characters of the Skitterling's side in melee reach of an
+enemy it is next to, by id, so a character being moved never counts itself,
+and takes the best enemy. The Bloater's Burst replaces its Threat only while
+it has the `burst` ability and hasn't spent it: the points' worth its burst
+damage (`ABILITIES.burst.damage`, capped at each enemy's HP) would take off
+every enemy in `burstArea`. Range is a flat penalty once, for any
+melee-weapon enemy whose weapon reaches the square. Two sizes were chosen, in
+the points' worth the other terms use, both *Proposed*:
+
+- **Pack: +1 for each other of its side** next to that enemy: a tenth of a
+  Skitterling's cost, enough to pick a flank between two squares the plain
+  terms rate alike, never enough to outweigh a hit.
+- **Range: −5**, beyond the Exposure the reach already adds (×1.5): a third of
+  a Spitter's cost, so a step back wins whenever it keeps the shot.
+
+The Queen's puzzle is not "hatches from behind the wall": a Hatch is worth
+about 10 points' worth of brood, more than the whole of any Exposure a step
+into cover saves (at most about 8 for a Knight's blow on her), so she hatches
+wherever she stands and it is what she does with the AP left that her
+temperament changes. The puzzle plays her turn out: she hatches, then leaves
+the Knight beside her rather than trading blows with it.
+
 - **It isn't a rule.** The planner's choices are recorded, not replayed
   (§29.7), so this takes no rules or command version and changes no battle
   already fought. It can ship before or after the rest.
@@ -5641,13 +5677,19 @@ All values *Proposed*.
 - **Puzzles** (§29.11), each with one right answer: a Skitterling takes the
   square that flanks over one that doesn't; a Bloater walks into three of the
   team over striking a lone Archer; a Spitter steps back out of a Knight's
-  reach before it spits; a Queen hatches from behind the wall, not in front of
-  it.
+  reach before it spits; a Queen hatches, then leaves the Knight beside her
+  rather than trading blows with it.
 - **Measured.** `--team-planner main` against the Swarm on every Hold Out
   battlefield: the warbands play the checkout's planner and the team main's,
   so the team's win rate falling is the Swarm playing better. If a temperament
   makes the warbands weaker, as a truer Exposure did
   (`realm-arena-balance.md`, *Planner experiments*), that row isn't kept.
+  *As built:* at version 12 the team won 470 of 480 against either planner
+  and lost about as many characters (24.4 → 23.4 a battle, summed over the
+  cells), so the run is saturated and shows neither gain nor loss
+  (`realm-arena-balance.md`, *Swarm temperaments*). Every row is kept,
+  untuned, until characters choose two abilities each and the lot is
+  measured again.
 
 ### 39.9 PR 8: Balance, copy and release
 
@@ -5795,3 +5837,4 @@ Realm, its sibling in the same world.
 | 1.67 | §39 PR 2 builds the Bloater's death burst (§39.3): in rules version 12, still not current, a Bloater downed by a blow, a blast, burning or poison bursts where it falls, as its Burst does, each Bloater once and chains in the order they fell, its knock-outs scoring for whoever downed it. The event is `burst` with `downed: true`. Aiming at a Bloater shades its burst and rings whoever it would catch. |
 | 1.68 | §39 PR 4 builds the Swarm's three elites (§39.5) in the unreleased rules version 12: the Brood Queen (Hatch stands a Skitterling on a free square next to it, nearest an enemy it sees, at most three at a time, acting from its owner's next turn), the Carapace Brute (armour 1, added to Braced's and never reducing a blow under 1) and the Bile Lobber (Bile: 2 and Corroded to a 3×3 within 10, friend or foe, no roll). `Faction.elites` keeps them out of every muster; `Character.armour`, `Fighter.hatchedBy` and the `hatched` and `bile` events are new, and absent means the old behaviour. Art for each is its base master scaled with an addition, and the sprite sheets grow to 1024 × 6080, laid out from `ART_CHARACTER_IDS`. |
 | 1.69 | §39 PR 6 builds the nests (§39.7) in the unreleased rules version 12: two to each Swarm warband from the first muster, on squares each Hold Out map lists, structures that can be hurt but never act; each the team destroys takes 15 points off its warband's next wave, never below half, and regrows as that wave lands. The scoreboard's next-wave line notes them, the board marks their squares, and both, with the regrow line, are withheld for an unseen random enemy and in fog count only falls the team saw. |
+| 1.70 | §39 PR 7 builds the Swarm's temperaments (§39.8): a table in the planner, by character, of multipliers on Exposure and Threat and at most one extra term — a Skitterling's Pack, a Bloater's Burst threat, a Spitter's and Lobber's Range — which the Realm and the Miners don't have; not a rule, so no rules or command version changes. `temperamentSwitch` turns it off for planner experiments. |

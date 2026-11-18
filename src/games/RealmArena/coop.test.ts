@@ -16,8 +16,9 @@ import {
 import type { IRealmArenaStepOutcome, RealmArenaPartState } from "./apiModels";
 import type { GameResultBarChart, GameResultChart, GameResultTable } from "@/utils/apiModels/GameDataApi";
 import {
-    battleOf, coopBattle, endTurnBy, makeGame, muster, musterAll, play, playScriptedBattle, playScriptedTurn, readyMadePicks, seedRolls, TEAMS, FOUR_TEAM, warbandsOf, type RealmArenaTestGame,
+    battleOf, coopBattle, endTurnBy, makeGame, muster, musterAll, play, playScriptedBattle, playScriptedTurn, readyMadePicks, TEAMS, FOUR_TEAM, warbandsOf, type RealmArenaTestGame,
 } from "./testFixtures";
+import { seedRolls } from "./seedRolls";
 
 // docs/games/realm-arena.md §29, PR 4a: the enemy's turn. Co-op from the setup
 // to the state, the warbands mustered, a warband's turn inside each player's

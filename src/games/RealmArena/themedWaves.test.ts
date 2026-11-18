@@ -7,7 +7,8 @@ import { recordBattle } from "./recordBattle";
 import { nextWaveOf, warbandBudgetOf, waveBudgetOf, waveOf } from "./RealmArenaLogic";
 import { isCombatant, isWarband, newFighter, nextFighterId, wavePurchase, wavesLanded, waveThemeOf } from "./rules";
 import { ruleValuesOf, rulesetFor } from "./rulesets";
-import { addFighter, endTurnBy, makeGame, musterAll, play, playScriptedBattle, seedRolls, warbandsOf, type RealmArenaTestGame } from "./testFixtures";
+import { addFighter, endTurnBy, makeGame, musterAll, play, playScriptedBattle, warbandsOf, type RealmArenaTestGame } from "./testFixtures";
+import { seedRolls } from "./seedRolls";
 import type { GameResultBarChart } from "@/utils/apiModels/GameDataApi";
 
 // docs/games/realm-arena.md §39.6: waves that differ, bought with points. The

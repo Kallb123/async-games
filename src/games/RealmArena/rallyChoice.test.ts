@@ -12,7 +12,8 @@ import { rallyOptionsOf, rallyRefusal, rallyTally, rallyTotal, resupplyItems, ty
 import { battlefieldById } from "./maps";
 import { distance } from "@/utils/games/battlefield/terrain";
 import { isStanding, isWarband, maxHpOf, newFighter, viewOf, warbandOwner, type Fighter } from "./rules";
-import { actBy, addFighter, battleOf, cmd, endTurnBy, makeGame, muster, musterAll, play, readyMadePicks, playScriptedBattle, responseFor, seedRolls, type RealmArenaTestGame } from "./testFixtures";
+import { actBy, addFighter, battleOf, cmd, endTurnBy, makeGame, muster, musterAll, play, readyMadePicks, playScriptedBattle, responseFor, type RealmArenaTestGame } from "./testFixtures";
+import { seedRolls } from "./seedRolls";
 
 // docs/games/realm-arena.md §39.4: from rules version 12 a Hold Out wave heals
 // nobody as it lands, and each player of the team owes a rally choice instead:
