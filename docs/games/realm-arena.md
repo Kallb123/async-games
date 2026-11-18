@@ -1,10 +1,10 @@
 # Realm Arena — Game Design Document
 
-**Status:** v1.65. The Realm troop overhaul (§34) is implemented for new
+**Status:** v1.71. The Realm troop overhaul (§34) is implemented for new
 battles in rules version 9, using §34.10's proposed defaults for playtesting,
 sight with angles (§36) in rules version 10, co-op for a team of four in
 Hold Out (§37), and every Archer shot at 2 AP (§38) in rules version 11. Battles already created keep their original rules.
-§39 plans what comes next for Hold Out against the Swarm; its first PR, Taunt's radius (§39.2), is built in the unreleased rules version 12.
+§39 plans what comes next for Hold Out against the Swarm; its first seven PRs (§39.2–§39.8) are built, six of them in the unreleased rules version 12, which also holds the ability loadouts (§40).
 Earlier implementation
 notes and revision history describe the game before this overhaul wherever
 they conflict with §34.
@@ -1486,6 +1486,9 @@ first, so mastery moved from C4 to C5.
   or one ability. It's picked per figure at muster, like an item, and costs
   the same points as the kit it replaces. A character with no option picked
   is the starter character of §13.6.
+  *From rules version 12 (§40.2):* for the Realm's five, an ability option
+  joins the character's pool of abilities to pick from rather than swapping
+  one out; Frost bolt still swaps the Mage's weapon.
 - **An option is a sidegrade.** It never adds HP, accuracy or AP outright.
   Anything it adds, it pays for by giving something else up.
 - **The options picked are public once the battle starts**, like items (in
@@ -4871,7 +4874,7 @@ two different arrows in one turn, but never the same one twice running.
 
 ## 39. Hold Out against the Swarm: the next seven PRs (plan)
 
-*Planned; PRs 1, 2, 3, 4 and 5 (§39.2, §39.3, §39.4, §39.5, §39.6) are built, in a catalogue not yet released.* Hold Out with the players as the Realm against the
+*Planned; PRs 1–7 (§39.2–§39.8) are built, PRs 1–6 in a catalogue not yet released.* Hold Out with the players as the Realm against the
 computer's Swarm is the game's main mode, which is why the Realm's kit was
 rebuilt first (§34). This section plans what makes the Swarm worth using that
 kit on: a Taunt with a reach, Bloaters that burst when they fall, a rally each
@@ -4898,9 +4901,10 @@ Every value marked *Proposed* is a starting point for the balance harness
   the old behaviour. The Renegades and the Miners have none of the new fields,
   so Hold Out against them plays as it does today.
 - **A command version where one is due** (`docs/command-versions.md`): for the
-  rally's new action (§39.4) only. The End turn landing a wave by the new rules
+  rally's new action (§39.4, command version 12), and the loadout a muster's
+  picks carry (§40.3, command version 13). The End turn landing a wave by the new rules
   (§39.6, §39.7) needs none: version 12 is unreleased, no battle can be created
-  under it until §39.9, and by then every client sends command version 12 or
+  under it until §39.9, and by then every client sends command version 13 or
   later, so the catalogue is the only gate those waves need.
 - **One "What's new" line**, written by the last PR, for the lot.
 - **Step 0: a baseline.** Before PR 1, run the harness at version 11: Hold Out
@@ -5721,8 +5725,8 @@ the Knight beside her rather than trading blows with it.
 ### 39.10 What it leaves, and what it meets
 
 - **The loadout** ([issue 957](https://github.com/Kallb123/async-games/issues/957))
-  is a rules change of its own. If it lands in the same release it shares
-  version 12; if later, it's version 13. *Built* in version 12 (§40). Either way it should be measured
+  is a rules change of its own. It shares rules version 12, built in §40,
+  and it should be measured
   after §39.5 and §39.6: the elites are what make a single-target pick worth
   taking, so a loadout tuned before them would be tuned against the wrong
   enemy.
