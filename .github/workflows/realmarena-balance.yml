@@ -43,7 +43,7 @@ on:
         description: First seed; battle k of each scenario rolls from seed + k
         default: '1'
       rules:
-        description: Rules version to fight under (blank for the current one; 12 for the unreleased §39 catalogue)
+        description: Rules version to fight under (blank for the current one, 12; 11 for the one before)
         default: ''
       rally:
         description: How the team answers the rally's choice under rules that have one (policy, or always to Rally every time)

@@ -82,7 +82,7 @@ export const WHATS_NEW: WhatsNewGroup[] = [
         icon: "✨",
         items: [
             {
-                title: "Realm Arena: Hold Out against a Swarm worth fighting",
+                title: "Realm Arena: pick your abilities, and a Swarm worth fighting in Hold Out",
                 detail: "Each of your Realm characters now picks two of its abilities at the muster, so two Archers can carry different arrows. Against the Swarm, the waves come themed — some led by a Bile Lobber, a Carapace Brute or a Brood Queen — nests at the edges cost the next wave if you burn them out, Bloaters burst when they fall, and a Knight's Taunt braces every ally around it. After each wave, every player picks their own rally: heal, bring someone back, or refill items. Two new achievements: Regicide and Scorched Earth.",
                 game: "realmarena",
             },

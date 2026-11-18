@@ -72,6 +72,21 @@ export interface BalanceScenario {
 /** The optional numeric rule values (`RealmArenaRuleValues`): absent from older catalogues, but a rule the engine reads whenever it's there. */
 const OPTIONAL_NUMERIC_RULES = ["WAVE_GROWTH_POINTS", "WAVE_CAP", "NEST_POINTS"] as const satisfies readonly (keyof RealmArenaRuleValues)[];
 
+/** Refuses a `--set` path or value the version fought can't take: not a numeric rule, an unknown character, a non-positive HP, or any other path. */
+function checkOverride(path: string, value: number, ruleset: RealmArenaRuleset, rulesVersion: number): void {
+    const parts = path.split(".");
+    if (parts[0] === "RULES" && parts.length === 2) {
+        const key = parts[1] as keyof RealmArenaRuleValues;
+        const known = Object.hasOwn(ruleset.RULES, key) ? typeof ruleset.RULES[key] === "number" : (OPTIONAL_NUMERIC_RULES as readonly string[]).includes(key);
+        if (!known) throw new Error(`--set: "${path}" isn't a numeric rule of rules version ${rulesVersion}`);
+    } else if (parts[0] === "CHARACTERS" && parts.length === 3 && parts[2] === "hp") {
+        if (!Object.hasOwn(ruleset.CHARACTERS, parts[1])) throw new Error(`--set: "${path}": rules version ${rulesVersion} has no character "${parts[1]}"`);
+        if (value <= 0) throw new Error(`--set: "${path}" must be above 0`);
+    } else {
+        throw new Error(`--set: "${path}" isn't RULES.<KEY> or CHARACTERS.<id>.hp`);
+    }
+}
+
 /**
  * What `--set` may change, and what it takes effect on: the numeric values of
  * `rulesVersion`'s `RULES` (and the optional ones above), and a character's
@@ -91,17 +106,7 @@ export function parseOverrides(text: string, rulesVersion: number = CURRENT_RULE
         const [, path, raw] = match;
         const value = raw.trim() === "" ? NaN : Number(raw);
         if (!Number.isFinite(value)) throw new Error(`--set: "${path}" needs a finite number, not "${raw}"`);
-        const parts = path.split(".");
-        if (parts[0] === "RULES" && parts.length === 2) {
-            const key = parts[1] as keyof RealmArenaRuleValues;
-            const known = Object.hasOwn(ruleset.RULES, key) ? typeof ruleset.RULES[key] === "number" : (OPTIONAL_NUMERIC_RULES as readonly string[]).includes(key);
-            if (!known) throw new Error(`--set: "${path}" isn't a numeric rule of rules version ${rulesVersion}`);
-        } else if (parts[0] === "CHARACTERS" && parts.length === 3 && parts[2] === "hp") {
-            if (!Object.hasOwn(ruleset.CHARACTERS, parts[1])) throw new Error(`--set: "${path}": rules version ${rulesVersion} has no character "${parts[1]}"`);
-            if (value <= 0) throw new Error(`--set: "${path}" must be above 0`);
-        } else {
-            throw new Error(`--set: "${path}" isn't RULES.<KEY> or CHARACTERS.<id>.hp`);
-        }
+        checkOverride(path, value, ruleset, rulesVersion);
         if (found.has(path)) throw new Error(`--set: "${path}" is given twice`);
         found.set(path, value);
     }
@@ -123,10 +128,10 @@ export function applyOverrides(scenario: Pick<BalanceScenario, "rules" | "set">)
     if (!scenario.set || Object.keys(scenario.set).length === 0) return;
     const version = scenario.rules ?? CURRENT_RULESET_VERSION;
     const base = rulesetFor(version);
-    const checked = parseOverrides(Object.entries(scenario.set).map(([path, value]) => `${path}=${value}`).join(","), version);
+    for (const [path, value] of Object.entries(scenario.set)) checkOverride(path, value, base, version);
     const rules: Record<string, unknown> = { ...base.RULES };
     const characters: Record<string, unknown> = { ...base.CHARACTERS };
-    for (const [path, value] of Object.entries(checked)) {
+    for (const [path, value] of Object.entries(scenario.set)) {
         const [group, id] = path.split(".");
         if (group === "RULES") rules[id] = value;
         else characters[id] = { ...base.CHARACTERS[id as keyof RealmArenaRuleset["CHARACTERS"]], hp: value };

@@ -152,18 +152,19 @@ describe("the balance harness's overrides (--set)", () => {
     });
 
     it("reaches the version fought and no other, and goes when the next scenario has none", () => {
-        const v11 = { growth: ruleValuesOf({ rulesVersion: 11 }).ARMOUR, hp: rulesetFor(11).CHARACTERS.knight.hp, queen: rulesetFor(12).CHARACTERS.broodQueen.hp };
+        const v11 = { armour: ruleValuesOf({ rulesVersion: 11 }).ARMOUR, hp: rulesetFor(11).CHARACTERS.knight.hp, growth12: rulesetFor(12).RULES.WAVE_GROWTH_POINTS, hp12: rulesetFor(12).CHARACTERS.knight.hp, queen: rulesetFor(12).CHARACTERS.broodQueen.hp };
         try {
             applyOverrides({ rules: 12, set: { "RULES.WAVE_GROWTH_POINTS": 30, "RULES.ARMOUR": 3, "CHARACTERS.knight.hp": 99 } });
+            expect(v11.growth12).not.toBe(30);
             expect(ruleValuesOf({ rulesVersion: 12 }).WAVE_GROWTH_POINTS).toBe(30);
             expect(ruleValuesOf({ rulesVersion: 12 }).ARMOUR).toBe(3);
             expect(rulesetFor(12).CHARACTERS.knight.hp).toBe(99);
             expect(rulesetFor(12).CHARACTERS.broodQueen.hp).toBe(v11.queen);
-            expect(ruleValuesOf({ rulesVersion: 11 }).ARMOUR).toBe(v11.growth);
+            expect(ruleValuesOf({ rulesVersion: 11 }).ARMOUR).toBe(v11.armour);
             expect(rulesetFor(11).CHARACTERS.knight.hp).toBe(v11.hp);
             applyOverrides({ rules: 12 });
-            expect(ruleValuesOf({ rulesVersion: 12 }).WAVE_GROWTH_POINTS).toBe(15);
-            expect(rulesetFor(12).CHARACTERS.knight.hp).toBe(v11.hp);
+            expect(ruleValuesOf({ rulesVersion: 12 }).WAVE_GROWTH_POINTS).toBe(v11.growth12);
+            expect(rulesetFor(12).CHARACTERS.knight.hp).toBe(v11.hp12);
         } finally {
             applyOverrides({});
         }
