@@ -36,7 +36,7 @@ import { battlefieldWith, coordsOf, type Battlefield, type Square } from "@/util
 import { type AbilityId, type CharacterId } from "./characters";
 import {
     abilitiesOf, alliesWithin, activeEffects, act, canAct, allied, areaAround, blastedIn, burstArea, CENTRE, centrePoints, check, fighterById, isCombatant, isStanding, isStructure, landedSmoke,
-    damageTo, dodgeReach, inMeleeReach, leapTargets, maxHpOf, moveAp, movementOf, reachOf, ROLL_SIDES, shotOdds, squadSight, strikeChance, watchedSquares, weaponOf, weaponReaches,
+    damageTo, dodgeReach, givesCover, inMeleeReach, leapTargets, maxHpOf, moveAp, movementOf, reachOf, ROLL_SIDES, shotOdds, squadSight, strikeChance, watchedSquares, weaponOf, weaponReaches,
     type Action, type BattleEvent, type BattleState, type Fighter, type FogGhost, type ShotOdds,
 } from "./rules";
 import { ACTION_AIMS, standingAt, rangeKindOf, rangeSquares, reactionPreviews, rollsToHit, shotOf, targetKindOf, targetsOf, type ActionKind } from "./tactics";
@@ -405,7 +405,7 @@ function movesFor(plan: Plan, fighter: Fighter, kind: "move" | "sneak"): Action[
     const taken = new Set(state.fighters.filter(isStanding).map(one => one.square));
     const ranked: { square: Square; value: number }[] = [];
     const enemies = enemiesOf(state, fighter.owner);
-    const known = harmKnown(plan, fighter, enemies);
+    const known = harmKnown(plan, state, enemies)(fighter);
     reach.costs.forEach((cost, square) => {
         if (cost === Infinity || square === reach.from || taken.has(square) || !state.field.tiles[square].terrain.standable) return;
         // Read against the battle as it stands rather than one with the
@@ -414,9 +414,7 @@ function movesFor(plan: Plan, fighter: Fighter, kind: "move" | "sneak"): Action[
         // reads where it stands — its own shield wall shelters its allies,
         // never itself or an enemy.
         const moved = { ...fighter, square, ap: fighter.ap - moveAp(fighter, cost, sneaking, plan.state) };
-        let harm = known.get(square);
-        if (!harm) known.set(square, harm = harmAt(state, moved, enemies));
-        ranked.push({ square, value: standingTerms(plan, state, moved, enemies, harm) });
+        ranked.push({ square, value: standingTerms(plan, state, moved, enemies, harmIn(known, state, moved, enemies)) });
     });
     ranked.sort((a, b) => b.value - a.value || a.square - b.square);
     const moves: Action[] = [];
@@ -516,6 +514,7 @@ function score(plan: Plan, battle: BattleState, events: readonly BattleEvent[]):
         }
     }
     const enemies = enemiesOf(battle, owner);
+    const known = harmKnown(plan, battle, enemies);
     for (const fighter of battle.fighters) {
         if (!isStanding(fighter)) continue;
         const catalogue = rulesetOf(battle);
@@ -529,7 +528,7 @@ function score(plan: Plan, battle: BattleState, events: readonly BattleEvent[]):
         const structure = isStructure(fighter, battle);
         total += side(fighter.owner) * worthOf(fighter, fighter.hp, plan.state) * WEIGHTS.strength * (side(fighter.owner) > 0 && !structure ? ownWorth : 1);
         // Where a structure stands is not its to choose.
-        if (fighter.owner === owner && !structure) total += standingTerms(plan, battle, fighter, enemies);
+        if (fighter.owner === owner && !structure) total += standingTerms(plan, battle, fighter, enemies, harmIn(known(fighter), battle, fighter, enemies));
     }
     return total;
 }
@@ -567,9 +566,11 @@ function temperedHarm(battle: BattleState, fighter: Fighter, enemies: readonly F
     let threat = harm.threat * temperament.threat, extra = 0;
     switch (temperament.extra) {
         case "pack": {
-            const pack = alliesWithin(battle, battle.fighters, fighter, undefined).filter(one => one.id !== fighter.id);
+            // Only a character next to an enemy has a pack to count.
+            let pack: Fighter[] | undefined;
             for (const enemy of enemies) {
                 if (!inMeleeReach(field, fighter.square, enemy.square, battle)) continue;
+                pack ??= alliesWithin(battle, battle.fighters, fighter, undefined).filter(one => one.id !== fighter.id);
                 const flanking = pack.filter(one => inMeleeReach(field, one.square, enemy.square, battle)).length;
                 extra = Math.max(extra, flanking * PACK_BONUS);
             }
@@ -611,18 +612,52 @@ function harmAt(battle: BattleState, fighter: Fighter, enemies: readonly Fighter
  * change a shot's odds, the sides, and the battlefield. Anything that reads
  * more must name it here too, which the memo's test holds.
  */
-function harmKnown(plan: Plan, fighter: Fighter, enemies: readonly Fighter[]): Map<Square, Harm> {
-    const { state, memo } = plan;
-    // Of each character, only what a shot or a strike reads: not the way it
-    // faces, or what it has banked or spent, which every action changes, the
-    // overwatch a move sets off among them. Of the character itself, not
-    // where it stands either.
-    const read = ({ id, owner, character, option, loadout, hp, maxHp, effects }: Fighter) => [id, owner, character, option ?? null, loadout ?? null, hp, maxHp ?? null, effects];
-    const walls = state.fighters.filter(isStanding).map(one => [...read(one), one.square]);
-    const key = JSON.stringify([fieldId(memo, state.field), read(fighter), enemies.map(enemy => [...read(enemy), enemy.square]), walls, state.clouds ?? [], landedSmoke(state.fighters), state.sides ?? null, state.rulesVersion ?? null, ruleValuesOf(state), state.armoured ?? false]);
-    let known = memo.harm.get(key);
-    if (!known) memo.harm.set(key, known = new Map());
-    return known;
+function harmKnown(plan: Plan, battle: BattleState, enemies: readonly Fighter[]): (fighter: Fighter) => Map<Square, Harm> {
+    const { memo } = plan;
+    // What every character of the battle shares, worked out once for it when first asked.
+    let shared: string | undefined;
+    return fighter => {
+        shared ??= [
+            fieldId(memo, battle.field), enemies.map(enemy => `${readKey(enemy, true)},${enemy.square}`).join(";"),
+            battle.fighters.filter(one => isStanding(one) && givesCover(battle, one)).map(one => `${readKey(one, true)},${one.square}`).join(";"),
+            JSON.stringify([battle.clouds ?? [], landedSmoke(battle.fighters), battle.sides ?? null, battle.rulesVersion ?? null, battle.armoured ?? false]),
+            rulesKey(battle),
+        ].join("\n");
+        const key = `${readKey(fighter, givesCover(battle, fighter))}\n${shared}`;
+        let known = memo.harm.get(key);
+        if (!known) memo.harm.set(key, known = new Map());
+        return known;
+    };
+}
+
+/**
+ * Of a character, only what a shot or a strike reads: not the way it faces, or
+ * what it has banked or spent, which every action changes, the overwatch a
+ * move sets off among them; and not where it stands. Nor, unless `named`,
+ * which of its kind it is: the only way a shot's odds tell two characters of
+ * one kind apart is the cover one of them gives (`givesCover`), so a
+ * warband's dozen Skitterlings share what one of them works out.
+ */
+function readKey({ id, owner, character, option, loadout, hp, maxHp, effects }: Fighter, named: boolean): string {
+    let held = "";
+    for (const effect in effects) held += `${effect}:${effects[effect as keyof typeof effects]};`;
+    return `${named ? id : -1},${owner},${character},${option ?? ""},${loadout ? `[${loadout.join()}]` : ""},${hp},${maxHp ?? ""},${held}`;
+}
+
+/** Every rule value a battle plays by, as `harmKnown` names them: made once for each set of values. */
+function rulesKey(battle: BattleState): string {
+    const values = ruleValuesOf(battle);
+    let key = RULES_KEYS.get(values);
+    if (key === undefined) RULES_KEYS.set(values, key = JSON.stringify(values));
+    return key;
+}
+const RULES_KEYS = new WeakMap<object, string>();
+
+/** `harmAt` for a character on a square, read from what its turn has already worked out for it (`harmKnown`) or worked out and kept. */
+function harmIn(known: Map<Square, Harm>, battle: BattleState, fighter: Fighter, enemies: readonly Fighter[]): Harm {
+    let harm = known.get(fighter.square);
+    if (!harm) known.set(fighter.square, harm = harmAt(battle, fighter, enemies));
+    return harm;
 }
 
 /** The enemies of a player standing in a battle: whoever its characters' Exposure and Threat are read against. */

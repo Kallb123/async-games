@@ -336,6 +336,15 @@ const SWAPPED_KITS = new WeakMap<Character, WeakMap<CharacterOption, Kit>>();
 const LOADOUT_KITS = new WeakMap<Character, Map<string, Kit>>();
 /** The planner's hot path: the default kit per character, with nothing picked and no weapon swapped. */
 const DEFAULT_LOADOUT_KITS = new WeakMap<Character, Kit>();
+/** A loadout array's kit, per character: the loadout a fighter was mustered with is one array, asked about thousands of times a turn. */
+const PICKED_KITS = new WeakMap<readonly AbilityId[], WeakMap<Character, Kit>>();
+/** A loadout's cache key, joined once per array: a fighter keeps the one array it was mustered with, and the planner asks for its kit thousands of times a turn. */
+const LOADOUT_KEYS = new WeakMap<readonly AbilityId[], string>();
+const loadoutKey = (loadout: readonly AbilityId[]): string => {
+    let key = LOADOUT_KEYS.get(loadout);
+    if (key === undefined) LOADOUT_KEYS.set(loadout, key = loadout.join());
+    return key;
+};
 export function kitOf(character: CharacterId, option?: OptionId, context?: RulesContext, loadout?: readonly AbilityId[]): Kit {
     const { CHARACTERS, OPTIONS } = rulesetOf(context);
     const starter = CHARACTERS[character];
@@ -348,7 +357,10 @@ export function kitOf(character: CharacterId, option?: OptionId, context?: Rules
         const weaponSwap = swap && swap.character === character && "weapon" in swap ? swap : undefined;
         const plain = weaponSwap || loadout ? undefined : DEFAULT_LOADOUT_KITS.get(starter);
         if (plain) return plain;
-        const key = `${weaponSwap ? option : ""}|${loadout ? loadout.join() : ""}`;
+        // The same array again, which is what a fighter hands in every time: no key to build.
+        const picked = !weaponSwap && loadout ? PICKED_KITS.get(loadout)?.get(starter) : undefined;
+        if (picked) return picked;
+        const key = `${weaponSwap ? option : ""}|${loadout ? loadoutKey(loadout) : ""}`;
         let kits = LOADOUT_KITS.get(starter);
         if (!kits) LOADOUT_KITS.set(starter, kits = new Map());
         let kit = kits.get(key);
@@ -357,6 +369,11 @@ export function kitOf(character: CharacterId, option?: OptionId, context?: Rules
             kits.set(key, kit);
         }
         if (!weaponSwap && !loadout) DEFAULT_LOADOUT_KITS.set(starter, kit);
+        if (!weaponSwap && loadout) {
+            let byStarter = PICKED_KITS.get(loadout);
+            if (!byStarter) PICKED_KITS.set(loadout, byStarter = new WeakMap());
+            byStarter.set(starter, kit);
+        }
         return kit;
     }
     if (!swap || swap.character !== character) {
