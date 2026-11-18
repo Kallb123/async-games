@@ -7,7 +7,7 @@ import RealmArenaCrosshair from './RealmArenaCrosshair';
 import { RealmArenaStatusList } from './RealmArenaEffects';
 import { apPips, canAct, effectsOn, fighterName, hpFraction, watchStatus } from '@/games/RealmArena/ui';
 import { attackOptions } from '@/games/RealmArena/tactics';
-import { CHARACTER_MARK } from '@/games/RealmArena/roster';
+import { CHARACTER_MARK, loadoutLine } from '@/games/RealmArena/roster';
 
 interface RealmArenaUnitsProps {
     /** The battlefield and everyone on it: the viewer's own are picked out of it. */
@@ -56,7 +56,7 @@ export default function RealmArenaUnits({ battle, player, colourFor, acting, sho
                             mark={standing ? CHARACTER_MARK[fighter.character] : '✕'}
                             colour={standing ? colourFor(fighter.owner) : undefined}
                             name={fighterName(fighters, fighter, battle)}
-                            sub={`${fighter.hp}/${maxHpOf(fighter)} HP`}
+                            sub={[`${fighter.hp}/${maxHpOf(fighter)} HP`, loadoutLine(fighter, battle)].filter(Boolean).join(' · ')}
                             selected={fighter.id === selectedId}
                             dim={done || !standing}
                             onClick={() => onSelect(fighter.id)}

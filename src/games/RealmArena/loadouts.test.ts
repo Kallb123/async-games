@@ -6,7 +6,7 @@ import type { MasterySnapshot } from "./mastery";
 import { gameStateToModel } from "./RealmArenaModels";
 import { undoDepthOf } from "./RealmArenaLogic";
 import { rulesetOf } from "./rulesets";
-import { abilitiesOf, check, musterRefusal, newFighter, pickOf, readyMadeMuster, storedFighter, type MusterPick } from "./rules";
+import { abilitiesOf, check, musterRefusal, newFighter, pickOf, readyMadeMuster, storedFighter, viewOf, type MusterPick } from "./rules";
 import { battleOf, makeGame, muster, musterAll, play, playScriptedTurn, readyMadePicks, responseFor, type RealmArenaTestGame } from "./testFixtures";
 
 // docs/games/realm-arena.md §40: each of the Realm's figures keeps its fixed
@@ -79,6 +79,10 @@ describe("kits under a pool (§40.3)", () => {
         expect(kitOf("mage", "frostBolt", V12, ["focus", "iceBall"]).weapon.name).not.toBe(kitOf("mage", undefined, V12).weapon.name);
         expect(kitIds("mage", ["focus", "iceBall"], V12, "frostBolt")).toEqual(["iceBall", "focus"]);
         expect(kitIds("knight", undefined, V12, "demolish")).toEqual(["bulwark", "taunt", "shove"]);
+    });
+
+    it("reads a stored loadout that isn't a list as the defaults, rather than throwing", () => {
+        for (const junk of ["aimedShot", 7, { length: 2 }]) expect(kitIds("archer", junk as unknown as AbilityId[])).toEqual(["aimedShot", "poisonArrow"]);
     });
 
     it("leaves every earlier catalogue's whole kit, and its options swapping, alone", () => {
@@ -202,6 +206,17 @@ describe("mustering with a loadout (§40.3)", () => {
             const fighters = (await responseFor(game, viewer)).specificGameState.fighters;
             expect(fighters.find(one => one.owner === "a" && one.character === "mage")?.loadout).toEqual(["focus", "iceBall"]);
         }
+    });
+
+    it("in fog of war, tells a loadout only with a figure the viewer can see", async () => {
+        const game = makeGame(undefined, RANKED, { ...V12, fog: true });
+        await play(game, muster("a", picksFor(game, ["mage", "archer"], { mage: ["focus", "iceBall"] })));
+        await play(game, muster("b", readyMadePicks(game, 1)));
+        const seen = new Set(viewOf(battleOf(game), "b").fighters.map(fighter => fighter.id));
+        const mage = game.specificGameState.fighters.find(one => one.owner === "a" && one.character === "mage")!;
+        const wire = (await responseFor(game, "b")).specificGameState;
+        expect(wire.fighters.every(fighter => seen.has(fighter.id))).toBe(true);
+        expect(JSON.stringify(wire).includes("iceBall")).toBe(seen.has(mage.id));
     });
 
     it("gives the ready-made squad and warbands no loadout, and they fight with the defaults", async () => {

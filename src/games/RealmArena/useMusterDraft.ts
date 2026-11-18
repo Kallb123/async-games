@@ -2,8 +2,9 @@ import { rulesetOf, type RulesContext } from "./rulesets";
 import { useResettingState } from "@/utils/hooks/useResettingState";
 import type { Battlefield, Square } from "@/utils/games/battlefield/terrain";
 import { pluralize } from "@/utils/ui/text";
-import { readyMadeSquad, squadPoints, type FactionId, type ItemId, type OptionId } from "./characters";
+import { readyMadeSquad, squadPoints, type AbilityId, type FactionId, type ItemId, type OptionId } from "./characters";
 import type { Ranks } from "./mastery";
+import { loadoutOf, withPick } from "./roster";
 import { itemsPoints, musterRefusal, pickOf, readyMadeMuster, type MusterPick } from "./rules";
 import { handItem, handOut, itemsOf, NO_ITEMS, placeTap, squadCounts, squadOf, type ItemCounts, type Placement, type SquadCounts } from "./ui";
 
@@ -83,6 +84,12 @@ export function useMusterDraft(field: Battlefield, seat: number, budget: number,
         /** Musters the character picked up with `option`, or as the starter character. */
         choose: (option: OptionId | null) => outfit((all, selected) =>
             all.map((pick, i) => i === selected ? pickOf({ ...pick, option: option ?? undefined }) : pick)),
+        /** Takes `ability` into battle with the character picked up (§40.4), dropping the one it took first: in pick order, which the kit sorts itself. */
+        pickAbility: (ability: AbilityId) => outfit((all, selected) =>
+            all.map((pick, i) => {
+                const picks = rulesetOf(context).CHARACTERS[pick.character].loadout?.picks;
+                return i === selected && picks ? pickOf({ ...pick, loadout: withPick(loadoutOf(pick, context) ?? [], ability, picks) }) : pick;
+            })),
     };
 }
 

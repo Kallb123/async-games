@@ -5858,11 +5858,16 @@ for the squad, and Blessing, the one that helps everyone.
   rank hasn't unlocked is greyed, with the rank that does. Frost bolt is
   still offered as the weapon swap.
 - **Telling figures apart.** The squad's list names each figure's picks under
-  it, in the muster and in the battle, for its owner and for the opponent,
-  so two Archers read apart at a glance; the character's card lists its kit,
-  as it always has.
-- **The stats sheet** shows a character's fixed abilities, then its pool and
-  how many it picks.
+  it (`loadoutLine`), in the muster and in the battle, so a player's two
+  Archers read apart at a glance. That list is the viewer's own squad; an
+  opponent's figure, tapped, shows its card, which lists its kit — the loadout
+  it fights with — as it always has. A list of the opponent's squad would be a
+  new surface, not built.
+- **The stats sheet** shows a character's fixed abilities (*Always*), then its
+  pool (*Pick 2*, and *Rank 1 · pick* for an option's), with only Frost bolt
+  left among its options (`optionsFor`). The profile still lists every option
+  a rank has unlocked (`unlocksFor`), an ability one reading "Joins its
+  picks".
 
 ### 40.5 Measured
 

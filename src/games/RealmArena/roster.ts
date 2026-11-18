@@ -6,7 +6,7 @@
 // carrying the whole of rules.ts into its bundle. The board's own readings of
 // the battle are ui.ts's.
 
-import { CHARACTERS, type AbilityId, type CharacterId, type FactionId, type OptionId, type Weapon } from "./characters";
+import { CHARACTERS, loadoutPoolOf, type AbilityId, type CharacterId, type FactionId, type OptionId, type Weapon } from "./characters";
 import { ruleValuesOf, rulesetOf, type RulesContext } from "./rulesets";
 import { nextRankXp, rankOf, type PlayerMastery } from "./mastery";
 
@@ -55,12 +55,50 @@ export function weaponLine(weapon: Weapon, context?: RulesContext): string {
     return `${weapon.accuracy}% · range ${weapon.range} · ${weapon.damage} damage${leaves}`;
 }
 
-/** A character's options (§23.2), lowest rank first: what its muster row offers, locked or not. */
-export function optionsFor(character: CharacterId, context?: RulesContext): OptionId[] {
+/** Every option a character has unlocked by mastery (§23.2), lowest rank first: what the profile lists, an ability option of a character with a pool included. */
+export function unlocksFor(character: CharacterId, context?: RulesContext): OptionId[] {
     const { OPTIONS } = rulesetOf(context);
     return (Object.keys(OPTIONS) as OptionId[])
         .filter(id => OPTIONS[id].character === character)
         .sort((a, b) => OPTIONS[a].rank - OPTIONS[b].rank);
+}
+
+/**
+ * A character's options (§23.2), lowest rank first: what its muster row
+ * offers, locked or not. Where it has a pool of abilities (§40) an ability
+ * option is one of the pool's entries, not a swap, so only the weapon ones
+ * are options there.
+ */
+export function optionsFor(character: CharacterId, context?: RulesContext): OptionId[] {
+    const { OPTIONS } = rulesetOf(context);
+    const pooled = loadoutPoolOf(character, context) !== undefined;
+    return unlocksFor(character, context).filter(id => !pooled || "weapon" in OPTIONS[id]);
+}
+
+/**
+ * The abilities a figure with a pool carries besides its fixed ones (§40.3):
+ * the loadout it was mustered with, or its character's defaults. Undefined for
+ * a character with no pool, which fights with its whole kit.
+ */
+export function loadoutOf(subject: { character: CharacterId; loadout?: readonly AbilityId[] }, context?: RulesContext): readonly AbilityId[] | undefined {
+    const pool = rulesetOf(context).CHARACTERS[subject.character].loadout;
+    return pool && (subject.loadout ?? pool.defaults);
+}
+
+/**
+ * The loadout after taking `ability` (§40.4): it goes last, and the one taken
+ * longest ago falls off the front so the list stays `picks` long.
+ */
+export function withPick(current: readonly AbilityId[], ability: AbilityId, picks: number): AbilityId[] {
+    return [...current.filter(id => id !== ability), ability].slice(-picks);
+}
+
+/** The names of what a figure with a pool took into battle, in its pool's order: "Aimed shot · Poison arrow". Undefined with no pool. */
+export function loadoutLine(subject: { character: CharacterId; loadout?: readonly AbilityId[] }, context?: RulesContext): string | undefined {
+    const taken = loadoutOf(subject, context);
+    if (!taken) return undefined;
+    const { ABILITIES } = rulesetOf(context);
+    return loadoutPoolOf(subject.character, context)!.filter(entry => taken.includes(entry.ability)).map(entry => ABILITIES[entry.ability]!.name).join(" · ");
 }
 
 /** The glyph an ability's row leads with, where a weapon's leads with `weaponMark`. */
@@ -109,7 +147,9 @@ export function optionView(id: OptionId, context?: RulesContext): KitView {
         return { icon: weaponMark(character, id), name: weapon.name, line: `In place of the ${replaced} · ${weaponLine(weapon, context)}` };
     }
     const ability = ABILITIES[option.ability]!;
-    return { icon: ABILITY_MARK, name: ability.name, line: `In place of ${replaced} · ${ability.ap} AP · ${ability.description}` };
+    // A character with a pool takes it as one of its picks, rather than in place of anything.
+    const lead = loadoutPoolOf(option.character, context) ? "Joins its picks" : `In place of ${replaced}`;
+    return { icon: ABILITY_MARK, name: ability.name, line: `${lead} · ${ability.ap} AP · ${ability.description}` };
 }
 
 /** Where a character's XP stands against the ranks (§23.1): "75 XP · 105 more for rank 2". */

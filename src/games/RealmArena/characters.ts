@@ -308,6 +308,8 @@ export function kitOf(character: CharacterId, option?: OptionId, context?: Rules
     const { weapon, abilities } = starter;
     const swap: CharacterOption | undefined = option ? OPTIONS[option] : undefined;
     if (starter.loadout) {
+        // Only a muster's checked list is ever stored; anything else reads as the defaults, never a throw.
+        if (loadout !== undefined && !Array.isArray(loadout)) loadout = undefined;
         // §40.2: an ability option isn't a swap here, it's a pool entry; only a weapon swaps.
         const weaponSwap = swap && swap.character === character && "weapon" in swap ? swap : undefined;
         const byArray = weaponSwap || !loadout ? undefined : ARRAY_LOADOUT_KITS.get(loadout)?.get(starter);
