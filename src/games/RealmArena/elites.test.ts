@@ -22,7 +22,7 @@ const field = fieldOf(...Array(8).fill("............"));
 const point = (col: number, row = 3) => at(field, col, row);
 
 function fighter(id: number, owner: string, character: CharacterId, col: number, row = 3, extra: Partial<Fighter> = {}, on = field): Fighter {
-    return { ...newFighter(id, owner, character, at(on, col, row), null, undefined, false, V12), ap: 6, ...extra };
+    return { ...newFighter(id, owner, character, at(on, col, row), null, undefined, undefined, false, V12), ap: 6, ...extra };
 }
 const stateOf = (fighters: Fighter[], extra: Partial<BattleState> = {}, on = field): BattleState => ({ field: on, fighters, ...V12, ...extra });
 const get = (state: Pick<BattleState, "fighters">, id: number) => state.fighters.find(one => one.id === id)!;

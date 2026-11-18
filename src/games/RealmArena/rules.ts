@@ -33,7 +33,7 @@ import { canSee } from "@/utils/games/battlefield/lineOfSight";
 import { DEFAULT_CLIMB, pathCost, pathTo, reachFrom, stepCost, type MoveRules, type Reach } from "@/utils/games/battlefield/pathfinding";
 import { coordsOf, distance, facingTowards, FULL_HEIGHT, isNeighbour, riseOf, squareAt, type Area, type Battlefield, type Cover, type Facing, type Square } from "@/utils/games/battlefield/terrain";
 import {
-    afflictionsOf, factionOf, isCharacterId, isItemId, isOptionId, kitOf, LINE_COOP_MAX, squadPoints,
+    afflictionsOf, factionOf, isCharacterId, isItemId, isOptionId, kitOf, LINE_COOP_MAX, loadoutPoolOf, squadPoints,
     type Ability, type AbilityId, type Affliction, type CharacterId, type Effect, type EffectId, type Faction, type FactionId, type Item, type ItemId, type OptionId, type PlayerCount, type Weapon, type WaveTheme,
 } from "./characters";
 import { currentRuleset, ruleValuesOf, rulesetOf, type RulesContext } from "./rulesets";
@@ -188,6 +188,12 @@ export interface Fighter {
     hatchedBy?: number;
     /** The option it was mustered with, swapping part of its kit for another (§23.2): absent on the starter character. */
     option?: OptionId;
+    /**
+     * The abilities it was mustered with from its character's pool (§40): absent
+     * means the character's default loadout, where it has a pool. Public once the
+     * battle starts, as `option` is, and copied by undo's snapshots.
+     */
+    loadout?: AbilityId[];
     /**
      * Where the smoke pot it threw landed, while the cloud lasts: until the
      * start of its owner's next turn, as a shield wall does, and gone with it
@@ -451,18 +457,18 @@ export function canAct(fighter: Fighter, context?: RulesContext): boolean {
 }
 
 /** What a character's kit says it fights with: its character's weapon, or the one its option swaps in (§23.2). Read only through `weaponOf`, which knows the battle's rules. */
-const kitWeapon = (fighter: Pick<Fighter, "character" | "option">, context?: RulesContext): Weapon => kitOf(fighter.character, fighter.option, context).weapon;
+const kitWeapon = (fighter: Pick<Fighter, "character" | "option" | "loadout">, context?: RulesContext): Weapon => kitOf(fighter.character, fighter.option, context, fighter.loadout).weapon;
 
 /** The weapon this character's selected catalogue and mastery option give it. */
-export function weaponOf(state: Pick<BattleState, "rulesVersion">, fighter: Pick<Fighter, "character" | "option">): Weapon {
+export function weaponOf(state: Pick<BattleState, "rulesVersion">, fighter: Pick<Fighter, "character" | "option" | "loadout">): Weapon {
     return kitWeapon(fighter, state);
 }
 
 /** Whether a character shoots rather than strikes under the selected catalogue. */
-export const shoots = (fighter: Pick<Fighter, "character" | "option">, context?: RulesContext): boolean => kitWeapon(fighter, context).kind === "ranged";
+export const shoots = (fighter: Pick<Fighter, "character" | "option" | "loadout">, context?: RulesContext): boolean => kitWeapon(fighter, context).kind === "ranged";
 
-/** The abilities a character has: its character's, with the one its option swaps out swapped for its own (§23.2). */
-export const abilitiesOf = (fighter: Pick<Fighter, "character" | "option">, context?: RulesContext): readonly AbilityId[] => kitOf(fighter.character, fighter.option, context).abilities;
+/** The abilities a character has: its character's, with the one its option swaps out swapped for its own (§23.2), or — where it has a pool — its fixed ones and the loadout it picked (§40). */
+export const abilitiesOf = (fighter: Pick<Fighter, "character" | "option" | "loadout">, context?: RulesContext): readonly AbilityId[] => kitOf(fighter.character, fighter.option, context, fighter.loadout).abilities;
 
 /**
  * The most HP a character can have: its character's, or — for Hold Out's team
@@ -1864,7 +1870,7 @@ export function act(state: BattleState, player: string, action: Action, roll: Ro
             }
             const id = nextFighterId(run.fighters);
             run.fighters.push({
-                ...newFighter(id, actor.owner, ability.hatches!, square, null, undefined, false, state),
+                ...newFighter(id, actor.owner, ability.hatches!, square, null, undefined, undefined, false, state),
                 hatchedBy: actor.id,
             });
             events.push({ kind: "hatched", fighter: actor.id, target: id, at: square });
@@ -2273,11 +2279,13 @@ export interface MusterPick {
     item?: ItemId;
     /** The option it's mustered with, if any: one its owner's rank with the character unlocks (§23.2). */
     option?: OptionId;
+    /** The abilities it takes from its character's pool (§40): exactly `picks` different ones, absent for the default. */
+    loadout?: AbilityId[];
 }
 
-/** A pick as `musterRefusal` checked it, and nothing else a request carried: no `item` or `option` key at all when it has none. */
-export function pickOf({ character, square, item, option }: MusterPick): MusterPick {
-    return { character, square, ...(item ? { item } : {}), ...(option ? { option } : {}) };
+/** A pick as `musterRefusal` checked it, and nothing else a request carried: no `item`, `option` or `loadout` key at all when it has none. */
+export function pickOf({ character, square, item, option, loadout }: MusterPick): MusterPick {
+    return { character, square, ...(item ? { item } : {}), ...(option ? { option } : {}), ...(loadout?.length ? { loadout: [...loadout] } : {}) };
 }
 
 /** What a muster costs: its characters, and the items they carry (§21.1). */
@@ -2295,7 +2303,30 @@ function optionRefusal(pick: Partial<MusterPick>, character: CharacterId, ranks:
     const { OPTIONS } = rulesetOf(context);
     if (pick.option == null) return undefined;
     if (!isOptionId(pick.option, context) || OPTIONS[pick.option].character !== character) return "That isn't an option for that character";
+    // §40.2: where a character has a pool an ability option is a pool entry, not a swap; only a weapon one is an option.
+    if (loadoutPoolOf(character, context) && "ability" in OPTIONS[pick.option]) return "That ability is picked in the loadout";
     return (ranks[character] ?? 0) >= OPTIONS[pick.option].rank ? undefined : "That option isn't unlocked yet";
+}
+
+/**
+ * Why a pick's loadout can't be mustered, or undefined when it can (§40.3):
+ * none at all (the default), or — for a character with a pool — exactly
+ * `picks` different abilities from it, each an option's unlocked by `ranks`.
+ * Total: whatever it's sent, it's a refusal and never a throw.
+ */
+function loadoutRefusal(pick: Partial<MusterPick>, character: CharacterId, ranks: Ranks, context?: RulesContext): string | undefined {
+    if (pick.loadout == null) return undefined;
+    const pool = loadoutPoolOf(character, context);
+    const { name, loadout } = rulesetOf(context).CHARACTERS[character];
+    if (!pool || !loadout) return "That character has no abilities to pick";
+    const chosen: unknown = pick.loadout;
+    if (!Array.isArray(chosen) || chosen.length !== loadout.picks || new Set(chosen).size !== chosen.length) return `Pick ${loadout.picks} different abilities for your ${name}`;
+    for (const id of chosen) {
+        const entry = typeof id === "string" ? pool.find(({ ability }) => ability === id) : undefined;
+        if (!entry) return `That isn't an ability your ${name} can pick`;
+        if ((ranks[character] ?? 0) < entry.rank) return "That ability isn't unlocked yet";
+    }
+    return undefined;
 }
 
 /**
@@ -2316,6 +2347,8 @@ export function musterRefusal(field: Battlefield, seat: number, picks: unknown, 
         if (pick.item != null && !isItemId(pick.item, context)) return "That isn't an item";
         const option = optionRefusal(pick, pick.character, ranks, context);
         if (option) return option;
+        const loadout = loadoutRefusal(pick, pick.character, ranks, context);
+        if (loadout) return loadout;
         if (!zone.has(pick.square as Square) || squares.has(pick.square as Square)) return "Each character needs its own square in your deployment zone";
         squares.add(pick.square as Square);
     }
@@ -2328,10 +2361,10 @@ export function musterRefusal(field: Battlefield, seat: number, picks: unknown, 
  * spent, carrying what it was mustered with. A `stout` one is of Hold Out's
  * team (`musterHp`) and carries its bigger `maxHp`.
  */
-export function newFighter(id: number, owner: string, character: CharacterId, square: Square, item: ItemId | null = null, option?: OptionId, stout = false, context?: RulesContext): Fighter {
+export function newFighter(id: number, owner: string, character: CharacterId, square: Square, item: ItemId | null = null, option?: OptionId, loadout?: readonly AbilityId[], stout = false, context?: RulesContext): Fighter {
     return {
         id, owner, character, square, hp: musterHp(character, stout, context), ...(stout ? { maxHp: teamHp(character, context) } : {}),
-        ap: 0, banked: 0, effects: {}, cooldowns: {}, spent: [], item, ...(option ? { option } : {}),
+        ap: 0, banked: 0, effects: {}, cooldowns: {}, spent: [], item, ...(option ? { option } : {}), ...(loadout ? { loadout: [...loadout] } : {}),
     };
 }
 
@@ -2346,6 +2379,7 @@ export function storedFighter(fighter: Fighter): Fighter {
         ...fighter, effects: { ...fighter.effects }, cooldowns: { ...fighter.cooldowns }, spent: [...(fighter.spent ?? [])], item: fighter.item ?? null,
         // Copied, so an undo snapshot never shares them with the live fighter.
         ...(fighter.tally ? { tally: addTally(fighter.tally, NO_TALLY) } : {}),
+        ...(fighter.loadout ? { loadout: [...fighter.loadout] } : {}),
         ...(fighter.woundedBy ? { woundedBy: [...fighter.woundedBy] } : {}),
         ...(fighter.effectSources ? { effectSources: { ...fighter.effectSources } } : {}),
         ...(fighter.usedThisTurn ? { usedThisTurn: [...fighter.usedThisTurn] } : {}),

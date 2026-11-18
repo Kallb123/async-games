@@ -67,9 +67,9 @@ const FIELD = buildBattlefield({ name: "Ruleset test", rows: ["............", ".
 const stateFor = (rulesVersion: number): BattleState => battleFrom(FIELD, {
     rulesVersion,
     fighters: [
-        { ...newFighter(0, "a", "knight", 0, null, undefined, false, { rulesVersion }), ap: 4 },
+        { ...newFighter(0, "a", "knight", 0, null, undefined, undefined, false, { rulesVersion }), ap: 4 },
         { ...newFighter(1, "a", "cleric", 1), ap: 4 },
-        { ...newFighter(2, "a", "knight", 3, null, undefined, false, { rulesVersion }), hp: 1 },
+        { ...newFighter(2, "a", "knight", 3, null, undefined, undefined, false, { rulesVersion }), hp: 1 },
     ],
 });
 
@@ -117,6 +117,27 @@ describe("Realm Arena ruleset compatibility", () => {
         expect(real.CURRENT_RULESET_VERSION).toBe(11);
     });
 
+    it("gives the five Realm characters a loadout in v12 and changes nothing else of v11's (§40.1)", async () => {
+        const real = await vi.importActual<typeof import("./rulesets")>("./rulesets");
+        const before = real.rulesetFor(11).CHARACTERS, after = real.rulesetFor(12).CHARACTERS;
+        const loadouts = {
+            manAtArms: { fixed: [], picks: 2, defaults: ["cleave", "leap"] },
+            knight: { fixed: ["bulwark"], picks: 2, defaults: ["taunt", "shove"] },
+            archer: { fixed: [], picks: 2, defaults: ["aimedShot", "poisonArrow"] },
+            mage: { fixed: [], picks: 2, defaults: ["fireball", "thunder"] },
+            cleric: { fixed: ["heal"], picks: 2, defaults: ["raise", "blessing"] },
+        };
+        for (const [id, loadout] of Object.entries(loadouts) as [keyof typeof loadouts, (typeof loadouts)[keyof typeof loadouts]][]) {
+            expect(before[id].loadout, `${id} before`).toBeUndefined();
+            expect(after[id]).toEqual({ ...before[id], loadout });
+        }
+        for (const version of [7, 9, 10, 11]) for (const character of Object.values(real.rulesetFor(version).CHARACTERS)) expect(character.loadout).toBeUndefined();
+        // No other character has a pool; the Scout's is the version before's.
+        for (const [id, character] of Object.entries(after)) if (!(id in loadouts)) expect(character.loadout, id).toBeUndefined();
+        for (const id of ["OPTIONS", "ITEMS", "EFFECTS"] as const) expect(real.rulesetFor(12)[id]).toBe(real.rulesetFor(11)[id]);
+        expect(real.CURRENT_RULESET_VERSION).toBe(11);
+    });
+
     it("makes the rally each player's choice in v12 and changes nothing else of v11's rules (§39.4)", async () => {
         const real = await vi.importActual<typeof import("./rulesets")>("./rulesets");
         const before = real.rulesetFor(11).RULES, after = real.rulesetFor(12).RULES;
@@ -136,7 +157,11 @@ describe("Realm Arena ruleset compatibility", () => {
         expect(after.bloater).toEqual({ ...before.bloater, burstsWhenDowned: true });
         // Only the elites (§39.5) and the nest (§39.7) are added besides.
         const { bloater: _before, ...rest } = before, { bloater: _after, broodQueen: _queen, carapaceBrute: _brute, bileLobber: _lobber, nest: _nest, ...restAfter } = after;
-        expect(restAfter).toEqual(rest);
+        // The Realm's five have a loadout besides (§40.1).
+        for (const id of ["manAtArms", "knight", "archer", "mage", "cleric"] as const) expect(restAfter[id]).toEqual({ ...rest[id], loadout: expect.any(Object) });
+        const { manAtArms: _m, knight: _k, archer: _a, mage: _g, cleric: _c, ...restOthers } = restAfter;
+        const { manAtArms: _m2, knight: _k2, archer: _a2, mage: _g2, cleric: _c2, ...rest2 } = rest;
+        expect(restOthers).toEqual(rest2);
     });
 
     it("adds the Swarm's three elites in v12, apart from its roster, and changes nothing else of v11 (§39.5)", async () => {
@@ -309,7 +334,7 @@ describe("Realm Arena ruleset compatibility", () => {
 describe("catalogue-driven behavior", () => {
     const battle = (version: number, fighters: BattleState["fighters"]) => battleFrom(FIELD, { rulesVersion: version, fighters });
     const ready = (id: number, owner: string, character: Parameters<typeof newFighter>[2], square: number, version: number) =>
-        ({ ...newFighter(id, owner, character, square, null, undefined, false, { rulesVersion: version }), ap: 20 });
+        ({ ...newFighter(id, owner, character, square, null, undefined, undefined, false, { rulesVersion: version }), ap: 20 });
 
     it("reads AP, attack costs and the per-turn attack limit from the catalogue", () => {
         for (const version of [7, 9]) {

@@ -997,7 +997,7 @@ describe("Realm Arena's death burst in fog of war (§39.3)", () => {
     // a's Archer shoots b's Bloater, which bursts on b's Knight beside it; c's Mage is at the far edge.
     const field = realmArenaFieldOf(...Array(4).fill("..............................."));
     const make = (id: number, owner: string, character: "archer" | "bloater" | "knight" | "mage", col: number, extra = {}) =>
-        ({ ...realmArenaNewFighter(id, owner, character, realmArenaSquareAt(field, col, 1), null, undefined, false, { rulesVersion: 12 }), ap: 4, ...extra });
+        ({ ...realmArenaNewFighter(id, owner, character, realmArenaSquareAt(field, col, 1), null, undefined, undefined, false, { rulesVersion: 12 }), ap: 4, ...extra });
     const fighters = [make(0, "a", "archer", 1), make(1, "b", "bloater", 3, { hp: 1 }), make(2, "b", "knight", 4), make(3, "c", "mage", 30)];
     const battle = { field, fighters, rulesVersion: 12, fog: true as const };
     const { events } = realmArenaActRules(battle, "a", { kind: "attack", fighter: 0, target: 1 }, realmArenaFixedRolls([1]));
@@ -1019,7 +1019,7 @@ describe("Realm Arena's death burst in fog of war (§39.3)", () => {
         const SENTINEL = 7777;
         const cast = [make2(0, "a", "archer", 6), make2(1, "b", "bloater", 10, 4, { hp: 1 }), make2(SENTINEL, "b", "knight", 11, 3), make2(3, "c", "mage", 39, 0)];
         function make2(id: number, owner: string, character: "archer" | "bloater" | "knight" | "mage", col: number, row = 4, extra = {}) {
-            return { ...realmArenaNewFighter(id, owner, character, realmArenaSquareAt(wall, col, row), null, undefined, false, { rulesVersion: 12 }), ap: 4, ...extra };
+            return { ...realmArenaNewFighter(id, owner, character, realmArenaSquareAt(wall, col, row), null, undefined, undefined, false, { rulesVersion: 12 }), ap: 4, ...extra };
         }
         const walled = { field: wall, fighters: cast, rulesVersion: 12, fog: true as const };
         const { events: walledEvents } = realmArenaActRules(walled, "a", { kind: "attack", fighter: 0, target: 1 }, realmArenaFixedRolls([1]));
@@ -1119,7 +1119,7 @@ describe("Realm Arena's Hatch in fog of war (§39.5)", () => {
     // a's Brood Queen hatches beside itself; b's Knight is 7 squares east and sees it, c's Mage is at the far edge and sees nothing of it.
     const field = realmArenaFieldOf(...Array(4).fill(".".repeat(60)));
     const make = (id: number, owner: string, character: "broodQueen" | "carapaceBrute" | "bileLobber" | "knight" | "mage" | "skitterling", col: number, extra = {}) =>
-        ({ ...realmArenaNewFighter(id, owner, character, realmArenaSquareAt(field, col, 1), null, undefined, false, { rulesVersion: 12 }), ap: 4, ...extra });
+        ({ ...realmArenaNewFighter(id, owner, character, realmArenaSquareAt(field, col, 1), null, undefined, undefined, false, { rulesVersion: 12 }), ap: 4, ...extra });
     // A sentinel id for the hatchling, so nothing can carry it unseen.
     const SENTINEL = 4242;
     const battle = { field, fighters: [make(0, "a", "broodQueen", 3), make(1, "b", "knight", 10), make(SENTINEL - 1, "c", "mage", 58)], rulesVersion: 12, fog: true as const };

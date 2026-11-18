@@ -396,7 +396,7 @@ describe("Reinforce in fog of war (§39.4)", () => {
             .sort((x, y) => Math.min(...zone.map(near => distance(field, y.square, near))) - Math.min(...zone.map(near => distance(field, x.square, near))));
         mine(game, "b").filter(isStanding).forEach((fighter, index) => { fighter.square = far[index].square; });
         let id = 100;
-        for (const square of zone.slice(0, count)) game.specificGameState.fighters.push(newFighter(id++, warbandOwner(0), "knight", square, null, undefined, false, game.specificGameState));
+        for (const square of zone.slice(0, count)) game.specificGameState.fighters.push(newFighter(id++, warbandOwner(0), "knight", square, null, undefined, undefined, false, game.specificGameState));
         const seen = new Set(viewOf(battleOf(game), "a").fighters.map(fighter => fighter.id));
         expect([...seen].some(one => one >= 100), "the blockers are out of sight").toBe(false);
         return game;
@@ -446,7 +446,7 @@ describe("a wiped-out player whose zone is full has no turn to take (§39.4)", (
         const full = await waveLanded(V12, g => mine(g, "a").forEach(down));
         const zone = battlefieldById(full.specificGameState.map).deployments[0];
         let id = 100;
-        for (const square of zone) full.specificGameState.fighters.push(newFighter(id++, "b", "knight", square, null, undefined, false, full.specificGameState));
+        for (const square of zone) full.specificGameState.fighters.push(newFighter(id++, "b", "knight", square, null, undefined, undefined, false, full.specificGameState));
         expect(rallyOptionsOf(battleOf(full), full.specificGameState.seats, "a")[1].available).toBe(false);
         expect(nextSeat(full, "b")).toBe("b");
     });

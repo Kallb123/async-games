@@ -48,7 +48,7 @@ describe("the nest's art", () => {
 });
 
 describe("a nest on the isometric board", () => {
-    const nest = (hp: number): Fighter => ({ ...newFighter(0, warbandOwner(0), "nest", at(field, 4, 1), null, undefined, false, CONTEXT), hp, maxHp: 10 });
+    const nest = (hp: number): Fighter => ({ ...newFighter(0, warbandOwner(0), "nest", at(field, 4, 1), null, undefined, undefined, false, CONTEXT), hp, maxHp: 10 });
 
     const draw = (fighters: Fighter[], nestSquares?: number[]) => renderToStaticMarkup(React.createElement(RealmArenaBoard, {
         field, fighters, owners: ["a", "b", warbandOwner(0)], rulesVersion: 12, viewerId: "a", nestSquares,

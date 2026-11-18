@@ -49,7 +49,10 @@ export const meta: GameMeta = {
     // Version 12 adds the rally's choice (§39.4): a rally action, sent by each
     // player of the team as a wave lands in the battles created under rules
     // version 12. An older tab can't send it, so it would wait out its turn.
-    commandVersion: 12,
+    // Version 13 carries each figure's loadout (§40) in a muster's picks, in battles
+    // created under rules version 12: an older tab would show and send every Realm
+    // character's whole kit.
+    commandVersion: 13,
     oldestReplayableCommandVersion: 2,
     available: true,
 };
