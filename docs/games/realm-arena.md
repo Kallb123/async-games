@@ -5679,12 +5679,17 @@ the Knight beside her rather than trading blows with it.
   team over striking a lone Archer; a Spitter steps back out of a Knight's
   reach before it spits; a Queen hatches, then leaves the Knight beside her
   rather than trading blows with it.
-- **Measured.** The measurement is in `realm-arena-balance.md`.
-  `--team-planner main` against the Swarm on every Hold Out
+- **Measured.** `--team-planner main` against the Swarm on every Hold Out
   battlefield: the warbands play the checkout's planner and the team main's,
   so the team's win rate falling is the Swarm playing better. If a temperament
   makes the warbands weaker, as a truer Exposure did
   (`realm-arena-balance.md`, *Planner experiments*), that row isn't kept.
+  *As built:* at version 12 the team won 470 of 480 against either planner
+  and lost about as many characters (24.4 → 23.4 a battle, summed over the
+  cells), so the run is saturated and shows neither gain nor loss
+  (`realm-arena-balance.md`, *Swarm temperaments*). Every row is kept,
+  untuned, until characters choose two abilities each and the lot is
+  measured again.
 
 ### 39.9 PR 8: Balance, copy and release
 

@@ -400,6 +400,38 @@ match, which is a sweep of runs rather than one; the puzzles alone can't
 tell whether any weight beats `main`. The patch is small (Exposure's
 `harmAt`, a strike zone per walk), so redoing it is the cheap part.
 
+### Swarm temperaments (kept, untuned)
+
+§39.8's temperaments: per-character multipliers on Exposure and Threat, plus
+a Skitterling's Pack (+1 for each other of its side next to its enemy), a
+Bloater's Threat read as its burst, and a Spitter's and Bile Lobber's Range
+(−5 within an enemy's melee reach). Measured at rules version 12 against
+the Swarm on every Hold Out battlefield, teams of one to four, Normal, no
+fog, seeds 1–60, the team on `main`'s planner (820caf4). Eight distinct
+cells, 480 battles a run (Solo's gate fort and Ruined Fort are the same
+battlefield, so they're counted once):
+
+| Cell | Team wins, `main`'s warbands → temperaments | Team characters lost |
+|---|---:|---:|
+| Solo, gate fort | 56 → 54 of 60 | 1.8 → 1.9 |
+| 2 players, gate fort | 60 → 60 | 1.8 → 1.8 |
+| 2 players, Sacked Fort | 60 → 60 | 1.0 → 1.1 |
+| 3 players, gate fort | 60 → 60 | 3.9 → 3.3 |
+| 3 players, Sacked Fort | 60 → 60 | 2.7 → 2.1 |
+| 3 players, Sunken Village | 57 → 56 | 4.1 → 4.4 |
+| 4 players, Sacked Fort | 60 → 60 | 2.5 → 2.6 |
+| 4 players, Sunken Village | 57 → 60 | 6.6 → 6.2 |
+| **All** | **470 → 470 of 480** | **24.4 → 23.4** |
+
+**What it says.** Nothing yet, either way. Version 12's team wins almost
+every battle against either planner, so the win rate is saturated and can't
+show the Swarm playing better; the team's losses move both ways cell by
+cell, and by about one character in all, within noise. The temperaments are
+kept for how they make the Swarm play (the puzzles in `ai.test.ts`), with
+their values left *Proposed*: they are tuned with the rest once characters
+choose two abilities each, which changes what every side fights with.
+`temperamentSwitch.on` in `ai.ts` turns them off for that run.
+
 ## How each lever was built
 
 For re-running: each was an environment switch in a scratch worktree.
