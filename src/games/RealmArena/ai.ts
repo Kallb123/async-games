@@ -33,10 +33,10 @@ import { ruleValuesOf, rulesetOf } from "@/games/RealmArena/rulesets";
 
 import { costsFrom, DEFAULT_CLIMB, reachFrom, pathTo, type Reach } from "@/utils/games/battlefield/pathfinding";
 import { battlefieldWith, coordsOf, type Battlefield, type Square } from "@/utils/games/battlefield/terrain";
-import { type AbilityId } from "./characters";
+import { type AbilityId, type CharacterId } from "./characters";
 import {
-    abilitiesOf, alliesWithin, activeEffects, act, canAct, allied, areaAround, blastedIn, CENTRE, centrePoints, check, fighterById, isCombatant, isStanding, isStructure, landedSmoke,
-    damageTo, dodgeReach, leapTargets, maxHpOf, moveAp, movementOf, reachOf, ROLL_SIDES, shotOdds, squadSight, strikeChance, watchedSquares, weaponOf, weaponReaches,
+    abilitiesOf, alliesWithin, activeEffects, act, canAct, allied, areaAround, blastedIn, burstArea, CENTRE, centrePoints, check, fighterById, isCombatant, isStanding, isStructure, landedSmoke,
+    damageTo, dodgeReach, inMeleeReach, leapTargets, maxHpOf, moveAp, movementOf, reachOf, ROLL_SIDES, shotOdds, squadSight, strikeChance, watchedSquares, weaponOf, weaponReaches,
     type Action, type BattleEvent, type BattleState, type Fighter, type FogGhost, type ShotOdds,
 } from "./rules";
 import { ACTION_AIMS, standingAt, rangeKindOf, rangeSquares, reactionPreviews, rollsToHit, shotOf, targetKindOf, targetsOf, type ActionKind } from "./tactics";
@@ -60,6 +60,62 @@ const WEIGHTS = {
     /** Value of each AP above the normal turn allowance. */
     bonusAp: 0.1,
 };
+
+/**
+ * How a character plays out of the ordinary (§39.8): a multiplier on each of
+ * its Exposure and Threat, and at most one extra term, read where the character
+ * stands. Applied by `standingTerms` after the memo is read, so the memo keeps
+ * the raw Exposure and Threat. All values are *Proposed* until balance.
+ */
+interface Temperament {
+    exposure: number;
+    threat: number;
+    /**
+     * - `pack`: a bonus for each other of its side next to the enemy it's next to.
+     * - `burst`: its Threat is the burst's, not its barbs', while it can still burst.
+     * - `range`: a penalty for standing within an enemy's melee reach.
+     */
+    extra?: "pack" | "burst" | "range";
+}
+
+/**
+ * Every character that plays by a temperament of its own, by id; one with no
+ * row plans by the plain weights, exactly as it did before there were any. The
+ * Realm's and the Miners' characters have none (a test holds it): the Swarm
+ * alone plays out of character, and so can be tuned without touching them.
+ */
+export const TEMPERAMENTS: Readonly<Partial<Record<CharacterId, Temperament>>> = {
+    // Throws itself at the team, and is happiest where its pack closes round one enemy.
+    skitterling: { exposure: 0.25, threat: 1, extra: "pack" },
+    ravager: { exposure: 0.5, threat: 1 },
+    carapaceBrute: { exposure: 0.5, threat: 1 },
+    // Walks into the thick of the team: the burst is what it is for.
+    bloater: { exposure: 0, threat: 1, extra: "burst" },
+    // Keeps its distance: wary of a hit, and not to be caught in a melee.
+    spitter: { exposure: 1.5, threat: 1, extra: "range" },
+    bileLobber: { exposure: 1.5, threat: 1, extra: "range" },
+    // Leads from the back, and lets the brood do the fighting.
+    broodmother: { exposure: 2, threat: 0.5 },
+    broodQueen: { exposure: 2, threat: 0.5 },
+};
+
+/**
+ * Whether `standingTerms` applies `TEMPERAMENTS` at all. On, always, but for
+ * planner experiments (§39.8, and *Planner experiments* in
+ * `realm-arena-balance.md`): set `on` to false to plan by the plain weights, as
+ * every character did before there were any, or swap the table's rows to try
+ * others. Nothing else reads it.
+ */
+export const temperamentSwitch = { on: true };
+
+/** For tests: the temperament a character plays by, if it has one (§39.8). */
+export const temperamentOf = (character: CharacterId): Temperament | undefined => TEMPERAMENTS[character];
+
+/** What each other of a Skitterling's side next to the enemy it's next to is worth to it, in points' worth: about a tenth of its own cost, a flank worth closing for but never worth a hit. *Proposed.* */
+const PACK_BONUS = 1;
+
+/** What standing within an enemy's melee reach costs a Spitter or a Lobber, in points' worth, beyond the Exposure the reach already adds: about a third of a Spitter's cost, so a step back wins when it keeps the shot. *Proposed.* */
+const RANGE_PENALTY = 5;
 
 /**
  * What the warband's own characters are worth to it in Hold Out (§30.3), as a
@@ -491,13 +547,48 @@ function score(plan: Plan, battle: BattleState, events: readonly BattleEvent[]):
  * from comes nearer.
  */
 function standingTerms(plan: Plan, battle: BattleState, fighter: Fighter, enemies: readonly Fighter[], harm = harmAt(battle, fighter, enemies)): number {
-    const { exposure, threat } = harm;
+    const { exposure, threat, extra } = temperedHarm(battle, fighter, enemies, harm);
     const armed = fighter.ap >= ruleValuesOf(battle).ATTACK_AP ? 1 : SPENT_THREAT;
     const urgency = Math.min(1, plan.round / ruleValuesOf(battle).CENTRE_SCORES_FROM_ROUND);
     const bonus = Math.max(0, fighter.ap - ruleValuesOf(battle).ACTION_POINTS) * WEIGHTS.bonusAp;
     return bonus - WEIGHTS.exposure * plan.ownWorth * exposure
         + WEIGHTS.threat * armed * threat
-        - WEIGHTS.objective * urgency * plan.toCentre(fighter) / movementOf(fighter, plan.state);
+        - WEIGHTS.objective * urgency * plan.toCentre(fighter) / movementOf(fighter, plan.state)
+        + extra;
+}
+
+/**
+ * A character's Exposure and Threat as its temperament reads them, and its
+ * extra term (§39.8): `harm` itself, and nothing extra, for a character with no
+ * row. `fighter` is where it stands, which in `movesFor` is not where `battle`
+ * has it, so what reads its square reads this one, and the others by id.
+ */
+function temperedHarm(battle: BattleState, fighter: Fighter, enemies: readonly Fighter[], harm: Harm): Harm & { extra: number } {
+    const temperament = temperamentSwitch.on ? TEMPERAMENTS[fighter.character] : undefined;
+    if (!temperament) return { ...harm, extra: 0 };
+    const { field } = battle;
+    let threat = harm.threat * temperament.threat, extra = 0;
+    switch (temperament.extra) {
+        case "pack":
+            for (const enemy of enemies) {
+                if (!inMeleeReach(field, fighter.square, enemy.square, battle)) continue;
+                const pack = battle.fighters.filter(one => one.id !== fighter.id && isCombatant(one, battle) && allied(battle, one.owner, fighter.owner)
+                    && inMeleeReach(field, one.square, enemy.square, battle)).length;
+                extra = Math.max(extra, pack * PACK_BONUS);
+            }
+            break;
+        case "burst":
+            if (abilitiesOf(fighter, battle).includes("burst") && !fighter.spent.includes("burst")) {
+                const area = new Set(burstArea(field, fighter.square));
+                const { damage } = rulesetOf(battle).ABILITIES.burst;
+                threat = enemies.reduce((sum, enemy) => area.has(enemy.square) ? sum + worthOf(enemy, Math.min(damage ?? 0, enemy.hp), battle) : sum, 0);
+            }
+            break;
+        case "range":
+            if (enemies.some(enemy => weaponOf(battle, enemy).kind === "melee" && weaponReaches(battle, enemy, fighter.square))) extra = -RANGE_PENALTY;
+            break;
+    }
+    return { exposure: harm.exposure * temperament.exposure, threat, extra };
 }
 
 /** A character's Exposure and Threat where it stands (`standingTerms`). */
