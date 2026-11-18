@@ -648,7 +648,7 @@ export function activeEffects(fighter: Pick<Fighter, "effects">, context?: Rules
  * Whether one of `player`'s structures (§39.7) is standing under an effect that
  * does damage — a nest burning or poisoned. Such a nest is hurt as its owner's
  * turn begins, so a warband with nothing else standing still has a turn to
- * take, with no actions in it (`warbandPlays`).
+ * take, with no actions in it (`nestsBurning`).
  */
 export function structureBurning(state: BattleState, player: string): boolean {
     return state.fighters.some(fighter => fighter.owner === player && isStanding(fighter) && isStructure(fighter, state)
