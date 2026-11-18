@@ -235,3 +235,23 @@ export async function coopBattle(players: string[], settings: RealmArenaSettings
     }
     return { game, times };
 }
+
+/**
+ * A `crypto.getRandomValues` that fills every array from `seed` (mulberry32),
+ * so a battle plays the same each run; the sequence carries on across calls.
+ * Pure: `seedRolls.ts` (vitest) and the balance harness install it.
+ */
+export function seededRandomValues(seed: number): Crypto["getRandomValues"] {
+    let state = seed >>> 0;
+    return (<T extends ArrayBufferView | null>(array: T): T => {
+        const values = array as unknown as Uint32Array;
+        for (let i = 0; i < values.length; i++) {
+            state = (state + 0x6d2b79f5) >>> 0;
+            let t = state;
+            t = Math.imul(t ^ (t >>> 15), t | 1);
+            t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+            values[i] = (t ^ (t >>> 14)) >>> 0;
+        }
+        return array;
+    }) as Crypto["getRandomValues"];
+}

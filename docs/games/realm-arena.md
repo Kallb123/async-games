@@ -5677,8 +5677,8 @@ the Knight beside her rather than trading blows with it.
 - **Puzzles** (§29.11), each with one right answer: a Skitterling takes the
   square that flanks over one that doesn't; a Bloater walks into three of the
   team over striking a lone Archer; a Spitter steps back out of a Knight's
-  reach before it spits; a Queen hatches from behind the wall, not in front of
-  it.
+  reach before it spits; a Queen hatches, then leaves the Knight beside her
+  rather than trading blows with it.
 - **Measured.** The measurement is in `realm-arena-balance.md`.
   `--team-planner main` against the Swarm on every Hold Out
   battlefield: the warbands play the checkout's planner and the team main's,

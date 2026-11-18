@@ -20,7 +20,7 @@ import { battlefieldById, mapFor, type CoopMap } from "../../src/games/RealmAren
 import { battleRoundsOf, owesRally } from "../../src/games/RealmArena/RealmArenaLogic";
 import { defaultRally, rallyOptionsOf, rallyTotal, reinforcedHp, type RallyAction } from "../../src/games/RealmArena/rally";
 import { ACTION_POINTS, isStanding, isWarband, viewOf, waveArrives, type BattleState } from "../../src/games/RealmArena/rules";
-import { actBy, battleOf, endTurnBy, makeGame, musterAll, play } from "../../src/games/RealmArena/testFixtures";
+import { actBy, battleOf, endTurnBy, makeGame, musterAll, play, seededRandomValues } from "../../src/games/RealmArena/testFixtures";
 import { percentile as sortedPercentile } from "../../src/utils/performance";
 
 export type Mission = "holdOut" | "holdTheCentre";
@@ -166,18 +166,7 @@ export function settingsOf(s: BalanceScenario): RealmArenaSettings {
  * rolls through `crypto.getRandomValues` and nothing else (`randomInt`).
  */
 export function seedRolls(seed: number): void {
-    let state = seed >>> 0;
-    globalThis.crypto.getRandomValues = (<T extends ArrayBufferView | null>(array: T): T => {
-        const values = array as unknown as Uint32Array;
-        for (let i = 0; i < values.length; i++) {
-            state = (state + 0x6d2b79f5) >>> 0;
-            let t = state;
-            t = Math.imul(t ^ (t >>> 15), t | 1);
-            t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
-            values[i] = (t ^ (t >>> 14)) >>> 0;
-        }
-        return array;
-    }) as Crypto["getRandomValues"];
+    globalThis.crypto.getRandomValues = seededRandomValues(seed);
 }
 
 /** The seats of a team of `players`. */

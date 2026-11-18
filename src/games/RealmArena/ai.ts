@@ -108,9 +108,6 @@ export const TEMPERAMENTS: Readonly<Partial<Record<CharacterId, Temperament>>> =
  */
 export const temperamentSwitch = { on: true };
 
-/** For tests: the temperament a character plays by, if it has one (§39.8). */
-export const temperamentOf = (character: CharacterId): Temperament | undefined => TEMPERAMENTS[character];
-
 /** What each other of a Skitterling's side next to the enemy it's next to is worth to it, in points' worth: about a tenth of its own cost, a flank worth closing for but never worth a hit. *Proposed.* */
 const PACK_BONUS = 1;
 
@@ -569,14 +566,15 @@ function temperedHarm(battle: BattleState, fighter: Fighter, enemies: readonly F
     const { field } = battle;
     let threat = harm.threat * temperament.threat, extra = 0;
     switch (temperament.extra) {
-        case "pack":
+        case "pack": {
+            const pack = alliesWithin(battle, battle.fighters, fighter, undefined).filter(one => one.id !== fighter.id);
             for (const enemy of enemies) {
                 if (!inMeleeReach(field, fighter.square, enemy.square, battle)) continue;
-                const pack = battle.fighters.filter(one => one.id !== fighter.id && isCombatant(one, battle) && allied(battle, one.owner, fighter.owner)
-                    && inMeleeReach(field, one.square, enemy.square, battle)).length;
-                extra = Math.max(extra, pack * PACK_BONUS);
+                const flanking = pack.filter(one => inMeleeReach(field, one.square, enemy.square, battle)).length;
+                extra = Math.max(extra, flanking * PACK_BONUS);
             }
             break;
+        }
         case "burst":
             if (abilitiesOf(fighter, battle).includes("burst") && !fighter.spent.includes("burst")) {
                 const area = new Set(burstArea(field, fighter.square));

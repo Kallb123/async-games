@@ -3,12 +3,12 @@ import { at } from "@/utils/games/battlefield/testFixtures";
 import { coverAgainst } from "@/utils/games/battlefield/cover";
 import { reachFrom } from "@/utils/games/battlefield/pathfinding";
 import { battlefieldWith, buildBattlefield, distance, type Battlefield, type Square } from "@/utils/games/battlefield/terrain";
-import { FACTION_IDS, FACTIONS, type CharacterId } from "./characters";
+import { FACTIONS, type CharacterId } from "./characters";
 import {
     ACTION_POINTS, act, areaAround, ATTACK_AP, blastedIn, check, endTurn, inMeleeReach, newFighter, reachOf, reactionsTo, shotOdds, startTurn, viewOf,
     type Action, type BattleState, type Fighter, type FogGhost,
 } from "./rules";
-import { nextAction, optionsOf, temperamentOf, temperamentSwitch, turnMemo } from "./ai";
+import { nextAction, optionsOf, TEMPERAMENTS, temperamentSwitch, turnMemo } from "./ai";
 import { registeredRulesets, type RulesContext } from "./rulesets";
 
 // docs/games/realm-arena.md §29.7, §29.11: the computer's planner. Each puzzle
@@ -80,6 +80,11 @@ describe("nextAction's puzzles (§29.11)", () => {
     describe("the Swarm's elites (§39.5, rules version 12)", () => {
         const V12 = { rulesVersion: 12 };
         const v12 = (field: Battlefield, fighters: Fighter[]): BattleState => ({ ...battle(field, fighters), ...V12 });
+    /** `fn` with every temperament off, so a puzzle can prove it is the table that answers it. */
+    function withoutTemperaments<T>(fn: () => T): T {
+        temperamentSwitch.on = false;
+        try { return fn(); } finally { temperamentSwitch.on = true; }
+    }
 
         it("spits bile on a huddle of enemies it would down", () => {
             const lobber = ready(0, AI, "bileLobber", at(OPEN, 2, 4), { ap: 3 }, V12);
@@ -452,20 +457,25 @@ describe("Taunt in the planner's options (§39.2)", () => {
 describe("temperaments (§39.8)", () => {
     const V12 = { rulesVersion: 12 };
     const v12 = (field: Battlefield, fighters: Fighter[]): BattleState => ({ ...battle(field, fighters), ...V12 });
+    /** `fn` with every temperament off, so a puzzle can prove it is the table that answers it. */
+    function withoutTemperaments<T>(fn: () => T): T {
+        temperamentSwitch.on = false;
+        try { return fn(); } finally { temperamentSwitch.on = true; }
+    }
 
     it("gives no Renegade or Miner a row, so they plan by the plain weights", () => {
         for (const ruleset of registeredRulesets) {
             for (const faction of ["realm", "miners"] as const) {
                 const { characters, elites = [] } = ruleset.FACTIONS[faction];
-                for (const character of [...characters, ...elites]) expect(temperamentOf(character), `${faction} ${character}`).toBeUndefined();
+                for (const character of [...characters, ...elites]) expect(TEMPERAMENTS[character], `${faction} ${character}`).toBeUndefined();
             }
         }
         // Whoever has one is in the Swarm.
-        const rows = (Object.keys(registeredRulesets.at(-1)!.CHARACTERS) as CharacterId[]).filter(character => temperamentOf(character));
-        const swarm = registeredRulesets.at(-1)!.FACTIONS.swarm;
+        const latest = registeredRulesets.at(-1)!;
+        const rows = (Object.keys(latest.CHARACTERS) as CharacterId[]).filter(character => TEMPERAMENTS[character]);
+        const swarm = latest.FACTIONS.swarm;
         expect(rows.length).toBeGreaterThan(0);
         for (const character of rows) expect([...swarm.characters, ...swarm.elites ?? []]).toContain(character);
-        expect(FACTION_IDS).toContain("swarm");
     });
 
     it("takes the square that flanks with a pack over one next to a lone enemy (a Skitterling)", () => {
@@ -485,6 +495,9 @@ describe("temperaments (§39.8)", () => {
         const action = planned(state);
         expect(action).toMatchObject({ kind: "move", fighter: runner.id });
         expect(neighbours(north)).toContain(endOf(action, runner.square));
+        // (its premise): by the plain weights it doesn't.
+        const plain = withoutTemperaments(() => planned(state));
+        expect(plain?.kind === "move" && plain.fighter === runner.id && neighbours(north).includes(endOf(plain, runner.square))).toBe(false);
     });
 
     it("walks into three of the team rather than striking a lone Archer (a Bloater)", () => {
@@ -497,6 +510,10 @@ describe("temperaments (§39.8)", () => {
         expect(action).toMatchObject({ kind: "move", fighter: bloater.id });
         const end = endOf(action, bloater.square);
         expect(three.filter(one => inMeleeReach(OPEN, end, one.square)).length).toBeGreaterThanOrEqual(3);
+        // (its premise): by the plain weights it doesn't walk in.
+        const plain = withoutTemperaments(() => planned(state));
+        const plainEnd = plain?.kind === "move" && plain.fighter === bloater.id ? endOf(plain, bloater.square) : undefined;
+        expect(plainEnd !== undefined && three.filter(one => inMeleeReach(OPEN, plainEnd, one.square)).length >= 3).toBe(false);
     });
 
     it("steps back out of a Knight's reach before it spits (a Spitter)", () => {
@@ -516,6 +533,9 @@ describe("temperaments (§39.8)", () => {
         expect(inMeleeReach(OPEN, knight.square, end)).toBe(false);
         const after = act(state, AI, action!, () => 50).fighters.find(one => one.id === spitter.id)!;
         expect(after.ap).toBeGreaterThanOrEqual(ATTACK_AP);
+        // (its premise): by the plain weights it doesn't step out of the Knight's reach.
+        const plain = withoutTemperaments(() => planned(state));
+        expect(plain?.kind === "move" && plain.fighter === spitter.id && !inMeleeReach(OPEN, knight.square, endOf(plain, spitter.square))).toBe(false);
     });
 
     it("hatches, then leaves a Knight beside her rather than trading blows (a Brood Queen)", () => {
@@ -525,16 +545,20 @@ describe("temperaments (§39.8)", () => {
         // Exposure doubled and her Threat halved, she steps out of reach.
         const queen = ready(0, AI, "broodQueen", at(OPEN, 7, 4), {}, V12);
         const knight = ready(1, "a", "knight", at(OPEN, 8, 4), {}, V12);
-        let state = v12(OPEN, [queen, knight]);
-        const kinds: string[] = [];
-        for (let step = 0; step < 6; step++) {
-            const action = nextAction(viewOf(state, AI), AI, 1);
-            if (!action) break;
-            kinds.push(action.kind);
-            state = { ...state, fighters: act(state, AI, action, () => 50).fighters };
-        }
-        expect(kinds[0]).toBe("hatch");
-        expect(kinds).not.toContain("attack");
-        expect(inMeleeReach(OPEN, knight.square, state.fighters.find(one => one.id === queen.id)!.square)).toBe(false);
+        const turn = () => {
+            let state = v12(OPEN, [queen, knight]);
+            const kinds: string[] = [];
+            for (let step = 0; step < 6; step++) {
+                const action = nextAction(viewOf(state, AI), AI, 1);
+                if (!action) break;
+                kinds.push(action.kind);
+                state = { ...state, fighters: act(state, AI, action, () => 50).fighters };
+            }
+            const leaves = !inMeleeReach(OPEN, knight.square, state.fighters.find(one => one.id === queen.id)!.square);
+            return kinds[0] === "hatch" && !kinds.includes("attack") && leaves;
+        };
+        expect(turn()).toBe(true);
+        // (its premise): by the plain weights she doesn't play it that way.
+        expect(withoutTemperaments(turn)).toBe(false);
     });
 });
