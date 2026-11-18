@@ -74,6 +74,9 @@ const RULESETS: Readonly<Record<number, RealmArenaRuleset>> = Object.freeze({
 /** Every registered catalogue once, oldest first, whether or not a match can still start on it. */
 export const registeredRulesets: readonly RealmArenaRuleset[] = Object.freeze([...new Set(Object.values(RULESETS))]);
 
+// Catalogues standing in for registered ones, for the balance harness alone.
+const experimental = new Map<number, RealmArenaRuleset>();
+
 // The last version asked for, read before the checks: the planner asks
 // millions of times a battle, nearly always for one version.
 let lastVersion: number | undefined;
@@ -81,13 +84,28 @@ let lastRuleset: RealmArenaRuleset;
 
 export const currentRuleset = rulesetFor(CURRENT_RULESET_VERSION);
 
+/**
+ * FOR THE BALANCE HARNESS ONLY (`scripts/realmarena-balance.ts`, `--set`); never
+ * call it from `src/`. Makes `rulesetFor(version)` answer with `catalogue` (a copy
+ * carrying changed values, never a mutation of the shared frozen one) until it is
+ * called again with `undefined`. `currentRuleset`, and the constants `rules.ts` and
+ * `characters.ts` read from it at load, keep the registered catalogue: whatever
+ * reads a game's values through `rulesetOf(game)` / `ruleValuesOf(game)` sees the copy.
+ */
+export function overrideRulesetForExperiment(version: number, catalogue: RealmArenaRuleset | undefined): void {
+    if (!Number.isInteger(version) || !Object.hasOwn(RULESETS, version)) throw new Error(`Unsupported Realm Arena rules version: ${version}`);
+    if (catalogue) experimental.set(version, catalogue);
+    else experimental.delete(version);
+    lastVersion = undefined;
+}
+
 /** Missing means legacy forever. Unknown versions fail instead of silently using today's rules. */
 export function rulesetFor(rulesVersion: number | undefined): RealmArenaRuleset {
     const version = rulesVersion ?? 0;
     if (version === lastVersion) return lastRuleset;
     if (!Number.isInteger(version) || !Object.hasOwn(RULESETS, version)) throw new Error(`Unsupported Realm Arena rules version: ${version}`);
     lastVersion = version;
-    return lastRuleset = RULESETS[version];
+    return lastRuleset = experimental.get(version) ?? RULESETS[version];
 }
 
 /**

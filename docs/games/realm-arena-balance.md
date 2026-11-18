@@ -34,9 +34,10 @@ across 144 battles the team won none.
 - Each cell is the team's win rate, then the average round it was overrun in
   when it lost. A 2-player battle lasts 15 rounds and a 3-player one lasts 13,
   with waves landing at rounds 4, 7, 10 and 13 in both.
-- The levers were environment switches in a scratch copy of the rules, never
-  committed (see *How each lever was built*). Repeating a run means
-  re-applying them.
+- The levers were applied in a scratch copy of the rules, never committed (see
+  *How each lever was built*). From one commit, `npm run ra-balance -- --rules 12
+  --set RULES.WAVE_GROWTH_POINTS=25,CHARACTERS.broodQueen.hp=24` overrides
+  numbers in the catalogue being fought, and names them in the scenario.
 
 ## Baseline
 

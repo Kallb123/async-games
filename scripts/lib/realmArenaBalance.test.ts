@@ -1,7 +1,8 @@
 import { describe, expect, it } from "vitest";
 import { nextAction } from "../../src/games/RealmArena/ai";
+import { ruleValuesOf, rulesetFor } from "../../src/games/RealmArena/rulesets";
 import {
-    formatReport, percentile, scenarioKey, settingsOf, simulateBattle, summarise, summariseAll, wilson,
+    applyOverrides, formatReport, parseOverrides, percentile, scenarioKey, settingsOf, simulateBattle, summarise, summariseAll, wilson,
     type BalanceScenario, type BattleSample,
 } from "./realmArenaBalance";
 
@@ -129,5 +130,42 @@ describe("the balance harness's statistics", () => {
         const [stats] = summariseAll([sample({ scenario: "a · team plays main @ 4ba0a86", teamPlanner: "main @ 4ba0a86" })]);
         expect(stats.teamPlanner).toBe("main @ 4ba0a86");
         expect(formatReport([stats])).toContain("the warbands play this checkout's");
+    });
+});
+
+describe("the balance harness's overrides (--set)", () => {
+    it("reads PATH=NUMBER pairs in path order and refuses anything else", () => {
+        expect(parseOverrides("RULES.NEST_POINTS=10, CHARACTERS.broodQueen.hp=24,RULES.WAVE_GROWTH_POINTS=25", 12))
+            .toEqual({ "CHARACTERS.broodQueen.hp": 24, "RULES.NEST_POINTS": 10, "RULES.WAVE_GROWTH_POINTS": 25 });
+        // A rule that is null in the version fought isn't a number there.
+        expect(() => parseOverrides("RULES.BANK_CAP=3", 8)).toThrow(/numeric rule/);
+        for (const bad of ["RULES.NOPE=1", "RULES.COVER_PENALTY=1", "RULES.ARMOUR=x", "RULES.ARMOUR=", "RULES.ARMOUR=Infinity", "RULES.ARMOUR",
+            "CHARACTERS.nobody.hp=3", "CHARACTERS.knight.points=3", "CHARACTERS.knight.hp=0", "ABILITIES.heal.hp=3", "RULES.ARMOUR=1,RULES.ARMOUR=2"]) {
+            expect(() => parseOverrides(bad, 12), bad).toThrow(/--set/);
+        }
+    });
+
+    it("names the overrides in the scenario", () => {
+        expect(scenarioKey({ ...SOLO, rules: 12, set: { "RULES.NEST_POINTS": 10, "RULES.WAVE_GROWTH_POINTS": 25 } }))
+            .toBe("1 player (Solo) vs Swarm · Hold Out (Ruined Fort) · rules v12, set RULES.NEST_POINTS=10 RULES.WAVE_GROWTH_POINTS=25");
+        expect(scenarioKey({ ...SOLO, rules: 12, set: {} })).toBe(scenarioKey({ ...SOLO, rules: 12 }));
+    });
+
+    it("reaches the version fought and no other, and goes when the next scenario has none", () => {
+        const v11 = { growth: ruleValuesOf({ rulesVersion: 11 }).ARMOUR, hp: rulesetFor(11).CHARACTERS.knight.hp, queen: rulesetFor(12).CHARACTERS.broodQueen.hp };
+        try {
+            applyOverrides({ rules: 12, set: { "RULES.WAVE_GROWTH_POINTS": 30, "RULES.ARMOUR": 3, "CHARACTERS.knight.hp": 99 } });
+            expect(ruleValuesOf({ rulesVersion: 12 }).WAVE_GROWTH_POINTS).toBe(30);
+            expect(ruleValuesOf({ rulesVersion: 12 }).ARMOUR).toBe(3);
+            expect(rulesetFor(12).CHARACTERS.knight.hp).toBe(99);
+            expect(rulesetFor(12).CHARACTERS.broodQueen.hp).toBe(v11.queen);
+            expect(ruleValuesOf({ rulesVersion: 11 }).ARMOUR).toBe(v11.growth);
+            expect(rulesetFor(11).CHARACTERS.knight.hp).toBe(v11.hp);
+            applyOverrides({ rules: 12 });
+            expect(ruleValuesOf({ rulesVersion: 12 }).WAVE_GROWTH_POINTS).toBe(15);
+            expect(rulesetFor(12).CHARACTERS.knight.hp).toBe(v11.hp);
+        } finally {
+            applyOverrides({});
+        }
     });
 });
