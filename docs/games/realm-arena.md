@@ -5601,7 +5601,10 @@ stays 11. The open point is settled as planned: nests **regrow** with each wave.
   nothing burning it takes no turn, and drops out again once the effect has run
   out or the nest has fallen. The empty turn writes no "ended their turn" line
   (only what burning did, told as for any turn, and in fog only to those who saw
-  it), and `nestsSeenDestroyed` is still only what `toldTo` the team.
+  it), and `nestsSeenDestroyed` is still only what `toldTo` the team. An empty
+  turn a viewer was told nothing of is left out of what they get (`toldTurns`):
+  a review step's parts cut no seam for it, and recap rows are keyed without it,
+  so neither shows that it was taken.
 - **No command version**, as for §39.6.
 
 **Screens, as built.**

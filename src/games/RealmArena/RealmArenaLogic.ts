@@ -1427,6 +1427,15 @@ export const enemyEvents = (turn: EnemyTurn): BattleEvent[] => [...turn.started,
 export const enemyTurnsOf = (recap: Pick<NonNullable<IRealmArenaOutcome["recap"]>, "enemy" | "thenEnemy"> | undefined): EnemyTurn[] =>
     recap?.enemy ? [recap.enemy, ...recap.thenEnemy ?? []] : [];
 
+/**
+ * The warband turns a viewer has anything of, from `turns` (§27.2): an empty
+ * turn — a nest-only warband's burn (§39.7) — that `said` tells them nothing
+ * of is left out, so neither its place nor the count of turns tells a fogged
+ * viewer it was taken. Every other turn is kept, as its end is told to all.
+ */
+export const toldTurns = (turns: readonly EnemyTurn[], said: (told: Told | undefined, events: readonly BattleEvent[]) => readonly BattleEvent[]): EnemyTurn[] =>
+    turns.filter(turn => turn.steps.length > 0 || turn.ended !== undefined || said(turn.startedTold, turn.started).length > 0);
+
 const ACTION_PHRASES: Readonly<Record<Action["kind"], string>> = {
     move: "moved",
     sneak: "sneaked",
