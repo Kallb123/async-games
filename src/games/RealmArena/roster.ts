@@ -1,12 +1,13 @@
 // Realm Arena's characters, their kits and their mastery as the screens word
 // them (docs/games/realm-arena.md §13.6, §23): each one's mark, a weapon in a
-// line, the options and where XP stands against the ranks. Readings of the
-// data in characters.ts and mastery.ts, and nothing of the rules, so a screen
-// outside the game — the profile's mastery section — can import them without
-// carrying the whole of rules.ts into its bundle. The board's own readings of
+// line, the options, the abilities a loadout takes (§40) and where XP stands
+// against the ranks. Readings of the data in characters.ts and mastery.ts, and
+// nothing of the rules, so a screen outside the game — the profile's mastery
+// section — can import them without carrying the whole of rules.ts into its
+// bundle. The board's own readings of
 // the battle are ui.ts's.
 
-import { CHARACTERS, loadoutPoolOf, type AbilityId, type CharacterId, type FactionId, type OptionId, type Weapon } from "./characters";
+import { CHARACTERS, isPoolEntry, kitOf, loadoutPoolOf, type AbilityId, type CharacterId, type FactionId, type OptionId, type Weapon } from "./characters";
 import { ruleValuesOf, rulesetOf, type RulesContext } from "./rulesets";
 import { nextRankXp, rankOf, type PlayerMastery } from "./mastery";
 
@@ -70,36 +71,19 @@ export function unlocksFor(character: CharacterId, context?: RulesContext): Opti
  * are options there.
  */
 export function optionsFor(character: CharacterId, context?: RulesContext): OptionId[] {
-    const { OPTIONS } = rulesetOf(context);
-    const pooled = loadoutPoolOf(character, context) !== undefined;
-    return unlocksFor(character, context).filter(id => !pooled || "weapon" in OPTIONS[id]);
-}
-
-/**
- * The abilities a figure with a pool carries besides its fixed ones (§40.3):
- * the loadout it was mustered with, or its character's defaults. Undefined for
- * a character with no pool, which fights with its whole kit.
- */
-export function loadoutOf(subject: { character: CharacterId; loadout?: readonly AbilityId[] }, context?: RulesContext): readonly AbilityId[] | undefined {
-    const pool = rulesetOf(context).CHARACTERS[subject.character].loadout;
-    return pool && (subject.loadout ?? pool.defaults);
-}
-
-/**
- * The loadout after taking `ability` (§40.4): it goes last, and the one taken
- * longest ago falls off the front so the list stays `picks` long.
- */
-export function withPick(current: readonly AbilityId[], ability: AbilityId, picks: number): AbilityId[] {
-    return [...current.filter(id => id !== ability), ability].slice(-picks);
+    return unlocksFor(character, context).filter(id => !isPoolEntry(id, context));
 }
 
 /** The names of what a figure with a pool took into battle, in its pool's order: "Aimed shot · Poison arrow". Undefined with no pool. */
 export function loadoutLine(subject: { character: CharacterId; loadout?: readonly AbilityId[] }, context?: RulesContext): string | undefined {
-    const taken = loadoutOf(subject, context);
-    if (!taken) return undefined;
+    const pool = loadoutPoolOf(subject.character, context);
+    if (!pool) return undefined;
     const { ABILITIES } = rulesetOf(context);
-    return loadoutPoolOf(subject.character, context)!.filter(entry => taken.includes(entry.ability)).map(entry => ABILITIES[entry.ability]!.name).join(" · ");
+    return kitOf(subject.character, undefined, context, subject.loadout).abilities.slice(pool.fixed.length).map(id => ABILITIES[id]!.name).join(" · ");
 }
+
+/** How a screen says a rank with a character is what unlocks something (§23.2, §40.3): a pick in its loadout, an option. */
+export const unlockNote = (rank: number): string => `Unlocked at rank ${rank}`;
 
 /** The glyph an ability's row leads with, where a weapon's leads with `weaponMark`. */
 export const ABILITY_MARK = "✦";
@@ -147,9 +131,7 @@ export function optionView(id: OptionId, context?: RulesContext): KitView {
         return { icon: weaponMark(character, id), name: weapon.name, line: `In place of the ${replaced} · ${weaponLine(weapon, context)}` };
     }
     const ability = ABILITIES[option.ability]!;
-    // A character with a pool takes it as one of its picks, rather than in place of anything.
-    const lead = loadoutPoolOf(option.character, context) ? "Joins its picks" : `In place of ${replaced}`;
-    return { icon: ABILITY_MARK, name: ability.name, line: `${lead} · ${ability.ap} AP · ${ability.description}` };
+    return { icon: ABILITY_MARK, name: ability.name, line: `In place of ${replaced} · ${ability.ap} AP · ${ability.description}` };
 }
 
 /** Where a character's XP stands against the ranks (§23.1): "75 XP · 105 more for rank 2". */

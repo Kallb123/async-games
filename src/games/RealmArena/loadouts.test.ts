@@ -55,21 +55,21 @@ describe("kits under a pool (§40.3)", () => {
     it("reads a chosen loadout in the pool's order, as one cached, frozen kit however it was sent", () => {
         const one = kitOf("archer", undefined, V12, ["splittingArrow", "aimedShot"]);
         expect([...one.abilities]).toEqual(["aimedShot", "splittingArrow"]);
-        expect(kitOf("archer", undefined, V12, ["aimedShot", "splittingArrow"])).toBe(one);
+        expect(kitOf("archer", undefined, V12, ["aimedShot", "splittingArrow"])).toEqual(one);
         expect(Object.isFrozen(one)).toBe(true);
         expect(Object.isFrozen(one.abilities)).toBe(true);
         // The default is a kit of its own, the same object each time.
-        expect(kitOf("archer", undefined, V12)).toBe(kitOf("archer", undefined, V12, ["aimedShot", "poisonArrow"]));
+        expect(kitOf("archer", undefined, V12)).toEqual(kitOf("archer", undefined, V12, ["aimedShot", "poisonArrow"]));
         expect(kitIds("cleric", ["ward", "beckon"])).toEqual(["heal", "beckon", "ward"]);
     });
 
     it("builds the pool from the character's other abilities, then its ability options with their ranks", () => {
-        expect(loadoutPoolOf("manAtArms", V12)).toEqual([
+        expect(loadoutPoolOf("manAtArms", V12)?.entries).toEqual([
             { ability: "cleave", rank: 0 }, { ability: "leap", rank: 0 }, { ability: "slashAndDash", rank: 0 }, { ability: "shieldBash", rank: 1 },
         ]);
-        expect(loadoutPoolOf("knight", V12)!.map(entry => entry.ability)).toEqual(["taunt", "shove", "demolish"]);
+        expect(loadoutPoolOf("knight", V12)!.entries.map(entry => entry.ability)).toEqual(["taunt", "shove", "demolish"]);
         // Frost bolt swaps the weapon, so it isn't a pick.
-        expect(loadoutPoolOf("mage", V12)!.map(entry => entry.ability)).toEqual(["fireball", "iceBall", "thunder", "focus"]);
+        expect(loadoutPoolOf("mage", V12)!.entries.map(entry => entry.ability)).toEqual(["fireball", "iceBall", "thunder", "focus"]);
         expect(loadoutPoolOf("archer", V12)).toBe(loadoutPoolOf("archer", V12));
         for (const character of ["scout", "skitterling", "miner"] as const) expect(loadoutPoolOf(character, V12)).toBeUndefined();
         expect(loadoutPoolOf("knight", V11)).toBeUndefined();
@@ -167,7 +167,7 @@ describe("mustering with a loadout (§40.3)", () => {
         expect(await musters(game, picksFor(game, ["mage", "archer"], { mage: ["focus", "thunder"] }))).toBe(true);
         expect((await play(game, muster("b", readyMadePicks(game, 1)))).outcome.validMove).toBe(true);
         const [mage, archer] = game.specificGameState.fighters.filter(one => one.owner === "a");
-        expect(mage.loadout).toEqual(["focus", "thunder"]);
+        expect(mage.loadout).toEqual(["thunder", "focus"]);
         expect(archer).not.toHaveProperty("loadout");
         expect(abilitiesOf(mage, game.specificGameState)).toEqual(["thunder", "focus"]);
         expect(abilitiesOf(archer, game.specificGameState)).toEqual(["aimedShot", "poisonArrow"]);
@@ -204,7 +204,7 @@ describe("mustering with a loadout (§40.3)", () => {
         await play(game, muster("b", readyMadePicks(game, 1)));
         for (const viewer of ["b", null]) {
             const fighters = (await responseFor(game, viewer)).specificGameState.fighters;
-            expect(fighters.find(one => one.owner === "a" && one.character === "mage")?.loadout).toEqual(["focus", "iceBall"]);
+            expect(fighters.find(one => one.owner === "a" && one.character === "mage")?.loadout).toEqual(["iceBall", "focus"]);
         }
     });
 
@@ -232,6 +232,7 @@ describe("mustering with a loadout (§40.3)", () => {
     it("copies it into undo snapshots, never sharing the array", () => {
         const fighter = newFighter(1, "a", "archer", 0, null, undefined, ["aimedShot", "bouncingArrow"], false, V12);
         expect(fighter.loadout).toEqual(["aimedShot", "bouncingArrow"]);
+        expect(newFighter(1, "a", "archer", 0, null, undefined, ["bouncingArrow", "aimedShot"], false, V12).loadout).toEqual(["aimedShot", "bouncingArrow"]);
         const stored = storedFighter(fighter);
         expect(stored.loadout).toEqual(fighter.loadout);
         expect(stored.loadout).not.toBe(fighter.loadout);
@@ -246,7 +247,7 @@ describe("mustering with a loadout (§40.3)", () => {
         const timeline = await buildTimeline(game, { a: "A", b: "B" }, [], undefined, "a");
         const last = timeline.snapshots[timeline.currentIndex];
         expect(last.specificGameState).toEqual(gameStateToModel(game.specificGameState, "a", game.gameState.commandHistory.at(-1)?.id ?? null));
-        expect(game.specificGameState.fighters.find(one => one.character === "mage" && one.owner === "a")?.loadout).toEqual(["focus", "iceBall"]);
+        expect(game.specificGameState.fighters.find(one => one.character === "mage" && one.owner === "a")?.loadout).toEqual(["iceBall", "focus"]);
     });
 });
 

@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
-import { loadoutLine, loadoutOf, optionsFor, optionView, unlocksFor, withPick } from "./roster";
+import { loadoutOf } from "./characters";
+import { loadoutLine, optionsFor, optionView, unlocksFor } from "./roster";
+import { withPick } from "./ui";
 import { characterStats } from "./stats";
 
 // docs/games/realm-arena.md §40.4: what the screens say about a loadout, in
@@ -60,10 +62,6 @@ describe("optionsFor", () => {
 });
 
 describe("optionView", () => {
-    it("says an ability option joins a pool character's picks", () => {
-        expect(optionView("cripplingShot", V12).line).toMatch(/^Joins its picks · \d AP · /);
-    });
-
     it("still says what it replaces in version 11", () => {
         expect(optionView("cripplingShot", V11).line).toMatch(/^In place of /);
     });
@@ -75,7 +73,7 @@ describe("characterStats", () => {
         const kinds = Object.fromEntries(actions.map(action => [action.name, action.kind]));
         expect(kinds["Bulwark"]).toBe("Always");
         expect(kinds["Taunt"]).toBe("Pick 2");
-        expect(kinds["Demolish"]).toBe("Rank 1 · pick");
+        expect(kinds["Demolish"]).toBe("Unlocked at rank 1");
         expect(options).toEqual([]);
     });
 

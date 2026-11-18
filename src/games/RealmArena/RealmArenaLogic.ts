@@ -351,7 +351,7 @@ export function undoDepthOf(context: RulesContext): number {
         const { CHARACTERS, OPTIONS, ABILITIES } = catalogue;
         const options = Object.keys(OPTIONS) as OptionId[];
         const kits = (Object.keys(CHARACTERS) as CharacterId[]).flatMap(character =>
-            [undefined, ...options.filter(id => OPTIONS[id]?.character === character)].map(option => ({ character, option, loadout: loadoutPoolOf(character, context)?.map(entry => entry.ability) })));
+            [undefined, ...options.filter(id => OPTIONS[id]?.character === character)].map(option => ({ character, option, loadout: loadoutPoolOf(character, context)?.entries.map(entry => entry.ability) })));
         const onUse = (fighter: (typeof kits)[number]) => abilitiesOf(fighter, context).reduce((sum, id) => sum + (ABILITIES[id]?.passive ? 0 : ABILITIES[id]?.bonusAp ?? 0), 0);
         depth = Math.max(...kits.map(fighter => actionPointsOf(fighter, context) + onUse(fighter)));
         UNDO_DEPTHS.set(catalogue, depth);

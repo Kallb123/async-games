@@ -4,13 +4,14 @@ import React, { useState } from 'react';
 import ActionButton from '@/components/ui/ActionButton';
 import AmountSteppers from '@/components/ui/AmountSteppers';
 import BuildRow from '@/components/ui/BuildRow';
+import ListRow from '@/components/ui/ListRow';
 import OptionChoiceSection from '@/components/ui/OptionChoiceSection';
 import Section from '@/components/ui/Section';
 import { ITEM_ART } from '@/games/RealmArena/art';
-import { loadoutPoolOf, type AbilityId, type ItemId, type OptionId } from '@/games/RealmArena/characters';
+import { loadoutOf, loadoutPoolOf, type AbilityId, type ItemId, type OptionId } from '@/games/RealmArena/characters';
 import type { Ranks } from '@/games/RealmArena/mastery';
 import { musterHp, type MusterPick } from '@/games/RealmArena/rules';
-import { CHARACTER_MARK, factionRosterLine, loadoutLine, loadoutOf, optionsFor, optionView, starterView, type KitView } from '@/games/RealmArena/roster';
+import { CHARACTER_MARK, factionRosterLine, loadoutLine, optionsFor, optionView, starterView, unlockNote, type KitView } from '@/games/RealmArena/roster';
 import type { UnitRef } from '@/games/RealmArena/stats';
 import { numberedName, squadOf } from '@/games/RealmArena/ui';
 import type { MusterDraft } from '@/games/RealmArena/useMusterDraft';
@@ -211,28 +212,29 @@ function squadLine(pick: MusterPick, stout: boolean, context?: RulesContext): st
 interface UnlockRowProps {
     /** The option or ability the row offers. */
     view: KitView;
-    /** The rank with the character that unlocks it. */
+    /** The rank with the character that unlocks it: 0 for what it starts with. */
     need: number;
     /** The player's rank with it. */
     rank: number;
     /** It's what the character takes into battle now. */
     taken: boolean;
-    onClick: () => void;
+    /** Takes it. Not called for what's already taken. */
+    onTake: () => void;
 }
 
-/** One thing a rank unlocks, for the character picked up to take: greyed, with the rank that does, until the player has it. */
-function UnlockRow({ view, need, rank, taken, onClick }: UnlockRowProps) {
+/** One thing a rank unlocks, for the character picked up to take: greyed, with the rank that does, until the player has it. The starting one reads "Standard". */
+function UnlockRow({ view, need, rank, taken, onTake }: UnlockRowProps) {
     const locked = need > rank;
     return (
         <BuildRow
             icon={view.icon}
             name={view.name}
-            cost={view.line}
+            cost={need === 0 ? `Standard · ${view.line}` : view.line}
             tag={taken ? 'Taken' : locked ? `Rank ${need}` : 'Take'}
             tagMuted={locked}
             disabled={locked}
             active={taken}
-            onClick={onClick}
+            onClick={() => { if (!taken) onTake(); }}
         />
     );
 }
@@ -255,32 +257,34 @@ interface LoadoutPickerProps {
 function LoadoutPicker({ pick, ranks, onPick, context }: LoadoutPickerProps) {
     const { character } = pick;
     const pool = loadoutPoolOf(character, context);
-    const { CHARACTERS, ABILITIES } = rulesetOf(context);
-    const { name, loadout } = CHARACTERS[character];
     const taken = loadoutOf(pick, context);
-    if (!pool || !loadout || !taken) return null;
+    if (!pool || !taken) return null;
+    const { name } = rulesetOf(context).CHARACTERS[character];
     const rank = ranks[character] ?? 0;
-    const always = loadout.fixed.map(id => ABILITIES[id]!.name);
     return (
         <>
             <p className="ag-hint ag-hint--tight">
-                {`Your ${name} takes ${loadout.picks} of these abilities into battle${always.length ? `, besides ${always.join(' and ')}, which it always carries` : ''}. Taking another drops the one you took first.`}
+                {`Your ${name} takes ${pool.picks} of these abilities into battle. Taking another drops the one you took first.`}
             </p>
+            {pool.fixed.length > 0 && (
+                <div className="ag-list">
+                    {pool.fixed.map(id => {
+                        const view = starterView(character, id, context);
+                        return <ListRow key={id} icon={view.icon} title={view.name} sub={view.line} action={<span className="ag-tag ag-tag--quiet">Always</span>} />;
+                    })}
+                </div>
+            )}
             <div className="ag-build-list">
-                {loadout.fixed.map(id => {
-                    const view = starterView(character, id, context);
-                    return <BuildRow key={id} icon={view.icon} name={view.name} cost={view.line} tag="Always" active onClick={() => {}} />;
-                })}
-                {pool.map(({ ability, rank: need }) => {
+                {pool.entries.map(({ ability, rank: need }) => {
                     const view = starterView(character, ability, context);
                     return (
                         <UnlockRow
                             key={ability}
-                            view={need > 0 ? { ...view, line: `Unlocked by mastery · ${view.line}` } : view}
+                            view={need > 0 ? { ...view, line: `${unlockNote(need)} · ${view.line}` } : view}
                             need={need}
                             rank={rank}
                             taken={taken.includes(ability)}
-                            onClick={() => { if (!taken.includes(ability)) onPick(ability); }}
+                            onTake={() => onPick(ability)}
                         />
                     );
                 })}
@@ -328,14 +332,7 @@ function OptionPicker({ pick, ranks, onChoose, context }: OptionPickerProps) {
                     const kept = !pick.option || OPTIONS[pick.option].replaces !== part;
                     return (
                         <React.Fragment key={part}>
-                            <BuildRow
-                                icon={starter.icon}
-                                name={starter.name}
-                                cost={`Standard · ${starter.line}`}
-                                tag={kept ? 'Taken' : 'Take'}
-                                active={kept}
-                                onClick={() => { if (!kept) onChoose(null); }}
-                            />
+                            <UnlockRow view={starter} need={0} rank={rank} taken={kept} onTake={() => onChoose(null)} />
                             {options.filter(id => OPTIONS[id].replaces === part).map(id => {
                                 return (
                                     <UnlockRow
@@ -344,7 +341,7 @@ function OptionPicker({ pick, ranks, onChoose, context }: OptionPickerProps) {
                                         need={OPTIONS[id].rank}
                                         rank={rank}
                                         taken={pick.option === id}
-                                        onClick={() => onChoose(id)}
+                                        onTake={() => onChoose(id)}
                                     />
                                 );
                             })}

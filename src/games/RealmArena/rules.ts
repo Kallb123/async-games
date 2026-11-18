@@ -33,7 +33,7 @@ import { canSee } from "@/utils/games/battlefield/lineOfSight";
 import { DEFAULT_CLIMB, pathCost, pathTo, reachFrom, stepCost, type MoveRules, type Reach } from "@/utils/games/battlefield/pathfinding";
 import { coordsOf, distance, facingTowards, FULL_HEIGHT, isNeighbour, riseOf, squareAt, type Area, type Battlefield, type Cover, type Facing, type Square } from "@/utils/games/battlefield/terrain";
 import {
-    afflictionsOf, factionOf, isCharacterId, isItemId, isOptionId, kitOf, LINE_COOP_MAX, loadoutPoolOf, squadPoints,
+    afflictionsOf, factionOf, isCharacterId, isItemId, isOptionId, isPoolEntry, kitOf, LINE_COOP_MAX, loadoutOf, loadoutPoolOf, squadPoints,
     type Ability, type AbilityId, type Affliction, type CharacterId, type Effect, type EffectId, type Faction, type FactionId, type Item, type ItemId, type OptionId, type PlayerCount, type Weapon, type WaveTheme,
 } from "./characters";
 import { currentRuleset, ruleValuesOf, rulesetOf, type RulesContext } from "./rulesets";
@@ -2304,7 +2304,7 @@ function optionRefusal(pick: Partial<MusterPick>, character: CharacterId, ranks:
     if (pick.option == null) return undefined;
     if (!isOptionId(pick.option, context) || OPTIONS[pick.option].character !== character) return "That isn't an option for that character";
     // §40.2: where a character has a pool an ability option is a pool entry, not a swap; only a weapon one is an option.
-    if (loadoutPoolOf(character, context) && "ability" in OPTIONS[pick.option]) return "That ability is picked in the loadout";
+    if (isPoolEntry(pick.option, context)) return "That ability is picked in the loadout";
     return (ranks[character] ?? 0) >= OPTIONS[pick.option].rank ? undefined : "That option isn't unlocked yet";
 }
 
@@ -2317,12 +2317,12 @@ function optionRefusal(pick: Partial<MusterPick>, character: CharacterId, ranks:
 function loadoutRefusal(pick: Partial<MusterPick>, character: CharacterId, ranks: Ranks, context?: RulesContext): string | undefined {
     if (pick.loadout == null) return undefined;
     const pool = loadoutPoolOf(character, context);
-    const { name, loadout } = rulesetOf(context).CHARACTERS[character];
-    if (!pool || !loadout) return "That character has no abilities to pick";
+    if (!pool) return "That character has no abilities to pick";
+    const { name } = rulesetOf(context).CHARACTERS[character];
     const chosen: unknown = pick.loadout;
-    if (!Array.isArray(chosen) || chosen.length !== loadout.picks || new Set(chosen).size !== chosen.length) return `Pick ${loadout.picks} different abilities for your ${name}`;
+    if (!Array.isArray(chosen) || chosen.length !== pool.picks || new Set(chosen).size !== chosen.length) return `Pick ${pool.picks} different abilities for your ${name}`;
     for (const id of chosen) {
-        const entry = typeof id === "string" ? pool.find(({ ability }) => ability === id) : undefined;
+        const entry = typeof id === "string" ? pool.entries.find(({ ability }) => ability === id) : undefined;
         if (!entry) return `That isn't an ability your ${name} can pick`;
         if ((ranks[character] ?? 0) < entry.rank) return "That ability isn't unlocked yet";
     }
@@ -2364,7 +2364,7 @@ export function musterRefusal(field: Battlefield, seat: number, picks: unknown, 
 export function newFighter(id: number, owner: string, character: CharacterId, square: Square, item: ItemId | null = null, option?: OptionId, loadout?: readonly AbilityId[], stout = false, context?: RulesContext): Fighter {
     return {
         id, owner, character, square, hp: musterHp(character, stout, context), ...(stout ? { maxHp: teamHp(character, context) } : {}),
-        ap: 0, banked: 0, effects: {}, cooldowns: {}, spent: [], item, ...(option ? { option } : {}), ...(loadout ? { loadout: [...loadout] } : {}),
+        ap: 0, banked: 0, effects: {}, cooldowns: {}, spent: [], item, ...(option ? { option } : {}), ...(loadout ? { loadout: [...(loadoutOf({ character, loadout }, context) ?? loadout)] } : {}),
     };
 }
 
