@@ -644,6 +644,17 @@ export function activeEffects(fighter: Pick<Fighter, "effects">, context?: Rules
     return (Object.keys(fighter.effects) as EffectId[]).filter(id => hasEffect(fighter, id) && effects[id]).map(id => [id, effects[id]!]);
 }
 
+/**
+ * Whether one of `player`'s structures (§39.7) is standing under an effect that
+ * does damage — a nest burning or poisoned. Such a nest is hurt as its owner's
+ * turn begins, so a warband with nothing else standing still has a turn to
+ * take, with no actions in it (`warbandPlays`).
+ */
+export function structureBurning(state: BattleState, player: string): boolean {
+    return state.fighters.some(fighter => fighter.owner === player && isStanding(fighter) && isStructure(fighter, state)
+        && activeEffects(fighter, state).some(([, effect]) => effect.damage));
+}
+
 type EffectBonus = "armour" | "damageBonus" | "abilityDamageBonus";
 /** Per catalogue, whether any of its effects carries each bonus, or cover: most never do, and `damageTo` and `temporaryCover` are on the planner's hot path. */
 const EFFECT_BONUSES = new WeakMap<object, ReadonlySet<EffectBonus | "cover">>();

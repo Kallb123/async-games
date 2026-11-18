@@ -15,9 +15,9 @@ import {
 } from "./rules";
 import { ruleValuesOf, rulesetFor } from "./rulesets";
 import { targetsOf } from "./tactics";
-import { actBy, addFighter, battleOf, endTurnBy, makeGame, musterAll, play, playScriptedBattle, readyMadePicks, warbandsOf, type RealmArenaTestGame } from "./testFixtures";
+import { actBy, addFighter, battleOf, endTurnBy, makeGame, musterAll, play, playScriptedBattle, readyMadePicks, responseFor, warbandsOf, type RealmArenaTestGame } from "./testFixtures";
 import { seedRolls } from "./seedRolls";
-import type { RealmArenaEndTurn } from "./RealmArenaLogic";
+import type { IRealmArenaOutcome, RealmArenaEndTurn } from "./RealmArenaLogic";
 
 // docs/games/realm-arena.md §39.7: nests. The Swarm's warbands stand two nests each
 // from the first muster, which the team destroys to thin the next wave. They are
@@ -646,4 +646,112 @@ describe("a replay of a Hold Out with nests destroyed (§39.7)", () => {
             field.nests = original;
         }
     }, 120_000);
+});
+
+// A warband with only nests standing still takes a turn while one of them burns or is poisoned (§39.7):
+// an empty one, so the damage lands as its turn begins and not a wave later.
+describe("a nest burns down once its warband has only nests left (§39.7, #967)", () => {
+    const base = (gs: RealmArenaTestGame["specificGameState"], round: number) => warbandBudgetOf(gs) + 15 * Math.floor((round - 1) / 3);
+    const enemyOf = (outcome: unknown) => (outcome as IRealmArenaOutcome).recap?.enemy;
+
+    /** A battle whose first warband has only nests, one of them at 1 HP and under `effect`, lit by the team's first character. */
+    async function burning(effect: "burning" | "poisoned" | undefined, settings: Parameters<typeof makeGame>[2] = {}) {
+        seedRolls(3);
+        const { game, gs, nest } = await mustered(settings);
+        const setter = fighters(game).find(one => one.owner === "a")!.id;
+        downWarbandCharacters(game);
+        gs.roundsPlayed = 2;
+        gs.rallyOwed = undefined;
+        if (effect) gs.fighters = gs.fighters.map(one => one.id === nest.id ? { ...afflicted({ ...one, hp: 1 }, effect, setter, CONTEXT)!.fighter, hp: 1 } : one);
+        return { game, gs, nest, owner: nest.owner, other: warbandOwner(1) };
+    }
+
+    for (const effect of ["burning", "poisoned"] as const) {
+        for (const teamBlocks of [false, true]) {
+            it(`${effect}: the nest falls before the wave and the wave is smaller${teamBlocks ? ", in a block of turns" : ""}`, async () => {
+                const { game, gs, nest, owner, other } = await burning(effect, { coop: { enemy: "swarm", mission: "holdOut", ...(teamBlocks ? { teamBlocks: true as const } : {}) } });
+                await play(game, endTurnBy("a"));
+                // Not in a block, where the warbands wait for the last player: the nest is already down.
+                expect(fighters(game).find(one => one.id === nest.id)!.hp).toBe(teamBlocks ? 1 : 0);
+                if (!teamBlocks) expect(gs.nestsDestroyed).toEqual({ [owner]: 1 });
+                // The wave of the round about to begin lands smaller for it, and the other warband's is whole.
+                const whole = wavePurchase(SWARM, base(gs, 4), 4, CONTEXT);
+                const thinned = wavePurchase(SWARM, base(gs, 4) - 15, 4, CONTEXT);
+                expect([...thinned].sort()).not.toEqual([...whole].sort());
+                const { outcome } = await play(game, endTurnBy("b"));
+                if (teamBlocks) expect(enemyOf(outcome)).toMatchObject({ owner, steps: [] });
+                expect(gs.roundsPlayed).toBe(3);
+                expect(combatantsOf(game, owner).map(one => one.character).sort()).toEqual([...thinned].sort());
+                expect(combatantsOf(game, other).map(one => one.character).sort()).toEqual([...whole].sort());
+                // It grew back with the wave, and what it cost is spent.
+                expect(fighters(game).find(one => one.id === nest.id)).toMatchObject({ hp: 10 });
+                expect(gs.nestsDestroyed).toBeUndefined();
+            });
+        }
+    }
+
+    it("the burn is an empty turn: no actions, no 'ended their turn' line, recorded and replayed as such", async () => {
+        const live = await burning("burning");
+        const turn = await play(live.game, endTurnBy("a"));
+        const enemy = (turn.outcome as IRealmArenaOutcome).recap!.enemy!;
+        expect(enemy).toMatchObject({ owner: live.owner, steps: [] });
+        expect(enemy.started.some(event => event.kind === "downed")).toBe(true);
+        expect(enemy.ended).toBeUndefined();
+        expect(text(live.game).some(line => /ended their turn/.test(line) && line.startsWith("The Swarm"))).toBe(false);
+        const command = live.game.gameState.commandHistory.at(-1) as RealmArenaEndTurn;
+        expect(command.recordedEnemyActions).toEqual([]);
+
+        // The same turn replayed from what was recorded, on an identical battle, lands on the same state and consumes nothing.
+        const replay = await burning("burning");
+        const random = vi.spyOn(Math, "random").mockImplementation(() => { throw new Error("replay consumed randomness"); });
+        try {
+            const again = Object.assign(new (command.constructor as new () => RealmArenaEndTurn)(), JSON.parse(JSON.stringify(command)));
+            expect((await play(replay.game, again)).outcome.validMove).toBe(true);
+        } finally {
+            random.mockRestore();
+        }
+        expect(rawOf(replay.game.specificGameState)).toEqual(rawOf(live.game.specificGameState));
+        expect(fighters(replay.game)).toEqual(fighters(live.game));
+    });
+
+    it("a nest-only warband with nothing burning takes no turn, and the round still passes", async () => {
+        const { game, gs } = await burning(undefined);
+        const first = await play(game, endTurnBy("a"));
+        expect(enemyOf(first.outcome)).toBeUndefined();
+        expect((game.gameState.commandHistory.at(-1) as RealmArenaEndTurn).recordedEnemyActions).toEqual([]);
+        await play(game, endTurnBy("b"));
+        expect(gs.roundsPlayed).toBe(3);
+        expect(nestsOf(game)).toHaveLength(4);
+    });
+
+    it("drops out of the rotation again once the burn has run its course", async () => {
+        const { game, nest, owner } = await burning("burning");
+        game.specificGameState.fighters = game.specificGameState.fighters.map(one => one.id === nest.id ? { ...one, hp: 10 } : one);
+        const first = await play(game, endTurnBy("a"));
+        expect(enemyOf(first.outcome)).toMatchObject({ owner, steps: [] });
+        // Burning counts down as it hurts, so the turns stop on their own.
+        let turns = 1;
+        for (const player of ["b", "a", "b", "a", "b", "a"]) {
+            if (!fighters(game).find(one => one.id === nest.id)!.effects.burning) break;
+            const { outcome } = await play(game, endTurnBy(player));
+            if (enemyOf(outcome)) turns++;
+        }
+        expect(fighters(game).find(one => one.id === nest.id)!.effects.burning).toBeFalsy();
+        expect(turns).toBeGreaterThan(1);
+        expect(turns).toBeLessThan(6);
+    });
+
+    it("does not narrate a burn on a nest out of the team's sight, in fog", async () => {
+        const { game, gs, nest } = await burning("burning", { fog: true });
+        await play(game, endTurnBy("a"));
+        await play(game, endTurnBy("b"));
+        expect(gs.nestsDestroyed).toBeUndefined();
+        expect(combatantsOf(game, nest.owner).map(one => one.character).sort()).not.toEqual(combatantsOf(game, warbandOwner(1)).map(one => one.character).sort());
+        expect(gs.nestsSeenDestroyed ?? 0).toBe(0);
+        expect(text(game).some(line => /regrow/i.test(line))).toBe(false);
+        for (const viewer of ["a", "b"]) {
+            const response = await responseFor(game, viewer);
+            expect(response.gameState.history.some(line => /nest/i.test(line.text))).toBe(false);
+        }
+    });
 });

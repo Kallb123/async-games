@@ -5586,8 +5586,17 @@ stays 11. The open point is settled as planned: nests **regrow** with each wave.
 - **Planner.** A warband counts a nest's worth in full, not at
   `HOLD_OUT_OWN_WORTH`; nothing plans a nest. The scripted team in
   `testFixtures` hits a nest it reaches and never walks to one.
-- **Accepted:** a warband with only its nests standing takes no turn, so a burn
-  on them ticks again only once its wave lands.
+- **Nests burn between turns.** A warband with only nests standing still takes
+  a turn while one of them is burning or poisoned (`structureBurning`, read with
+  `squadsStanding` by `warbandPlays`, the one test the rotation and a block of
+  turns pick a warband by): an empty one, `beginTurn` then `applyEndTurn` with no
+  action between (its AP cap is 0, so the planner is never asked, and a replay's
+  recorded list is empty), so the damage lands as its turn begins and a burning
+  1-HP nest falls before the wave, which is then smaller. With nothing burning
+  it takes no turn, and drops out of the rotation again once the effect has run
+  out or the nest has fallen. The turn writes no "ended their turn" line (only
+  what burning did, told as for any turn, and in fog only to those who saw it),
+  and `nestsSeenDestroyed` is still only what `toldTo` the team.
 - **No command version**, as for §39.6.
 
 **Screens, as built.**
