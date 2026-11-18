@@ -4901,11 +4901,11 @@ Every value marked *Proposed* is a starting point for the balance harness
   the old behaviour. The Renegades and the Miners have none of the new fields,
   so Hold Out against them plays as it does today.
 - **A command version where one is due** (`docs/command-versions.md`): for the
-  rally's new action (§39.4, command version 12), and the loadout a muster's
-  picks carry (§40.3, command version 13). The End turn landing a wave by the new rules
-  (§39.6, §39.7) needs none: version 12 is unreleased, no battle can be created
-  under it until §39.9, and by then every client sends command version 13 or
-  later, so the catalogue is the only gate those waves need.
+  rally's new action (§39.4) only. The End turn landing a wave by the new rules
+  (§39.6, §39.7) and the loadout a muster's picks carry (§40.3) need none:
+  version 12 is unreleased, no battle can be created under it until §39.9, and
+  by then every client sends command version 12 or later, so the catalogue is
+  the only gate they need.
 - **One "What's new" line**, written by the last PR, for the lot.
 - **Step 0: a baseline.** Before PR 1, run the harness at version 11: Hold Out
   against the Swarm, teams of one to four, on the gate forts, the Sacked Fort
@@ -5781,21 +5781,21 @@ still change them until §39.9 releases it.
   musters with unless its player picks another: the ready-made squads, a
   timed-out muster, the computer's warbands (the Renegades among them) and
   Hold Out's waves all fight with it, and a new player never has to choose.
-- ***Proposed:* two picks for every Realm character**, the Archer and the
+- **Two picks for every Realm character** (*agreed*), the Archer and the
   Cleric too (issue 957, question 2). Their pools are the largest, so the
   choice is widest there; three would leave an Archer missing only two arrows
   and barely a choice.
-- ***Proposed:* the Knight and the Man-at-arms are cut to two as well**
+- **The Knight and the Man-at-arms are cut to two as well** (*agreed*)
   (question 1). One rule for the whole faction, and their pools grow with
   mastery: a Knight's choice is empty at rank 0 (Taunt and Shove are its
   whole pool) and real from rank 1, when Demolish joins it.
-- ***Proposed:* the Cleric's Heal is fixed** (question 4), as the Knight's
+- **The Cleric's Heal is fixed** (*agreed*) (question 4), as the Knight's
   Bulwark is: a Cleric is the squad's healer, and a passive or a heal isn't
   a pick worth weighing against an arrow.
 - **Other factions are unchanged.** Their kits are already one or two
   abilities, and none of their characters has a pool.
 
-| Character | Always has | Pool | Default (*Proposed*) |
+| Character | Always has | Pool | Default (*agreed*) |
 |---|---|---|---|
 | Man-at-arms | — | Cleave, Leap, Slash and Dash; *rank 1:* Shield bash | Cleave, Leap |
 | Knight | Bulwark | Taunt, Shove; *rank 1:* Demolish | Taunt, Shove |
@@ -5847,8 +5847,9 @@ for the squad, and Blessing, the one that helps everyone.
 - **Undo** sizes its stack by every ability in a character's pool
   (`undoDepthOf`), so a Man-at-arms that picked Slash and Dash still has the
   reach its bonus AP needs.
-- **Command version 13**: a muster's picks carry a loadout, and an older tab
-  would show every Realm character's full kit in a version-12 battle.
+- **No command version of its own** (§39.1): version 12 is unreleased, so no
+  battle holds a loadout until §39.9, and by then every client sends command
+  version 12 or later. An older catalogue refuses a loadout outright.
 - **Old battles keep their full kits**, and replay under the rules they were
   created under: no catalogue before 12 has a `loadout`.
 
@@ -5896,15 +5897,15 @@ The guide's first section, the tutorial and the setup screen describe the
 kits and the rank-1 option as a swap. They describe the released rules, so
 they change with version 12's release (§39.9), not before.
 
-### 40.7 Open questions
+### 40.7 Questions
 
-1. **Two picks for everyone** (§40.1), or three for the Archer and the Cleric?
-2. **The Knight and the Man-at-arms** cut to two, or left whole until their
-   pools grow (§40.1)?
-3. **The defaults** (§40.1).
-4. **Heal fixed** (§40.1)?
-5. **Ranks 2 and 3**: which abilities join each pool (§40.2)?
-6. **Slash and Dash with Cleave**: left to the balance run, or barred as a
+*Answered on review:* two picks for everyone, the Archer and the Cleric
+included; the Knight and the Man-at-arms cut to two as well; the Cleric's
+Heal fixed; the defaults as in §40.1; and no command version of its own
+(§40.3). Still open:
+
+1. **Ranks 2 and 3**: which abilities join each pool (§40.2)?
+2. **Slash and Dash with Cleave**: left to the balance run, or barred as a
    pair?
 
 ---
@@ -6000,4 +6001,4 @@ Realm, its sibling in the same world.
 | 1.68 | §39 PR 4 builds the Swarm's three elites (§39.5) in the unreleased rules version 12: the Brood Queen (Hatch stands a Skitterling on a free square next to it, nearest an enemy it sees, at most three at a time, acting from its owner's next turn), the Carapace Brute (armour 1, added to Braced's and never reducing a blow under 1) and the Bile Lobber (Bile: 2 and Corroded to a 3×3 within 10, friend or foe, no roll). `Faction.elites` keeps them out of every muster; `Character.armour`, `Fighter.hatchedBy` and the `hatched` and `bile` events are new, and absent means the old behaviour. Art for each is its base master scaled with an addition, and the sprite sheets grow to 1024 × 6080, laid out from `ART_CHARACTER_IDS`. |
 | 1.69 | §39 PR 6 builds the nests (§39.7) in the unreleased rules version 12: two to each Swarm warband from the first muster, on squares each Hold Out map lists, structures that can be hurt but never act; each the team destroys takes 15 points off its warband's next wave, never below half, and regrows as that wave lands. The scoreboard's next-wave line notes them, the board marks their squares, and both, with the regrow line, are withheld for an unseen random enemy and in fog count only falls the team saw. |
 | 1.70 | §39 PR 7 builds the Swarm's temperaments (§39.8): a table in the planner, by character, of multipliers on Exposure and Threat and at most one extra term — a Skitterling's Pack, a Bloater's Burst threat, a Spitter's and Lobber's Range — which the Realm and the Miners don't have; not a rule, so no rules or command version changes. `temperamentSwitch` turns it off for planner experiments. |
-| 1.71 | Ability loadouts (§40, issue 957) in the unreleased rules version 12, command version 13: each Realm figure keeps its signature ability (the Knight's Bulwark, the Cleric's Heal) and picks two more from its character's pool at muster, a default loadout for anyone who doesn't choose; ability options join the pool at their rank rather than swapping, and Frost bolt stays a weapon swap. `Character.loadout`, `MusterPick.loadout` and `Fighter.loadout` are new, absent meaning the whole kit before version 12 and the default in it. |
+| 1.71 | Ability loadouts (§40, issue 957) in the unreleased rules version 12, with no command version of its own: each Realm figure keeps its signature ability (the Knight's Bulwark, the Cleric's Heal) and picks two more from its character's pool at muster, a default loadout for anyone who doesn't choose; ability options join the pool at their rank rather than swapping, and Frost bolt stays a weapon swap. `Character.loadout`, `MusterPick.loadout` and `Fighter.loadout` are new, absent meaning the whole kit before version 12 and the default in it. |
