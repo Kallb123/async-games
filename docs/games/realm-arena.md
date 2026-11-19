@@ -5347,7 +5347,7 @@ its waves, and each is bought with points.
 - **A wave has a budget.** The warband's own budget (`warbandBudgetOf`), plus
   *15* points for every wave landed before it (`WAVE_GROWTH_POINTS`, about the
   one character more that §30.10 brings today), less what the team has taken
-  off it (§39.7).
+  off it (§39.7). §39.9's balance pass released it at **25**.
 - **A wave has a theme**: a name, an elite or none, and the order it buys the
   rest in. Hold Out's waves land at rounds 4, 7, 10 and 13 for every team size
   (§30.3), so the Swarm has four. *Proposed:*
@@ -5743,6 +5743,53 @@ the Knight beside her rather than trading blows with it.
   the nests); `locksmith` and `gremlin` for PR 3's new action; `rulebook` for
   PR 8; `caveman` for all of them.
 
+**Built.**
+
+- **Balance** (`realm-arena-balance.md`, *Rules version 12's release*). One
+  lever moved: `WAVE_GROWTH_POINTS` 15 → **25**. On Normal without fog the
+  planner-played team now wins about half its battles (49% at 100 battles a
+  cell, 51% at 200), every cell from 24% to 74%, where version 11 won about
+  nine in ten; Easy and Hard now sit either side of it in every cell. The
+  nests' 15, Reinforce, the elites' HP, `HOLD_OUT_ENEMY_STEPS` and
+  `TEAM_HP_FACTOR` are unchanged. Not met: in fog, the Sunken Village is won
+  0–6% of the time at any growth (8% under version 11) — the planner's team
+  doesn't scout its lanes, which no rule value moves, so it is the planner's
+  to fix (§29.7). The harness gained `--set` to try a lever from one commit,
+  and its workflow input.
+- **The planner, first.** Once version 12 was current, the Swarm's twelve-strong
+  waves ran a team of four's Hold Out turn into the warband's two-second
+  deadline (`planner.pace.test.ts`). Two rounds of speedups, every choice
+  unchanged (hashed across every pace-test cell), brought the slowest turn
+  from about 2.2 s to about 1.2 s: the harm memo keyed by the squares that
+  can give cover and shared by `score()`, allocation-free odds, loadout kits
+  cached by array, `canSee` and a search's step costs kept per battlefield,
+  reaches kept across a turn's plans.
+- **Release.** `CURRENT_RULESET_VERSION` is 12; the command version was
+  already 12 (PR 3), so an older open tab reloads before it reads a
+  version-12 battle. `rulesets.test.ts` pins every change against version 11;
+  tests of version-11 behaviour still true for older battles are pinned to
+  version 11.
+- **Copy.** The guide's goal tells the loadout (the Knight's Bulwark and the
+  Cleric's Heal kept, two picks, the usual pair by default) and the rank-1
+  options joining the pool, with Frost bolt still a weapon swap; Taunt's
+  reach; and, in its co-op section, the rally's three choices, the themed
+  waves and their elites, the nests and the Bloater's burst, every number
+  read from the ruleset. The tutorial's muster tells the loadout. The
+  tutorial has no Hold Out step to update, and the rally sheet has no anchor
+  for one. The setup screen's Hold Out
+  line names the themed waves and the nests.
+- **Achievements** (§30.4). *Regicide* reads a downed Brood Queen from the
+  finished response. *Scorched Earth* can't be read from the end alone, since
+  nests regrow with each wave: a `nestsCleared` flag is set on the state the
+  moment no nest stands with a wave still to land, kept for good, and sent
+  only on the finished response. Both are pinned in `hiddenHands.test.ts`.
+- **What's new**: one line, under Enhancements, naming the loadouts too.
+- **The crew.** `rulebook`, `caveman` and `croupier` ran; their findings are
+  applied. `croupier` noted, for later, that an empty nest-only turn decides
+  its "ended their turn" line from the raw events (#967): safe while no
+  effect ticks damage at the end of a turn, but worth a `hiddenHands` case
+  before one does.
+
 ### 39.10 What it leaves, and what it meets
 
 - **The loadout** ([issue 957](https://github.com/Kallb123/async-games/issues/957))
@@ -6024,3 +6071,4 @@ Realm, its sibling in the same world.
 | 1.70 | §39 PR 7 builds the Swarm's temperaments (§39.8): a table in the planner, by character, of multipliers on Exposure and Threat and at most one extra term — a Skitterling's Pack, a Bloater's Burst threat, a Spitter's and Lobber's Range — which the Realm and the Miners don't have; not a rule, so no rules or command version changes. `temperamentSwitch` turns it off for planner experiments. |
 | 1.71 | Ability loadouts (§40, issue 957) in the unreleased rules version 12, with no command version of its own: each Realm figure keeps its signature ability (the Knight's Bulwark, the Cleric's Heal) and picks two more from its character's pool at muster, a default loadout for anyone who doesn't choose; ability options join the pool at their rank rather than swapping, and Frost bolt stays a weapon swap. `Character.loadout`, `MusterPick.loadout` and `Fighter.loadout` are new, absent meaning the whole kit before version 12 and the default in it. |
 | 1.72 | Two §39.7 follow-ups before rules version 12 ships. Every nest destroyed now counts against its warband's next wave, whoever downed it, the Swarm's own burst, bile or burn included (#966). Only a nest the team downs scores, and in fog `nestsSeenDestroyed` still counts only falls the team was told of. A warband with only nests standing still takes an empty turn while one of them is burning or poisoned, after the turn of any warband the rotation passed it over for, so the damage ticks and a dying nest falls before the wave (#967). |
+| 1.73 | §39.9 releases rules version 12 (§39, §40): `WAVE_GROWTH_POINTS` tuned from 15 to 25 by the balance harness (new `--set` overrides), the planner sped up twice with every choice unchanged so the Swarm's twelve-strong waves fit their turn, the guide, tutorial and setup screen tell the new rules, and two achievements, *Regicide* and *Scorched Earth* (with a `nestsCleared` flag sent only once a battle is over). |
