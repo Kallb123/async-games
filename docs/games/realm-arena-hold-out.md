@@ -54,9 +54,9 @@ Four changes, the first independent of the other three:
    Swarm: cheap, weak *minions* in numbers, real characters and elites among
    them, priced in a finer currency of their own. The playable Swarm is
    untouched.
-3. **Break the Brood, keep the shrine (§5).** The nests produce the enemy every
+3. **Break the Brood, keep the Shrine (§5).** The nests produce the enemy every
    round instead of in waves, and destroying them is how the team wins. The
-   team also has something to defend, the shrine, and loses if it falls.
+   team also has something to defend, the Shrine, and loses if it falls.
 4. **Stars (§6).** A win is graded from one to three stars, so the basic win can
    be generous while Hard players go for three.
 
@@ -190,7 +190,8 @@ freely. That recklessness is how a swarm should play.
 
 **`minion: true`.** A minion has 1 HP and no armour, and anything that does it
 damage downs it: a blow, a blast, a burst, a burning or poison tick. A miss is
-still a miss, and the board draws no HP bar for one.
+still a miss, and the board draws no HP bar for one. A Thunder or an Ice Ball
+that hits a minion downs it, so its stun or slow never matters.
 
 This is what makes area abilities matter: one Fireball can clear a pack. It also
 keeps single-target abilities for the real characters and the elites, the job
@@ -228,10 +229,10 @@ with their temperaments (`realm-arena.md` §39.8). Minions take a **swarm step**
 one pass, in id order, with no search.
 
 - **Something in reach:** strike the most hurt team character it reaches, or
-  the shrine (§5.2) if no character is in reach. A Spitter shoots the nearest
+  the Shrine (§5.2) if no character is in reach. A Spitter shoots the nearest
   one it sees.
 - **Nothing in reach:** step toward its goal along the path. The goal is the
-  nearest team character its side sees, or else the shrine.
+  nearest team character its side sees, or else the Shrine.
 - **A Bloater** walks toward the most team characters inside its burst.
 
 It's deterministic, and it reads the warband's view only, as the planner does.
@@ -252,11 +253,18 @@ the board, and their strikes follow one after another, quickly.
 
 ---
 
-## 5. The mission: break the Brood, keep the shrine
+## 5. The mission: break the Brood, keep the Shrine
 
 Hold Out keeps its name and its place on the setup screen, so the achievements
 that read "win Hold Out" still mean what they say. Rules version 13 changes what
 it asks.
+
+**Hold Out is the Brood's alone, for now.** Under version 13 the setup screen
+offers Hold Out with no choice of enemy: it is always the Brood. The Renegades
+and the Miners stay enemies for Hold the Centre. Version-12 battles against them
+play to their end as they were. That also retires the random enemy from Hold Out
+(`realm-arena.md` §29.3), and with it everything that withheld the wave's name,
+the nests' squares and the next-wave line while the enemy was unseen.
 
 ### 5.1 Nests produce the enemy (A)
 
@@ -281,50 +289,58 @@ it asks.
 - **The first muster.** Each warband starts with its nests and a starting horde
   of *Proposed* 10 threat. The team musters as it does today.
 
-### 5.2 The shrine (B)
+### 5.2 The Shrine (B)
 
-- **Something to defend.** The shrine (*Proposed* name) is a structure on the
-  team's side, on one square in the keep that each Hold Out map lists
-  (`BattlefieldMap.shrine`). It is built on the nests' rules (`isStructure`): it
-  can be hurt by anything that hurts a character, and it never acts or moves.
+- **Something to defend.** The Shrine is a structure on the team's side, on one
+  square in the keep that each Hold Out map lists (`BattlefieldMap.shrine`).
+  It is built on the nests' rules (`isStructure`): it can be hurt by anything
+  that hurts a character, and it never acts or moves.
 - **HP:** *Proposed* 20 plus 10 for each player.
 - **No ability heals it.** The rally gains a fourth choice, **Mend**: half the
-  shrine's HP back (§5.3).
+  Shrine's HP back (§5.3).
 - **The Brood goes for it.** It is the minions' goal when they see no team
   character (§4.5). For the planner, every HP of it is worth what the team's
   side loses: *Proposed* 3 points' worth an HP.
-- **The team splits.** Some of the team guard the shrine and some raid the
+- **The team splits.** Some of the team guard the Shrine and some raid the
   nests. With two to four players, that split is a natural division of roles to
   talk over.
 
 ### 5.3 The rally
 
-The rally has always come with a wave, and there are no waves now. **The team
-rallies each time a warband is broken**, meaning its last nest falls. Each player
-chooses, as in `realm-arena.md` §39.4: Rally, Reinforce, Resupply, or now Mend.
-So the rally rewards raiding rather than rewarding having lasted.
+The rally has always come with a wave, and there are no waves now. The team
+rallies at two kinds of moment. At each one, every player chooses, as in
+`realm-arena.md` §39.4: Rally, Reinforce, Resupply, or now Mend.
+
+- **On a schedule:** as rounds 5, 9 and 13 begin (*Proposed*), the rounds the
+  elites arrive in, so a team that is struggling to raid still recovers.
+- **Each time a warband is broken**, meaning its last nest falls. This rally
+  rewards raiding.
 
 ### 5.4 Winning and losing
 
 - **Won the moment the last nest falls.** The Brood breaks. Whatever of it
-  still stands scatters, leaving the board unscored, so the team doesn't have to
-  clear the field. This is the ending that shortens a battle the better the team
-  plays.
-- **Won at the round cap**, if the shrine still stands: *Proposed* 15 rounds for
-  every team size. Holding the keep is still a win, just the smallest one (§6).
-- **Lost** the moment the shrine falls, or when every team character is down.
+  still stands scatters: it leaves the board, and nobody scores for it, so the
+  team doesn't have to clear the field. This is the ending that shortens a
+  battle the better the team plays.
+- **A bonus for breaking it early.** The team scores *Proposed* 10 points for
+  each round left before the cap, shared evenly among its players, in the
+  result's points race. As always in Hold Out, the score doesn't decide the
+  result (`realm-arena.md` §30.3), but it ranks the team's wins against each
+  other.
+- **Won at the round cap**, if the Shrine still stands: **15 rounds**, for every
+  team size, Solo included. Holding the keep is still a win, just the smallest
+  one (§6).
+- **Lost** the moment the Shrine falls, or when every team character is down.
 
-### 5.5 The Renegades and the Miners
+### 5.5 The Renegades and the Miners, later
 
-The mission is the same against them, with a producing structure of their own
-named by their faction's data: the Renegades' war camp, the Miners' mine head.
-They have no minions. Their ready-made squads' characters are produced with
-threat equal to their points. That means two more pieces of art, drawn as
-`nest.svg` was.
-
-A random enemy (`realm-arena.md` §29.3) stays hidden until one of its
-characters or structures is seen. The structures' squares are withheld as the
-nests' are, so the shape of a war camp can't give the enemy away.
+Hold Out is the Brood's alone until it has been played (§5). If the Renegades or
+the Miners come back to it, the mission is the same against them, with a
+producing structure of their own named by their faction's data: a war camp, a
+mine head. They have no minions, and their ready-made squads' characters are
+produced at a threat equal to their points. The random enemy would then come back
+too, with the structures' squares withheld while the enemy is unseen, as the
+nests' are today.
 
 ---
 
@@ -333,14 +349,14 @@ nests' are, so the shape of a war camp can't give the enemy away.
 - **Win or lose stays as it is.** The result, stats and every achievement read
   as now. A win also carries **stars**, one to three, stored on the result's
   Hold Out record:
-  - ★ **Held:** the team won. The shrine stood to the end.
+  - ★ **Held:** the team won. The Shrine stood to the end.
   - ★ **Broke the Brood:** every nest fell before the round cap.
-  - ★ **Unscathed:** the shrine ended above half its HP.
+  - ★ **Unscathed:** the Shrine ended above half its HP.
 - **Difficulty becomes stars.** Easy, Normal and Hard move `SPAWN_THREAT`, nest
-  HP and shrine HP by small steps. The win itself can stay generous on every
+  HP and the Shrine's HP by small steps. The win itself can stay generous on every
   difficulty, while the stars carry the challenge.
 - **On screen.** The result shows the stars with the reason for each. The
-  scoreboard shows nests left and the shrine's HP throughout.
+  scoreboard shows the nests left and the Shrine's HP throughout.
 - **Achievements:**
   - New: *Three Stars* (any Hold Out) and *Three Stars on Hard*.
   - Existing ids are permanent. In a version-13 battle, *Broken Tide* (which
@@ -365,7 +381,7 @@ nests' are, so the shape of a war camp can't give the enemy away.
   nest (`realm-arena.md` §39.7), so it would never break the Brood and every
   battle would end at the round cap. Two steps:
   - First, a scripted policy in the harness: each player's two fastest
-    characters raid the nearest standing nest, and the rest guard the shrine.
+    characters raid the nearest standing nest, and the rest guard the Shrine.
   - Later, the team's planner gets an objective term of its own.
 - **Hand-offs.** Battles end at the round cap or before it, so a Hold Out is
   never longer than today's and often shorter. The harness reports the round
@@ -378,31 +394,36 @@ nests' are, so the shape of a war camp can't give the enemy away.
 |---|---|---|
 | 1 | The enemy's turn in the background (§3) | Command 13 |
 | 2 | The Brood: minions, threat, the swarm step, playback (§4) | Rules 13, unreleased |
-| 3 | Nests that produce, the shrine, Mend, the new ending (§5.1–§5.4) | Rules 13, unreleased |
-| 4 | The Renegades' and Miners' structures and art (§5.5) | Rules 13, unreleased |
-| 5 | Stars, the result, achievements, the guide and setup copy (§6) | Rules 13, unreleased |
-| 6 | The harness's raid policy, balance, release, What's new (§7) | Rules 13 released |
+| 3 | Nests that produce, the Shrine, Mend, the rally's two triggers, the new ending and its bonus, Hold Out against the Brood only (§5) | Rules 13, unreleased |
+| 4 | Stars, the result, achievements, the guide and setup copy (§6) | Rules 13, unreleased |
+| 5 | The harness's raid policy, balance, release, What's new (§7) | Rules 13 released |
 
 PR 1 stands alone and ships first: it gives version 12's warbands their time back
-today. PRs 2–6 follow `realm-arena.md` §39.1's pattern. The catalogue
-`catalogues/v13.ts` is registered but not current until PR 6, so each PR may
+today. PRs 2–5 follow `realm-arena.md` §39.1's pattern. The catalogue
+`catalogues/v13.ts` is registered but not current until PR 5, so each PR may
 still edit it, and tests and the harness fight at version 13 through
 `rulesVersion`. One "What's new" line, written by the last PR, covers the lot.
 
-### 8.1 Open questions
+### 8.1 Questions
 
-1. **The shrine's name**, and whether it is one square or a 2×2.
-2. **The rally:** only when a warband is broken, or also at fixed rounds, so a
-   team that never raids still gets one?
-3. **The Brood's scattering:** do the characters still standing when it breaks
-   score for the team, or just leave?
-4. **Minions and status effects.** A Thunder or an Ice Ball that hits a minion
-   also downs it. Is a stunned minion ever a better outcome than a downed one?
-5. **The playable Swarm:** kept beside the Brood, or retired once the Brood
-   has been played?
-6. **The round cap:** 15 for every team size, or 13 for teams as today?
-7. **Do the Renegades and the Miners need the mission at all**, or is Hold Out
-   the Brood's alone, with the others kept on version 12's waves?
+*Answered on review:*
+
+1. **The Shrine** is its name, and it is one square.
+2. **The rally** comes on a schedule as well as when a warband is broken
+   (§5.3).
+3. **The Brood's scattering** scores nothing. Breaking it early earns a bonus
+   for each round left instead (§5.4).
+4. **Minions and status effects:** a minion hit by anything that does damage is
+   downed, whatever else the hit would have done (§4.3).
+5. **The round cap** is 15 for every team size (§5.4).
+6. **Hold Out is the Brood's alone** for now (§5, §5.5).
+
+*Still open:*
+
+1. **The playable Swarm:** kept beside the Brood, or retired? To revisit once
+   the Brood has been played.
+2. **The bonus:** is 10 a round right beside the knock-outs a battle scores?
+   The harness's score columns will show (§7).
 
 ---
 
@@ -666,3 +687,4 @@ A `rulebook` pass checks this against `docs/achievements.md`.
 | Version | Change |
 |---|---|
 | 0.1 | Split out of `realm-arena.md`. The plan to rethink Hold Out: the enemy's turn in the background (§3), the Brood as an enemy-only Swarm with minions (§4), nests that produce the enemy and a shrine to defend (§5), and stars (§6). The parked plan for Hold Out to the last enemy moved here from `realm-arena.md` §41 (§9). |
+| 0.2 | Answers on review (§8.1): the Shrine, one square; a rally on a schedule as well as when a warband is broken; the scattered Brood scores nothing, and breaking it early earns a bonus for each round left; minions hit by anything that does damage are downed; a 15-round cap for every team size; and Hold Out is the Brood's alone for now, so the Renegades' and Miners' structures are put off (§5.5) and the PRs are five. |
