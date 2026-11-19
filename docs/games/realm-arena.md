@@ -6085,7 +6085,28 @@ for it.
 
 ### 41.4 Measured (prototype)
 
-*Filled in below from the prototype run.*
+**These numbers stand alone.** The team wins a different way here, so a win
+rate can't be set against version 12's. What can be compared is one
+version-13 setup against another, fought on the same seeds and under the same
+win condition. Each setup is read against fixed targets:
+
+- **Win rate:** on Normal, the planner-played team wins about half to two
+  thirds, with no cell under a quarter or over three quarters (§39.9's band).
+- **Length:** the round a battle ends in, median and 90th percentile. This is
+  the change's real cost, counted in hand-offs (§4).
+- **Stalls:** how many battles reach the cap. Anything beyond a few means a
+  last wave can hold out of reach, and the *last stand* (§41.3) is needed.
+
+The harness copes with a battle past 13 rounds as it is. It reads the length
+from `battleRoundsOf`, and its turn limit, its per-round tables and its
+ended-round columns all scale with that length. The prototype fought to a
+40-round safety cap with no change to the harness.
+
+The prototype is an environment switch in a scratch checkout. It runs every
+Hold Out cell on Normal without fog, seeds 1–40, under three setups: waves
+every 4 rounds at growth 15, every 4 at growth 25, and every 3 at growth 15.
+
+*Results to follow.*
 
 ### 41.5 Screens and copy
 
