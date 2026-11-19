@@ -11,7 +11,7 @@
 // Every cost is a whole number of half-points (terrain.ts), so the search is a
 // bucket queue over half-points — exact, with no floating-point ties to break.
 
-import { coordsOf, FULL_HEIGHT, HALF_HEIGHT, isNeighbour, squareAt, towersOver, type Battlefield, type Square } from "./terrain";
+import { coordsOf, FULL_HEIGHT, HALF_HEIGHT, isNeighbour, towersOver, type Battlefield, type Square } from "./terrain";
 
 /** A diagonal step costs this many times the square it lands on. */
 export const DIAGONAL_STEP = 1.5;
@@ -110,12 +110,36 @@ export function costsFrom(field: Battlefield, sources: readonly Square[], rules:
     return search(field, sources, Infinity, rules).costs;
 }
 
+/** `STEPS` as columns and rows, for a search that reads them without a pair to take apart. */
+const STEP_COLS = STEPS.map(([dc]) => dc), STEP_ROWS = STEPS.map(([, dr]) => dr);
+
+/**
+ * What each step off each square costs, by battlefield and climb: the ground
+ * alone settles it (`neighbourStep`), so every search over it reads one
+ * answer rather than working it out again. Eight to a square, in `STEPS`'
+ * order; `NaN` where it hasn't been asked yet, `Infinity` where the step
+ * can't be taken.
+ */
+const STEP_COSTS = new WeakMap<Battlefield, Map<number, Float64Array>>();
+
+function stepCosts(field: Battlefield, climb: number): Float64Array {
+    let byClimb = STEP_COSTS.get(field);
+    if (!byClimb) STEP_COSTS.set(field, byClimb = new Map());
+    let costs = byClimb.get(climb);
+    if (!costs) byClimb.set(climb, costs = new Float64Array(field.tiles.length * STEPS.length).fill(NaN));
+    return costs;
+}
+
 function search(field: Battlefield, sources: readonly Square[], budget: number, rules: MoveRules): Omit<Reach, "from"> {
     const size = field.tiles.length;
+    const { width, height, tiles } = field;
     const halves = new Float64Array(size).fill(Infinity);
     const cameFrom = new Int32Array(size).fill(-1);
     const limit = Math.floor(budget * 2);
     const buckets: Square[][] = [[...sources]];
+    const { blocked, occupied } = rules;
+    const climb = rules.climb ?? DEFAULT_CLIMB;
+    const known = stepCosts(field, climb);
     for (const source of sources) halves[source] = 0;
 
     for (let cost = 0; cost < buckets.length; cost++) {
@@ -123,12 +147,16 @@ function search(field: Battlefield, sources: readonly Square[], budget: number, 
         // ever pushed onto the bucket being read.
         for (const square of buckets[cost] ?? []) {
             if (halves[square] !== cost) continue; // reached more cheaply since it was queued
-            const here = coordsOf(field, square);
-            for (const [dc, dr] of STEPS) {
-                const next = squareAt(field, here.col + dc, here.row + dr);
-                if (next === undefined || rules.blocked?.has(next)) continue;
-                const step = neighbourStep(field, square, dc, dr, rules.climb);
-                if (step === undefined) continue;
+            const col = square % width, row = Math.floor(square / width);
+            for (let way = 0; way < STEPS.length; way++) {
+                const nextCol = col + STEP_COLS[way], nextRow = row + STEP_ROWS[way];
+                if (nextCol < 0 || nextRow < 0 || nextCol >= width || nextRow >= height) continue;
+                const next = nextRow * width + nextCol;
+                if (blocked?.has(next)) continue;
+                const at = square * STEPS.length + way;
+                let step = known[at];
+                if (step !== step) known[at] = step = neighbourStep(field, square, STEP_COLS[way], STEP_ROWS[way], climb) ?? Infinity;
+                if (step === Infinity) continue;
                 const reached = cost + step * 2;
                 if (reached > limit || reached >= halves[next]) continue;
                 halves[next] = reached;
@@ -138,9 +166,12 @@ function search(field: Battlefield, sources: readonly Square[], budget: number, 
         }
     }
 
-    const start = new Set(sources);
-    const costs = halves.map((half, square) =>
-        !start.has(square) && (!field.tiles[square].terrain.standable || rules.occupied?.has(square)) ? Infinity : half / 2);
+    const costs = new Float64Array(size);
+    for (let square = 0; square < size; square++) {
+        const half = halves[square];
+        // Only a square reached is asked whether it can be stopped on; the start (and only it, at no cost) always can.
+        costs[square] = half === Infinity || (half !== 0 && (!tiles[square].terrain.standable || occupied?.has(square))) ? Infinity : half / 2;
+    }
     return { costs, cameFrom };
 }
 
