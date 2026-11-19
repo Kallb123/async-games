@@ -276,26 +276,45 @@ the nests' squares and the next-wave line while the enemy was unseen.
 - **Themes by round.** The Rush in rounds 1–4, the Bile in 5–8, the Brutes in
   9–12, the Queen from 13. The themes' buy lists from version 12 carry over,
   repriced in threat.
-- **Elites on a schedule.** The Lobber in round 5, the Brute in round 9 and the
-  Queen in round 13, each from one of its warband's standing nests. A warband
-  with no nest standing gets none. Destroying nests early is how the team keeps
-  the Queen from ever arriving.
+- **Elites on a schedule, more of the early ones.** Each elite arrives in its
+  round from a standing nest, and how many arrive depends on the elite
+  (*Proposed*):
+
+  | Round | Elite | How many |
+  |---:|---|---|
+  | 5 | Bile Lobber | One for each warband with a nest standing |
+  | 9 | Carapace Brute | One for every two such warbands, rounded up |
+  | 13 | Brood Queen | One, from the warband with the most nests standing |
+
+  Ties go to the lowest seat. With one warband, as in Solo, every row is one.
+  A warband with no nest standing contributes no elites, so destroying nests
+  early is how the team keeps the Queen from ever arriving. The count is data
+  on the faction's schedule (`perWarband`, or a number per battle), so it is
+  tuned like any other value.
 - **Destroyed for good.** No nest regrows. Every nest down permanently slows
   the enemy, so the momentum runs in the team's favour.
-- **Two nests a warband**, *Proposed* 15 HP each. Their squares are the map's
-  (`BattlefieldMap.nests`, `realm-arena.md` §39.7): near the edge, reachable,
-  out of the team's sight on the first turn. Whether the raid is too far is
-  measured (§7).
+- **Two nests a warband**, *Proposed* 15 HP each. **Their squares are the
+  ruleset's.** `catalogues/v13.ts` lists the nest squares and the Shrine's square
+  for every Hold Out map, even where they start as copies of the map's own
+  (`BattlefieldMap.nests`, `realm-arena.md` §39.7). A battle reads its sites from
+  its own rules version, so a version-12 battle keeps the map's nests whatever
+  later happens to them, and moving a nest is a new rules version rather than an
+  edit to a map in play. `maps/holdOut.test.ts`'s checks (two to a warband, near
+  the edge, reachable, out of sight on the first turn, clear of the placements)
+  walk every catalogue's sites. Whether the raid is too far is measured (§7).
 - **The first muster.** Each warband starts with its nests and a starting horde
   of *Proposed* 10 threat. The team musters as it does today.
 
 ### 5.2 The Shrine (B)
 
 - **Something to defend.** The Shrine is a structure on the team's side, on one
-  square in the keep that each Hold Out map lists (`BattlefieldMap.shrine`).
+  square in the keep, listed for each Hold Out map by the ruleset (§5.1).
   It is built on the nests' rules (`isStructure`): it can be hurt by anything
   that hurts a character, and it never acts or moves.
 - **HP:** *Proposed* 20 plus 10 for each player.
+- **Friendly fire counts.** A structure takes damage from anything, the team's
+  own Fireball included, as anyone standing in a blast does. Fighting in the
+  keep is a risk to the Shrine.
 - **No ability heals it.** The rally gains a fourth choice, **Mend**: half the
   Shrine's HP back (§5.3).
 - **The Brood goes for it.** It is the minions' goal when they see no team
@@ -339,11 +358,16 @@ rounds running. At each one, every player chooses, as in `realm-arena.md`
   still stands scatters: it leaves the board, and nobody scores for it, so the
   team doesn't have to clear the field. This is the ending that shortens a
   battle the better the team plays.
-- **A bonus for breaking it early.** The team scores *Proposed* 10 points for
-  each round left before the cap, shared evenly among its players, in the
-  result's points race. As always in Hold Out, the score doesn't decide the
-  result (`realm-arena.md` §30.3), but it ranks the team's wins against each
-  other.
+- **A bonus for breaking it early.** The team scores points for each round
+  left before the cap, shared evenly among its players, in the result's points
+  race. As always in Hold Out, the score doesn't decide the result
+  (`realm-arena.md` §30.3), but it ranks the team's wins against each other, and
+  **a faster win must outscore a slower one with more knock-outs.** So a round's
+  bonus is set above the most a round of fighting can score: the knock-out points
+  of everything every nest the battle started with can produce in a round, at its
+  latest, largest `SPAWN_THREAT`. That is *Proposed* 50 points a round to begin
+  with, and a test holds the bonus above that bound for every team size, so a
+  retune of the spawning can't quietly undo it.
 - **Won at the round cap**, if the Shrine still stands: **15 rounds**, for every
   team size, Solo included. Holding the keep is still a win, just the smallest
   one (§6).
@@ -376,10 +400,13 @@ nests' are today.
   scoreboard shows the nests left and the Shrine's HP throughout.
 - **Achievements:**
   - New: *Three Stars* (any Hold Out) and *Three Stars on Hard*.
-  - Existing ids are permanent. In a version-13 battle, *Broken Tide* (which
-    needs waves) and *Scorched Earth* (which needs nests to regrow) take new
-    criteria: breaking the Brood by round 10, and breaking it with nobody of
-    the team down.
+  - *Broken Tide* (which needs waves) and *Scorched Earth* (which needs nests
+    to regrow) take new criteria in place: breaking the Brood by round 10, and
+    breaking it with nobody of the team down. Their ids stay. Nobody has earned
+    either, so nothing needs to depend on the rules version. A version-12 battle
+    still in progress at the change simply can't earn them. *Broken Tide* is
+    older (`realm-arena.md` §30.4), so confirm in the database that nobody has
+    earned it before changing it; no admin page shows it.
   - *Regicide* keeps its meaning. The Queen only arrives while a nest stands in
     round 13, so earning it now means letting her come.
   - A `rulebook` pass is due against `docs/achievements.md`.
@@ -426,40 +453,35 @@ still edit it, and tests and the harness fight at version 13 through
 *Answered on review:*
 
 1. **The Shrine** is its name, and it is one square.
-2. **The rally** comes on a schedule as well as when a warband is broken
-   (§5.3).
+2. **The rally** is earned on a schedule as well as when a warband is broken,
+   and is taken only as a round begins, never in two rounds running, with none
+   lost (§5.3).
 3. **The Brood's scattering** scores nothing. Breaking it early earns a bonus
-   for each round left instead (§5.4).
+   for each round left, large enough that a faster win outscores a slower one
+   with more knock-outs (§5.4).
 4. **Minions and status effects:** a minion hit by anything that does damage is
    downed, whatever else the hit would have done (§4.3).
 5. **The round cap** is 15 for every team size (§5.4).
 6. **Hold Out is the Brood's alone** for now (§5, §5.5).
+7. **Elites** depend on the elite: a Lobber a warband, a Brute every two
+   warbands, one Queen (§5.1).
+8. **The nest and Shrine squares are the ruleset's**, even while they match the
+   maps' (§5.1).
+9. **Friendly fire** hurts the Shrine, as it hurts everyone (§5.2).
+10. **Solo** keeps both jobs: its player has more time and every character
+    (§5).
+11. **The numbers** are found by trying them, once the harness's team can raid
+    (§7).
+12. **Achievements** change their criteria in place, since nobody has earned
+    them (§6).
 
 *Still open:*
 
 1. **The playable Swarm:** kept beside the Brood, or retired? To revisit once
    the Brood has been played.
-2. **The bonus:** is 10 a round the right size beside the knock-outs a battle
-   scores?
-3. **One elite per battle, or per warband?** In version 12 each warband buys
-   its theme's elite, so three warbands field three Queens. With the elites the
-   prize for leaving nests standing, one per battle (from the warband with the
-   most nests standing) may be enough.
-4. **Where the nests stand.** The maps' nest squares were placed for version
-   12's waves, and a version-12 battle in progress reads them. If the raid is
-   too long for a 15-round cap, version 13 needs a list of its own on each map,
-   not an edit to the shared one.
-5. **Does the team's own fire hurt the Shrine?** A structure takes damage from
-   anything, so a Fireball beside it does.
-6. **Solo's split.** Four characters guarding and raiding at once may be too
-   thin. Solo might want one nest instead of two, or a sturdier Shrine.
-7. **The *Proposed* numbers:** `SPAWN_THREAT`, nest and Shrine HP, the starting
-   horde, `HORDE_CAP` and the rally's rounds are all the harness's to set (§7),
-   once its team can raid.
-8. **The background runner's budget:** whether `after()` gives the warbands
-   enough time, or they need their own route (§3.2).
-9. **Achievements whose criteria change by rules version.** Nothing has done
-   that before; `docs/achievements.md` should say whether it may.
+2. **The background runner's budget:** whether `after()` gives the warbands
+   enough time, or they need their own route (§3.2). Measured once PR 1 runs in
+   production.
 
 ---
 
@@ -725,3 +747,4 @@ A `rulebook` pass checks this against `docs/achievements.md`.
 | 0.1 | Split out of `realm-arena.md`. The plan to rethink Hold Out: the enemy's turn in the background (§3), the Brood as an enemy-only Swarm with minions (§4), nests that produce the enemy and a shrine to defend (§5), and stars (§6). The parked plan for Hold Out to the last enemy moved here from `realm-arena.md` §41 (§9). |
 | 0.2 | Answers on review (§8.1): the Shrine, one square; a rally on a schedule as well as when a warband is broken; the scattered Brood scores nothing, and breaking it early earns a bonus for each round left; minions hit by anything that does damage are downed; a 15-round cap for every team size; and Hold Out is the Brood's alone for now, so the Renegades' and Miners' structures are put off (§5.5) and the PRs are five. |
 | 0.3 | The rally is earned on a schedule and when a warband is broken, and taken only as a round begins, never in two rounds running, with none lost (§5.3). The open questions are spelt out (§8.1). |
+| 0.4 | More answers on review (§8.1): a bonus for each round left large enough that a faster win outscores a slower one, held by a test; elites counted by the elite (a Lobber a warband, a Brute every two, one Queen); nest and Shrine squares in the ruleset; friendly fire hurts the Shrine; Solo keeps both jobs; and achievements change in place. |
