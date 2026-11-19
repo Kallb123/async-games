@@ -5980,7 +5980,7 @@ Heal fixed; the defaults as in §40.1; and no command version of its own
 
 ## 41. Hold Out to the last enemy (rules version 13, plan)
 
-*Plan; nothing built.* A review of version 12 before anyone played it found
+*Plan; nothing built. Prototyped and measured (§41.4): parked.* A review of version 12 before anyone played it found
 that the last wave hardly fights. A team of two to four plays 13 rounds, and
 the waves land in rounds 4, 7, 10 and 13, so the Queen's wave lands as the last
 round begins. Each warband then gets one turn before the team wins by still
@@ -6102,11 +6102,66 @@ from `battleRoundsOf`, and its turn limit, its per-round tables and its
 ended-round columns all scale with that length. The prototype fought to a
 40-round safety cap with no change to the harness.
 
-The prototype is an environment switch in a scratch checkout. It runs every
-Hold Out cell on Normal without fog, seeds 1–40, under three setups: waves
-every 4 rounds at growth 15, every 4 at growth 25, and every 3 at growth 15.
+The prototype was an environment switch in a scratch checkout. It fought
+every Hold Out cell on Normal without fog, seeds 1–40, waves every fourth
+round, a 40-round cap, at growth 0, 5, 10 and 15. Growth 25 and waves every
+third round were left unrun: growth 15 already lost nearly every battle.
 
-*Results to follow.*
+| Cell | Growth 0 | 5 | 10 | 15 | v12 as shipped |
+|---|---:|---:|---:|---:|---:|
+| Solo, Ruined Fort | 100% | 92% | 60% | 30% | 45% |
+| 2 players, gate fort | 100% | 100% | 62% | 25% | 80% |
+| 2 players, Sacked Fort | 100% | 92% | 55% | 20% | 65% |
+| 3 players, gate fort | 100% | 90% | 12% | 2% | 77% |
+| 3 players, Sacked Fort | 97% | 85% | 7% | 5% | 30% |
+| 3 players, Sunken Village | 100% | 77% | 12% | 0% | 22% |
+| 4 players, Sacked Fort | 100% | 97% | 47% | 0% | 50% |
+| 4 players, Sunken Village | 100% | 70% | 2% | 0% | 20% |
+| Battles ending at the cap | 0 | 18 | 10 | 4 | — |
+
+The last column is the same seeds under version 12, and it is there only for
+scale: version 12 wins by surviving, so its win rates measure something else.
+
+**What it says.**
+
+- **Battles roughly double in length.** A win comes in round 19–23 at any
+  growth, two to six rounds after the last wave lands, where version 12 ends at
+  13. In hand-offs this is the change's cost, before anything else.
+- **Growth 15 doesn't work.** The team gets through the waves (fewer than one
+  in ten battles is lost before round 17), but it never clears the field. At
+  growth 15, a team of three goes into the last wave with about 3 characters
+  standing against about 27 enemies, and is overrun within two to four rounds
+  of the Queen's wave landing. A wave refills its warband to the purchase
+  (§39.6), so the stack the team must finally wipe out is about as big as the
+  warbands can field, whatever the team did between waves.
+- **The slope is a cliff.** Win rates fall from about 100% at growth 5 to about
+  0% at growth 15 in every cell of three or four players. Either the team keeps
+  pace and wins comfortably, or it falls one wave behind and is buried. Easy
+  and Hard move the warbands' base budget by 10–20 points, more than the whole
+  width of that slope, so they would be close to certain wins and certain
+  losses.
+- **No one growth fits every team size.** At 10, Solo and both two-player
+  cells sit in the band (55–62%), and so does the four-player Sacked Fort
+  (47%). The three-player cells and the four-player Sunken Village are at
+  2–12%.
+- **Stalls appear when the sides are evenly matched.** At growth 5 and 10, up
+  to one battle in five ran to the cap (the four-player Sunken Village, at
+  growth 5): the team and the Swarm grind with neither clearing the field. A
+  real version would need the *last stand* (§41.3) or a firmer cap.
+
+**Where that leaves the plan.** Needing a wipe to win does what it was meant
+to do: the last wave fights, and the Queen with it. But tuning growth can't
+balance it: the balance point is a knife-edge, and it sits at a different
+growth for every team size. If this goes ahead, the snowball needs a lever of
+its own before growth is tuned. The options:
+
+- the last wave replaces each warband rather than adding to it;
+- a much lower cap on how many characters each warband can have on the field;
+- earlier waves' survivors withdraw as the last one lands.
+
+The planner's team never goes after nests, so nests' part in shrinking the
+final fight is still unmeasured. This was left here to explore another
+direction.
 
 ### 41.5 Screens and copy
 
