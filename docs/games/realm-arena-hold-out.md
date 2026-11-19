@@ -1,0 +1,750 @@
+# Realm Arena: Hold Out
+
+Hold Out, the co-op mission where the team holds off the computer's
+warbands, is Realm Arena's main mode, and its design has outgrown a few
+sections of the game's design document. This doc holds what comes next for it.
+The history of what's built stays in [`realm-arena.md`](./realm-arena.md): the
+mission (§30.3), its waves and rallies (§30.10–§30.14), its battlefields (§30.9,
+§35, §37), and the Swarm's elites, themed waves and nests in rules version 12
+(§39). A bare § number below is this doc's own; one in the main design document
+says so.
+
+Every value marked *Proposed* is a starting point for the balance harness
+([`realm-arena-balance.md`](./realm-arena-balance.md)), not a decision.
+
+---
+
+## 1. Why Hold Out needs rethinking
+
+**What it asks.** On Normal a team musters once. Each Swarm warband musters
+about 70 points, then four waves refill it, each bought with more points than
+the last: about 530 points more per warband over the battle. Between waves the
+team gets back only the rally: half its HP, one character back, or its items. So
+the team's strength only shrinks and the enemy's keeps coming back. Hold Out is a
+war of attrition, decided by how many enemies each team character takes down
+before falling.
+
+**What that does, measured.**
+
+- **Winning by surviving (version 12).** The planner-played team wins about
+  half its battles on Normal. It does so by hanging on: at round 12 a winning
+  team has about one character left, and every win in the baseline came in the
+  last round, never from beating the last wave early. Pulling back into the keep
+  is the best play, and the last wave lands as the last round begins, so the
+  Brood Queen barely acts.
+- **Winning by clearing the field (prototyped and parked, §9).** It's all or
+  nothing. Wins fall from about 100% at growth 5 to about 0% at growth 15 for
+  teams of three and four. A team that falls one wave behind can't catch up, and
+  Easy and Hard would be near-certain wins and losses.
+
+**Why tuning numbers won't fix it.** Both results come from the attrition
+itself, not from its numbers. The Swarm's costs (10–20 points against budgets in
+steps of 10) make it coarse besides: one growth step is one or two whole
+characters.
+
+## 2. The plan in brief
+
+Four changes, the first independent of the other three:
+
+1. **The enemy's turn runs in the background (§3).** An End turn ends the
+   player's turn and returns at once. The warbands then play on the server with
+   a much longer time budget, and the next player is notified when they're done.
+   It needs no rules change and helps version 12 today.
+2. **The Brood, an enemy-only Swarm (§4).** The computer's own version of the
+   Swarm: cheap, weak *minions* in numbers, real characters and elites among
+   them, priced in a finer currency of their own. The playable Swarm is
+   untouched.
+3. **Break the Brood, keep the Shrine (§5).** The nests produce the enemy every
+   round instead of in waves, and destroying them is how the team wins. The
+   team also has something to defend, the Shrine, and loses if it falls.
+4. **Stars (§6).** A win is graded from one to three stars, so the basic win can
+   be generous while Hard players go for three.
+
+All of §4–§6 is one new rules version, 13 (§8). Old battles keep their rules to
+the end, as always.
+
+---
+
+## 3. The enemy's turn, in the background
+
+### 3.1 Today
+
+A player's End turn plays every warband turn that falls due before the next
+player's turn, inside the same request (`handOff` → `warbandTurns`,
+`RealmArenaLogic.ts`). The End turn command records the warbands' actions and
+rolls (`recordedEnemyActions`, `recordedRolls`), so a replay never asks the
+planner. Its outcome carries the warbands' turns, cut to what the sender saw in
+fog (`outcomeFor`), for the board to play back at once.
+
+The cost of that is time. The request waits for the planner, so each warband
+turn stops planning after **two seconds**. Version 12's twelve-strong waves
+already reached that deadline, and the release had to speed the planner up twice
+to fit (`realm-arena.md` §39.9). A Brood of minions can't fit inside it at all.
+
+### 3.2 The change
+
+- **The warband's turn is its own command.** A server-only
+  `RealmArenaWarbandTurn` (one warband, by index), built and stamped by the
+  server as `PlayerDropped` is (ARCHITECTURE §7), and recorded in the command
+  history like any move. It carries the recorded actions and rolls the End turn
+  carries today, so a replay plays it without the planner. Its `Execute` is
+  today's `warbandTurn` followed by the hand-off to whoever is next: a player,
+  or another warband in a block of turns.
+- **An End turn ends only the player's turn.** If a warband is due next,
+  `currentTurn` becomes that warband's seat (`ai:k`) and the game is saved.
+- **Who plays it.** Two runners, both calling one function,
+  `playEnemyTurns(gameId)`. It loads the game and, while `currentTurn` is a
+  warband's, runs one `RealmArenaWarbandTurn` through `runCommand` and saves.
+  Each warband turn is saved on its own, so a stopped runner loses at most the
+  turn in progress, which was never saved and is played again.
+  - **First, at once:** in the command route's `after()`, once the End turn is
+    saved, as the turn-end push and achievements are today.
+  - **Backstop:** the turn-timer cron. A game whose `currentTurn` has been a
+    warband's for over two minutes (*Proposed*) is a sweep candidate, and the
+    sweep runs the same function. A warband's turn is never timed out as a
+    player's is.
+  - **If `after()`'s budget proves too short:** a dedicated route that declares
+    its own `maxDuration`, as the crons do, called from `after()`, gives the
+    warbands a fresh function to play in.
+- **Two runners can meet.** Each save checks the document's version (the
+  `trySave`/409 idiom). On a conflict the runner reloads, and stops if the turn
+  has moved on. The function only acts while `currentTurn` is a warband's, so
+  running it twice is harmless.
+- **The time budget is stretched.** The two-second deadline becomes *Proposed*
+  10 seconds a warband turn, with each runner's whole budget set below the
+  function's limit. `planner.pace.test.ts` is held to the new budget.
+- **Pushes follow the turn.** The `YourTurn` push and turn-end achievements go
+  out when the turn reaches a player. That is now after the last warband turn,
+  not after the End turn.
+
+### 3.3 What the players see
+
+- **The sender's End turn** returns at once, without the enemy's turn. While
+  `currentTurn` is a warband's, the board says "The Swarm is moving…". It
+  checks back every few seconds (`useRefreshableData`'s refresh), and plays the
+  warband's turn from the history as it plays any other seat's turn, through
+  the recap and review step that already show what happened since a player's
+  last turn. Fog cutting moves with it: the warband command's events are told
+  per viewer as the End turn's are today.
+- **The dashboard** lists a game waiting on the computer as "The Swarm's turn",
+  not as anyone's.
+- **Solo** is where the wait is seen, since its player usually watches. The
+  wait is the planner's time either way. The request no longer hangs while it
+  runs, and the board says why it's waiting.
+- **Everyone else** is already waiting for a push. It arrives a few seconds
+  later than now, which in an async game nobody will notice.
+
+### 3.4 Versions and replays
+
+- **Command version 13.** An open tab built for an End turn that expects the
+  enemy's turn in its outcome reloads.
+- **No rules version.** Who plays the warbands' turn, and when, changes no rule.
+- **Old battles replay as recorded.** An End turn from before carries its
+  warbands' actions and replays as it did. From version 13, End turns carry none,
+  and the warband commands follow them in the history. `buildTimeline` reads
+  both.
+- **Every co-op battle uses it:** Hold Out and Hold the Centre alike.
+
+### 3.5 Tests
+
+- An End turn hands to the warband and saves without playing it.
+- `playEnemyTurns` plays one warband turn after another, saving each, and hands
+  to the player, with one push sent.
+- A runner stopped mid-turn leaves the game as it was, and the cron finishes
+  the turn.
+- Two runners at once play the turn once.
+- A replay of a version-13 battle, and of an older one.
+- Fog: what each viewer is told of a warband command.
+- `hiddenHands.test.ts` covers the new command's null viewer.
+- `gremlin` and `locksmith` passes: a new background path into a game's state,
+  and a command no player may send.
+
+---
+
+## 4. The Brood: an enemy-only Swarm
+
+### 4.1 Why apart from the Swarm
+
+The Swarm is a faction players can muster, PvP included (`realm-arena.md` §32),
+and Swarm characters earn mastery. Tuning it as Hold Out's enemy means tuning
+the PvP faction too. **The Brood** is the computer's own version: the Swarm's art
+and models, its own statlines and prices, in no player's faction list, and never
+mustered, as the elites aren't (`realm-arena.md` §39.5). The playable Swarm, its
+balance and its mastery stay as they are. Whether the Swarm stays playable can be
+decided once the Brood has been played.
+
+### 4.2 Two numbers
+
+Each Brood character has the two numbers every character has, and one more:
+
+- **`points`:** what a knock-out of it scores (`realm-arena.md` §13.7), and what
+  the planner values it at. These have to stay apart from its price, or every
+  retune moves the score race and the planner's choices too.
+- **`threat`:** what producing it costs, in steps of 1. A Skitterling is 1
+  where today it's 10 points, so a tuning step is a tenth of a character.
+
+A Brood minion is worth very little to the planner, so the planner spends minions
+freely. That recklessness is how a swarm should play.
+
+### 4.3 Minions
+
+**`minion: true`.** A minion has 1 HP and no armour, and anything that does it
+damage downs it: a blow, a blast, a burst, a burning or poison tick. A miss is
+still a miss, and the board draws no HP bar for one. A Thunder or an Ice Ball
+that hits a minion downs it, so its stun or slow never matters.
+
+This is what makes area abilities matter: one Fireball can clear a pack. It also
+keeps single-target abilities for the real characters and the elites, the job
+the elites were added for in the first place.
+
+| Character | Kind | Move | Weapon | Threat | Points |
+|---|---|---:|---|---:|---:|
+| Skitterling | minion | 8 | Claws: melee, 2 | 1 | 2 |
+| Spitter | minion | 5 | Acid spit: 70%, range 12, 2, corrodes | 2 | 3 |
+| Bloater | minion | 4 | Barbs: melee, 1; bursts as it falls (3, corrodes) | 2 | 3 |
+| Ravager | real, 9 HP | 5 | Scything talons: melee, 4; Rend | 5 | 10 |
+| Broodmother | real, 8 HP | 5 | Talons: melee, 3; Regrowth (a nest or a real one) | 5 | 10 |
+| Bile Lobber | elite, as in version 12 | | | 10 | 40 |
+| Carapace Brute | elite, as in version 12 | | | 12 | 50 |
+| Brood Queen | elite, as in version 12; Hatch makes minion Skitterlings | | | 15 | 60 |
+
+All *Proposed*. The art is the Swarm's: each Brood character names the Swarm
+character it's drawn as, so no sprite rows are added.
+
+### 4.4 How many on the field
+
+**`HORDE_CAP`**, *Proposed* 16 minions per warband, beside at most four real
+characters and elites. A team of three can then face about 60 figures, which is
+the cap's real limit. Three things to check before the cap is set:
+
+- **The phone screen:** can the player still read the board?
+- **Rendering:** measured with `npm run ra-bench`, on the isometric board and
+  the 3D one (`docs/realm-arena-rendering.md` §2).
+- **Playback:** a warband turn played one action at a time gets long (§4.5).
+
+### 4.5 How minions plan
+
+Minions don't run the planner's search. Real characters and elites plan as now,
+with their temperaments (`realm-arena.md` §39.8). Minions take a **swarm step**:
+one pass, in id order, with no search.
+
+- **Something in reach:** strike the most hurt team character it reaches, or
+  the Shrine (§5.2) if no character is in reach. A Spitter shoots the nearest
+  one it sees.
+- **Nothing in reach:** step toward its goal along the path. The goal is the
+  nearest team character its side sees, or else the Shrine.
+- **A Bloater** walks toward the most team characters inside its burst.
+
+It's deterministic, and it reads the warband's view only, as the planner does.
+It costs microseconds a minion, so the time §3 buys goes to the characters that
+need it.
+
+**Playback.** A warband's minions move together: their steps play as one beat on
+the board, and their strikes follow one after another, quickly.
+
+### 4.6 Hidden information
+
+- Minions are fighters, so fog hides them and remembers them as ghosts like
+  anyone else.
+- Characters a nest produces are told as hatchlings are (`realm-arena.md`
+  §39.5): only to a viewer who sees the nest, and only as much as they see.
+- A warband's threat, banked or spent, is server-only.
+- A `croupier` pass is due.
+
+---
+
+## 5. The mission: break the Brood, keep the Shrine
+
+Hold Out keeps its name and its place on the setup screen, so the achievements
+that read "win Hold Out" still mean what they say. Rules version 13 changes what
+it asks.
+
+**Hold Out is the Brood's alone, for now.** Under version 13 the setup screen
+offers Hold Out with no choice of enemy: it is always the Brood. The Renegades
+and the Miners stay enemies for Hold the Centre. Version-12 battles against them
+play to their end as they were. That also retires the random enemy from Hold Out
+(`realm-arena.md` §29.3), and with it everything that withheld the wave's name,
+the nests' squares and the next-wave line while the enemy was unseen.
+
+### 5.1 Nests produce the enemy (A)
+
+- **Every round, not in waves.** At the start of each warband turn, every
+  standing nest adds `SPAWN_THREAT` threat to its warband (*Proposed* 3, rising
+  by 1 every four rounds). The warband spends it at once on its theme's buy list.
+  What it buys stands on free squares next to the nest, chosen as Hatch chooses
+  them (`hatchSquares`), and acts from the warband's next turn.
+- **Themes by round.** The Rush in rounds 1–4, the Bile in 5–8, the Brutes in
+  9–12, the Queen from 13. The themes' buy lists from version 12 carry over,
+  repriced in threat.
+- **Elites on a schedule, more of the early ones.** Each elite arrives in its
+  round from a standing nest, and how many arrive depends on the elite
+  (*Proposed*):
+
+  | Round | Elite | How many |
+  |---:|---|---|
+  | 5 | Bile Lobber | One for each warband with a nest standing |
+  | 9 | Carapace Brute | One for every two such warbands, rounded up |
+  | 13 | Brood Queen | One, from the warband with the most nests standing |
+
+  Ties go to the lowest seat. With one warband, as in Solo, every row is one.
+  A warband with no nest standing contributes no elites, so destroying nests
+  early is how the team keeps the Queen from ever arriving. The count is data
+  on the faction's schedule (`perWarband`, or a number per battle), so it is
+  tuned like any other value.
+- **Destroyed for good.** No nest regrows. Every nest down permanently slows
+  the enemy, so the momentum runs in the team's favour.
+- **Two nests a warband**, *Proposed* 15 HP each. **Their squares are the
+  ruleset's.** `catalogues/v13.ts` lists the nest squares and the Shrine's square
+  for every Hold Out map, even where they start as copies of the map's own
+  (`BattlefieldMap.nests`, `realm-arena.md` §39.7). A battle reads its sites from
+  its own rules version, so a version-12 battle keeps the map's nests whatever
+  later happens to them, and moving a nest is a new rules version rather than an
+  edit to a map in play. `maps/holdOut.test.ts`'s checks (two to a warband, near
+  the edge, reachable, out of sight on the first turn, clear of the placements)
+  walk every catalogue's sites. Whether the raid is too far is measured (§7).
+- **The first muster.** Each warband starts with its nests and a starting horde
+  of *Proposed* 10 threat. The team musters as it does today.
+
+### 5.2 The Shrine (B)
+
+- **Something to defend.** The Shrine is a structure on the team's side, on one
+  square in the keep, listed for each Hold Out map by the ruleset (§5.1).
+  It is built on the nests' rules (`isStructure`): it can be hurt by anything
+  that hurts a character, and it never acts or moves.
+- **HP:** *Proposed* 20 plus 10 for each player.
+- **Friendly fire counts.** A structure takes damage from anything, the team's
+  own Fireball included, as anyone standing in a blast does. Fighting in the
+  keep is a risk to the Shrine.
+- **No ability heals it.** The rally gains a fourth choice, **Mend**: half the
+  Shrine's HP back (§5.3).
+- **The Brood goes for it.** It is the minions' goal when they see no team
+  character (§4.5). For the planner, every HP of it is worth what the team's
+  side loses: *Proposed* 3 points' worth an HP.
+- **The team splits.** Some of the team guard the Shrine and some raid the
+  nests. With two to four players, that split is a natural division of roles to
+  talk over.
+
+### 5.3 The rally
+
+The rally has always come with a wave, and there are no waves now. The team
+**earns** a rally at two kinds of moment:
+
+- **On a schedule:** as rounds 5, 9 and 13 begin (*Proposed*), the rounds the
+  elites arrive in, so a team that is struggling to raid still recovers.
+- **Each time a warband is broken**, meaning its last nest falls. This rally
+  rewards raiding.
+
+**Spacing.** A rally is **taken** only as a round begins, and never in two
+rounds running. At each one, every player chooses, as in `realm-arena.md`
+§39.4: Rally, Reinforce, Resupply, or now Mend.
+
+- **None is lost.** A rally earned while one can't be taken is banked, and is
+  taken as the first round begins that it can be. So breaking a warband the
+  round before a scheduled rally is never wasted: the team takes one rally in
+  round 5 and the other in round 7.
+- **A warband broken mid-round** earns its rally at once. The rally is taken as
+  the next round begins, so every player's choice still comes at the start of
+  their turn, as it does today.
+- **Ending with rallies banked** loses nothing that matters: the last nest
+  falling ends the battle, and so does the cap.
+- **The scoreboard** says when a banked rally comes: "Rally next round" or
+  "Rally in round 7".
+- **The state** keeps how many rallies are banked and the round of the last
+  one taken. Both are public: everyone saw what earned them.
+
+### 5.4 Winning and losing
+
+- **Won the moment the last nest falls.** The Brood breaks. Whatever of it
+  still stands scatters: it leaves the board, and nobody scores for it, so the
+  team doesn't have to clear the field. This is the ending that shortens a
+  battle the better the team plays.
+- **A bonus for breaking it early.** The team scores points for each round
+  left before the cap, shared evenly among its players, in the result's points
+  race. As always in Hold Out, the score doesn't decide the result
+  (`realm-arena.md` §30.3), but it ranks the team's wins against each other, and
+  **a faster win must outscore a slower one with more knock-outs.** So a round's
+  bonus is set above the most a round of fighting can score: the knock-out points
+  of everything every nest the battle started with can produce in a round, at its
+  latest, largest `SPAWN_THREAT`. That is *Proposed* 50 points a round to begin
+  with, and a test holds the bonus above that bound for every team size, so a
+  retune of the spawning can't quietly undo it.
+- **Won at the round cap**, if the Shrine still stands: **15 rounds**, for every
+  team size, Solo included. Holding the keep is still a win, just the smallest
+  one (§6).
+- **Lost** the moment the Shrine falls, or when every team character is down.
+
+### 5.5 The Renegades and the Miners, later
+
+Hold Out is the Brood's alone until it has been played (§5). If the Renegades or
+the Miners come back to it, the mission is the same against them, with a
+producing structure of their own named by their faction's data: a war camp, a
+mine head. They have no minions, and their ready-made squads' characters are
+produced at a threat equal to their points. The random enemy would then come back
+too, with the structures' squares withheld while the enemy is unseen, as the
+nests' are today.
+
+---
+
+## 6. Stars (D)
+
+- **Win or lose stays as it is.** The result, stats and every achievement read
+  as now. A win also carries **stars**, one to three, stored on the result's
+  Hold Out record:
+  - ★ **Held:** the team won. The Shrine stood to the end.
+  - ★ **Broke the Brood:** every nest fell before the round cap.
+  - ★ **Unscathed:** the Shrine ended above half its HP.
+- **Difficulty becomes stars.** Easy, Normal and Hard move `SPAWN_THREAT`, nest
+  HP and the Shrine's HP by small steps. The win itself can stay generous on every
+  difficulty, while the stars carry the challenge.
+- **On screen.** The result shows the stars with the reason for each. The
+  scoreboard shows the nests left and the Shrine's HP throughout.
+- **Achievements:**
+  - New: *Three Stars* (any Hold Out) and *Three Stars on Hard*.
+  - *Broken Tide* (which needs waves) and *Scorched Earth* (which needs nests
+    to regrow) take new criteria in place: breaking the Brood by round 10, and
+    breaking it with nobody of the team down. Their ids stay. Nobody has earned
+    either, so nothing needs to depend on the rules version. A version-12 battle
+    still in progress at the change simply can't earn them. *Broken Tide* is
+    older (`realm-arena.md` §30.4), so confirm in the database that nobody has
+    earned it before changing it; no admin page shows it.
+  - *Regicide* keeps its meaning. The Queen only arrives while a nest stands in
+    round 13, so earning it now means letting her come.
+  - A `rulebook` pass is due against `docs/achievements.md`.
+
+---
+
+## 7. Balance and measuring
+
+- **Targets on Normal**, for the planner-played team: a win (★) in 70–85% of
+  battles, two stars in 35–55%, three in 10–25%. Easy and Hard each move them by
+  about 15 points.
+- **The slope first.** Before tuning, check that one step of `SPAWN_THREAT` moves
+  the win rate by under 15 points. If it moves more, the mission still behaves
+  like an all-or-nothing war of attrition, and must be fixed before it's tuned.
+- **The harness's team has to raid.** Today the team's planner never walks to a
+  nest (`realm-arena.md` §39.7), so it would never break the Brood and every
+  battle would end at the round cap. Two steps:
+  - First, a scripted policy in the harness: each player's two fastest
+    characters raid the nearest standing nest, and the rest guard the Shrine.
+  - Later, the team's planner gets an objective term of its own.
+- **Hand-offs.** Battles end at the round cap or before it, so a Hold Out is
+  never longer than today's and often shorter. The harness reports the round
+  each battle ended in, as it does now.
+- **Rendering** with a full horde, through `npm run ra-bench` (§4.4).
+
+## 8. PRs and versions
+
+| PR | What | Versions |
+|---|---|---|
+| 1 | The enemy's turn in the background (§3) | Command 13 |
+| 2 | The Brood: minions, threat, the swarm step, playback (§4) | Rules 13, unreleased |
+| 3 | Nests that produce, the Shrine, Mend, the rally's two triggers, the new ending and its bonus, Hold Out against the Brood only (§5) | Rules 13, unreleased |
+| 4 | Stars, the result, achievements, the guide and setup copy (§6) | Rules 13, unreleased |
+| 5 | The harness's raid policy, balance, release, What's new (§7) | Rules 13 released |
+
+PR 1 stands alone and ships first: it gives version 12's warbands their time back
+today. PRs 2–5 follow `realm-arena.md` §39.1's pattern. The catalogue
+`catalogues/v13.ts` is registered but not current until PR 5, so each PR may
+still edit it, and tests and the harness fight at version 13 through
+`rulesVersion`. One "What's new" line, written by the last PR, covers the lot.
+
+### 8.1 Questions
+
+*Answered on review:*
+
+1. **The Shrine** is its name, and it is one square.
+2. **The rally** is earned on a schedule as well as when a warband is broken,
+   and is taken only as a round begins, never in two rounds running, with none
+   lost (§5.3).
+3. **The Brood's scattering** scores nothing. Breaking it early earns a bonus
+   for each round left, large enough that a faster win outscores a slower one
+   with more knock-outs (§5.4).
+4. **Minions and status effects:** a minion hit by anything that does damage is
+   downed, whatever else the hit would have done (§4.3).
+5. **The round cap** is 15 for every team size (§5.4).
+6. **Hold Out is the Brood's alone** for now (§5, §5.5).
+7. **Elites** depend on the elite: a Lobber a warband, a Brute every two
+   warbands, one Queen (§5.1).
+8. **The nest and Shrine squares are the ruleset's**, even while they match the
+   maps' (§5.1).
+9. **Friendly fire** hurts the Shrine, as it hurts everyone (§5.2).
+10. **Solo** keeps both jobs: its player has more time and every character
+    (§5).
+11. **The numbers** are found by trying them, once the harness's team can raid
+    (§7).
+12. **Achievements** change their criteria in place, since nobody has earned
+    them (§6).
+
+*Still open:*
+
+1. **The playable Swarm:** kept beside the Brood, or retired? To revisit once
+   the Brood has been played.
+2. **The background runner's budget:** whether `after()` gives the warbands
+   enough time, or they need their own route (§3.2). Measured once PR 1 runs in
+   production.
+
+---
+
+## 9. Parked: Hold Out to the last enemy (was `realm-arena.md` §41)
+
+Moved here from the main design document, with its own sections renumbered
+from §41.n to §9.n. Every other § number in it refers to
+[`realm-arena.md`](./realm-arena.md).
+
+*Plan; nothing built. Prototyped and measured (§9.4): parked.* A review of version 12 before anyone played it found
+that the last wave hardly fights. A team of two to four plays 13 rounds, and
+the waves land in rounds 4, 7, 10 and 13, so the Queen's wave lands as the last
+round begins. Each warband then gets one turn before the team wins by still
+standing. The Brood Queen lands in her warband's zone, out of the team's sight,
+and moves 4. Her hatchlings start with 0 AP, so they never act. The biggest
+wave of the battle (170 points a warband on Normal) does next to nothing, and
+*Regicide* can only really be earned in Solo, which lasts 15 rounds. More
+broadly, a team wins Hold Out by never leaving the keep, which is the problem
+nests (§39.7) were built to work around.
+
+This plan changes what winning Hold Out means instead: **the team wins by
+downing the last wave**, and the waves are a round further apart to leave time
+for it.
+
+### 9.1 The rule
+
+- **Four waves, every fourth round.** Waves land as rounds **5, 9, 13 and 17**
+  begin. Until now the number of waves came from the battle's length. Now
+  there are always four, one for each of the Swarm's themes (§39.6), and
+  against the Renegades and the Miners too.
+- **The team wins once the last wave is down.** From round 17, the team wins
+  the moment no enemy character stands. Hatchlings count; nests don't. They
+  are structures, not combatants (`isCombatant`, §39.7). Surviving the rounds
+  no longer wins anything.
+- **The team loses when everyone is down**, as before, **or at the cap**.
+  Players who never stop playing need a battle that ends: a Queen hiding in
+  fog and hatching, a Spitter backing away. At the end of round
+  `HOLD_OUT_MAX_ROUNDS` the battle is lost: "the Swarm held the field". The
+  cap is set from the measured length (§9.4), so a battle the planner can win
+  almost never reaches it.
+- **`WAVE_GROWTH_POINTS` goes back to 15.** Version 12 raised it to 25 because
+  a team that only had to survive won nine battles in ten. A team that has to
+  clear the field is facing a much harder task (§9.4). At 15, each nest's 15
+  points (`NEST_POINTS`) is one growth step again, as §39.7 designed it.
+- **Nests don't regrow with the last wave.** After it there is no wave left for
+  them to shrink, so a nest left standing is just scenery. Destroying one
+  before round 17 is still the only way to make the final fight smaller.
+- **The rally is unchanged:** each player chooses once after every wave
+  (§39.4).
+- **Hold the Centre, duels and free-for-all are untouched.** Only Hold Out's
+  ending and its wave schedule change.
+
+### 9.2 What it fixes, and what it costs
+
+- **The last wave plays out.** The Queen gets as many turns as the team needs
+  to down her, and her hatchlings fight. Getting to her through her brood is
+  the final fight the themed waves were built to end on.
+- **Staying in the keep stops being enough.** The team has to go out
+  eventually, so the nests, which sit near the edge, become part of the plan
+  rather than a side trip. The rule pays for that trip directly: every nest
+  destroyed before round 17 is one fewer character in the final fight.
+- **Clearing up between waves doesn't shrink the next one.** A wave refills
+  its warband to the purchase (§39.6), so a field the team has cleared gets the
+  whole wave, and survivors only add to it. The extra round between waves
+  doesn't mean fewer enemies. It gives the team a round to rally, regroup and
+  fight one wave at a time rather than two at once, and that is what it should
+  be measured for. Nests are the only thing that shrinks a wave.
+- **Battles get longer.** This is the price, and the reason it is measured
+  before anything is built. Version 12's Hold Out for two to four is 13 rounds.
+  This one is at least 17 plus however long the final fight takes, and an async
+  battle's length is counted in hand-offs (§4).
+- **Fog is harder.** The last enemies have to be found. The Sunken Village in
+  fog was already almost unwinnable for the planner's team (§39.9), and making
+  the team hunt down the last characters only makes that worse.
+
+### 9.3 Engine
+
+- **Rules are data.** `catalogues/v13.ts`, with `RULES`:
+  - `WAVE_EVERY: 4`
+  - `HOLD_OUT_WAVES: 4`
+  - `HOLD_OUT_TO_THE_LAST: true`
+  - `HOLD_OUT_MAX_ROUNDS`
+  - `WAVE_GROWTH_POINTS: 15`
+
+  Each is absent before version 13, where the wave interval is today's 3, the
+  battle's length sets how many waves come, and surviving wins.
+- **The schedule reads the rules.** `WAVE_EVERY` is a module constant in
+  `rules.ts` today. `waveArrives`, `wavesLanded`, `nextWaveRound`,
+  `lastWaveRound` and `waveThemeOf` take the battle's context. Every caller
+  already has the game state, except `battleRecord.ts`, which is handed the
+  rules version it already receives. The last wave is
+  `1 + WAVE_EVERY × HOLD_OUT_WAVES`.
+- **The length is the cap.** Under the new flag, `battleRounds` gives Hold Out
+  `HOLD_OUT_MAX_ROUNDS`. Everything that reads the length then sees the same
+  number: the ending, the record's rounds, the setup line and the harness's
+  turn limit. The round counter is the exception (§9.5).
+- **The ending.** Under the flag, `holdOutEnding`'s `held out for all N rounds`
+  becomes the cap's loss. `beat the last wave in round N`, which already
+  exists, is the one way to win.
+- **Nests.** `landWave` skips the regrowth on the last wave. `nestsCleared`
+  (*Scorched Earth*) already requires a wave still to come, so it needs no
+  change.
+- **The planner** needs no new rules code: the warbands already hunt the team.
+  §9.4 measures whether a last wave holds back for long enough to stall a
+  battle. If it does, the planner-side fix is a *last stand*: once the last
+  wave has landed, temperaments no longer reward Exposure (§39.8), and the
+  Queen stops hanging back. This is planner behaviour, not a rule, and isn't
+  versioned.
+- **Command version 13** at release, so an open tab reloads before it reads a
+  version-13 battle. The board's copy and wave line read the schedule, and an
+  old tab would announce the old rounds.
+
+### 9.4 Measured (prototype)
+
+**These numbers stand alone.** The team wins a different way here, so a win
+rate can't be set against version 12's. What can be compared is one
+version-13 setup against another, fought on the same seeds and under the same
+win condition. Each setup is read against fixed targets:
+
+- **Win rate:** on Normal, the planner-played team wins about half to two
+  thirds, with no cell under a quarter or over three quarters (§39.9's band).
+- **Length:** the round a battle ends in, median and 90th percentile. This is
+  the change's real cost, counted in hand-offs (§4).
+- **Stalls:** how many battles reach the cap. Anything beyond a few means a
+  last wave can hold out of reach, and the *last stand* (§9.3) is needed.
+
+The harness copes with a battle past 13 rounds as it is. It reads the length
+from `battleRoundsOf`, and its turn limit, its per-round tables and its
+ended-round columns all scale with that length. The prototype fought to a
+40-round safety cap with no change to the harness.
+
+The prototype was an environment switch in a scratch checkout. It fought
+every Hold Out cell on Normal without fog, seeds 1–40, waves every fourth
+round, a 40-round cap, at growth 0, 5, 10 and 15. Growth 25 and waves every
+third round were left unrun: growth 15 already lost nearly every battle.
+
+| Cell | Growth 0 | 5 | 10 | 15 | v12 as shipped |
+|---|---:|---:|---:|---:|---:|
+| Solo, Ruined Fort | 100% | 92% | 60% | 30% | 45% |
+| 2 players, gate fort | 100% | 100% | 62% | 25% | 80% |
+| 2 players, Sacked Fort | 100% | 92% | 55% | 20% | 65% |
+| 3 players, gate fort | 100% | 90% | 12% | 2% | 77% |
+| 3 players, Sacked Fort | 97% | 85% | 7% | 5% | 30% |
+| 3 players, Sunken Village | 100% | 77% | 12% | 0% | 22% |
+| 4 players, Sacked Fort | 100% | 97% | 47% | 0% | 50% |
+| 4 players, Sunken Village | 100% | 70% | 2% | 0% | 20% |
+| Battles ending at the cap | 0 | 18 | 10 | 4 | — |
+
+The last column is the same seeds under version 12, and it is there only for
+scale: version 12 wins by surviving, so its win rates measure something else.
+
+**What it says.**
+
+- **Battles roughly double in length.** A win comes in round 19–23 at any
+  growth, two to six rounds after the last wave lands, where version 12 ends at
+  13. In hand-offs this is the change's cost, before anything else.
+- **Growth 15 doesn't work.** The team gets through the waves (fewer than one
+  in ten battles is lost before round 17), but it never clears the field. At
+  growth 15, a team of three goes into the last wave with about 3 characters
+  standing against about 27 enemies, and is overrun within two to four rounds
+  of the Queen's wave landing. A wave refills its warband to the purchase
+  (§39.6), so the stack the team must finally wipe out is about as big as the
+  warbands can field, whatever the team did between waves.
+- **The slope is a cliff.** Win rates fall from about 100% at growth 5 to about
+  0% at growth 15 in every cell of three or four players. Either the team keeps
+  pace and wins comfortably, or it falls one wave behind and is buried. Easy
+  and Hard move the warbands' base budget by 10–20 points, more than the whole
+  width of that slope, so they would be close to certain wins and certain
+  losses.
+- **No one growth fits every team size.** At 10, Solo and both two-player
+  cells sit in the band (55–62%), and so does the four-player Sacked Fort
+  (47%). The three-player cells and the four-player Sunken Village are at
+  2–12%.
+- **Stalls appear when the sides are evenly matched.** At growth 5 and 10, up
+  to one battle in five ran to the cap (the four-player Sunken Village, at
+  growth 5): the team and the Swarm grind with neither clearing the field. A
+  real version would need the *last stand* (§9.3) or a firmer cap.
+
+**Where that leaves the plan.** Needing a wipe to win does what it was meant
+to do: the last wave fights, and the Queen with it. But tuning growth can't
+balance it: the balance point is a knife-edge, and it sits at a different
+growth for every team size. If this goes ahead, the snowball needs a lever of
+its own before growth is tuned. The options:
+
+- the last wave replaces each warband rather than adding to it;
+- a much lower cap on how many characters each warband can have on the field;
+- earlier waves' survivors withdraw as the last one lands.
+
+The planner's team never goes after nests, so nests' part in shrinking the
+final fight is still unmeasured. This was left here to explore another
+direction.
+
+### 9.5 Screens and copy
+
+- **The round counter** reads "Round 9" with no "of 13", and from the last
+  wave on, "Round 18 · last wave". Showing the cap would make it look like the
+  goal.
+- **The next-wave line** (§30.11) counts down to round 17 as it does now. After
+  that it says what is left: "The last wave: 6 still standing". In fog that
+  count is a ceiling, as the wave count already is (§39.6): the characters the
+  team has seen fall, subtracted from what arrived. That is a hidden-information
+  question, and a croupier pass is due.
+- **The guide's** co-op section changes from "anyone still standing after the
+  last round" to "down the last wave", with the new rounds and the cap. The
+  setup screen's Hold Out line and the tutorial's Hold Out step follow.
+- **The result** keeps its waves and its *Enemies downed by wave* chart. The
+  lost detail "the Swarm held the field by round N" joins "overrun".
+
+### 9.6 Achievements
+
+Two achievements change meaning under the new ending. Ids are permanent and
+existing earners keep theirs, so the criteria only change for version 13
+battles:
+
+- **Broken Tide** ("down every character of the last wave before the last
+  round is over") becomes every win. In version 13 it becomes a race instead:
+  *down the last wave within two rounds of it landing*.
+- **Regicide** (a Brood Queen downed) becomes every win against the Swarm,
+  since the Queen is in the last wave at every budget. In version 13 it
+  becomes *down a Brood Queen before her first hatchling acts*.
+
+A `rulebook` pass checks this against `docs/achievements.md`.
+
+### 9.7 PRs
+
+| PR | What |
+|---|---|
+| 1 | `catalogues/v13.ts` (unreleased), the wave schedule from the rules, the ending, the cap, no regrowth on the last wave. Tests below |
+| 2 | Screens and copy: the round counter, the next-wave line after the last wave, the guide, setup and tutorial lines, the result's detail. Croupier pass on the count left |
+| 3 | Balance at 200 a cell (every Hold Out cell, Easy, Normal and Hard, with and without fog, and against the Renegades and the Miners), the cap set from it, achievements (§9.6), release, What's new |
+
+**Tests.**
+- The schedule at version 13: waves in 5, 9, 13 and 17, and none after.
+- The ending:
+  - no win while an enemy stands, or a hatchling;
+  - a win the moment the last falls;
+  - a win with only nests left standing;
+  - the cap's loss.
+- No regrowth on the last wave.
+- A version-12 battle still lands waves in 4, 7, 10 and 13 and still wins by
+  surviving.
+- A replay.
+- `rulesets.test.ts` pins the new values and that nothing else of version 12
+  changed.
+
+### 9.8 Open questions
+
+1. **What the cap gives.** A loss, as proposed, or a lesser result: "held,
+   but didn't break them"?
+2. **Every fourth round, or every third.** §9.4 measures both.
+3. **The number in fog** after the last wave: a ceiling, as proposed, or
+   nothing?
+4. **The Renegades and the Miners.** Their waves grow by a character each
+   (`waveStrength`), not by points, and were never retuned for having to be
+   wiped out. They are measured in PR 3 before release.
+
+---
+
+## Revision history
+
+| Version | Change |
+|---|---|
+| 0.1 | Split out of `realm-arena.md`. The plan to rethink Hold Out: the enemy's turn in the background (§3), the Brood as an enemy-only Swarm with minions (§4), nests that produce the enemy and a shrine to defend (§5), and stars (§6). The parked plan for Hold Out to the last enemy moved here from `realm-arena.md` §41 (§9). |
+| 0.2 | Answers on review (§8.1): the Shrine, one square; a rally on a schedule as well as when a warband is broken; the scattered Brood scores nothing, and breaking it early earns a bonus for each round left; minions hit by anything that does damage are downed; a 15-round cap for every team size; and Hold Out is the Brood's alone for now, so the Renegades' and Miners' structures are put off (§5.5) and the PRs are five. |
+| 0.3 | The rally is earned on a schedule and when a warband is broken, and taken only as a round begins, never in two rounds running, with none lost (§5.3). The open questions are spelt out (§8.1). |
+| 0.4 | More answers on review (§8.1): a bonus for each round left large enough that a faster win outscores a slower one, held by a test; elites counted by the elite (a Lobber a warband, a Brute every two, one Queen); nest and Shrine squares in the ruleset; friendly fire hurts the Shrine; Solo keeps both jobs; and achievements change in place. |

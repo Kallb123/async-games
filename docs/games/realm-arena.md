@@ -5978,6 +5978,17 @@ Heal fixed; the defaults as in §40.1; and no command version of its own
 
 ---
 
+## 41. Hold Out's next design: moved
+
+Hold Out's design from here on is in its own document,
+[`realm-arena-hold-out.md`](./realm-arena-hold-out.md). It has the plan to
+rethink the mission: the enemy's turn in the background, the Brood (an
+enemy-only Swarm with minions), nests that produce the enemy, a shrine to
+defend, and stars. It also has the parked plan for Hold Out to the last enemy,
+which was this section, with its prototype's numbers.
+
+---
+
 ## Appendix: Working title
 
 "Realm Arena", chosen in round 4. The shared "Realm" ties it to Defender of the
@@ -6072,3 +6083,4 @@ Realm, its sibling in the same world.
 | 1.71 | Ability loadouts (§40, issue 957) in the unreleased rules version 12, with no command version of its own: each Realm figure keeps its signature ability (the Knight's Bulwark, the Cleric's Heal) and picks two more from its character's pool at muster, a default loadout for anyone who doesn't choose; ability options join the pool at their rank rather than swapping, and Frost bolt stays a weapon swap. `Character.loadout`, `MusterPick.loadout` and `Fighter.loadout` are new, absent meaning the whole kit before version 12 and the default in it. |
 | 1.72 | Two §39.7 follow-ups before rules version 12 ships. Every nest destroyed now counts against its warband's next wave, whoever downed it, the Swarm's own burst, bile or burn included (#966). Only a nest the team downs scores, and in fog `nestsSeenDestroyed` still counts only falls the team was told of. A warband with only nests standing still takes an empty turn while one of them is burning or poisoned, after the turn of any warband the rotation passed it over for, so the damage ticks and a dying nest falls before the wave (#967). |
 | 1.73 | §39.9 releases rules version 12 (§39, §40): `WAVE_GROWTH_POINTS` tuned from 15 to 25 by the balance harness (new `--set` overrides), the planner sped up twice with every choice unchanged so the Swarm's twelve-strong waves fit their turn, the guide, tutorial and setup screen tell the new rules, and two achievements, *Regicide* and *Scorched Earth* (with a `nestsCleared` flag sent only once a battle is over). |
+| 1.74 | Hold Out's design moves to its own document, [`realm-arena-hold-out.md`](./realm-arena-hold-out.md): a plan to rethink the mission (the enemy's turn in the background, the Brood as an enemy-only Swarm, nests that produce the enemy, a shrine to defend, stars), and §41, the parked plan for Hold Out to the last enemy with its prototype's numbers, which is now that document's §9. |
