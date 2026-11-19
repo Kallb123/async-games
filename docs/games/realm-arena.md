@@ -5978,6 +5978,181 @@ Heal fixed; the defaults as in §40.1; and no command version of its own
 
 ---
 
+## 41. Hold Out to the last enemy (rules version 13, plan)
+
+*Plan; nothing built.* A review of version 12 before anyone played it found
+that the last wave hardly fights. A team of two to four plays 13 rounds, and
+the waves land in rounds 4, 7, 10 and 13, so the Queen's wave lands as the last
+round begins. Each warband then gets one turn before the team wins by still
+standing. The Brood Queen lands in her warband's zone, out of the team's sight,
+and moves 4. Her hatchlings start with 0 AP, so they never act. The biggest
+wave of the battle (170 points a warband on Normal) does next to nothing, and
+*Regicide* can only really be earned in Solo, which lasts 15 rounds. More
+broadly, a team wins Hold Out by never leaving the keep, which is the problem
+nests (§39.7) were built to work around.
+
+This plan changes what winning Hold Out means instead: **the team wins by
+downing the last wave**, and the waves are a round further apart to leave time
+for it.
+
+### 41.1 The rule
+
+- **Four waves, every fourth round.** Waves land as rounds **5, 9, 13 and 17**
+  begin. Until now the number of waves came from the battle's length. Now
+  there are always four, one for each of the Swarm's themes (§39.6), and
+  against the Renegades and the Miners too.
+- **The team wins once the last wave is down.** From round 17, the team wins
+  the moment no enemy character stands. Hatchlings count; nests don't. They
+  are structures, not combatants (`isCombatant`, §39.7). Surviving the rounds
+  no longer wins anything.
+- **The team loses when everyone is down**, as before, **or at the cap**.
+  Players who never stop playing need a battle that ends: a Queen hiding in
+  fog and hatching, a Spitter backing away. At the end of round
+  `HOLD_OUT_MAX_ROUNDS` the battle is lost: "the Swarm held the field". The
+  cap is set from the measured length (§41.4), so a battle the planner can win
+  almost never reaches it.
+- **`WAVE_GROWTH_POINTS` goes back to 15.** Version 12 raised it to 25 because
+  a team that only had to survive won nine battles in ten. A team that has to
+  clear the field is facing a much harder task (§41.4). At 15, each nest's 15
+  points (`NEST_POINTS`) is one growth step again, as §39.7 designed it.
+- **Nests don't regrow with the last wave.** After it there is no wave left for
+  them to shrink, so a nest left standing is just scenery. Destroying one
+  before round 17 is still the only way to make the final fight smaller.
+- **The rally is unchanged:** each player chooses once after every wave
+  (§39.4).
+- **Hold the Centre, duels and free-for-all are untouched.** Only Hold Out's
+  ending and its wave schedule change.
+
+### 41.2 What it fixes, and what it costs
+
+- **The last wave plays out.** The Queen gets as many turns as the team needs
+  to down her, and her hatchlings fight. Getting to her through her brood is
+  the final fight the themed waves were built to end on.
+- **Staying in the keep stops being enough.** The team has to go out
+  eventually, so the nests, which sit near the edge, become part of the plan
+  rather than a side trip. The rule pays for that trip directly: every nest
+  destroyed before round 17 is one fewer character in the final fight.
+- **Clearing up between waves doesn't shrink the next one.** A wave refills
+  its warband to the purchase (§39.6), so a field the team has cleared gets the
+  whole wave, and survivors only add to it. The extra round between waves
+  doesn't mean fewer enemies. It gives the team a round to rally, regroup and
+  fight one wave at a time rather than two at once, and that is what it should
+  be measured for. Nests are the only thing that shrinks a wave.
+- **Battles get longer.** This is the price, and the reason it is measured
+  before anything is built. Version 12's Hold Out for two to four is 13 rounds.
+  This one is at least 17 plus however long the final fight takes, and an async
+  battle's length is counted in hand-offs (§4).
+- **Fog is harder.** The last enemies have to be found. The Sunken Village in
+  fog was already almost unwinnable for the planner's team (§39.9), and making
+  the team hunt down the last characters only makes that worse.
+
+### 41.3 Engine
+
+- **Rules are data.** `catalogues/v13.ts`, with `RULES`:
+  - `WAVE_EVERY: 4`
+  - `HOLD_OUT_WAVES: 4`
+  - `HOLD_OUT_TO_THE_LAST: true`
+  - `HOLD_OUT_MAX_ROUNDS`
+  - `WAVE_GROWTH_POINTS: 15`
+
+  Each is absent before version 13, where the wave interval is today's 3, the
+  battle's length sets how many waves come, and surviving wins.
+- **The schedule reads the rules.** `WAVE_EVERY` is a module constant in
+  `rules.ts` today. `waveArrives`, `wavesLanded`, `nextWaveRound`,
+  `lastWaveRound` and `waveThemeOf` take the battle's context. Every caller
+  already has the game state, except `battleRecord.ts`, which is handed the
+  rules version it already receives. The last wave is
+  `1 + WAVE_EVERY × HOLD_OUT_WAVES`.
+- **The length is the cap.** Under the new flag, `battleRounds` gives Hold Out
+  `HOLD_OUT_MAX_ROUNDS`. Everything that reads the length then sees the same
+  number: the ending, the record's rounds, the setup line and the harness's
+  turn limit. The round counter is the exception (§41.5).
+- **The ending.** Under the flag, `holdOutEnding`'s `held out for all N rounds`
+  becomes the cap's loss. `beat the last wave in round N`, which already
+  exists, is the one way to win.
+- **Nests.** `landWave` skips the regrowth on the last wave. `nestsCleared`
+  (*Scorched Earth*) already requires a wave still to come, so it needs no
+  change.
+- **The planner** needs no new rules code: the warbands already hunt the team.
+  §41.4 measures whether a last wave holds back for long enough to stall a
+  battle. If it does, the planner-side fix is a *last stand*: once the last
+  wave has landed, temperaments no longer reward Exposure (§39.8), and the
+  Queen stops hanging back. This is planner behaviour, not a rule, and isn't
+  versioned.
+- **Command version 13** at release, so an open tab reloads before it reads a
+  version-13 battle. The board's copy and wave line read the schedule, and an
+  old tab would announce the old rounds.
+
+### 41.4 Measured (prototype)
+
+*Filled in below from the prototype run.*
+
+### 41.5 Screens and copy
+
+- **The round counter** reads "Round 9" with no "of 13", and from the last
+  wave on, "Round 18 · last wave". Showing the cap would make it look like the
+  goal.
+- **The next-wave line** (§30.11) counts down to round 17 as it does now. After
+  that it says what is left: "The last wave: 6 still standing". In fog that
+  count is a ceiling, as the wave count already is (§39.6): the characters the
+  team has seen fall, subtracted from what arrived. That is a hidden-information
+  question, and a croupier pass is due.
+- **The guide's** co-op section changes from "anyone still standing after the
+  last round" to "down the last wave", with the new rounds and the cap. The
+  setup screen's Hold Out line and the tutorial's Hold Out step follow.
+- **The result** keeps its waves and its *Enemies downed by wave* chart. The
+  lost detail "the Swarm held the field by round N" joins "overrun".
+
+### 41.6 Achievements
+
+Two achievements change meaning under the new ending. Ids are permanent and
+existing earners keep theirs, so the criteria only change for version 13
+battles:
+
+- **Broken Tide** ("down every character of the last wave before the last
+  round is over") becomes every win. In version 13 it becomes a race instead:
+  *down the last wave within two rounds of it landing*.
+- **Regicide** (a Brood Queen downed) becomes every win against the Swarm,
+  since the Queen is in the last wave at every budget. In version 13 it
+  becomes *down a Brood Queen before her first hatchling acts*.
+
+A `rulebook` pass checks this against `docs/achievements.md`.
+
+### 41.7 PRs
+
+| PR | What |
+|---|---|
+| 1 | `catalogues/v13.ts` (unreleased), the wave schedule from the rules, the ending, the cap, no regrowth on the last wave. Tests below |
+| 2 | Screens and copy: the round counter, the next-wave line after the last wave, the guide, setup and tutorial lines, the result's detail. Croupier pass on the count left |
+| 3 | Balance at 200 a cell (every Hold Out cell, Easy, Normal and Hard, with and without fog, and against the Renegades and the Miners), the cap set from it, achievements (§41.6), release, What's new |
+
+**Tests.**
+- The schedule at version 13: waves in 5, 9, 13 and 17, and none after.
+- The ending:
+  - no win while an enemy stands, or a hatchling;
+  - a win the moment the last falls;
+  - a win with only nests left standing;
+  - the cap's loss.
+- No regrowth on the last wave.
+- A version-12 battle still lands waves in 4, 7, 10 and 13 and still wins by
+  surviving.
+- A replay.
+- `rulesets.test.ts` pins the new values and that nothing else of version 12
+  changed.
+
+### 41.8 Open questions
+
+1. **What the cap gives.** A loss, as proposed, or a lesser result: "held,
+   but didn't break them"?
+2. **Every fourth round, or every third.** §41.4 measures both.
+3. **The number in fog** after the last wave: a ceiling, as proposed, or
+   nothing?
+4. **The Renegades and the Miners.** Their waves grow by a character each
+   (`waveStrength`), not by points, and were never retuned for having to be
+   wiped out. They are measured in PR 3 before release.
+
+---
+
 ## Appendix: Working title
 
 "Realm Arena", chosen in round 4. The shared "Realm" ties it to Defender of the
