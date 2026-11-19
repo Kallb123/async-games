@@ -8,7 +8,7 @@ import { catalogueV12 } from "./catalogues/v12";
 import type { Ability, AbilityId, Character, CharacterId, CharacterOption, Effect, EffectId, Faction, FactionId, Item, ItemId, OptionId, Weapon } from "./characters";
 
 /** Independent of commandVersion: a protocol change need not change a match's rules. */
-export const CURRENT_RULESET_VERSION = 11;
+export const CURRENT_RULESET_VERSION = 12;
 
 // Keep each entry's required fields (e.g. Fireball's range) while allowing
 // later catalogues to change their values without copying the whole table.
@@ -46,7 +46,7 @@ const rulesetV8: RealmArenaRuleset = registered(catalogueV8);
 const rulesetV9: RealmArenaRuleset = registered(catalogueV9);
 const rulesetV10: RealmArenaRuleset = registered(catalogueV10);
 const rulesetV11: RealmArenaRuleset = registered(catalogueV11);
-// Registered but not current: version 12 is built across §39 and released by its last PR.
+// Version 12 is the current release (§39.9); it is the one catalogue not run through `registered`, which only types the pre-elite ones.
 const rulesetV12: RealmArenaRuleset = freeze(catalogueV12);
 
 // Games created before the balance release had no stamp, or one below 7.
@@ -74,6 +74,9 @@ const RULESETS: Readonly<Record<number, RealmArenaRuleset>> = Object.freeze({
 /** Every registered catalogue once, oldest first, whether or not a match can still start on it. */
 export const registeredRulesets: readonly RealmArenaRuleset[] = Object.freeze([...new Set(Object.values(RULESETS))]);
 
+// Catalogues standing in for registered ones, for the balance harness alone.
+const experimental = new Map<number, RealmArenaRuleset>();
+
 // The last version asked for, read before the checks: the planner asks
 // millions of times a battle, nearly always for one version.
 let lastVersion: number | undefined;
@@ -81,13 +84,28 @@ let lastRuleset: RealmArenaRuleset;
 
 export const currentRuleset = rulesetFor(CURRENT_RULESET_VERSION);
 
+/**
+ * FOR THE BALANCE HARNESS ONLY (`scripts/realmarena-balance.ts`, `--set`); never
+ * call it from `src/`. Makes `rulesetFor(version)` answer with `catalogue` (a copy
+ * carrying changed values, never a mutation of the shared frozen one) until it is
+ * called again with `undefined`. `currentRuleset`, and the constants `rules.ts` and
+ * `characters.ts` read from it at load, keep the registered catalogue: whatever
+ * reads a game's values through `rulesetOf(game)` / `ruleValuesOf(game)` sees the copy.
+ */
+export function overrideRulesetForExperiment(version: number, catalogue: RealmArenaRuleset | undefined): void {
+    if (!Number.isInteger(version) || !Object.hasOwn(RULESETS, version)) throw new Error(`Unsupported Realm Arena rules version: ${version}`);
+    if (catalogue) experimental.set(version, catalogue);
+    else experimental.delete(version);
+    lastVersion = undefined;
+}
+
 /** Missing means legacy forever. Unknown versions fail instead of silently using today's rules. */
 export function rulesetFor(rulesVersion: number | undefined): RealmArenaRuleset {
     const version = rulesVersion ?? 0;
     if (version === lastVersion) return lastRuleset;
     if (!Number.isInteger(version) || !Object.hasOwn(RULESETS, version)) throw new Error(`Unsupported Realm Arena rules version: ${version}`);
     lastVersion = version;
-    return lastRuleset = RULESETS[version];
+    return lastRuleset = experimental.get(version) ?? RULESETS[version];
 }
 
 /**

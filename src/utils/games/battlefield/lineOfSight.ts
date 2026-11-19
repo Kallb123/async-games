@@ -78,6 +78,21 @@ const EYE_HEIGHT = 2 * FULL_HEIGHT - 1;
  * what's past its corner.
  */
 export function canSee(field: Battlefield, from: Square, to: Square): boolean {
+    // The same pair is asked again and again as a planner weighs a turn, and a battlefield is never changed in place
+    // (a blast makes a new one), so each answer is kept against the field it was worked out on.
+    let rows = SIGHT.get(field);
+    if (!rows) SIGHT.set(field, rows = []);
+    let row = rows[from];
+    if (!row) rows[from] = row = new Int8Array(field.tiles.length);
+    let known = row[to];
+    if (known === 0) row[to] = known = sees(field, from, to) ? 1 : -1;
+    return known === 1;
+}
+
+/** What `canSee` has worked out, by battlefield, then the square seen from: 1 for sees, -1 for doesn't, 0 for not yet asked. */
+const SIGHT = new WeakMap<Battlefield, (Int8Array | undefined)[]>();
+
+function sees(field: Battlefield, from: Square, to: Square): boolean {
     const a = coordsOf(field, from), b = coordsOf(field, to);
     const across = b.col - a.col, down = b.row - a.row;
     // How far along the line, from 0 at `from` to `scale` at `to`: every edge it crosses is a whole number of steps.

@@ -60,7 +60,9 @@ describe("the Miners' characters (§33)", () => {
 describe("the factions (§29.3)", () => {
     it("muster every character, each for one faction alone", () => {
         const rosters = Object.values(FACTIONS).flatMap(faction => faction.characters);
-        expect([...rosters].sort()).toEqual((Object.keys(CHARACTERS) as CharacterId[]).filter(id => id !== "scout").sort());
+        // Besides the Scout (an option's, §23), the Swarm's elites (§39.5) and its nest (§39.7) stand in no roster.
+        const unmustered = new Set<CharacterId>(["scout", ...(FACTIONS.swarm.elites ?? []), ...(FACTIONS.swarm.nest ? [FACTIONS.swarm.nest] : [])]);
+        expect([...rosters].sort()).toEqual((Object.keys(CHARACTERS) as CharacterId[]).filter(id => !unmustered.has(id)).sort());
     });
 
     describe.each(Object.values(FACTIONS))("$name's ready-made squads (§17.2, §30.5)", faction => {

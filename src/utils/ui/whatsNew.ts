@@ -82,6 +82,11 @@ export const WHATS_NEW: WhatsNewGroup[] = [
         icon: "✨",
         items: [
             {
+                title: "Realm Arena: pick your abilities, and a Swarm worth fighting in Hold Out",
+                detail: "Each of your Realm characters now picks two of its abilities at the muster, so two Archers can carry different arrows. Against the Swarm, the waves come themed — some led by a Bile Lobber, a Carapace Brute or a Brood Queen — nests at the edges cost the next wave if you burn them out, Bloaters burst when they fall, and a Knight's Taunt braces every ally around it. After each wave, every player picks their own rally: heal, bring someone back, or refill items. Two new achievements: Regicide and Scorched Earth.",
+                game: "realmarena",
+            },
+            {
                 title: "Realm Arena: a Blessing shows who it reaches",
                 detail: "Tapping a Cleric's Blessing now shades the squares it reaches and names the allies it would bless, before you spend the AP — tap Bless to send it, or Cancel to think again.",
                 game: "realmarena",
@@ -123,11 +128,6 @@ export const WHATS_NEW: WhatsNewGroup[] = [
             {
                 title: "Quicker when you come back to the app",
                 detail: "Switching back to the app, or opening it from a notification, now renews your sign-in before your games refresh, so they no longer stall for a few seconds first — and a move you make the moment you're back goes through. Players' names show straight away too, even when you've been away a while.",
-            },
-            {
-                title: "Realm Arena: clearer battle details",
-                detail: "Inspect unit stats during battle, read passives and status effects below their actions, and track defeated enemies and both sides’ health in Hold Out.",
-                game: "realmarena",
             },
         ],
     },

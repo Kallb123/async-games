@@ -184,7 +184,8 @@ describe("Hold Out (§30.3)", () => {
 });
 
 describe("Hold Out's growing waves (§30.10)", () => {
-    const holdOut = () => makeGame(["a", "b"], {}, { coop: { enemy: "realm", mission: "holdOut" } });
+    // Version 11's waves: each lands a character bigger and one team-wide heal, as version 12 changes both (§39.4, §39.6).
+    const holdOut = () => makeGame(["a", "b"], {}, { rulesVersion: 11, coop: { enemy: "realm", mission: "holdOut" } });
     const standingOf = (game: RealmArenaTestGame, owner: string) => game.specificGameState.fighters.filter(fighter => fighter.owner === owner && isStanding(fighter));
 
     it("brings a warband to its squad and one character more for every wave landed, the squad's own in its order", () => {
@@ -266,7 +267,8 @@ describe("Hold Out's growing waves (§30.10)", () => {
 });
 
 describe("Hold Out's rally and the next wave told (§30.11)", () => {
-    const holdOut = (fog = false) => makeGame(["a", "b"], {}, { fog, coop: { enemy: "realm", mission: "holdOut" } });
+    // Version 11's rally: the wave heals the team itself; from version 12 each player chooses (§39.4).
+    const holdOut = (fog = false) => makeGame(["a", "b"], {}, { rulesVersion: 11, fog, coop: { enemy: "realm", mission: "holdOut" } });
     const team = (game: RealmArenaTestGame) => game.specificGameState.fighters.filter(fighter => !isWarband(fighter.owner));
 
     /** Ends round three with the team hurt and the enemy off the field, so the warbands' own turns can't touch anyone, and lands round four's wave. */
@@ -343,7 +345,7 @@ describe("Hold Out's rally and the next wave told (§30.11)", () => {
 describe("Hold Out's result (§30.10)", () => {
     it("tells the waves, who stood each round, and how the battle ended", async () => {
         seedRolls(11);
-        const { game } = await coopBattle(["a", "b"], { coop: { enemy: "realm", mission: "holdOut" } });
+        const { game } = await coopBattle(["a", "b"], { rulesVersion: 11, coop: { enemy: "realm", mission: "holdOut" } });
         const record = await recordBattle(game);
         expect(record?.waves).toBeDefined();
         const waves = record!.waves!;

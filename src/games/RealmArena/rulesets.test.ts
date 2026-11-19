@@ -113,8 +113,8 @@ describe("Realm Arena ruleset compatibility", () => {
         const { taunt: _before, ...rest } = before.ABILITIES, { taunt: _after, hatch: _hatch, carapace: _carapace, bile: _bile, ...restAfter } = after.ABILITIES;
         expect(restAfter).toEqual(rest);
         for (const id of ["OPTIONS", "ITEMS", "EFFECTS"] as const) expect(after[id]).toBe(before[id]);
-        // Not released until §39.9: nobody creates a version-12 battle yet.
-        expect(real.CURRENT_RULESET_VERSION).toBe(11);
+        // Released (§39.9): a battle created now is version 12.
+        expect(real.CURRENT_RULESET_VERSION).toBe(12);
     });
 
     it("gives the five Realm characters a loadout in v12 and changes nothing else of v11's (§40.1)", async () => {
@@ -135,7 +135,7 @@ describe("Realm Arena ruleset compatibility", () => {
         // No other character has a pool; the Scout's is the version before's.
         for (const [id, character] of Object.entries(after)) if (!(id in loadouts)) expect(character.loadout, id).toBeUndefined();
         for (const id of ["OPTIONS", "ITEMS", "EFFECTS"] as const) expect(real.rulesetFor(12)[id]).toBe(real.rulesetFor(11)[id]);
-        expect(real.CURRENT_RULESET_VERSION).toBe(11);
+        expect(real.CURRENT_RULESET_VERSION).toBe(12);
     });
 
     it("makes the rally each player's choice in v12 and changes nothing else of v11's rules (§39.4)", async () => {
@@ -144,7 +144,7 @@ describe("Realm Arena ruleset compatibility", () => {
         expect(before.RALLY_CHOICE).toBeUndefined();
         expect(after.RALLY_CHOICE).toBe(true);
         // Only the themed waves' two numbers (§39.6) and what a nest takes off a wave (§39.7) are added besides.
-        expect(after).toEqual({ ...before, RALLY_CHOICE: true, WAVE_GROWTH_POINTS: 15, WAVE_CAP: 12, NEST_POINTS: 15 });
+        expect(after).toEqual({ ...before, RALLY_CHOICE: true, WAVE_GROWTH_POINTS: 25, WAVE_CAP: 12, NEST_POINTS: 15 });
         expect(before.NEST_POINTS).toBeUndefined();
         expect(real.rulesetFor(11).RULES).toBe(real.rulesetFor(10).RULES);
     });
@@ -200,7 +200,7 @@ describe("Realm Arena ruleset compatibility", () => {
         // Every id names a character the catalogue has, and a buy is never an elite.
         for (const theme of FACTIONS.swarm.waves ?? []) for (const id of [...theme.elite ? [theme.elite] : [], ...theme.buys]) expect(CHARACTERS[id]).toBeDefined();
         expect((FACTIONS.swarm.waves ?? []).flatMap(theme => theme.buys).some(id => FACTIONS.swarm.elites?.includes(id))).toBe(false);
-        expect(RULES.WAVE_GROWTH_POINTS).toBe(15);
+        expect(RULES.WAVE_GROWTH_POINTS).toBe(25);
         expect(RULES.WAVE_CAP).toBe(12);
         expect(FACTIONS.realm.waves).toBeUndefined();
         expect(FACTIONS.miners.waves).toBeUndefined();

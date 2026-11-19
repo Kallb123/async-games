@@ -302,7 +302,9 @@ export function battleFrom(field: Battlefield, { fighters, fog, clouds, seats = 
 
 /** The side an owner fights on (§29.6): its own, in a free-for-all. */
 export function sideOf(state: Pick<BattleState, "sides">, owner: string): string {
-    return state.sides && Object.hasOwn(state.sides, owner) ? state.sides[owner] : owner;
+    // A side is a string; an owner named like something every object inherits ("constructor") finds a function, never one.
+    const side: unknown = state.sides?.[owner];
+    return typeof side === "string" ? side : owner;
 }
 
 /**
@@ -457,7 +459,10 @@ export function canAct(fighter: Fighter, context?: RulesContext): boolean {
 }
 
 /** What a character's kit says it fights with: its character's weapon, or the one its option swaps in (§23.2). Read only through `weaponOf`, which knows the battle's rules. */
-const kitWeapon = (fighter: Pick<Fighter, "character" | "option" | "loadout">, context?: RulesContext): Weapon => kitOf(fighter.character, fighter.option, context, fighter.loadout).weapon;
+const kitWeapon = (fighter: Pick<Fighter, "character" | "option" | "loadout">, context?: RulesContext): Weapon => fighter.option
+    ? kitOf(fighter.character, fighter.option, context, fighter.loadout).weapon
+    // Only an option swaps a weapon (§23.2, §40.2): without one, the kit's is its character's own, and the planner asks millions of times a battle.
+    : rulesetOf(context).CHARACTERS[fighter.character].weapon;
 
 /** The weapon this character's selected catalogue and mastery option give it. */
 export function weaponOf(state: Pick<BattleState, "rulesVersion">, fighter: Pick<Fighter, "character" | "option" | "loadout">): Weapon {
@@ -560,7 +565,10 @@ export function abilityRules(state: Pick<BattleState, "rulesVersion">, id: Abili
 export function movementOf(fighter: Fighter, context?: RulesContext): number {
     const { CHARACTERS } = rulesetOf(context);
     const { movement } = CHARACTERS[fighter.character];
-    return Math.ceil(activeEffects(fighter, context).reduce((value, [, effect]) => value * (effect.movementFactor ?? 1), movement));
+    let value = movement;
+    // Most characters carry no effect: the planner asks for every square it weighs.
+    for (const [, effect] of activeEffects(fighter, context)) value *= effect.movementFactor ?? 1;
+    return Math.ceil(value);
 }
 
 export function fighterById(state: BattleState, id: unknown): Fighter | undefined {
@@ -605,8 +613,13 @@ export function moveRules(state: BattleState, mover: Fighter): Required<MoveRule
 
 /** The AP a move of this many movement points costs: whole AP, each buying the character's allowance; a sneak pays double (§13.2). */
 export function moveAp(fighter: Fighter, cost: number, sneaking = false, context?: RulesContext): number {
+    return moveApAt(movementOf(fighter, context), cost, sneaking, context);
+}
+
+/** `moveAp` for a character whose `movementOf` is already known: what the computer asks for every square a character could reach. */
+export function moveApAt(movement: number, cost: number, sneaking = false, context?: RulesContext): number {
     const { ABILITIES } = rulesetOf(context);
-    return Math.ceil(cost / movementOf(fighter, context)) * (sneaking ? ABILITIES.sneak.ap : 1);
+    return Math.ceil(cost / movement) * (sneaking ? ABILITIES.sneak.ap : 1);
 }
 
 /**
@@ -641,7 +654,9 @@ export interface ShotOdds {
 /** Active effects, read from the match's catalogue rather than today's ids. */
 export function activeEffects(fighter: Pick<Fighter, "effects">, context?: RulesContext): [EffectId, Effect][] {
     const effects = rulesetOf(context).EFFECTS;
-    return (Object.keys(fighter.effects) as EffectId[]).filter(id => hasEffect(fighter, id) && effects[id]).map(id => [id, effects[id]!]);
+    const active: [EffectId, Effect][] = [];
+    for (const id of Object.keys(fighter.effects) as EffectId[]) if (hasEffect(fighter, id) && effects[id]) active.push([id, effects[id]!]);
+    return active;
 }
 
 /**
@@ -720,12 +735,14 @@ function temporaryProtection(state: BattleState, target: Fighter): { cover: Cove
     if (effectsCarrying(state).has("cover")) for (const [, effect] of activeEffects(target, state)) offer(effect.cover);
     if (rank[cover] === 2) return { cover, ability: abilityId };
     // A structure takes no shelter from anyone next to it (§39.7).
+    const { field } = state;
     for (const giver of isStructure(target, state) ? [] : state.fighters) {
         // Only the target and those next to it can give it cover. Every shot's
         // odds ask, so the cheap test goes first: an aura reaching enemies
         // would otherwise weigh every character on the field (§29.7).
         const self = giver.id === target.id;
-        if (!isCombatant(giver, state) || (!self && !isNeighbour(state.field, giver.square, target.square))) continue;
+        if (!self && !isNeighbour(field, giver.square, target.square)) continue;
+        if (!isCombatant(giver, state)) continue;
         const friendly = allied(state, giver.owner, target.owner);
         if (!friendly && !reachesEnemies) continue;
         for (const [id, ability] of auras) {
@@ -737,6 +754,17 @@ function temporaryProtection(state: BattleState, target: Fighter): { cover: Cove
         }
     }
     return { cover, ability: abilityId };
+}
+
+/**
+ * Whether a character could give another cover with an ability of its own, the
+ * shield wall's kind (`temporaryProtection`): the only way a shot's odds read
+ * where someone other than the shooter and its target stands. A planner keys
+ * what it remembers about a shot by who can, and not by everyone.
+ */
+export function givesCover(state: BattleState, fighter: Fighter): boolean {
+    const { ABILITIES } = rulesetOf(state);
+    return abilitiesOf(fighter, state).some(id => ABILITIES[id]?.cover !== undefined);
 }
 
 /** The strongest temporary cover, from an aura or effect. */
@@ -813,8 +841,13 @@ function breakdownOf(base: number, factors: OddsFactor[]): OddsBreakdown {
 
 /** What each effect on a character adds to every shot at it, one factor per effect: Marked's, Corroded's (§23.2, §31.2). */
 function effectFactors(target: Fighter, context?: RulesContext): OddsFactor[] {
+    return hitBonusEffects(context).flatMap(([effect, amount]): OddsFactor[] => hasEffect(target, effect) ? [{ kind: "effect", amount, effect }] : []);
+}
+const HIT_BONUS_EFFECTS = new WeakMap<object, readonly [EffectId, number][]>();
+
+/** Per catalogue, the few effects that move the odds at all: every shot and strike asks. */
+function hitBonusEffects(context?: RulesContext): readonly [EffectId, number][] {
     const { EFFECTS } = rulesetOf(context);
-    // Per catalogue, the few effects that move the odds at all: every shot and strike asks.
     let moving = HIT_BONUS_EFFECTS.get(EFFECTS);
     if (!moving) {
         moving = (Object.keys(EFFECTS) as EffectId[]).flatMap((effect): [EffectId, number][] => {
@@ -823,9 +856,15 @@ function effectFactors(target: Fighter, context?: RulesContext): OddsFactor[] {
         });
         HIT_BONUS_EFFECTS.set(EFFECTS, moving);
     }
-    return moving.flatMap(([effect, amount]): OddsFactor[] => hasEffect(target, effect) ? [{ kind: "effect", amount, effect }] : []);
+    return moving;
 }
-const HIT_BONUS_EFFECTS = new WeakMap<object, readonly [EffectId, number][]>();
+
+/** What `effectFactors` adds up to, without listing them. */
+function effectsBonus(target: Fighter, context?: RulesContext): number {
+    let total = 0;
+    for (const [effect, amount] of hitBonusEffects(context)) if (hasEffect(target, effect)) total += amount;
+    return total;
+}
 
 /**
  * What a melee strike's chance to hit is (§13.3): `MELEE_ACCURACY` plus what
@@ -840,7 +879,8 @@ export function strikeBreakdown(state: Pick<BattleState, "rulesVersion">, target
 
 /** A strike's chance to hit, 0–100 (`strikeBreakdown`). */
 export function strikeChance(state: Pick<BattleState, "rulesVersion">, target: Fighter): number {
-    return strikeBreakdown(state, target).chance;
+    const { MELEE_ROLLS, MELEE_ACCURACY } = ruleValuesOf(state);
+    return MELEE_ROLLS ? clampPercent(MELEE_ACCURACY + effectsBonus(target, state)) : ROLL_SIDES;
 }
 
 /** A shot's chance worked out once: its breakdown, the graze band above it, and the cover it was read against. */
@@ -852,32 +892,74 @@ interface ShotBreakdown extends OddsBreakdown {
     hunkered: boolean;
 }
 
-function shotBreakdown(state: BattleState, attacker: Fighter, target: Fighter, weapon: Extract<Weapon, { kind: "ranged" }>, kind: ShotKind): ShotBreakdown {
-    const { FAR_SHOT_DISTANCE, COVER_PENALTY, HIGH_GROUND_RISE, HIGH_GROUND_BONUS, OVERWATCH_PENALTY, GRAZE_BAND } = ruleValuesOf(state);
+/** Everything that moves a shot's chance but the effects on its target, worked out once: what `shotBreakdown` lists and `shotOdds` sums. */
+interface ShotTerms {
+    far: boolean;
+    cover: Cover;
+    shield: boolean;
+    ability?: AbilityId;
+    hunkered: boolean;
+    doubled?: "hunkered" | "far";
+    coverAmount: number;
+    highGround: number;
+    smoke: number;
+    aimedShot: number;
+    overwatch: number;
+}
+
+function shotTerms(state: BattleState, attacker: Fighter, target: Fighter, kind: ShotKind): ShotTerms {
+    const { FAR_SHOT_DISTANCE, COVER_PENALTY, HIGH_GROUND_RISE, HIGH_GROUND_BONUS, OVERWATCH_PENALTY } = ruleValuesOf(state);
     const { ABILITIES, ITEMS } = rulesetOf(state);
     const { field } = state;
     // Measured as the range is. A hunkered target's cover is doubled already, and the two don't stack.
     const far = FAR_SHOT_DISTANCE !== null && distance(field, attacker.square, target.square) > FAR_SHOT_DISTANCE;
 
     const sideCover = coverAgainst(field, target.square, attacker.square);
-    const temporary = sideCover === "full" ? { cover: "none" as const } : temporaryProtection(state, target);
+    const temporary = sideCover === "full" ? { cover: "none" as const, ability: undefined } : temporaryProtection(state, target);
     const rank = { none: 0, half: 1, full: 2 };
     const shield = rank[temporary.cover] > rank[sideCover];
     const cover = shield ? temporary.cover : sideCover;
     const hunkered = hasEffect(target, "hunkered");
     const doubled = hunkered ? "hunkered" : far ? "far" : undefined;
+    return {
+        far, cover, shield, ability: shield ? temporary.ability : undefined, hunkered, doubled,
+        coverAmount: -COVER_PENALTY[cover] * (doubled ? 2 : 1),
+        highGround: riseOf(field, attacker.square, target.square) >= HIGH_GROUND_RISE ? HIGH_GROUND_BONUS : 0,
+        smoke: smokeSquares(state).has(target.square) ? -ITEMS.smokePot.hitPenalty : 0,
+        aimedShot: kind === "aimedShot" ? ABILITIES.aimedShot.hitBonus : 0,
+        overwatch: kind === "overwatch" ? -OVERWATCH_PENALTY : 0,
+    };
+}
+
+/** What a shot's odds say besides its chance, however they were summed: the graze band, and the cover, range and stance that moved it. */
+function shotTail(raw: number, chance: number, grazeBand: number, cover: Cover, far: boolean, hunkered: boolean) {
+    return { grazeChance: clampPercent(raw + grazeBand) - chance, flanked: cover === "none", cover, far, hunkered };
+}
+
+function shotBreakdown(state: BattleState, attacker: Fighter, target: Fighter, weapon: Extract<Weapon, { kind: "ranged" }>, kind: ShotKind): ShotBreakdown {
+    const { GRAZE_BAND } = ruleValuesOf(state);
+    const { far, cover, shield, ability, hunkered, doubled, coverAmount, highGround, smoke, aimedShot, overwatch } = shotTerms(state, attacker, target, kind);
     const factors: OddsFactor[] = [
-        { kind: "cover", amount: -COVER_PENALTY[cover] * (doubled ? 2 : 1), cover, doubled, shield, ...(shield && temporary.ability ? { ability: temporary.ability } : {}) },
-        { kind: "highGround", amount: riseOf(field, attacker.square, target.square) >= HIGH_GROUND_RISE ? HIGH_GROUND_BONUS : 0 },
+        { kind: "cover", amount: coverAmount, cover, doubled, shield, ...(ability ? { ability } : {}) },
+        { kind: "highGround", amount: highGround },
         ...effectFactors(target, state),
-        { kind: "smoke", amount: smokeSquares(state).has(target.square) ? -ITEMS.smokePot.hitPenalty : 0 },
-        { kind: "aimedShot", amount: kind === "aimedShot" ? ABILITIES.aimedShot.hitBonus : 0 },
-        { kind: "overwatch", amount: kind === "overwatch" ? -OVERWATCH_PENALTY : 0 },
+        { kind: "smoke", amount: smoke },
+        { kind: "aimedShot", amount: aimedShot },
+        { kind: "overwatch", amount: overwatch },
     ];
     const breakdown = breakdownOf(weapon.accuracy, factors.filter(factor => factor.amount !== 0));
     // Grazes are the rolls that miss by `GRAZE_BAND` or less, counted from the
     // raw chance: a shot at −10% can't so much as graze.
-    return { ...breakdown, grazeChance: clampPercent(breakdown.raw + GRAZE_BAND) - breakdown.chance, flanked: cover === "none", cover, far, hunkered };
+    return { ...breakdown, ...shotTail(breakdown.raw, breakdown.chance, GRAZE_BAND, cover, far, hunkered) };
+}
+
+/** `shotBreakdown`'s chance, graze band and cover without the list of what moved it: what the planner asks thousands of times a turn. */
+function shotFigures(state: BattleState, attacker: Fighter, target: Fighter, weapon: Extract<Weapon, { kind: "ranged" }>, kind: ShotKind): Pick<ShotBreakdown, "chance" | "grazeChance" | "cover" | "far" | "hunkered" | "flanked"> {
+    const { GRAZE_BAND } = ruleValuesOf(state);
+    const { far, cover, hunkered, coverAmount, highGround, smoke, aimedShot, overwatch } = shotTerms(state, attacker, target, kind);
+    const raw = weapon.accuracy + coverAmount + highGround + effectsBonus(target, state) + smoke + aimedShot + overwatch;
+    const chance = clampPercent(raw);
+    return { chance, ...shotTail(raw, chance, GRAZE_BAND, cover, far, hunkered) };
 }
 
 /**
@@ -902,7 +984,7 @@ export function shotOdds(state: BattleState, attacker: Fighter, target: Fighter,
     const weapon = weaponOf(state, attacker);
     if (weapon.kind !== "ranged") return undefined;
     if (!inRange(state.field, attacker.square, target.square, weapon.range)) return undefined;
-    const { chance, grazeChance, cover, far, hunkered, flanked } = shotBreakdown(state, attacker, target, weapon, kind);
+    const { chance, grazeChance, cover, far, hunkered, flanked } = shotFigures(state, attacker, target, weapon, kind);
     const ability = kind === "attack" || kind === "overwatch" ? undefined : rulesetOf(state).ABILITIES[kind]!;
     const struck = (ability?.damage ?? weapon.damage) + (flanked ? FLANK_BONUS : 0);
     const via = ability ? "ability" : "weapon";
@@ -1541,22 +1623,43 @@ export function blastedIn(events: readonly BattleEvent[]): Square[] {
 }
 
 /**
- * A deep copy of plain data — a battle's fighters, which are nothing but
- * numbers, strings, arrays and plain objects — that a rule can change without
- * touching what it was handed. What `structuredClone` makes, many times
- * quicker, since the computer copies the fighters for every action it weighs.
+ * A deep copy of a battle's fighters — which are nothing but numbers, strings,
+ * arrays and plain objects — that a rule can change without touching what it
+ * was handed. What `structuredClone` makes, many times quicker, since the
+ * computer copies the fighters for every action it weighs. Its loadout is
+ * shared, not copied: it is set once at muster and never changed after, and one
+ * array is what `kitOf` recognises a fighter's kit by (characters.ts), so a copy
+ * that kept it would be a kit looked up afresh for every action weighed.
  */
-function copyOf<T>(value: T): T {
-    if (Array.isArray(value)) return value.map(copyOf) as T;
-    if (value === null || typeof value !== "object") return value;
+function copyFighters(fighters: readonly Fighter[]): Fighter[] {
+    return fighters.map(fighter => {
+        const copy: Record<string, unknown> = {};
+        for (const key in fighter) {
+            const item = (fighter as unknown as Record<string, unknown>)[key];
+            copy[key] = key === "loadout" || item === null || typeof item !== "object" ? item : copyOf(item);
+        }
+        return copy as unknown as Fighter;
+    });
+}
+
+/** `copyFighters`' copy of anything nested: an array, or a plain object of numbers, strings and more of both. */
+function copyOf<T extends object>(value: T): T {
+    if (Array.isArray(value)) {
+        const copy = value.slice();
+        for (let i = 0; i < copy.length; i++) if (copy[i] !== null && typeof copy[i] === "object") copy[i] = copyOf(copy[i]);
+        return copy as T;
+    }
     const copy: Record<string, unknown> = {};
-    for (const key of Object.keys(value)) copy[key] = copyOf((value as Record<string, unknown>)[key]);
+    for (const key in value) {
+        const item = (value as Record<string, unknown>)[key];
+        copy[key] = item !== null && typeof item === "object" ? copyOf(item) : item;
+    }
     return copy as T;
 }
 
 /** A working copy of the battle that an action changes as it resolves, writing down what happens. */
 function resolver(state: BattleState, roll: Roll) {
-    const fighters = copyOf(state.fighters) as Fighter[];
+    const fighters = copyFighters(state.fighters);
     const battle: BattleState = { ...state, fighters };
     const events: BattleEvent[] = [];
     const get = (id: number): Fighter => {
@@ -1763,11 +1866,13 @@ function walk(state: BattleState, run: ReturnType<typeof resolver>, mover: Fight
 
 /**
  * Takes an action `check` allows, spending its AP and rolling as it goes.
- * Throws if `check` refuses it.
+ * Throws if `check` refuses it. A caller that has just asked `check` about this
+ * very action on this very battle — the computer, which plays each action out
+ * several times — hands over what it said (`allowed`) rather than asking again.
  */
-export function act(state: BattleState, player: string, action: Action, roll: Roll): Outcome {
+export function act(state: BattleState, player: string, action: Action, roll: Roll, known?: Check): Outcome {
     const { ABILITIES, ITEMS, EFFECTS } = rulesetOf(state);
-    const checked = check(state, player, action);
+    const checked = known ?? check(state, player, action);
     if ("refused" in checked) throw new Error(checked.refused);
 
     const run = resolver(state, roll);

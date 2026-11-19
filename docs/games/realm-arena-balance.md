@@ -34,9 +34,10 @@ across 144 battles the team won none.
 - Each cell is the team's win rate, then the average round it was overrun in
   when it lost. A 2-player battle lasts 15 rounds and a 3-player one lasts 13,
   with waves landing at rounds 4, 7, 10 and 13 in both.
-- The levers were environment switches in a scratch copy of the rules, never
-  committed (see *How each lever was built*). Repeating a run means
-  re-applying them.
+- The levers were applied in a scratch copy of the rules, never committed (see
+  *How each lever was built*). From one commit, `npm run ra-balance -- --rules 12
+  --set RULES.WAVE_GROWTH_POINTS=25,CHARACTERS.broodQueen.hp=24` overrides
+  numbers in the catalogue being fought, and names them in the scenario.
 
 ## Baseline
 
@@ -472,6 +473,79 @@ the noise of 40 battles a cell. They stay on, as the game's default.
 
 Nothing is tuned here: the defaults (§40.1) and the levers are §39.9's to
 balance, with the rest of version 12.
+
+## Rules version 12's release (§39.9)
+
+§39.9 tunes version 12 as a whole and releases it. The harness at version 12
+against the step-0 baseline (version 11, `main` at 3ffdf4e): Hold Out against
+the Swarm, every battlefield and team size — Solo on the Ruined Fort, two and
+three players on the gate forts, two to four on the Sacked Fort, three and four
+on the Sunken Village — at Easy, Normal and Hard, with and without fog, seeds
+1–200 a cell. The levers were tried as `--set` overrides of one commit.
+
+**The planner first.** Version 12's waves reach twelve characters a warband,
+and a team of four's Hold Out turn ran into the warband's two-second deadline
+(`planner.pace.test.ts` failed once 12 was current). Two rounds of planner
+speedups, every choice unchanged, brought the slowest turn back inside its
+budget. They matter to these numbers too: a warband turn cut off at the
+deadline is a Swarm that stopped early, so runs on the slower planner (the
+§39.8 and §40.5 runs, and this pass's first probes) read the Swarm weaker than
+it plays. The tables below are all on the faster planner.
+
+**The lever.** `WAVE_GROWTH_POINTS`, the first in §39.9's order, was enough;
+the nests, Reinforce, the elites' HP, the steps and the team's HP are as they
+were. Normal, no fog, seeds 1–100 a cell, at 5542f12:
+
+| Cell | Growth 15 | 20 | **25** |
+|---|---:|---:|---:|
+| Solo, Ruined Fort | 72% | 27% | **39%** |
+| 2 players, gate fort | 98% | 86% | **70%** |
+| 3 players, gate fort | 97% | 81% | **73%** |
+| 2 players, Sacked Fort | 96% | 80% | **61%** |
+| 3 players, Sacked Fort | 82% | 62% | **40%** |
+| 4 players, Sacked Fort | 95% | 75% | **53%** |
+| 3 players, Sunken Village | 73% | 34% | **24%** |
+| 4 players, Sunken Village | 77% | 46% | **28%** |
+| **All** | **86%** | **61%** | **49%** |
+
+At 15 the team wins almost everywhere; 20 leaves three cells above three
+quarters; 25 is the one value with every cell within a point of the band and
+the whole at the bottom of the target (a half to two thirds). Version 12
+ships with 25.
+
+**Version 12 against the baseline**, team win rate, 200 battles a cell
+(version 12 at abcbaab with growth 25, whose Normal cells agree with the
+100-battle column above within a few points):
+
+| Cell | Easy | Easy, fog | Normal | Normal, fog | Hard | Hard, fog |
+|---|---:|---:|---:|---:|---:|---:|
+| Solo, Ruined Fort | 75 → 50 | 60 → 44 | 68 → 40 | 65 → 41 | 52 → 34 | 42 → 50 |
+| 2 players, gate fort | 98 → 93 | 92 → 93 | 98 → 74 | 94 → 65 | 80 → 61 | 81 → 55 |
+| 3 players, gate fort | 93 → 90 | 77 → 67 | 85 → 74 | 86 → 65 | 68 → 60 | 85 → 65 |
+| 2 players, Sacked Fort | 92 → 87 | 86 → 84 | 96 → 65 | 53 → 38 | 94 → 26 | 77 → 10 |
+| 3 players, Sacked Fort | 94 → 72 | 76 → 56 | 97 → 40 | 87 → 27 | 85 → 22 | 67 → 19 |
+| 4 players, Sacked Fort | 99 → 94 | 94 → 62 | 100 → 57 | 95 → 43 | 94 → 19 | 81 → 11 |
+| 3 players, Sunken Village | 73 → 63 | 8 → 3 | 77 → 28 | 8 → 3 | 72 → 30 | 22 → 6 |
+| 4 players, Sunken Village | 90 → 60 | 8 → 2 | 88 → 26 | 28 → 2 | 69 → 12 | 23 → 7 |
+
+**What it says.**
+
+- **Normal is where §39.9 aimed it.** About half the battles won, every cell
+  from a quarter to three quarters (the three-player Sunken Village at the
+  edge, 24–28%), where version 11 won nine battles in ten.
+- **The difficulties now mean something.** Under version 11 Hard was often
+  no harder than Normal (the two-player Sacked Fort won 94% on Hard); now
+  each step down the ladder costs the team, cell by cell, with Easy a
+  comfortable win and Hard a fight most teams lose.
+- **Fog on the Sunken Village is the planner's, not the rules'.** The team
+  wins almost none of those battles at any growth (0–6% from 15 to 25) or
+  difficulty, and version 11 won 8%. In fog the planner's team doesn't scout
+  the village's lanes and hedges, so it is caught out of position: no rule
+  value moves it, and it is left for the planner (§29.7), not tuned here. Fog
+  elsewhere costs the team ten to twenty points, as it always has.
+- **Solo stays the hardest seat to read.** One planner-played squad of four
+  over fifteen rounds is the noisiest cell (27–72% across the growths, not in
+  order), and it sits at about 40% on Normal either way.
 
 ## How each lever was built
 

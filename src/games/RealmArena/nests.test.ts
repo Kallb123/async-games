@@ -38,7 +38,7 @@ const nestsOf = (game: RealmArenaTestGame, owner?: string) => fighters(game).fil
 const combatantsOf = (game: RealmArenaTestGame, owner: string) => fighters(game).filter(fighter => fighter.owner === owner && isCombatant(fighter, CONTEXT));
 const text = (game: RealmArenaTestGame) => game.gameState.history.map(entry => entry.text);
 /** A warband's budget for `round`'s wave with no nest taken off it. */
-const base = (gs: RealmArenaTestGame["specificGameState"], round: number) => warbandBudgetOf(gs) + 15 * Math.floor((round - 1) / 3);
+const base = (gs: RealmArenaTestGame["specificGameState"], round: number) => warbandBudgetOf(gs) + ruleValuesOf(CONTEXT).WAVE_GROWTH_POINTS! * Math.floor((round - 1) / 3);
 /** Leaves `nest` at `hp` under `effect`, set by `setter`. */
 const afflictNest = (gs: RealmArenaTestGame["specificGameState"], nest: Fighter, effect: "burning" | "poisoned", setter: number, hp = 1) => {
     gs.fighters = gs.fighters.map(one => one.id === nest.id ? { ...afflicted({ ...one, hp }, effect, setter, CONTEXT)!.fighter, hp } : one);

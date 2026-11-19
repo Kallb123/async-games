@@ -1,7 +1,6 @@
 // Rules version 12 (realm-arena.md §39): the Swarm's new kit and the changes
-// that answer it. NOT yet released: `CURRENT_RULESET_VERSION` stays 11, so no
-// battle is created under it and each PR of §39 may still edit this file, until
-// §39.9 releases it. Then it is shipped and never edited; see ../rulesets.ts.
+// that answer it. Released (§39.9) as `CURRENT_RULESET_VERSION`: every
+// battle created now is under it, so it is shipped and never edited; see ../rulesets.ts.
 import type { Ability, AbilityId, Character, CharacterId, Faction, FactionId } from "../characters";
 import { catalogueV11 } from "./v11";
 
@@ -69,9 +68,9 @@ const FACTIONS = {
 } satisfies Partial<Record<FactionId, Faction>>;
 
 // §39.4: the rally is each player's choice, not a heal the wave hands out.
-// §39.6: a themed wave's budget grows 15 points a wave, and a wave never takes a warband past 12.
+// §39.6: a themed wave's budget grows 25 points a wave, and a wave never takes a warband past 12.
 // §39.7: each nest destroyed since a warband's last wave takes 15 points off the next one's budget.
-const RULES = { ...catalogueV11.RULES, RALLY_CHOICE: true, WAVE_GROWTH_POINTS: 15, WAVE_CAP: 12, NEST_POINTS: 15 };
+const RULES = { ...catalogueV11.RULES, RALLY_CHOICE: true, WAVE_GROWTH_POINTS: 25, WAVE_CAP: 12, NEST_POINTS: 15 };
 
 export const catalogueV12 = {
     ...catalogueV11,

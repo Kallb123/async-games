@@ -252,7 +252,8 @@ it("the computer's new actions remain legal and deterministic", () => {
 });
 
 it("keeps old games stamped and undoes bonus AP with its cooldown and attack count", async () => {
-    const game = makeGame();
+    // Version 11's Man-at-arms keeps Slash and Dash in its kit; from version 12 it picks two at muster (§40).
+    const game = makeGame(undefined, {}, { rulesVersion: 11 });
     await musterAll(game);
     const gs = game.specificGameState;
     // These squares are open in the battlefield's bottom deployment area.
@@ -263,7 +264,7 @@ it("keeps old games stamped and undoes bonus AP with its cooldown and attack cou
     expect(gs.fighters.find(one => one.id === own.id)!.ap).toBe(6);
     expect((await play(game, cmd(RealmArenaUndo, "a"))).outcome.validMove).toBe(true);
     expect(gs.fighters).toEqual(before);
-    expect(gs.rulesVersion).toBe(CURRENT_RULESET_VERSION);
+    expect(gs.rulesVersion).toBe(11);
     const old = makeGame(undefined, undefined, { rulesVersion: 8 });
     await musterAll(old);
     expect(old.specificGameState.rulesVersion).toBe(8);
@@ -291,7 +292,8 @@ it("scrubs hidden enemy ability names, movement labels and area kinds", () => {
 });
 
 it("replays a recorded Bouncing Arrow without drawing fresh randomness", async () => {
-    const game = makeGame();
+    // Version 11's Archer has Bouncing Arrow in its kit; from version 12 a loadout picks it (§40).
+    const game = makeGame(undefined, {}, { rulesVersion: 11 });
     await musterAll(game);
     for (let turn = 0; turn < 24 && !game.complete; turn++) {
         const state = battleOf(game);

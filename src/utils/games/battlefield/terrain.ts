@@ -307,8 +307,8 @@ export function facingTowards(field: Pick<Battlefield, "width">, from: Square, t
 
 /** Whether two squares touch, along a side or at a corner. */
 export function isNeighbour(field: Pick<Battlefield, "width">, a: Square, b: Square): boolean {
-    const one = coordsOf(field, a), other = coordsOf(field, b);
-    return Math.max(Math.abs(one.col - other.col), Math.abs(one.row - other.row)) === 1;
+    const { width } = field;
+    return Math.max(Math.abs(a % width - b % width), Math.abs(Math.floor(a / width) - Math.floor(b / width))) === 1;
 }
 
 /**

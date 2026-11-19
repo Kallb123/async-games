@@ -329,13 +329,13 @@ export function loadoutOf(subject: { character: CharacterId; loadout?: readonly 
     return pool.entries.map(entry => entry.ability).filter(id => picked.includes(id));
 }
 
-/** Kits are reused, starter, swapped and picked alike: the planner reads them thousands of times a turn. */
+/** Kits are reused, starter, swapped and picked alike: the planner reads them thousands of times a turn. The default kit per character, with nothing picked and no weapon swapped, is the hottest. */
 const STARTER_KITS = new WeakMap<Character, Kit>();
 const SWAPPED_KITS = new WeakMap<Character, WeakMap<CharacterOption, Kit>>();
 /** A character with a pool: its kits by weapon option and the loadout as stored (a fighter's is in pool order, §40.3). */
 const LOADOUT_KITS = new WeakMap<Character, Map<string, Kit>>();
-/** The planner's hot path: the default kit per character, with nothing picked and no weapon swapped. */
-const DEFAULT_LOADOUT_KITS = new WeakMap<Character, Kit>();
+/** A loadout array's kit, per character: a fighter keeps the one array it was mustered with (a planned copy of it shares that array), and asks for its kit thousands of times a turn. */
+const PICKED_KITS = new WeakMap<readonly AbilityId[], WeakMap<Character, Kit>>();
 export function kitOf(character: CharacterId, option?: OptionId, context?: RulesContext, loadout?: readonly AbilityId[]): Kit {
     const { CHARACTERS, OPTIONS } = rulesetOf(context);
     const starter = CHARACTERS[character];
@@ -343,11 +343,16 @@ export function kitOf(character: CharacterId, option?: OptionId, context?: Rules
     const swap: CharacterOption | undefined = option ? OPTIONS[option] : undefined;
     if (starter.loadout) {
         // Only a muster's checked list is ever stored; anything else reads as the defaults, never a throw.
-        if (loadout !== undefined && !Array.isArray(loadout)) loadout = undefined;
+        if (!Array.isArray(loadout)) loadout = undefined;
         // §40.2: an ability option isn't a swap here, it's a pool entry; only a weapon swaps.
         const weaponSwap = swap && swap.character === character && "weapon" in swap ? swap : undefined;
-        const plain = weaponSwap || loadout ? undefined : DEFAULT_LOADOUT_KITS.get(starter);
-        if (plain) return plain;
+        if (!weaponSwap && !loadout) {
+            const plain = STARTER_KITS.get(starter);
+            if (plain) return plain;
+        }
+        // The same array again, which is what a fighter hands in every time: no key to build.
+        const picked = !weaponSwap && loadout ? PICKED_KITS.get(loadout)?.get(starter) : undefined;
+        if (picked) return picked;
         const key = `${weaponSwap ? option : ""}|${loadout ? loadout.join() : ""}`;
         let kits = LOADOUT_KITS.get(starter);
         if (!kits) LOADOUT_KITS.set(starter, kits = new Map());
@@ -356,7 +361,12 @@ export function kitOf(character: CharacterId, option?: OptionId, context?: Rules
             kit = Object.freeze({ weapon: weaponSwap ? weaponSwap.weapon : weapon, abilities: Object.freeze([...starter.loadout.fixed, ...loadoutOf({ character, loadout }, context)!]) });
             kits.set(key, kit);
         }
-        if (!weaponSwap && !loadout) DEFAULT_LOADOUT_KITS.set(starter, kit);
+        if (!weaponSwap && !loadout) STARTER_KITS.set(starter, kit);
+        if (!weaponSwap && loadout) {
+            let byStarter = PICKED_KITS.get(loadout);
+            if (!byStarter) PICKED_KITS.set(loadout, byStarter = new WeakMap());
+            byStarter.set(starter, kit);
+        }
         return kit;
     }
     if (!swap || swap.character !== character) {

@@ -49,9 +49,9 @@ export const meta: GameMeta = {
     // Version 12 adds the rally's choice (§39.4): a rally action, sent by each
     // player of the team as a wave lands in the battles created under rules
     // version 12. An older tab can't send it, so it would wait out its turn.
-    // The loadout a muster's picks carry (§40) needs no version of its own: rules
-    // version 12 is unreleased, and by the time a battle can be created under it
-    // every client sends version 12 or later.
+    // The loadout a muster's picks carry (§40) needs no version of its own: a
+    // battle is created under rules version 12 only by a deploy whose clients
+    // send command version 12 or later.
     commandVersion: 12,
     oldestReplayableCommandVersion: 2,
     available: true,

@@ -35,8 +35,8 @@ import { costsFrom, DEFAULT_CLIMB, reachFrom, pathTo, type Reach } from "@/utils
 import { battlefieldWith, coordsOf, type Battlefield, type Square } from "@/utils/games/battlefield/terrain";
 import { type AbilityId, type CharacterId } from "./characters";
 import {
-    abilitiesOf, alliesWithin, activeEffects, act, canAct, allied, areaAround, blastedIn, burstArea, CENTRE, centrePoints, check, fighterById, isCombatant, isStanding, isStructure, landedSmoke,
-    damageTo, dodgeReach, inMeleeReach, leapTargets, maxHpOf, moveAp, movementOf, reachOf, ROLL_SIDES, shotOdds, squadSight, strikeChance, watchedSquares, weaponOf, weaponReaches,
+    abilitiesOf, alliesWithin, activeEffects, act, canAct, allied, areaAround, blastedIn, burstArea, CENTRE, centrePoints, check, type Check, fighterById, isCombatant, isStanding, isStructure, landedSmoke,
+    damageTo, dodgeReach, givesCover, inMeleeReach, leapTargets, maxHpOf, moveApAt, movementOf, reachOf, ROLL_SIDES, shotOdds, squadSight, strikeChance, watchedSquares, weaponOf,
     type Action, type BattleEvent, type BattleState, type Fighter, type FogGhost, type ShotOdds,
 } from "./rules";
 import { ACTION_AIMS, standingAt, rangeKindOf, rangeSquares, reactionPreviews, rollsToHit, shotOf, targetKindOf, targetsOf, type ActionKind } from "./tactics";
@@ -143,17 +143,25 @@ const LEAST_GAIN = 1e-6;
 export interface TurnMemo {
     /**
      * Each square's Exposure and Threat for a character standing on it
-     * (`harmAt`), by everything they read but where it stands now and the AP
-     * it has (`harmKnown`): neither of which they read, so they last while it
+     * (`harmAt`), by what the battle shares (the outer key) and then the
+     * character (the inner), together everything they read but where it stands
+     * now and the AP it has (`harmKnown`): neither of which they read, so they last while it
      * moves, until it or an enemy is hurt, an enemy moves or comes into
      * sight, a shield wall or a smoke cloud goes up or down, or the ground is
      * blasted.
      */
-    harm: Map<string, Map<Square, Harm>>;
+    harm: Map<string, Map<string, Map<Square, Harm>>>;
     /** The last walk from the squares hunted (§30.3), for each climb: the team stands still through a warband's turn, so plan after plan hunts the same squares. */
     hunts: Map<number, { hunted: string; costs: Float64Array }>;
     /** Each battlefield seen this turn, numbered by its place here for the keys above: a blast makes a new one. */
     fields: Battlefield[];
+    /**
+     * Every character's walk (`reachOf`) as of the last plan, by who walks, from
+     * where, with what to spend: another plan over the same ground with
+     * everyone on the same squares (`stood`) — an action that moved no one —
+     * has them already.
+     */
+    reaches?: { stood: string; walks: Map<string, Reach> };
 }
 
 export const turnMemo = (): TurnMemo => ({ harm: new Map(), hunts: new Map(), fields: [] });
@@ -188,6 +196,8 @@ interface Plan {
     toCentre: (fighter: Fighter) => number;
     /** Every square a move by one of its characters would set off a reaction on (`watchedSquares`): worked out once, when a move first asks. */
     watched: () => ReadonlySet<Square>;
+    /** Who stands where on which ground: what a walk (`reachOf`) is read against besides who walks, worked out once, when first asked. */
+    stood: () => string;
 }
 
 /**
@@ -242,10 +252,11 @@ function planFor(view: BattleState, owner: string, round: number, memo: TurnMemo
         const cost = (hunted.length > 0 ? huntWalk(memo, field, hunted, huntKey, climb) : centreWalk(field, climb))[fighter.square];
         return Number.isFinite(cost) ? cost : field.width + field.height;
     };
-    let watched: ReadonlySet<Square> | undefined;
+    let watched: ReadonlySet<Square> | undefined, stood: string | undefined;
     const holdOut = hunt !== undefined;
     return {
         state, owner, round, memo, toCentre, watched: () => watched ??= watchedSquares(state, owner),
+        stood: () => stood ??= `${fieldId(memo, field)}|${state.rulesVersion ?? ""}|${state.fighters.filter(isStanding).map(one => `${one.id}:${one.square}`).join()}`,
         ownWorth: holdOut ? HOLD_OUT_OWN_WORTH : 1, centreCounts: !holdOut,
     };
 }
@@ -374,9 +385,17 @@ function optionsFor(plan: Plan, fighter: Fighter): Action[] {
     });
 }
 
+/** What `check` said of each action `allowed` let through, for `judge` to play it out on: the same battle, the same answer. */
+const CHECKED = new WeakMap<Action, Check>();
+
 /** The actions `check` allows. */
 function allowed({ state, owner }: Plan, actions: Action[]): Action[] {
-    return actions.filter(action => !("refused" in check(state, owner, action)));
+    return actions.filter(action => {
+        const checked = check(state, owner, action);
+        if ("refused" in checked) return false;
+        CHECKED.set(action, checked);
+        return true;
+    });
 }
 
 /** Every way to pick `count` of a list, in order. */
@@ -395,17 +414,31 @@ function groupsOf<T>(list: readonly T[], count: number): T[][] {
  * lane. Ties go to the lower square, and so does the order they're played out
  * in.
  */
+/** `reachOf` for the plan's battle, kept for the next plan over the same ground and the same squares (`TurnMemo.reaches`). */
+function walkOf(plan: Plan, fighter: Fighter, sneaking: boolean): Reach {
+    const { state, memo } = plan;
+    const stood = plan.stood();
+    if (memo.reaches?.stood !== stood) memo.reaches = { stood, walks: new Map() };
+    const key = `${fighter.id},${fighter.owner},${fighter.character},${fighter.square},${fighter.ap},${movementOf(fighter, state)},${sneaking}`;
+    let reach = memo.reaches.walks.get(key);
+    if (!reach) memo.reaches.walks.set(key, reach = reachOf(state, fighter, sneaking));
+    return reach;
+}
+
 function movesFor(plan: Plan, fighter: Fighter, kind: "move" | "sneak"): Action[] {
     const { state } = plan;
     const sneaking = kind === "sneak";
-    const reach = reachOf(state, fighter, sneaking);
+    const reach = walkOf(plan, fighter, sneaking);
     // A sneak sets nothing off, so has no way round to look for.
     const watched = sneaking && rulesetOf(state).ABILITIES.sneak.movesWithoutReactions ? new Set<Square>() : plan.watched();
     let covered: Reach | undefined;
     const taken = new Set(state.fighters.filter(isStanding).map(one => one.square));
     const ranked: { square: Square; value: number }[] = [];
     const enemies = enemiesOf(state, fighter.owner);
-    const known = harmKnown(plan, fighter, enemies);
+    const known = harmKnown(plan, state, enemies)(fighter);
+    // One stand-in for every square, moved in turn: nothing keeps it past the terms it is read for.
+    const moved = { ...fighter };
+    const movement = movementOf(fighter, state);
     reach.costs.forEach((cost, square) => {
         if (cost === Infinity || square === reach.from || taken.has(square) || !state.field.tiles[square].terrain.standable) return;
         // Read against the battle as it stands rather than one with the
@@ -413,10 +446,9 @@ function movesFor(plan: Plan, fighter: Fighter, kind: "move" | "sneak"): Action[
         // a square: its terms read the others' squares, and nobody else's
         // reads where it stands — its own shield wall shelters its allies,
         // never itself or an enemy.
-        const moved = { ...fighter, square, ap: fighter.ap - moveAp(fighter, cost, sneaking, plan.state) };
-        let harm = known.get(square);
-        if (!harm) known.set(square, harm = harmAt(state, moved, enemies));
-        ranked.push({ square, value: standingTerms(plan, state, moved, enemies, harm) });
+        moved.square = square;
+        moved.ap = fighter.ap - moveApAt(movement, cost, sneaking, state);
+        ranked.push({ square, value: standingTerms(plan, state, moved, enemies, harmIn(known, state, moved, enemies)) });
     });
     ranked.sort((a, b) => b.value - a.value || a.square - b.square);
     const moves: Action[] = [];
@@ -451,7 +483,7 @@ function judge(plan: Plan, action: Action): number {
     const { state, owner } = plan;
     let value = 0;
     for (const { roll, weight } of rollsFor(state, action)) {
-        const { fighters, events } = act(state, owner, action, () => roll);
+        const { fighters, events } = act(state, owner, action, () => roll, CHECKED.get(action));
         const blasted = blastedIn(events);
         const field = blasted.length > 0 ? battlefieldWith(state.field, blasted) : state.field;
         value += weight * score(plan, { ...state, field, fighters }, events);
@@ -516,20 +548,24 @@ function score(plan: Plan, battle: BattleState, events: readonly BattleEvent[]):
         }
     }
     const enemies = enemiesOf(battle, owner);
+    const known = harmKnown(plan, battle, enemies);
     for (const fighter of battle.fighters) {
         if (!isStanding(fighter)) continue;
         const catalogue = rulesetOf(battle);
-        const effects = activeEffects(fighter, battle).map(([id, effect]) => ({ effect, count: fighter.effects[id]! }));
-        const delayed = effects.reduce((sum, { effect, count }) => sum + (effect.damage ?? 0) * count, 0);
-        total -= side(fighter.owner) * worthOf(fighter, Math.min(fighter.hp, delayed), battle) * WEIGHTS.strength;
-        const focus = effects.reduce((sum, { effect }) => sum + (effect.abilityDamageBonus ?? 0), 0);
+        const sign = side(fighter.owner);
+        let delayed = 0, focus = 0;
+        for (const [id, effect] of activeEffects(fighter, battle)) {
+            delayed += (effect.damage ?? 0) * fighter.effects[id]!;
+            focus += effect.abilityDamageBonus ?? 0;
+        }
+        total -= sign * worthOf(fighter, Math.min(fighter.hp, delayed), battle) * WEIGHTS.strength;
         const readyAbility = focus > 0 && abilitiesOf(fighter, battle).some(id => (catalogue.ABILITIES[id]?.damage ?? 0) > 0 && (fighter.cooldowns[id] ?? 0) <= 1);
-        if (readyAbility) total += side(fighter.owner) * focus * WEIGHTS.threat;
+        if (readyAbility) total += sign * focus * WEIGHTS.threat;
         // A wave brings a warband's characters back, but a nest only conditionally: it counts its worth in full (§39.7).
         const structure = isStructure(fighter, battle);
-        total += side(fighter.owner) * worthOf(fighter, fighter.hp, plan.state) * WEIGHTS.strength * (side(fighter.owner) > 0 && !structure ? ownWorth : 1);
+        total += sign * worthOf(fighter, fighter.hp, plan.state) * WEIGHTS.strength * (sign > 0 && !structure ? ownWorth : 1);
         // Where a structure stands is not its to choose.
-        if (fighter.owner === owner && !structure) total += standingTerms(plan, battle, fighter, enemies);
+        if (fighter.owner === owner && !structure) total += standingTerms(plan, battle, fighter, enemies, harmIn(known(fighter), battle, fighter, enemies));
     }
     return total;
 }
@@ -567,9 +603,11 @@ function temperedHarm(battle: BattleState, fighter: Fighter, enemies: readonly F
     let threat = harm.threat * temperament.threat, extra = 0;
     switch (temperament.extra) {
         case "pack": {
-            const pack = alliesWithin(battle, battle.fighters, fighter, undefined).filter(one => one.id !== fighter.id);
+            // Only a character next to an enemy has a pack to count.
+            let pack: Fighter[] | undefined;
             for (const enemy of enemies) {
                 if (!inMeleeReach(field, fighter.square, enemy.square, battle)) continue;
+                pack ??= alliesWithin(battle, battle.fighters, fighter, undefined).filter(one => one.id !== fighter.id);
                 const flanking = pack.filter(one => inMeleeReach(field, one.square, enemy.square, battle)).length;
                 extra = Math.max(extra, flanking * PACK_BONUS);
             }
@@ -583,7 +621,7 @@ function temperedHarm(battle: BattleState, fighter: Fighter, enemies: readonly F
             }
             break;
         case "range":
-            if (enemies.some(enemy => weaponOf(battle, enemy).kind === "melee" && weaponReaches(battle, enemy, fighter.square))) extra = -RANGE_PENALTY;
+            if (enemies.some(enemy => weaponOf(battle, enemy).kind === "melee" && inMeleeReach(battle.field, enemy.square, fighter.square, battle))) extra = -RANGE_PENALTY;
             break;
     }
     return { exposure: harm.exposure * temperament.exposure, threat, extra };
@@ -611,18 +649,65 @@ function harmAt(battle: BattleState, fighter: Fighter, enemies: readonly Fighter
  * change a shot's odds, the sides, and the battlefield. Anything that reads
  * more must name it here too, which the memo's test holds.
  */
-function harmKnown(plan: Plan, fighter: Fighter, enemies: readonly Fighter[]): Map<Square, Harm> {
-    const { state, memo } = plan;
-    // Of each character, only what a shot or a strike reads: not the way it
-    // faces, or what it has banked or spent, which every action changes, the
-    // overwatch a move sets off among them. Of the character itself, not
-    // where it stands either.
-    const read = ({ id, owner, character, option, loadout, hp, maxHp, effects }: Fighter) => [id, owner, character, option ?? null, loadout ?? null, hp, maxHp ?? null, effects];
-    const walls = state.fighters.filter(isStanding).map(one => [...read(one), one.square]);
-    const key = JSON.stringify([fieldId(memo, state.field), read(fighter), enemies.map(enemy => [...read(enemy), enemy.square]), walls, state.clouds ?? [], landedSmoke(state.fighters), state.sides ?? null, state.rulesVersion ?? null, ruleValuesOf(state), state.armoured ?? false]);
-    let known = memo.harm.get(key);
-    if (!known) memo.harm.set(key, known = new Map());
-    return known;
+function harmKnown(plan: Plan, battle: BattleState, enemies: readonly Fighter[]): (fighter: Fighter) => Map<Square, Harm> {
+    const { memo } = plan;
+    // What every character of the battle shares, worked out once for it when first asked.
+    let ofBattle: Map<string, Map<Square, Harm>> | undefined;
+    return fighter => {
+        if (!ofBattle) {
+            const shared = [
+                fieldId(memo, battle.field), enemies.map(enemy => `${readKey(enemy, true)},${enemy.square}`).join(";"),
+                battle.fighters.filter(one => isStanding(one) && givesCover(battle, one)).map(one => `${readKey(one, true)},${one.square}`).join(";"),
+                JSON.stringify([battle.clouds ?? [], landedSmoke(battle.fighters), sidesKey(battle.sides), battle.rulesVersion ?? null, battle.armoured ?? false]),
+                rulesKey(battle),
+            ].join("\n");
+            ofBattle = memo.harm.get(shared);
+            if (!ofBattle) memo.harm.set(shared, ofBattle = new Map());
+        }
+        const key = readKey(fighter, givesCover(battle, fighter));
+        let known = ofBattle.get(key);
+        if (!known) ofBattle.set(key, known = new Map());
+        return known;
+    };
+}
+
+/**
+ * Of a character, only what a shot or a strike reads: not the way it faces, or
+ * what it has banked or spent, which every action changes, the overwatch a
+ * move sets off among them; and not where it stands. Nor, unless `named`,
+ * which of its kind it is: the only way a shot's odds tell two characters of
+ * one kind apart is the cover one of them gives (`givesCover`), so a
+ * warband's dozen Skitterlings share what one of them works out.
+ */
+function readKey({ id, owner, character, option, loadout, hp, maxHp, effects }: Fighter, named: boolean): string {
+    let held = "";
+    for (const effect in effects) held += `${effect}:${effects[effect as keyof typeof effects]};`;
+    return `${named ? id : -1},${owner},${character},${option ?? ""},${loadout ? `[${loadout.join()}]` : ""},${hp},${maxHp ?? ""},${held}`;
+}
+
+/** Every rule value a battle plays by, as `harmKnown` names them: made once for each set of values. */
+function rulesKey(battle: BattleState): string {
+    const values = ruleValuesOf(battle);
+    let key = RULES_KEYS.get(values);
+    if (key === undefined) RULES_KEYS.set(values, key = JSON.stringify(values));
+    return key;
+}
+const RULES_KEYS = new WeakMap<object, string>();
+
+/** The sides of a battle, as `harmKnown` names them: a battle's copies all share the one object, so it is made once for each. */
+function sidesKey(sides: BattleState["sides"]): string | null {
+    if (!sides) return null;
+    let key = SIDES_KEYS.get(sides);
+    if (key === undefined) SIDES_KEYS.set(sides, key = JSON.stringify(sides));
+    return key;
+}
+const SIDES_KEYS = new WeakMap<object, string>();
+
+/** `harmAt` for a character on a square, read from what its turn has already worked out for it (`harmKnown`) or worked out and kept. */
+function harmIn(known: Map<Square, Harm>, battle: BattleState, fighter: Fighter, enemies: readonly Fighter[]): Harm {
+    let harm = known.get(fighter.square);
+    if (!harm) known.set(fighter.square, harm = harmAt(battle, fighter, enemies));
+    return harm;
 }
 
 /** The enemies of a player standing in a battle: whoever its characters' Exposure and Threat are read against. */
@@ -638,7 +723,7 @@ function enemiesOf(battle: BattleState, player: string): Fighter[] {
  */
 function expectedHarm(battle: BattleState, attacker: Fighter, target: Fighter): number {
     const weapon = weaponOf(battle, attacker);
-    if (weapon.kind === "melee") return weaponReaches(battle, attacker, target.square) ? worthOf(target, strikeChance(battle, target) * Math.min(damageTo(battle, attacker, target), target.hp) / ROLL_SIDES, battle) : 0;
+    if (weapon.kind === "melee") return inMeleeReach(battle.field, attacker.square, target.square, battle) ? worthOf(target, strikeChance(battle, target) * Math.min(damageTo(battle, attacker, target), target.hp) / ROLL_SIDES, battle) : 0;
     const odds = shotOdds(battle, attacker, target);
     if (!odds) return 0;
     return worthOf(target, expectedDamage(odds, target.hp), battle);

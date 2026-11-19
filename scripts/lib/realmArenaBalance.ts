@@ -17,6 +17,8 @@ import { nextAction, temperamentSwitch, turnMemo } from "../../src/games/RealmAr
 import { DIFFICULTY_NAMES, BATTLE_SIZE_NAMES, FACTIONS, type BattleSize, type Difficulty, type FactionId } from "../../src/games/RealmArena/characters";
 import type { RealmArenaSettings } from "../../src/games/RealmArena/RealmArenaModels";
 import { battlefieldById, mapFor, type CoopMap } from "../../src/games/RealmArena/maps";
+import { CURRENT_RULESET_VERSION, overrideRulesetForExperiment, rulesetFor, type RealmArenaRuleset } from "../../src/games/RealmArena/rulesets";
+import type { RealmArenaRuleValues } from "../../src/games/RealmArena/ruleValues";
 import { battleRoundsOf, owesRally } from "../../src/games/RealmArena/RealmArenaLogic";
 import { defaultRally, rallyOptionsOf, rallyTotal, reinforcedHp, type RallyAction } from "../../src/games/RealmArena/rally";
 import { ACTION_POINTS, isStanding, isWarband, viewOf, waveArrives, type BattleState } from "../../src/games/RealmArena/rules";
@@ -56,6 +58,86 @@ export interface BalanceScenario {
      * `"off"` is named in it, to see what they do (§40.5).
      */
     temperaments?: "off";
+    /**
+     * Numbers overriding the catalogue's own (`--set`), by path, in path order:
+     * `RULES.<KEY>` or `CHARACTERS.<id>.hp` (`parseOverrides`). Applied to the
+     * rules version being fought before each battle, in whichever process fights
+     * it. Absent is the catalogue as registered, and leaves the scenario's name
+     * as it was; the overrides are named in it, so samples fought under
+     * different ones never merge.
+     */
+    set?: Readonly<Record<string, number>>;
+}
+
+/** The optional numeric rule values (`RealmArenaRuleValues`): absent from older catalogues, but a rule the engine reads whenever it's there. */
+const OPTIONAL_NUMERIC_RULES = ["WAVE_GROWTH_POINTS", "WAVE_CAP", "NEST_POINTS"] as const satisfies readonly (keyof RealmArenaRuleValues)[];
+
+/** Refuses a `--set` path or value the version fought can't take: not a numeric rule, an unknown character, a non-positive HP, or any other path. */
+function checkOverride(path: string, value: number, ruleset: RealmArenaRuleset, rulesVersion: number): void {
+    const parts = path.split(".");
+    if (parts[0] === "RULES" && parts.length === 2) {
+        const key = parts[1] as keyof RealmArenaRuleValues;
+        const known = Object.hasOwn(ruleset.RULES, key) ? typeof ruleset.RULES[key] === "number" : (OPTIONAL_NUMERIC_RULES as readonly string[]).includes(key);
+        if (!known) throw new Error(`--set: "${path}" isn't a numeric rule of rules version ${rulesVersion}`);
+    } else if (parts[0] === "CHARACTERS" && parts.length === 3 && parts[2] === "hp") {
+        if (!Object.hasOwn(ruleset.CHARACTERS, parts[1])) throw new Error(`--set: "${path}": rules version ${rulesVersion} has no character "${parts[1]}"`);
+        if (value <= 0) throw new Error(`--set: "${path}" must be above 0`);
+    } else {
+        throw new Error(`--set: "${path}" isn't RULES.<KEY> or CHARACTERS.<id>.hp`);
+    }
+}
+
+/**
+ * What `--set` may change, and what it takes effect on: the numeric values of
+ * `rulesVersion`'s `RULES` (and the optional ones above), and a character's
+ * `hp`, which is also the HP a Reinforce returns it at (half, `reinforcedHp`).
+ * The engine reads every one of them through `ruleValuesOf(game)` /
+ * `rulesetOf(game)` — a module constant like `TEAM_HP_FACTOR` is only what the
+ * guide prints — so each takes effect in a battle. Anything else is refused:
+ * a value that isn't a plain number (`BANK_CAP: null`, `COVER_PENALTY`, the lists).
+ * Returns the overrides in path order.
+ */
+export function parseOverrides(text: string, rulesVersion: number = CURRENT_RULESET_VERSION): Record<string, number> {
+    const ruleset = rulesetFor(rulesVersion);
+    const found = new Map<string, number>();
+    for (const entry of text.split(",").map(part => part.trim()).filter(Boolean)) {
+        const match = /^([^=\s]+)=(.*)$/.exec(entry);
+        if (!match) throw new Error(`--set: "${entry}" isn't PATH=NUMBER`);
+        const [, path, raw] = match;
+        const value = raw.trim() === "" ? NaN : Number(raw);
+        if (!Number.isFinite(value)) throw new Error(`--set: "${path}" needs a finite number, not "${raw}"`);
+        checkOverride(path, value, ruleset, rulesVersion);
+        if (found.has(path)) throw new Error(`--set: "${path}" is given twice`);
+        found.set(path, value);
+    }
+    return Object.fromEntries([...found].sort(([a], [b]) => a.localeCompare(b)));
+}
+
+let overriddenVersion: number | undefined;
+
+/**
+ * Makes `rulesetFor(scenario's rules version)` answer with a copy of the
+ * catalogue carrying `scenario.set`, and every other version as registered: the
+ * shared, frozen catalogues are never touched, so v11 keeps what v12 reuses of
+ * it. Undoes whatever an earlier scenario set. Idempotent, so every battle may
+ * call it; the process's rules are this scenario's from here on.
+ */
+export function applyOverrides(scenario: Pick<BalanceScenario, "rules" | "set">): void {
+    if (overriddenVersion !== undefined) overrideRulesetForExperiment(overriddenVersion, undefined);
+    overriddenVersion = undefined;
+    if (!scenario.set || Object.keys(scenario.set).length === 0) return;
+    const version = scenario.rules ?? CURRENT_RULESET_VERSION;
+    const base = rulesetFor(version);
+    for (const [path, value] of Object.entries(scenario.set)) checkOverride(path, value, base, version);
+    const rules: Record<string, unknown> = { ...base.RULES };
+    const characters: Record<string, unknown> = { ...base.CHARACTERS };
+    for (const [path, value] of Object.entries(scenario.set)) {
+        const [group, id] = path.split(".");
+        if (group === "RULES") rules[id] = value;
+        else characters[id] = { ...base.CHARACTERS[id as keyof RealmArenaRuleset["CHARACTERS"]], hp: value };
+    }
+    overrideRulesetForExperiment(version, { ...base, RULES: rules as unknown as RealmArenaRuleValues, CHARACTERS: characters as unknown as RealmArenaRuleset["CHARACTERS"] });
+    overriddenVersion = version;
 }
 
 /** How the harness's team makes a rally choice (`--rally`). */
@@ -145,6 +227,7 @@ export function scenarioKey(s: BalanceScenario): string {
         s.rules !== undefined ? `rules v${s.rules}` : undefined,
         s.rally === "always" ? "rally always" : undefined,
         s.temperaments === "off" ? "temperaments off" : undefined,
+        s.set && Object.keys(s.set).length > 0 ? `set ${Object.entries(s.set).map(([path, value]) => `${path}=${value}`).join(" ")}` : undefined,
     ].filter(Boolean);
     return `${team} vs ${factionName(s.enemy)} · ${mission}${extras.length ? ` · ${extras.join(", ")}` : ""}`;
 }
@@ -190,6 +273,7 @@ const seatsFor = (players: number) => Array.from({ length: players }, (_, k) => 
 export async function simulateBattle(scenario: BalanceScenario, seed: number, team?: TeamPlanner): Promise<BattleSample> {
     // The switch is the planner module's, so each worker (or a run in this process) sets its own before it plays.
     temperamentSwitch.on = scenario.temperaments !== "off";
+    applyOverrides(scenario);
     const started = performance.now();
     const planner: Planner = team?.planner ?? { nextAction, turnMemo };
     seedRolls(seed);

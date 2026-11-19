@@ -33,6 +33,11 @@ function enemyWipedOut(view: IRealmArenaSpecificGameStateResponse): boolean {
     return enemy.length > 0 && !enemy.some(isStanding);
 }
 
+/** Whether a Brood Queen (§39.5) of the Swarm is down: fallen fighters stay in the finished response, and a Queen never grows back. */
+function broodQueenDown(view: IRealmArenaSpecificGameStateResponse): boolean {
+    return view.fighters.some(fighter => isWarband(fighter.owner) && fighter.character === "broodQueen" && !isStanding(fighter));
+}
+
 export const achievements: GameAchievement<IRealmArenaSpecificGameStateResponse>[] = [
     {
         id: "realmarena.recruit",
@@ -137,6 +142,28 @@ export const achievements: GameAchievement<IRealmArenaSpecificGameStateResponse>
             kind: "match",
             at: "end",
             check: (view, { outcome }) => view.coop && view.difficulty === "hard" && outcome === "win",
+        },
+    },
+    {
+        id: "realmarena.regicide",
+        title: "Regicide",
+        icon: "🗡️",
+        description: "Win a battle of Hold Out in which a Brood Queen of the Swarm was downed.",
+        criteria: {
+            kind: "match",
+            at: "end",
+            check: (view, { outcome }) => wonHoldOut(view, outcome) && broodQueenDown(view),
+        },
+    },
+    {
+        id: "realmarena.scorched-earth",
+        title: "Scorched Earth",
+        icon: "🔥",
+        description: "Win a battle of Hold Out against the Swarm after destroying every nest at once, before a wave could grow them back.",
+        criteria: {
+            kind: "match",
+            at: "end",
+            check: (view, { outcome }) => wonHoldOut(view, outcome) && view.nestsCleared === true,
         },
     },
 ];
