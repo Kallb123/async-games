@@ -308,13 +308,30 @@ the nests' squares and the next-wave line while the enemy was unseen.
 ### 5.3 The rally
 
 The rally has always come with a wave, and there are no waves now. The team
-rallies at two kinds of moment. At each one, every player chooses, as in
-`realm-arena.md` §39.4: Rally, Reinforce, Resupply, or now Mend.
+**earns** a rally at two kinds of moment:
 
 - **On a schedule:** as rounds 5, 9 and 13 begin (*Proposed*), the rounds the
   elites arrive in, so a team that is struggling to raid still recovers.
 - **Each time a warband is broken**, meaning its last nest falls. This rally
   rewards raiding.
+
+**Spacing.** A rally is **taken** only as a round begins, and never in two
+rounds running. At each one, every player chooses, as in `realm-arena.md`
+§39.4: Rally, Reinforce, Resupply, or now Mend.
+
+- **None is lost.** A rally earned while one can't be taken is banked, and is
+  taken as the first round begins that it can be. So breaking a warband the
+  round before a scheduled rally is never wasted: the team takes one rally in
+  round 5 and the other in round 7.
+- **A warband broken mid-round** earns its rally at once. The rally is taken as
+  the next round begins, so every player's choice still comes at the start of
+  their turn, as it does today.
+- **Ending with rallies banked** loses nothing that matters: the last nest
+  falling ends the battle, and so does the cap.
+- **The scoreboard** says when a banked rally comes: "Rally next round" or
+  "Rally in round 7".
+- **The state** keeps how many rallies are banked and the round of the last
+  one taken. Both are public: everyone saw what earned them.
 
 ### 5.4 Winning and losing
 
@@ -422,8 +439,27 @@ still edit it, and tests and the harness fight at version 13 through
 
 1. **The playable Swarm:** kept beside the Brood, or retired? To revisit once
    the Brood has been played.
-2. **The bonus:** is 10 a round right beside the knock-outs a battle scores?
-   The harness's score columns will show (§7).
+2. **The bonus:** is 10 a round the right size beside the knock-outs a battle
+   scores?
+3. **One elite per battle, or per warband?** In version 12 each warband buys
+   its theme's elite, so three warbands field three Queens. With the elites the
+   prize for leaving nests standing, one per battle (from the warband with the
+   most nests standing) may be enough.
+4. **Where the nests stand.** The maps' nest squares were placed for version
+   12's waves, and a version-12 battle in progress reads them. If the raid is
+   too long for a 15-round cap, version 13 needs a list of its own on each map,
+   not an edit to the shared one.
+5. **Does the team's own fire hurt the Shrine?** A structure takes damage from
+   anything, so a Fireball beside it does.
+6. **Solo's split.** Four characters guarding and raiding at once may be too
+   thin. Solo might want one nest instead of two, or a sturdier Shrine.
+7. **The *Proposed* numbers:** `SPAWN_THREAT`, nest and Shrine HP, the starting
+   horde, `HORDE_CAP` and the rally's rounds are all the harness's to set (§7),
+   once its team can raid.
+8. **The background runner's budget:** whether `after()` gives the warbands
+   enough time, or they need their own route (§3.2).
+9. **Achievements whose criteria change by rules version.** Nothing has done
+   that before; `docs/achievements.md` should say whether it may.
 
 ---
 
@@ -688,3 +724,4 @@ A `rulebook` pass checks this against `docs/achievements.md`.
 |---|---|
 | 0.1 | Split out of `realm-arena.md`. The plan to rethink Hold Out: the enemy's turn in the background (§3), the Brood as an enemy-only Swarm with minions (§4), nests that produce the enemy and a shrine to defend (§5), and stars (§6). The parked plan for Hold Out to the last enemy moved here from `realm-arena.md` §41 (§9). |
 | 0.2 | Answers on review (§8.1): the Shrine, one square; a rally on a schedule as well as when a warband is broken; the scattered Brood scores nothing, and breaking it early earns a bonus for each round left; minions hit by anything that does damage are downed; a 15-round cap for every team size; and Hold Out is the Brood's alone for now, so the Renegades' and Miners' structures are put off (§5.5) and the PRs are five. |
+| 0.3 | The rally is earned on a schedule and when a warband is broken, and taken only as a round begins, never in two rounds running, with none lost (§5.3). The open questions are spelt out (§8.1). |
