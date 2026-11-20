@@ -1,0 +1,68 @@
+# Dependabot keeps the npm packages and the GitHub Actions the workflows use
+# up to date, a weekly batch at a time.
+#
+# Updates are grouped so a week's churn arrives as a handful of pull requests
+# rather than one per package, and each one gets its own Vercel preview and CI
+# run. Packages that only work at matching versions — every Capacitor plugin,
+# Next and its ESLint config, React and its types — move together in a group
+# of their own, majors included, so they never land half-upgraded.
+#
+# Dependabot's pull requests can't read the repository's Actions secrets, only
+# its Dependabot secrets: CI's build and the E2E suite need the same Clerk,
+# MongoDB and Firebase values added under Settings → Secrets and variables →
+# Dependabot to pass on them.
+#
+# The native Android project (`android/`) is not listed: Capacitor owns its
+# Gradle versions and moves them with `npx cap migrate` when the
+# `@capacitor/*` packages take a major, so bumping them on their own would
+# break the build Capacitor expects.
+
+version: 2
+updates:
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+    # A release has a few days to be yanked before it is proposed here.
+    cooldown:
+      default-days: 3
+    open-pull-requests-limit: 10
+    commit-message:
+      prefix: deps
+      prefix-development: deps-dev
+    ignore:
+      # Node is pinned to 24.x (package.json `engines`, CI, the dev
+      # container), so its types stay on 24 until Node itself moves.
+      - dependency-name: '@types/node'
+        update-types: ['version-update:semver-major']
+    groups:
+      capacitor:
+        patterns: ['@capacitor/*', '@capgo/*']
+      next:
+        patterns: ['next', 'eslint-config-next']
+      react:
+        patterns: ['react', 'react-dom', '@types/react', '@types/react-dom']
+      clerk:
+        patterns: ['@clerk/*']
+      firebase:
+        patterns: ['firebase', 'firebase-admin']
+      mongo:
+        patterns: ['mongodb', 'mongoose']
+      three:
+        patterns: ['three', '@types/three']
+      # Everything else: one pull request for the week's minor and patch
+      # releases. A major outside the groups above gets its own.
+      minor-and-patch:
+        update-types: ['minor', 'patch']
+
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+    commit-message:
+      prefix: ci
+    groups:
+      actions:
+        patterns: ['*']
