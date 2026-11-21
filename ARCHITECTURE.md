@@ -658,10 +658,10 @@ interface IGameType {
 ```
 
 `outcomeFor` is for a game whose outcome can carry what its own sender
-mustn't see: Realm Arena's End turn holds the enemy's turn, which in fog of
-war is cut to what the sender's side saw, and leaves out the turn step by step
-that its outcome keeps for the recap. The command route sends every other
-game's outcome whole.
+mustn't see: Realm Arena's actions and End turns, which in fog of war are cut
+to what the sender's side saw, leaving out the parts their outcome keeps for
+the recap (an End turn played before command version 13 held the enemy's turn
+too). The command route sends every other game's outcome whole.
 
 `CheckEndTurn` typically advances `currentTurn` around `turnOrder`, but games can
 override the flow (e.g. Smartthink hands the turn permanently to the codebreaker

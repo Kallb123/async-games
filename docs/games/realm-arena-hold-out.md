@@ -159,6 +159,35 @@ to fit (`realm-arena.md` §39.9). A Brood of minions can't fit inside it at all.
 - `gremlin` and `locksmith` passes: a new background path into a game's state,
   and a command no player may send.
 
+### 3.6 What PR 1 settled
+
+- **The warband's turn is `RealmArenaWarbandTurn`**, a server-only command
+  (`gameCommands.ts`'s `SERVER_ONLY_COMMANDS`), its sender the warband's seat.
+  It records `recordedActions` and `recordedRolls`, as the End turn's
+  `recordedEnemyActions` and `recordedRolls` were. Outside a block it also
+  plays the empty turns of any warband with only a burning nest that the
+  rotation passed over (`realm-arena.md` §39.7), as the End turn did, since
+  they need no planning. In a block each warband's turn is its own command.
+- **What's due is stored**: `warbandDue: { warband, from }` on the battle,
+  while `currentTurn` is that warband's seat. `from` is the player's seat the
+  hand-off carries on from: the player who ended their turn, or the last seat
+  round the table when the warbands take their turns in a block. The hand-off
+  (`handOff`) is the one it was, stopping where it used to play a warband and
+  picked up again by the warband's command from the same place, so the round,
+  the wave, the rally and burning land exactly where they did.
+- **An End turn that hands to a warband is `turnOver`, even solo**, so
+  `CheckEndTurn` gives the warband the turn. The warband's command is always
+  `turnOver`, and after the last one the turn passes on from `from`, which in
+  solo is the player again.
+- **The engine stays game-agnostic.** A computer's seat is any `currentTurn`
+  starting `ai:` (`COMPUTER_SEAT_PREFIX`, `src/utils/games/computerTurns.ts`),
+  and a game that has them registers an `IComputerTurnAdapter` that builds the
+  command for the seat on turn. The runner, `playComputerTurns`, knows no game.
+- **The planner's deadline** is 10 seconds a warband turn
+  (`WARBAND_DEADLINE_MS`).
+- **The review's dock** names a warband's command "The enemy · took its
+  turn", never by its faction, which a random enemy keeps hidden.
+
 ---
 
 ## 4. The Brood: an enemy-only Swarm
@@ -748,3 +777,4 @@ A `rulebook` pass checks this against `docs/achievements.md`.
 | 0.2 | Answers on review (§8.1): the Shrine, one square; a rally on a schedule as well as when a warband is broken; the scattered Brood scores nothing, and breaking it early earns a bonus for each round left; minions hit by anything that does damage are downed; a 15-round cap for every team size; and Hold Out is the Brood's alone for now, so the Renegades' and Miners' structures are put off (§5.5) and the PRs are five. |
 | 0.3 | The rally is earned on a schedule and when a warband is broken, and taken only as a round begins, never in two rounds running, with none lost (§5.3). The open questions are spelt out (§8.1). |
 | 0.4 | More answers on review (§8.1): a bonus for each round left large enough that a faster win outscores a slower one, held by a test; elites counted by the elite (a Lobber a warband, a Brute every two, one Queen); nest and Shrine squares in the ruleset; friendly fire hurts the Shrine; Solo keeps both jobs; and achievements change in place. |
+| 0.5 | PR 1 built (§3.6): the warbands' turns are `RealmArenaWarbandTurn`s from command version 13, played by the server once the End turn is saved, with the turn-timer cron as the backstop. |
