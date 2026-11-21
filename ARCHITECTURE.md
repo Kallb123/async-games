@@ -838,8 +838,11 @@ asks the planner again. `playComputerTurns(gameId, { finishBy })` plays them:
 one command at a time through `runCommand`, each saved on its own with
 `trySave` (a lost save reloads, and stops if the turn has moved on), stopping
 before a turn it couldn't finish by `finishBy`
-(`COMPUTER_TURN_BUDGET_MS`). Once the turn reaches a player it does what step
-13 does — the `YourTurn` push (not in a game of one) and the turn-end judging,
+(`COMPUTER_TURN_BUDGET_MS`); one that is refused or throws is counted and put
+back, and the game abandoned on the third. The computer's turn is always held
+by one seat, `COMPUTER_TURN_SEAT`, whichever of its pieces is moving. Once the
+turn reaches a player it does what step 13 does — the `YourTurn` push (in a
+game of one, only after a long wait) and the turn-end judging,
 both in `announceTurnEnd` (`src/utils/games/announceTurnEnd.ts`), which the
 route shares. The route runs it in `after()` in place of step 13 whenever the
 saved move left the turn with the computer (the route's `maxDuration` is 60 s

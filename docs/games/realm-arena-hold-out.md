@@ -194,16 +194,23 @@ to fit (`realm-arena.md` §39.9). A Brood of minions can't fit inside it at all.
   command for the seat on turn. The runner, `playComputerTurns`, knows no game.
 - **The runner** is `playComputerTurns(gameId, { finishBy })`
   (`src/utils/games/playComputerTurns.ts`). It starts a warband turn only with
-  `COMPUTER_TURN_BUDGET_MS` (15 seconds) left before `finishBy`: the command
-  route declares `maxDuration` 60 and hands it 50 seconds from the request's
-  start; the cron its run's hard stop. A lost save reloads and carries on only
+  `COMPUTER_TURN_BUDGET_MS` (30 seconds: the planner's guard, the save, and
+  the turn-end push and judging) left before `finishBy`: the command route
+  declares `maxDuration` 60 and hands it 50 seconds from the request's start;
+  the cron its run's own deadline. A lost save reloads and carries on only
   while the turn is still the computer's, giving up after three. When the turn
   reaches a player it pushes them and judges turn-end achievements
-  (`announceTurnEnd`, shared with the route), pushing nobody in solo.
+  (`announceTurnEnd`, shared with the route) — in solo only when the wait ran
+  past a minute, since the player otherwise watched it.
+- **A computer's turn that can't be played** — refused, or throwing — is
+  counted against its seat (`missedTurnCounts`) and put back two minutes, and
+  the game is abandoned on the third in a row, with nobody to blame, rather
+  than left on "The enemy is moving…" for good.
 - **The backstop** sweeps a computer's turn that has stood two minutes
   (`COMPUTER_TURN_STALE_MS`), whatever the timer — solo's unlimited one
   included — through a branch of `actionableTurnFilter` and a new
-  `{ complete, currentTurn, lastTurnTimestamp }` index. The sweep plays a
+  `{ complete, currentTurn, lastTurnTimestamp }` index, matching the one seat
+  exactly. The sweep plays a
   timed-out turn's warbands too, rather than pushing nobody.
 - **The planner's deadline** is 10 seconds a warband turn
   (`WARBAND_DEADLINE_MS`). `planner.pace.test.ts` keeps its tighter budgets on
