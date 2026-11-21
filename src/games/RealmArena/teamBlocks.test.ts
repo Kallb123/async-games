@@ -37,9 +37,10 @@ async function battle(teamBlocks: boolean, players = ["a", "b"], map?: "sackedFo
 
 /** Ends the current player's turn straight away, and says which warbands took a turn after it. */
 async function endTurn(game: RealmArenaTestGame): Promise<string[]> {
-    const { outcome } = await play(game, endTurnBy(game.currentTurn));
+    const { outcome, computer } = await play(game, endTurnBy(game.currentTurn));
     expect(outcome.validMove).toBe(true);
-    return enemyTurnsOf((outcome as IRealmArenaOutcome).recap).map(turn => turn.owner);
+    // The warbands' turns are commands of their own, after the End turn.
+    return computer.flatMap(({ outcome: played }) => enemyTurnsOf((played as IRealmArenaOutcome).recap).map(turn => turn.owner));
 }
 
 /** Takes a squad off the field, as a wipe-out leaves it. */
@@ -150,11 +151,16 @@ describe("the rotation", () => {
 });
 
 describe("recording and replay", () => {
-    it("records every warband's actions in the End turn that played the block, and replays them without the planner", async () => {
+    it("records every warband's actions in a command of its own for the block, and replays them without the planner", async () => {
         const game = await battle(true);
         for (let turn = 0; turn < 8 && !game.complete; turn++) await playScriptedTurn(game);
-        const blocks = game.gameState.commandHistory.filter(command => (command as { recordedMoreEnemyActions?: unknown }).recordedMoreEnemyActions);
-        expect(blocks.length).toBeGreaterThan(0);
+        const blocks = game.gameState.commandHistory.filter(command => command.className === "RealmArenaWarbandTurn");
+        // Two warbands a round, one command each, and none of it on the End turns.
+        expect(blocks.length).toBeGreaterThanOrEqual(2);
+        for (const command of game.gameState.commandHistory.filter(one => one.className === "RealmArenaEndTurn")) {
+            expect(command).not.toHaveProperty("recordedEnemyActions");
+            expect(command).not.toHaveProperty("recordedMoreEnemyActions");
+        }
         planner.broken = true;
         const lastId = game.gameState.commandHistory.at(-1)?.id ?? null;
         const timeline = await buildTimeline(game, { a: "Alice", b: "Bob" }, [], undefined, "a");

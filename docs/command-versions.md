@@ -66,8 +66,9 @@ recorded command carries a version:
 
 - a **follow-up** (`ICommandOutcome.followUpCommand`) inherits its trigger's —
   `runCommand` copies it, live and in a replay alike;
-- a **turn-timeout** move (`resolveStalledTurn`) and a **`PlayerDropped`** get
-  the game's current version;
+- a **turn-timeout** move (`resolveStalledTurn`), a **`PlayerDropped`** and a
+  **computer's turn** (`playComputerTurns`, Realm Arena's `RealmArenaWarbandTurn`)
+  get the game's current version;
 - a **planned** move (`/api/game/[gameid]/timeline`) gets the current version:
   a plan is today's rules.
 

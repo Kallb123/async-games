@@ -1,8 +1,9 @@
-import { GameDataModel, IGameData, IGameDataDocument, publicGameState } from "@/utils/mongodb/GameData";
+import { GameDataModel, GameDataSchema, IGameData, IGameDataDocument, publicGameState } from "@/utils/mongodb/GameData";
 import { IInvitationData, IInvitationDataDocument, InvitationModel, IInvitationRequest } from "@/utils/mongodb/InvitationData";
 import { Model, Schema, models } from "mongoose";
 import { v4 as uuidv4 } from 'uuid';
-import { compactCharts, formatPerTurnChart, gameResultEventSchemaDef, type GameResultAnyChart, type GameResultBarChart, type GameResultChartSeries, type GameResultStatGroup, type GameResultTable, type StoredGameResultEvent, type uuidString } from "@/utils/apiModels/GameDataApi";
+import type { UserDirectory } from "@/utils/users/clerk";
+import { compactCharts, formatPerTurnChart, gameResultEventSchemaDef, type GameResultAnyChart, type IGameResponse, type GameResultBarChart, type GameResultChartSeries, type GameResultStatGroup, type GameResultTable, type StoredGameResultEvent, type uuidString } from "@/utils/apiModels/GameDataApi";
 import { mongoMap } from "@/utils/games/mongoMaps";
 import { capitalise, pluralize } from "@/utils/ui/text";
 import { userIdListToNamesAndMap } from "@/utils/users/clerk";
@@ -17,6 +18,7 @@ import { BATTLE_SIZE_NAMES, CHARACTERS, COOP_PLAYERS, coopTeamMax, DIFFICULTY_NA
 import { addTally, NO_TALLY, xpOf, type MasterySnapshot, type Tally } from "./mastery";
 import { battlefieldById, COOP_MAPS, DEPLOYMENT_NAMES, mapFor, type CoopMap, type RealmArenaMapId } from "./maps";
 import { allied, ENEMY_SIDE, fighterById, fogGhost, isStructure, isWarband, pickOf, squadSight, storedFighter, TEAM_SIDE, viewOf, warbandsFor, maxHpOf, actionPointsOf, type BattleEvent, type Fighter, type FogGhost, type MusterPick, type ToldEvent } from "./rules";
+import { computerHoldsTurn } from "@/utils/games/computerTurns";
 import type { IRealmArenaGameDataResponse, IRealmArenaSpecificGameStateResponse, IRealmArenaStepOutcome, IRealmArenaStepPart, RealmArenaPartState } from "./apiModels";
 import type { Square } from "@/utils/games/battlefield/terrain";
 import { addRecords, NO_RECORD, RECORD_KEYS, type BattleRecord, type FightingRecord, type FightingRow, type WaveRecord } from "./battleRecord";
@@ -140,6 +142,20 @@ export interface IRealmArenaSpecificGameState {
      * Never sent as a list: the viewer is told only whether they owe one.
      */
     rallyOwed?: string[];
+    /**
+     * The warband whose turn is due, while the turn is the computer's
+     * (docs/games/realm-arena-hold-out.md §3): `warband` its index — always
+     * one with someone standing — while `ENEMY_TURN_SEAT` holds `currentTurn`,
+     * and `from` the
+     * player's seat the hand-off carries on from once the warbands have played
+     * — the player who ended their turn, or the last seat round the table
+     * when the warbands take their turns in a block. Set by an End turn played
+     * under `ENEMY_TURN_COMMAND_VERSION` or later and moved on by each
+     * `RealmArenaWarbandTurn`; absent the rest of the time, and in every
+     * battle from before it. Cleared by assigning `undefined`, never `delete`,
+     * as `rallyOwed` is. Never sent.
+     */
+    warbandDue?: { warband: number; from: string };
     /**
      * How many of each warband's nests (§39.7) have been destroyed, whoever downed
      * them (the team, or the Swarm's own burst, bile or burn), since that
@@ -493,6 +509,8 @@ var RealmArenaGameDataSchema = new Schema<IRealmArenaGameDataDocument>(
             roundsPlayed: Number,
             // Mixed, so `markDirty` saves it whole. It is cleared by assigning `undefined` (`forgiveRally`), never `delete`: a deleted path stays cached on a document, and the save still writes the old list (§39.4).
             rallyOwed: Schema.Types.Mixed,
+            // Mixed, so `markDirty` saves it whole; cleared by assigning `undefined`, as `rallyOwed` is.
+            warbandDue: Schema.Types.Mixed,
             // Mixed, so `markDirty` saves it whole; replaced, never mutated, as `scores` is (`addScores`).
             nestsDestroyed: Schema.Types.Mixed,
             nestsSeenDestroyed: Number,
@@ -511,6 +529,21 @@ var RealmArenaGameDataSchema = new Schema<IRealmArenaGameDataDocument>(
     },
     { discriminatorKey: 'kind' },
 );
+
+/**
+ * The dashboard's summary of a battle. A warband's turn is the computer's, played
+ * in the background (docs/games/realm-arena-hold-out.md §3), and its seat is no
+ * player in the directory, so the generic summary would leave the turn nameless
+ * and the dashboard would fall back to naming the opponents. It reads "The
+ * enemy's turn" instead, never the faction: a random enemy stays hidden until
+ * it is seen (§29.3).
+ */
+RealmArenaGameDataSchema.methods.CreateResponse = function(directory: UserDirectory): IGameResponse {
+    const response: IGameResponse = GameDataSchema.methods.CreateResponse.call(this, directory);
+    return computerHoldsTurn(response)
+        ? { ...response, currentTurnUsername: capitalise(UNKNOWN_ENEMY) }
+        : response;
+};
 
 RealmArenaGameDataSchema.methods.CreateDataResponse = async function(viewerId: string | null): Promise<IRealmArenaGameDataResponse> {
     console.log('CreateDataResponse: Realm Arena game');
@@ -740,7 +773,8 @@ function partsOf(outcome: IRealmArenaOutcome, viewerId: string | null, gs: IReal
     if (turns.length === 0) return undefined;
     const started = recap.started ?? [];
     // The command's own events are the player's End turn, then the warband's
-    // turn, then what happened as the next turn began (`RealmArenaEndTurn`).
+    // turn, then what happened as the next turn began (`RealmArenaEndTurn`);
+    // a `RealmArenaWarbandTurn`'s have no player's End turn before them.
     const own = events.slice(0, events.length - all.reduce((sum, turn) => sum + enemyEvents(turn).length, 0) - started.length);
 
     const board = (after: RealmArenaBoard | undefined): RealmArenaPartState | undefined => {
@@ -752,7 +786,8 @@ function partsOf(outcome: IRealmArenaOutcome, viewerId: string | null, gs: IReal
     // part of their own, as the first is handed the player's End turn.
     const last = turns[turns.length - 1];
     const planned = [
-        { kind: "ended" as const, events: said(both(recap.told, turns[0].startedTold), [...own, ...turns[0].started]), after: turns[0].startedAfter },
+        // A warband's turn of its own (`RealmArenaWarbandTurn`) has no End turn of a player's to open it.
+        { kind: own.length > 0 ? "ended" as const : "enemy" as const, events: said(both(recap.told, turns[0].startedTold), [...own, ...turns[0].started]), after: turns[0].startedAfter },
         ...turns.flatMap((turn, index) => {
             const following = turns[index + 1];
             return [

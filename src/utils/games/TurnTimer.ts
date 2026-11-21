@@ -1,4 +1,5 @@
 import { pluralize } from "@/utils/ui/text";
+import { COMPUTER_TURN_SEAT, COMPUTER_TURN_STALE_MS } from "./computerTurns";
 
 export const UNLIMITED_TURN_TIMER = 'unlimited';
 
@@ -113,38 +114,79 @@ export interface ITurnTimerState {
     turnTimer: string,
     lastTurnTimestamp: string,
     timerWarningNotificationSent: boolean,
+    /**
+     * Whose turn it is. Optional so a caller that has only the timer's own
+     * fields still compiles, in which case the turn is a player's.
+     */
+    currentTurn?: string,
 }
 
 /**
  * Whether the turn-timer cron has anything to do for this game: the turn has
  * run out, or it is close enough to be worth the one warning per turn.
  *
+ * A computer's turn (computerTurns.ts) is the exception, and it is decided
+ * first, before the game's timer is looked at at all: it never expires and
+ * never warns, however short the timer, because nobody is late for it. It is
+ * the cron's business only once it has stood for `COMPUTER_TURN_STALE_MS`,
+ * which means the runner that should have played it stopped, and the cron
+ * plays it instead.
+ *
  * One predicate, so the cron can ask it twice and get the same answer — of the
  * few fields its candidate read projects, and again of the whole document it
  * loads off the back of that. See `sweepGame` for why it asks twice.
  */
-export function needsSweeping({ turnTimer, lastTurnTimestamp, timerWarningNotificationSent }: ITurnTimerState): boolean {
+export function needsSweeping({ turnTimer, lastTurnTimestamp, timerWarningNotificationSent, currentTurn }: ITurnTimerState): boolean {
+    if (currentTurn === COMPUTER_TURN_SEAT) {
+        return Date.now() - new Date(lastTurnTimestamp).getTime() >= COMPUTER_TURN_STALE_MS;
+    }
     return isExpired(lastTurnTimestamp, turnTimer)
         || (isWarningThreshold(lastTurnTimestamp, turnTimer) && !timerWarningNotificationSent);
 }
 
-/** One `$or` branch of `actionableTurnFilter`: one timer, and the turns old
+/** One `$or` branch of `actionableTurnFilter` for a player's turn: one timer, and the turns old
  *  enough for it to have something to say. */
-export interface ActionableTurnBranch {
+export interface PlayerTurnBranch {
     turnTimer: string,
     lastTurnTimestamp: { $lte: string },
 }
 
 /**
+ * The `$or` branch for a computer's turn: its one seat, and a turn old enough
+ * that its runner has plainly stopped. The seat is a point interval rather than
+ * a bare equality so that Mongo reads the branch as a range on `currentTurn`
+ * with `lastTurnTimestamp` still in index order inside it, which lets the
+ * `$or`'s sort on `lastTurnTimestamp` merge the branches.
+ */
+export interface ComputerTurnBranch {
+    currentTurn: { $gte: string, $lte: string },
+    lastTurnTimestamp: { $lte: string },
+}
+
+export type ActionableTurnBranch = PlayerTurnBranch | ComputerTurnBranch;
+
+/** Whether `branch` is the computer's turn rather than one timer's. */
+export function isComputerTurnBranch(branch: ActionableTurnBranch): branch is ComputerTurnBranch {
+    return 'currentTurn' in branch;
+}
+
+/**
  * The Mongo filter for the only games a sweep could act on: for each timer on
  * the ladder, the turns that have been running long enough for that timer to
- * warn or expire.
+ * warn or expire, and, whatever the timer, a computer's turn that has stood
+ * long enough for the cron to play it (`COMPUTER_TURN_STALE_MS`).
  *
  * Per-timer, rather than the one cutoff across all of them this replaced —
  * where the shortest timer set the cutoff for every timer, so a 7-day game
  * whose turn started six minutes ago was still read in full, every tick, to be
  * put straight back. Unlimited games are excluded by construction: they aren't
- * on the ladder because they never expire and never warn.
+ * on the ladder because they never expire and never warn — but a computer's
+ * turn in one still has its branch, since its backstop doesn't depend on the
+ * timer.
+ *
+ * A computer's turn also matches the timer branch of its game, when its age
+ * allows; that is harmless, because `needsSweeping` is what decides and it
+ * answers a computer's turn by its own staleness alone.
  *
  * `lastTurnTimestamp` is an ISO-8601 string rather than a Date, and this
  * compares it as one: every writer produces it with `toISOString()`, which is
@@ -157,12 +199,15 @@ export interface ActionableTurnBranch {
 export function actionableTurnFilter(): { $or: ActionableTurnBranch[] } {
     const now = Date.now();
 
-    return {
-        $or: Object.keys(TIMER_MS).map(turnTimer => ({
-            turnTimer,
-            lastTurnTimestamp: { $lte: new Date(now - actionableElapsedMs(turnTimer)).toISOString() },
-        })),
+    const playerBranches: PlayerTurnBranch[] = Object.keys(TIMER_MS).map(turnTimer => ({
+        turnTimer,
+        lastTurnTimestamp: { $lte: new Date(now - actionableElapsedMs(turnTimer)).toISOString() },
+    }));
+    const computerBranch: ComputerTurnBranch = {
+        currentTurn: { $gte: COMPUTER_TURN_SEAT, $lte: COMPUTER_TURN_SEAT },
+        lastTurnTimestamp: { $lte: new Date(now - COMPUTER_TURN_STALE_MS).toISOString() },
     };
+    return { $or: [...playerBranches, computerBranch] };
 }
 
 type DurationParts = { days: number, hours: number, minutes: number };

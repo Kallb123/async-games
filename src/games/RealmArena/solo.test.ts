@@ -74,16 +74,21 @@ describe("a solo battle's turns (§30.6)", () => {
         expect(game.specificGameState.fighters.some(fighter => fighter.owner === warbandOwner(0))).toBe(true);
     });
 
-    it("plays the warband's turn inside every End turn, and comes straight back to the player a round on", async () => {
+    it("hands the turn to the warband after every End turn, and comes straight back to the player a round on", async () => {
         const game = await soloBattle();
         for (let round = 1; round <= 3; round++) {
-            const { outcome } = await play(game, endTurnBy("a"));
-            expect(outcome).toMatchObject({ validMove: true, turnOver: false, timerRestarts: true });
+            const { outcome, computer } = await play(game, endTurnBy("a"));
+            // The End turn hands on, even to a team of one, and the warband's command hands back.
+            expect(outcome).toMatchObject({ validMove: true, turnOver: true, timerRestarts: true });
+            expect(computer).toHaveLength(1);
+            expect(computer[0].outcome).toMatchObject({ validMove: true, turnOver: true, timerRestarts: true });
             expect(game.currentTurn).toBe("a");
             expect(game.specificGameState.roundsPlayed).toBe(round);
-            // Recorded for a replay: the warband took its turn.
-            const ended = game.gameState.commandHistory.at(-1) as unknown as { recordedEnemyActions?: unknown[] };
-            expect(Array.isArray(ended.recordedEnemyActions)).toBe(true);
+            expect(game.specificGameState.warbandDue).toBeUndefined();
+            // Recorded for a replay: the warband took its turn, in a command of its own.
+            const ended = game.gameState.commandHistory.at(-1) as unknown as { className: string; recordedActions?: unknown[] };
+            expect(ended.className).toBe("RealmArenaWarbandTurn");
+            expect(Array.isArray(ended.recordedActions)).toBe(true);
         }
         // The warband walks towards the keep: after three turns of its own, some of it has moved.
         const walked = game.specificGameState.fighters.filter(fighter => isWarband(fighter.owner))

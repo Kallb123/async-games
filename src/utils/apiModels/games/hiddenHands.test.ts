@@ -33,7 +33,7 @@ import { at as realmArenaSquareAt, fieldOf as realmArenaFieldOf } from "@/utils/
 import { REALM } from "@/games/RealmArena/characters";
 import { battlefieldById as realmArenaBattlefieldById } from "@/games/RealmArena/maps";
 import { gameStateToModel as realmArenaStateToModel, stepOutcomeToModel as realmArenaStepOutcome } from "@/games/RealmArena/RealmArenaModels";
-import { RealmArenaGameType, toldTo as realmArenaToldTo, type IRealmArenaOutcome, type RealmArenaEndTurn } from "@/games/RealmArena/RealmArenaLogic";
+import { RealmArenaGameType, toldTo as realmArenaToldTo, type IRealmArenaOutcome } from "@/games/RealmArena/RealmArenaLogic";
 import { buildAllEvents } from "@/utils/games/recap";
 import type { IRealmArenaSpecificGameStateResponse } from "@/games/RealmArena/apiModels";
 import { act as realmArenaActRules, fixedRolls as realmArenaFixedRolls, newFighter as realmArenaNewFighter, areaAround as realmArenaAreaAround, check as realmArenaCheck, afflicted as realmArenaAfflicted, isStanding as isRealmArenaStanding, lastWaveRound, warbandOwner, warbandsFor as realmArenaWarbandsFor } from "@/games/RealmArena/rules";
@@ -45,8 +45,10 @@ import {
     muster as realmArenaMuster,
     musterAll as realmArenaMusterAll,
     play as playRealmArena,
+    playOne as playRealmArenaOne,
     readyMadePicks as realmArenaPicks,
     scriptedAction as realmArenaScriptedAction,
+    warbandTurnBy as realmArenaWarbandTurn,
     type RealmArenaTestGame,
 } from "@/games/RealmArena/testFixtures";
 
@@ -741,8 +743,8 @@ describe("Realm Arena's random co-op enemy", () => {
         // The first warband's Knight raises a shield wall where it stands, far
         // out of the team's sight: its turn, as a replay plays it.
         const knight = game.specificGameState.fighters.find(fighter => fighter.owner === warbandOwner(0) && fighter.character === "knight")!;
-        const ended = Object.assign(realmArenaEndTurn("a"), { recordedEnemyActions: [{ kind: "shieldWall", fighter: knight.id }] }) as RealmArenaEndTurn;
-        const { outcome } = await playRealmArena(game, ended);
+        expect((await playRealmArenaOne(game, realmArenaEndTurn("a"))).outcome.validMove).toBe(true);
+        const { outcome } = await playRealmArenaOne(game, realmArenaWarbandTurn(game.currentTurn, [{ kind: "shieldWall", fighter: knight.id }]));
         expect(game.specificGameState.coop?.enemySeen).toBeUndefined();
         expect((outcome as IRealmArenaOutcome).events.some(event => event.kind === "shieldWall")).toBe(true);
 
@@ -785,8 +787,8 @@ describe("Realm Arena's random co-op enemy", () => {
         const at = battle.field.tiles.findIndex((_, square) => realmArenaAreaAround(battle.field, square).every(near => !gs.fighters.some(one => one.square === near))
             && !("refused" in realmArenaCheck(ready, sapper.owner, { kind: "dynamite", fighter: sapper.id, at: square })));
         expect(at).toBeGreaterThanOrEqual(0);
-        const ended = Object.assign(realmArenaEndTurn("a"), { recordedEnemyActions: [{ kind: "dynamite", fighter: sapper.id, at }] }) as RealmArenaEndTurn;
-        const { outcome } = await playRealmArena(game, ended);
+        expect((await playRealmArenaOne(game, realmArenaEndTurn("a"))).outcome.validMove).toBe(true);
+        const { outcome } = await playRealmArenaOne(game, realmArenaWarbandTurn(game.currentTurn, [{ kind: "dynamite", fighter: sapper.id, at }]));
         expect(outcome.validMove).toBe(true);
         expect((outcome as IRealmArenaOutcome).events.some(event => event.kind === "dynamite")).toBe(true);
         expect(gs.coop?.enemySeen).toBeUndefined();
@@ -799,6 +801,29 @@ describe("Realm Arena's random co-op enemy", () => {
             expect(JSON.stringify(realmArenaStepOutcome(outcome, viewer, gs) ?? null)).not.toMatch(MINERS);
             expect(JSON.stringify(await buildAllEvents(game, RA_NAMES, viewer))).not.toMatch(MINERS);
         }
+    });
+
+    it("tells the null viewer nothing of a warband command while the enemy is unseen: no faction, no character, no name", async () => {
+        const game = makeRealmArenaGame(["a", "b"], {}, { fog: true, coop: { enemy: "realm", random: true } });
+        await realmArenaMusterAll(game);
+        const gs = game.specificGameState;
+        const ended = await playRealmArena(game, realmArenaEndTurn("a"));
+        expect(ended.computer).toHaveLength(1);
+        const { outcome } = ended.computer[0];
+        expect(gs.coop?.enemySeen).toBeUndefined();
+        // The command is the server's own and its dock names no faction.
+        expect((game.gameState.commandHistory.at(-1) as { senderUsername: string }).senderUsername).toBe("The enemy");
+        expect(JSON.stringify(realmArenaStateToModel(gs, null, null))).not.toMatch(/"realm"|nextWarband/);
+        for (const viewer of VIEWERS) {
+            const step = realmArenaStepOutcome(outcome, viewer, gs);
+            // Whatever was told, it is told without a faction and without who of it did it.
+            expect(JSON.stringify(step ?? null), `step for ${viewer}`).not.toMatch(ENEMY_NAME);
+            expect(JSON.stringify(step?.parts?.map(part => part.state && "enemy" in part.state) ?? []), `parts for ${viewer}`).not.toContain("true");
+            expect(JSON.stringify(await buildAllEvents(game, RA_NAMES, viewer)), `rows for ${viewer}`).not.toMatch(ENEMY_NAME);
+        }
+        // Nobody in particular is told nothing of a warband that moved out of sight.
+        const nobody = realmArenaStepOutcome(outcome, null, gs)?.events ?? [];
+        expect(nobody.every(event => event.kind !== "moved" || event.path.length === 0)).toBe(true);
     });
 
     it("is known the moment it hurts the team, even when the blow downs the only one who could see it (§31.3)", async () => {
@@ -820,8 +845,8 @@ describe("Realm Arena's random co-op enemy", () => {
             : one.id === far.id ? one : { ...one, hp: 0 });
         expect(realmArenaBattle(game).fighters.filter(one => isRealmArenaStanding(one)).length).toBe(3);
 
-        const ended = Object.assign(realmArenaEndTurn(game.currentTurn), { recordedEnemyActions: [{ kind: "rend", fighter: ravager.id, target: archer.id }], recordedRolls: [1] }) as RealmArenaEndTurn;
-        const { outcome } = await playRealmArena(game, ended);
+        expect((await playRealmArenaOne(game, realmArenaEndTurn(game.currentTurn))).outcome.validMove).toBe(true);
+        const { outcome } = await playRealmArenaOne(game, realmArenaWarbandTurn(game.currentTurn, [{ kind: "rend", fighter: ravager.id, target: archer.id }], [1]));
         expect(outcome.validMove).toBe(true);
         expect((outcome as IRealmArenaOutcome).events).toContainEqual({ kind: "struck", fighter: ravager.id, target: archer.id, damage: 6, reaction: false, chance: 80, roll: 1 });
         expect(gs.coop?.enemySeen).toBe(true);
@@ -982,7 +1007,10 @@ describe("Realm Arena's nests in fog of war (§39.7)", () => {
         const gs = game.specificGameState;
         // The block of warband turns follows the last player's End turn.
         await playRealmArena(game, realmArenaEndTurn("a"));
-        const played = (await playRealmArena(game, realmArenaEndTurn("b"))).outcome as IRealmArenaOutcome;
+        const { computer } = await playRealmArena(game, realmArenaEndTurn("b"));
+        // Each warband's turn of the block is a command of its own.
+        expect(computer).toHaveLength(2);
+        const played = computer[0].outcome as IRealmArenaOutcome;
         expect(played.recap?.enemy).toBeDefined();
         // A centre score at a turn's end is told to everyone, so each turn has a seam to move.
         const scored = { kind: "scored", player: played.recap!.enemy!.owner, points: 1, reason: "centre" } as unknown as NonNullable<IRealmArenaOutcome["events"]>[number];

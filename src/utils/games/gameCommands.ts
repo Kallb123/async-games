@@ -171,10 +171,13 @@ const COMMANDS_BY_GAME_TYPE: Record<string, readonly string[]> = {
  * game's list above, so `isCommandForGameType` refuses every one of them at
  * the command route — which is the point: `PlayerDropped` removes a seat from
  * the game (utils/games/playerDropout.ts), and only the turn-timer cron gets
- * to decide that.
+ * to decide that; and a computer's turn is the server's to play.
  */
 const SERVER_ONLY_COMMANDS: readonly string[] = [
     "PlayerDropped",
+    // A Realm Arena warband's turn in co-op, which only the server plays
+    // (utils/games/computerTurns.ts, docs/games/realm-arena-hold-out.md §3).
+    "RealmArenaWarbandTurn",
 ];
 
 /** The server-only commands, for the test that guards the registry. */

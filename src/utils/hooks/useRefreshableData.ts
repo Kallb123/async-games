@@ -2,7 +2,7 @@
 import { useCallback, useEffect, useRef, useState, type Dispatch, type SetStateAction } from "react";
 import { clearStaleSessionReload } from "./fetchWithSessionRetry";
 import { confirmData, fetchResource, forgetCachedData, isDataJoinable, loadSharedResource, markDataUnconfirmed, readCachedData, writeCachedData } from "./dataCache";
-import { usePushEvents } from "./usePushEvents";
+import { usePushEvents, type PollMode } from "./usePushEvents";
 import type { PerformanceRequest } from "@/utils/performance";
 import { useIsAuthorised, useSessionRefresh } from "./useAuthGuard";
 
@@ -124,7 +124,7 @@ export function useRefreshableData<T>(
     events: readonly string[] = NO_EVENTS,
     options: {
         /** True, or a question asked of the last body. See above. */
-        pollWhileWatching?: boolean | ((data: T | null) => boolean);
+        pollWhileWatching?: PollMode | ((data: T | null) => PollMode);
         /** Skip fetching entirely while false — for a hook that mounts before it
          *  has an endpoint worth reading (the chat shell on a single-seat game,
          *  which has no thread). `data` stays null and `isLoading` stays true, so
