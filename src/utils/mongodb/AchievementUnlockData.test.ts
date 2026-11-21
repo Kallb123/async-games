@@ -13,7 +13,8 @@
 // Every driver class here comes from `mongoose.mongo`, the copy Mongoose itself
 // loaded, never from an import of "mongodb": recordUnlocks checks the errors it
 // catches against that copy, and a test that built them from another one would
-// stay green on the day the two stop being the same.
+// stay green on the day the two stop being the same. Its types come from there
+// too — the root package's don't fit Mongoose's classes once the two differ.
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { MockInstance } from 'vitest';
@@ -22,7 +23,7 @@ vi.mock('@clerk/nextjs/server', async () => (await import('@/utils/testing/apiRo
 vi.mock('@/utils/mongodb/mongodb', async () => (await import('@/utils/testing/apiRoute')).mongodbStub());
 
 import mongoose from 'mongoose';
-import type { BulkWriteResult, WriteError } from 'mongodb';
+import type { mongo } from 'mongoose';
 import { failNextAchievementUnlockWrite, resetApiRouteStubs, seedAchievementUnlock, storedAchievementUnlocks } from '@/utils/testing/apiRoute';
 import { AchievementUnlockModel, AchievementUnlockSchema, recordUnlocks } from './AchievementUnlockData';
 
@@ -56,8 +57,8 @@ class FakeWriteError {
  * has the shape the driver's has.
  */
 function bulkWriteError({ upserted, failed }: { upserted: number[], failed: { index: number, code: number }[] }) {
-    const result = { upsertedIds: Object.fromEntries(upserted.map(index => [index, new ObjectId()])) } as unknown as BulkWriteResult;
-    const writeErrors = failed.map(one => new FakeWriteError(one)) as unknown as WriteError[];
+    const result = { upsertedIds: Object.fromEntries(upserted.map(index => [index, new ObjectId()])) } as unknown as mongo.BulkWriteResult;
+    const writeErrors = failed.map(one => new FakeWriteError(one)) as unknown as mongo.WriteError[];
     return new MongoBulkWriteError({ message: 'bulk write failed', code: failed[0]?.code ?? 0, writeErrors }, result);
 }
 
