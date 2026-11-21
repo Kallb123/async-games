@@ -7,12 +7,8 @@
 
 import { isComputerTurnBranch, type ActionableTurnBranch } from '@/utils/games/TurnTimer';
 
-/** The fields of a game a branch reads. */
-export interface SweepBranchGame {
-    turnTimer?: unknown;
-    currentTurn?: unknown;
-    lastTurnTimestamp: unknown;
-}
+/** A game as a branch reads it: `turnTimer`, `currentTurn` and `lastTurnTimestamp`, whatever else it holds. */
+export type SweepBranchGame = object;
 
 /** Whether `branch` has the shape actionableTurnFilter produces, for a store that must not match an unrelated `$or`. */
 export function isSweepBranch(branch: unknown): branch is ActionableTurnBranch {
@@ -23,7 +19,8 @@ export function isSweepBranch(branch: unknown): branch is ActionableTurnBranch {
 }
 
 /** Whether `branch` matches `game`: its timer (or the computer's seat) and an upper bound on the turn's start. */
-export function sweepBranchMatches(branch: ActionableTurnBranch, game: SweepBranchGame): boolean {
+export function sweepBranchMatches(branch: ActionableTurnBranch, subject: SweepBranchGame): boolean {
+    const game = subject as { turnTimer?: unknown, currentTurn?: unknown, lastTurnTimestamp?: unknown };
     const onBranch = isComputerTurnBranch(branch)
         ? String(game.currentTurn ?? '') >= branch.currentTurn.$gte && String(game.currentTurn ?? '') <= branch.currentTurn.$lte
         : branch.turnTimer === game.turnTimer;

@@ -25,6 +25,7 @@ vi.mock('@/utils/games/awardAchievements', async importOriginal => {
 import { runAfterCallbacks } from '@/utils/testing/afterStub';
 import { ANN, BOB, commandPost, resetApiRouteStubs, seedSnakesAndLadders, sentPushes, signIn, storedGame, stubClerkUsers } from '@/utils/testing/apiRoute';
 import { registerFakeWarbands, warbandHooks, warbandTurnsRun } from '@/utils/testing/computerTurnFixtures';
+import { COMPUTER_TURN_SEAT } from '@/utils/games/computerTurns';
 import { maxDuration, POST as command } from './route';
 
 /** Ann's roll, which ends her turn: a three is never a six, so nobody rolls again. */
@@ -42,7 +43,7 @@ beforeEach(async () => {
     judgeTurnEnd.mockClear();
     stubClerkUsers(ANN, BOB);
     signIn(ANN);
-    registerFakeWarbands({ 'ai:0': BOB.id });
+    registerFakeWarbands([BOB.id]);
 });
 
 describe('POST /api/game/command, an End turn', () => {
@@ -64,7 +65,7 @@ describe('POST /api/game/command, an End turn', () => {
     });
 
     it('answers with the turn on the warband, and plays it in after() without pushing or judging first', async () => {
-        seedSnakesAndLadders({ gameState: { turnOrder: [ANN.id, 'ai:0', BOB.id], history: [], commandHistory: [] } });
+        seedSnakesAndLadders({ gameState: { turnOrder: [ANN.id, COMPUTER_TURN_SEAT, BOB.id], history: [], commandHistory: [] } });
 
         const response = await command(roll());
 
@@ -72,7 +73,7 @@ describe('POST /api/game/command, an End turn', () => {
         const saved = storedGame('game_1')!;
         // Saved on the warband's seat, its turn not yet played: the player's
         // request is not kept waiting on it.
-        expect(saved.currentTurn).toBe('ai:0');
+        expect(saved.currentTurn).toBe(COMPUTER_TURN_SEAT);
         expect(warbandTurnsRun.count).toBe(0);
         expect(sentPushes).toEqual([]);
 
@@ -88,13 +89,13 @@ describe('POST /api/game/command, an End turn', () => {
     it('hands a solo battle to the warbands and back without a push, judging the turn end', async () => {
         seedSnakesAndLadders({
             userIdList: [ANN.id],
-            gameState: { turnOrder: [ANN.id, 'ai:0'], history: [], commandHistory: [] },
+            gameState: { turnOrder: [ANN.id, COMPUTER_TURN_SEAT], history: [], commandHistory: [] },
         }, { [ANN.id]: 10 });
-        registerFakeWarbands({ 'ai:0': ANN.id });
+        registerFakeWarbands([ANN.id]);
 
         const response = await command(roll());
         expect(response.status).toBe(200);
-        expect(storedGame('game_1')!.currentTurn).toBe('ai:0');
+        expect(storedGame('game_1')!.currentTurn).toBe(COMPUTER_TURN_SEAT);
 
         await runAfterCallbacks();
 
@@ -104,7 +105,7 @@ describe('POST /api/game/command, an End turn', () => {
     });
 
     it('logs, and does not throw, when the warbands cannot be played, leaving the cron to try', async () => {
-        seedSnakesAndLadders({ gameState: { turnOrder: [ANN.id, 'ai:0', BOB.id], history: [], commandHistory: [] } });
+        seedSnakesAndLadders({ gameState: { turnOrder: [ANN.id, COMPUTER_TURN_SEAT, BOB.id], history: [], commandHistory: [] } });
         warbandHooks.onTurn = () => { throw new Error('the planner fell over'); };
         const error = vi.spyOn(console, 'error').mockImplementation(() => {});
 
@@ -113,7 +114,7 @@ describe('POST /api/game/command, an End turn', () => {
         await expect(runAfterCallbacks()).resolves.toBe(1);
 
         expect(error).toHaveBeenCalled();
-        expect(storedGame('game_1')!.currentTurn).toBe('ai:0');
+        expect(storedGame('game_1')!.currentTurn).toBe(COMPUTER_TURN_SEAT);
         expect(sentPushes).toEqual([]);
         error.mockRestore();
     });

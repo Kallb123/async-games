@@ -75,8 +75,9 @@ describe('playComputerTurns', () => {
         expect(judgeTurnEnd).toHaveBeenCalledTimes(1);
     });
 
-    it('sends no push in a solo battle, but still judges the turn end', async () => {
+    it('sends no push in a solo battle that was not kept waiting, but still judges the turn end', async () => {
         seedWarbandsDue({
+            lastTurnTimestamp: new Date().toISOString(),
             userIdList: [ANN.id],
             gameState: { turnOrder: [ANN.id, COMPUTER_TURN_SEAT], history: [], commandHistory: [] },
         });
@@ -154,20 +155,18 @@ describe('playComputerTurns', () => {
         expect(await playComputerTurns('game_1', { finishBy: finishBy() })).toBe('skipped');
     });
 
-    it('pushes a solo player when the warbands kept them waiting, and not when they did not', async () => {
-        const solo = { userIdList: [ANN.id], gameState: { turnOrder: [ANN.id, COMPUTER_TURN_SEAT], history: [], commandHistory: [] } };
+    it('pushes a solo player when the warbands kept them waiting past the long-wait threshold', async () => {
+        seedWarbandsDue({
+            userIdList: [ANN.id],
+            gameState: { turnOrder: [ANN.id, COMPUTER_TURN_SEAT], history: [], commandHistory: [] },
+            // Found stale, as the backstop finds a turn its runner left.
+            lastTurnTimestamp: new Date(Date.now() - COMPUTER_TURN_LONG_WAIT_MS - 1000).toISOString(),
+        });
         registerFakeWarbands([ANN.id]);
 
-        // Found stale, as the backstop finds a turn its runner left.
-        seedWarbandsDue({ ...solo, lastTurnTimestamp: new Date(Date.now() - COMPUTER_TURN_LONG_WAIT_MS - 1000).toISOString() });
         expect(await playComputerTurns('game_1', { finishBy: finishBy() })).toBe('handedBack');
-        expect(handedTo(ANN.id)).toHaveLength(1);
 
-        await resetApiRouteStubs();
-        stubClerkUsers(ANN, BOB);
-        seedWarbandsDue({ ...solo, lastTurnTimestamp: new Date(Date.now() - 5_000).toISOString() });
-        expect(await playComputerTurns('game_1', { finishBy: finishBy() })).toBe('handedBack');
-        expect(sentPushes).toEqual([]);
+        expect(handedTo(ANN.id)).toHaveLength(1);
     });
 
     describe('a turn that cannot be played', () => {
