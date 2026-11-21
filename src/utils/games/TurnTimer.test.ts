@@ -17,7 +17,8 @@ import {
     secondsUntil,
     warningThresholdMs,
 } from './TurnTimer';
-import { COMPUTER_TURN_STALE_MS } from './computerTurns';
+import { COMPUTER_TURN_SEAT, COMPUTER_TURN_STALE_MS } from './computerTurns';
+import { sweepBranchMatches } from '@/utils/testing/sweepBranches';
 
 describe('hasAbandonedGame', () => {
     it('does not abandon while under the threshold', () => {
@@ -150,18 +151,18 @@ describe('needsSweeping', () => {
         // Never timed out and never warned about, whatever the game's timer: it
         // is the sweep's business only once its runner has plainly stopped.
         it('is left alone while it is young, even on a timer that has run out', () => {
-            expect(needsSweeping(game('10m', COMPUTER_TURN_STALE_MS - 1000, false, 'ai:0'))).toBe(false);
+            expect(needsSweeping(game('10m', COMPUTER_TURN_STALE_MS - 1000, false, COMPUTER_TURN_SEAT))).toBe(false);
         });
 
         it('is never warned about', () => {
             // 50 minutes into a 1-hour timer a player would be warned.
-            expect(needsSweeping(game('1h', 50 * 60 * 1000, false, 'ai:0'))).toBe(true);
-            expect(needsSweeping(game('10m', 1000, false, 'ai:0'))).toBe(false);
+            expect(needsSweeping(game('1h', 50 * 60 * 1000, false, COMPUTER_TURN_SEAT))).toBe(true);
+            expect(needsSweeping(game('10m', 1000, false, COMPUTER_TURN_SEAT))).toBe(false);
         });
 
         it('is picked up once it has stood for the stale period, on any timer', () => {
             for (const turnTimer of TURN_TIMER_VALUES) {
-                expect(needsSweeping(game(turnTimer, COMPUTER_TURN_STALE_MS, true, 'ai:1')), turnTimer).toBe(true);
+                expect(needsSweeping(game(turnTimer, COMPUTER_TURN_STALE_MS, true, COMPUTER_TURN_SEAT)), turnTimer).toBe(true);
             }
         });
     });
@@ -172,11 +173,7 @@ describe('actionableTurnFilter', () => {
     // comparison Mongo would make of it — one $or branch per timer, each an
     // equality on turnTimer and an upper bound on lastTurnTimestamp.
     const matches = (branches: ActionableTurnBranch[], game: ITurnTimerState): boolean =>
-        branches.some(branch =>
-            (isComputerTurnBranch(branch)
-                ? new RegExp(branch.currentTurn.$regex).test(game.currentTurn ?? '')
-                : branch.turnTimer === game.turnTimer)
-            && game.lastTurnTimestamp <= branch.lastTurnTimestamp.$lte);
+        branches.some(branch => sweepBranchMatches(branch, game));
 
     const timerBranches = () => actionableTurnFilter().$or.filter(branch => !isComputerTurnBranch(branch));
 
@@ -211,7 +208,7 @@ describe('actionableTurnFilter', () => {
 
             for (const elapsedMs of [...elapsedCases, COMPUTER_TURN_STALE_MS - 1000, COMPUTER_TURN_STALE_MS, COMPUTER_TURN_STALE_MS + 1000]) {
                 for (const warned of [false, true]) {
-                    for (const currentTurn of ['user_ann', 'ai:0']) {
+                    for (const currentTurn of ['user_ann', COMPUTER_TURN_SEAT]) {
                         const candidate = game(turnTimer, elapsedMs, warned, currentTurn);
                         if (needsSweeping(candidate)) {
                             expect(matches(branches, candidate), `${turnTimer} at ${elapsedMs}ms on ${currentTurn} was left out`).toBe(true);
@@ -222,18 +219,18 @@ describe('actionableTurnFilter', () => {
         }
     });
 
-    it("asks for a computer's turn on an anchored seat prefix, whatever the timer", () => {
+    it("asks for a computer's turn on its one seat, whatever the timer", () => {
         // Including an unlimited game, which has no timer branch of its own.
         const branches = actionableTurnFilter().$or;
-        const stale = game(UNLIMITED_TURN_TIMER, COMPUTER_TURN_STALE_MS + 1000, false, 'ai:0');
+        const stale = game(UNLIMITED_TURN_TIMER, COMPUTER_TURN_STALE_MS + 1000, false, COMPUTER_TURN_SEAT);
         expect(needsSweeping(stale)).toBe(true);
         expect(matches(branches, stale)).toBe(true);
         // A player whose id merely contains the prefix is not a computer's seat.
-        expect(matches(branches, game(UNLIMITED_TURN_TIMER, COMPUTER_TURN_STALE_MS + 1000, false, 'user_ai:0'))).toBe(false);
+        expect(matches(branches, game(UNLIMITED_TURN_TIMER, COMPUTER_TURN_STALE_MS + 1000, false, 'user_ai:computer'))).toBe(false);
     });
 
     it("leaves out a computer's turn that is too young to have stalled", () => {
-        const young = game(UNLIMITED_TURN_TIMER, COMPUTER_TURN_STALE_MS - 1000, false, 'ai:0');
+        const young = game(UNLIMITED_TURN_TIMER, COMPUTER_TURN_STALE_MS - 1000, false, COMPUTER_TURN_SEAT);
         expect(needsSweeping(young)).toBe(false);
         expect(matches(actionableTurnFilter().$or, young)).toBe(false);
     });

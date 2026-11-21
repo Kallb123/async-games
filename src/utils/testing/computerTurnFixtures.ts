@@ -1,6 +1,6 @@
 // A computer's turn for the engine's tests that aren't about any one game
-// (docs/games/realm-arena-hold-out.md §3): Snakes and Ladders with a seat of the
-// computer's in its turn order, played by a fake warband command that does
+// (docs/games/realm-arena-hold-out.md §3): Snakes and Ladders with the
+// computer's seat (`COMPUTER_TURN_SEAT`) in its turn order, played by a fake warband command that does
 // nothing but hand the turn on. The route, the runner and the cron are the real
 // ones; only what the warbands *do* is stood in for, which is the game's own
 // business and is covered with Realm Arena's own tests.
@@ -13,10 +13,19 @@ import type { ICommandOutcome, IGameCommand } from '@/utils/apiModels/GameLogic'
 import type { uuidString } from '@/utils/apiModels/GameDataApi';
 import type { IGameData } from '@/utils/mongodb/GameData';
 import type { ISnakesAndLaddersGameData } from '@/games/SnakesAndLadders/SnakesAndLaddersModels';
-import { registerComputerTurnAdapter } from '@/utils/games/computerTurns';
+import { COMPUTER_TURN_SEAT, registerComputerTurnAdapter } from '@/utils/games/computerTurns';
 
 /** What a fake warband's turn hands the turn to, in place of a player: the game ends. */
 export const ENDS_THE_GAME = 'the-game-ends';
+
+/** In place of a hand-off: the turn's command is refused as an invalid move. */
+export const IS_REFUSED = 'the-turn-is-refused';
+
+/** In place of a hand-off: the turn's command throws out of its Execute. */
+export const THROWS = 'the-turn-throws';
+
+/** Where the computer's turn stays, for the next of its turns to play. */
+export const STAYS_WITH_COMPUTER = COMPUTER_TURN_SEAT;
 
 /**
  * Called as the runner sets about each warband turn, once the game is loaded and
@@ -51,6 +60,8 @@ export class FakeWarbandTurn implements IGameCommand {
     myString() { return 'took its turn'; }
 
     async Execute(gameData: IGameData): Promise<ICommandOutcome> {
+        if (this.handTo === THROWS) throw new Error('the warband fell over');
+        if (this.handTo === IS_REFUSED) return { validMove: false, turnOver: false };
         if (this.handTo === ENDS_THE_GAME) {
             const squares = (gameData as ISnakesAndLaddersGameData).specificGameState.playerPositions;
             for (const state of squares.values()) state.position = 100;
@@ -62,17 +73,21 @@ export class FakeWarbandTurn implements IGameCommand {
 }
 
 /**
- * Registers the fake adapter for Snakes and Ladders: each seat of the
- * computer's hands the turn to the seat `hands` names for it — another seat of
- * its own, a player, or `ENDS_THE_GAME`.
+ * Registers the fake adapter for Snakes and Ladders: the computer's n-th turn
+ * (counted off the turns already on the record, so a turn that was dropped
+ * unsaved is played again) hands the turn to `hands[n]` — the computer's seat
+ * again, a player, `ENDS_THE_GAME`, or a failure (`IS_REFUSED`, `THROWS`). A
+ * game with no entry left has no turn to play.
  */
-export function registerFakeWarbands(hands: Record<string, string>) {
+export function registerFakeWarbands(hands: string[]) {
     warbandTurnsRun.count = 0;
     delete warbandHooks.onTurn;
     registerComputerTurnAdapter({
         className: 'SnakesAndLaddersGameType',
         buildCommand(gameData) {
-            const handTo = hands[gameData.currentTurn];
+            const history = gameData.gameState.commandHistory as { className: string }[];
+            const played = history.filter(command => command.className === 'FakeWarbandTurn').length;
+            const handTo = hands[played];
             if (handTo === undefined) return null;
             warbandTurnsRun.count++;
             warbandHooks.onTurn?.(warbandTurnsRun.count);

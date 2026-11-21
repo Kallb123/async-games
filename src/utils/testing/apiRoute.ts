@@ -25,7 +25,8 @@ import type { User } from '@clerk/nextjs/server';
 import type { PushNotification, SendPushOptions } from '@/utils/firebase/pushNotification';
 import type { IGameDataDocument } from '@/utils/mongodb/GameData';
 import type { IChatAttachment } from '@/utils/chat';
-import { isComputerTurnBranch, type ActionableTurnBranch } from '@/utils/games/TurnTimer';
+import type { ActionableTurnBranch } from '@/utils/games/TurnTimer';
+import { isSweepBranch, sweepBranchMatches } from '@/utils/testing/sweepBranches';
 import { clearAfterCallbacks } from '@/utils/testing/afterStub';
 import { gameCommandVersion } from '@/utils/ui/games';
 
@@ -521,9 +522,7 @@ function findSweepCandidatesFromStore(filter: Record<string, unknown>) {
     // filter here, so a future query with an unrelated one would otherwise
     // match nothing and hand its test a clean, empty, meaningless pass.
     const shape = filter.complete === false && Array.isArray(branches) && branches.length > 0
-        && branches.every(branch => (typeof (branch as { turnTimer?: unknown })?.turnTimer === 'string'
-            || typeof (branch as { currentTurn?: { $regex?: unknown } })?.currentTurn?.$regex === 'string')
-            && typeof branch?.lastTurnTimestamp?.$lte === 'string');
+        && branches.every(isSweepBranch);
     if (!shape) {
         throw new Error(`The test game store's only $or query is the turn-timer sweep's, not ${JSON.stringify(filter)}`);
     }
@@ -531,11 +530,7 @@ function findSweepCandidatesFromStore(filter: Record<string, unknown>) {
     // games back rather than a page of empty objects.
     let fields: string[] | undefined;
     let results = [...games.values()].filter(stored =>
-        stored.complete === false && branches.some(branch =>
-            (isComputerTurnBranch(branch)
-                ? new RegExp(branch.currentTurn.$regex).test(String(stored.currentTurn))
-                : branch.turnTimer === stored.turnTimer)
-            && String(stored.lastTurnTimestamp) <= branch.lastTurnTimestamp.$lte));
+        stored.complete === false && branches.some(branch => sweepBranchMatches(branch, stored)));
 
     const query = {
         select: (projection: string) => {

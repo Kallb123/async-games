@@ -1,5 +1,5 @@
 import { pluralize } from "@/utils/ui/text";
-import { COMPUTER_SEAT_PREFIX, COMPUTER_TURN_STALE_MS, isComputerSeat } from "./computerTurns";
+import { COMPUTER_TURN_SEAT, COMPUTER_TURN_STALE_MS } from "./computerTurns";
 
 export const UNLIMITED_TURN_TIMER = 'unlimited';
 
@@ -137,7 +137,7 @@ export interface ITurnTimerState {
  * loads off the back of that. See `sweepGame` for why it asks twice.
  */
 export function needsSweeping({ turnTimer, lastTurnTimestamp, timerWarningNotificationSent, currentTurn }: ITurnTimerState): boolean {
-    if (isComputerSeat(currentTurn)) {
+    if (currentTurn === COMPUTER_TURN_SEAT) {
         return Date.now() - new Date(lastTurnTimestamp).getTime() >= COMPUTER_TURN_STALE_MS;
     }
     return isExpired(lastTurnTimestamp, turnTimer)
@@ -151,9 +151,15 @@ export interface PlayerTurnBranch {
     lastTurnTimestamp: { $lte: string },
 }
 
-/** The `$or` branch for a computer's turn: its seat, and a turn old enough that its runner has plainly stopped. */
+/**
+ * The `$or` branch for a computer's turn: its one seat, and a turn old enough
+ * that its runner has plainly stopped. The seat is a point interval rather than
+ * a bare equality so that Mongo reads the branch as a range on `currentTurn`
+ * with `lastTurnTimestamp` still in index order inside it, which lets the
+ * `$or`'s sort on `lastTurnTimestamp` merge the branches.
+ */
 export interface ComputerTurnBranch {
-    currentTurn: { $regex: string },
+    currentTurn: { $gte: string, $lte: string },
     lastTurnTimestamp: { $lte: string },
 }
 
@@ -198,10 +204,7 @@ export function actionableTurnFilter(): { $or: ActionableTurnBranch[] } {
         lastTurnTimestamp: { $lte: new Date(now - actionableElapsedMs(turnTimer)).toISOString() },
     }));
     const computerBranch: ComputerTurnBranch = {
-        // Anchored, so Mongo can read it as a prefix range of an index on
-        // `currentTurn` rather than testing every game's seat. The prefix is
-        // plain letters and a colon, which mean nothing to a regex.
-        currentTurn: { $regex: `^${COMPUTER_SEAT_PREFIX}` },
+        currentTurn: { $gte: COMPUTER_TURN_SEAT, $lte: COMPUTER_TURN_SEAT },
         lastTurnTimestamp: { $lte: new Date(now - COMPUTER_TURN_STALE_MS).toISOString() },
     };
     return { $or: [...playerBranches, computerBranch] };

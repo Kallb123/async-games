@@ -301,8 +301,9 @@ GameDataSchema.index({ complete: 1, turnTimer: 1, lastTurnTimestamp: 1 });
 // can't serve it — it has no `currentTurn` — so with only that one the planner
 // would fall back to scanning every live game and reading each whose turn is
 // two minutes old, which is nearly all of them, on every tick. Leading with
-// `complete` and then `currentTurn` turns the anchored `^ai:` match into a
-// prefix range, so only games actually on a computer's seat are visited.
+// `complete` and then `currentTurn` turns the computer's one seat (a point
+// range) into a seek, with `lastTurnTimestamp` still in order inside it, so only
+// games actually on that seat are visited and the `$or`'s sort can merge.
 GameDataSchema.index({ complete: 1, currentTurn: 1, lastTurnTimestamp: 1 });
 // The only link back from a game to the lobby it started from, looked up on
 // every poll from a host still sitting on their lobby screen once the
