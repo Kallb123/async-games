@@ -7,6 +7,7 @@ import {
     TURN_TIMER_VALUES,
     UNLIMITED_TURN_TIMER,
     actionableTurnFilter,
+    isComputerTurnBranch,
     formatRemainingUntil,
     hasAbandonedGame,
     isExpired,
@@ -16,6 +17,7 @@ import {
     secondsUntil,
     warningThresholdMs,
 } from './TurnTimer';
+import { COMPUTER_TURN_STALE_MS } from './computerTurns';
 
 describe('hasAbandonedGame', () => {
     it('does not abandon while under the threshold', () => {
@@ -114,10 +116,11 @@ describe('isValidTurnTimer', () => {
 
 // A game whose current turn started `elapsedMs` ago — the only thing either of
 // the two suites below varies, so they share the one builder.
-const game = (turnTimer: string, elapsedMs: number, warned = false): ITurnTimerState => ({
+const game = (turnTimer: string, elapsedMs: number, warned = false, currentTurn = 'user_ann'): ITurnTimerState => ({
     turnTimer,
     lastTurnTimestamp: new Date(Date.now() - elapsedMs).toISOString(),
     timerWarningNotificationSent: warned,
+    currentTurn,
 });
 
 // The ladder without the unlimited timer: the timers that actually count, and
@@ -142,6 +145,26 @@ describe('needsSweeping', () => {
     it('has nothing to do for an unlimited timer, however long the turn runs', () => {
         expect(needsSweeping(game(UNLIMITED_TURN_TIMER, 30 * 24 * 60 * 60 * 1000))).toBe(false);
     });
+
+    describe("a computer's turn", () => {
+        // Never timed out and never warned about, whatever the game's timer: it
+        // is the sweep's business only once its runner has plainly stopped.
+        it('is left alone while it is young, even on a timer that has run out', () => {
+            expect(needsSweeping(game('10m', COMPUTER_TURN_STALE_MS - 1000, false, 'ai:0'))).toBe(false);
+        });
+
+        it('is never warned about', () => {
+            // 50 minutes into a 1-hour timer a player would be warned.
+            expect(needsSweeping(game('1h', 50 * 60 * 1000, false, 'ai:0'))).toBe(true);
+            expect(needsSweeping(game('10m', 1000, false, 'ai:0'))).toBe(false);
+        });
+
+        it('is picked up once it has stood for the stale period, on any timer', () => {
+            for (const turnTimer of TURN_TIMER_VALUES) {
+                expect(needsSweeping(game(turnTimer, COMPUTER_TURN_STALE_MS, true, 'ai:1')), turnTimer).toBe(true);
+            }
+        });
+    });
 });
 
 describe('actionableTurnFilter', () => {
@@ -150,8 +173,12 @@ describe('actionableTurnFilter', () => {
     // equality on turnTimer and an upper bound on lastTurnTimestamp.
     const matches = (branches: ActionableTurnBranch[], game: ITurnTimerState): boolean =>
         branches.some(branch =>
-            branch.turnTimer === game.turnTimer
+            (isComputerTurnBranch(branch)
+                ? new RegExp(branch.currentTurn.$regex).test(game.currentTurn ?? '')
+                : branch.turnTimer === game.turnTimer)
             && game.lastTurnTimestamp <= branch.lastTurnTimestamp.$lte);
+
+    const timerBranches = () => actionableTurnFilter().$or.filter(branch => !isComputerTurnBranch(branch));
 
 
     // The clock is frozen because the cases below sit exactly on the timers'
@@ -164,7 +191,7 @@ describe('actionableTurnFilter', () => {
     afterEach(() => vi.useRealTimers());
 
     it('asks for every timer on the ladder, and never for an unlimited game', () => {
-        const asked = actionableTurnFilter().$or.map(branch => branch.turnTimer);
+        const asked = timerBranches().map(branch => 'turnTimer' in branch ? branch.turnTimer : '');
         expect(asked.sort()).toEqual([...COUNTED_TIMERS].sort());
     });
 
@@ -182,22 +209,40 @@ describe('actionableTurnFilter', () => {
                 total - 1000, total, total + 1000, total * 3,
             ];
 
-            for (const elapsedMs of elapsedCases) {
+            for (const elapsedMs of [...elapsedCases, COMPUTER_TURN_STALE_MS - 1000, COMPUTER_TURN_STALE_MS, COMPUTER_TURN_STALE_MS + 1000]) {
                 for (const warned of [false, true]) {
-                    const candidate = game(turnTimer, elapsedMs, warned);
-                    if (needsSweeping(candidate)) {
-                        expect(matches(branches, candidate), `${turnTimer} at ${elapsedMs}ms was left out`).toBe(true);
+                    for (const currentTurn of ['user_ann', 'ai:0']) {
+                        const candidate = game(turnTimer, elapsedMs, warned, currentTurn);
+                        if (needsSweeping(candidate)) {
+                            expect(matches(branches, candidate), `${turnTimer} at ${elapsedMs}ms on ${currentTurn} was left out`).toBe(true);
+                        }
                     }
                 }
             }
         }
     });
 
+    it("asks for a computer's turn on an anchored seat prefix, whatever the timer", () => {
+        // Including an unlimited game, which has no timer branch of its own.
+        const branches = actionableTurnFilter().$or;
+        const stale = game(UNLIMITED_TURN_TIMER, COMPUTER_TURN_STALE_MS + 1000, false, 'ai:0');
+        expect(needsSweeping(stale)).toBe(true);
+        expect(matches(branches, stale)).toBe(true);
+        // A player whose id merely contains the prefix is not a computer's seat.
+        expect(matches(branches, game(UNLIMITED_TURN_TIMER, COMPUTER_TURN_STALE_MS + 1000, false, 'user_ai:0'))).toBe(false);
+    });
+
+    it("leaves out a computer's turn that is too young to have stalled", () => {
+        const young = game(UNLIMITED_TURN_TIMER, COMPUTER_TURN_STALE_MS - 1000, false, 'ai:0');
+        expect(needsSweeping(young)).toBe(false);
+        expect(matches(actionableTurnFilter().$or, young)).toBe(false);
+    });
+
     it('leaves out a turn too young for its own timer to have anything to say', () => {
         // What the per-timer bounds buy over the one cutoff this replaced: a
         // 7-day game whose turn started an hour ago is no longer even read,
         // where before it was read in full every tick.
-        const branches = actionableTurnFilter().$or;
+        const branches = timerBranches();
 
         for (const turnTimer of COUNTED_TIMERS) {
             const tooYoung = game(turnTimer, parseTurnTimerMs(turnTimer) - warningThresholdMs(turnTimer) - 1000);

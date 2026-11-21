@@ -16,6 +16,8 @@ import { isAuthorisedCron } from '@/utils/cronAuth';
 import { userListToUserIdNameMap, usersById } from '@/utils/users/clerk';
 import { readableName } from '@/utils/ui/players';
 import { gameCommandVersion } from '@/utils/ui/games';
+import { isComputerSeat, isComputerTurn } from '@/utils/games/computerTurns';
+import { playComputerTurns } from '@/utils/games/playComputerTurns';
 
 /**
  * What one game's sweep did, which is also how the run tallies itself.
@@ -29,8 +31,11 @@ import { gameCommandVersion } from '@/utils/ui/games';
  * missed turn is banked against the abandon ladder and the turn stays where it
  * is; `stuck` is an adapter that ran commands and still didn't finish the
  * turn, where nothing is kept at all.
+ *
+ * `computer` is a turn of the computer's that stood long enough for the sweep to
+ * play it itself: not a timeout, and nothing is counted against anybody.
  */
-type SweepOutcome = 'expired' | 'dropped' | 'abandoned' | 'warned' | 'skipped' | 'declined' | 'stuck';
+type SweepOutcome = 'expired' | 'dropped' | 'abandoned' | 'warned' | 'skipped' | 'declined' | 'stuck' | 'computer';
 
 /**
  * Ends a game whose current player has stopped turning up.
@@ -119,7 +124,7 @@ async function passTurnOn(gameData: IGameDataDocument, timedOutPlayerId: string,
 
     if (resolution === 'declined') return 'declined';
 
-    await tellNextPlayer(gameData, userList, timedOutName);
+    await tellNextPlayer(gameData, userList, timedOutName, finishBy);
     return 'expired';
 }
 
@@ -160,8 +165,17 @@ async function finishPlayedOut(gameData: IGameDataDocument, outcome: SweepOutcom
  * Tells whoever now holds the turn that it's theirs. The turn arrived because
  * the previous player ran out of time, not because they moved — say so, it's
  * the more useful headline.
+ *
+ * A timed-out End turn may have handed the turn to the computer instead
+ * (computerTurns.ts), which there is nobody to tell: pushes follow the turn, so
+ * its turns are played here, and the player is told by the runner once the turn
+ * reaches them.
  */
-async function tellNextPlayer(gameData: IGameDataDocument, userList: User[], timedOutName: string): Promise<void> {
+async function tellNextPlayer(gameData: IGameDataDocument, userList: User[], timedOutName: string, finishBy: number): Promise<void> {
+    if (isComputerTurn(gameData)) {
+        await playComputerTurns(gameData.gameId, { finishBy });
+        return;
+    }
     const turnUser = userList.find(u => u.id === gameData.currentTurn);
     if (!turnUser) return;
     await sendPushToUsers([turnUser], {
@@ -224,7 +238,7 @@ async function dropPlayer(gameData: IGameDataDocument, missingPlayerId: string, 
     gameData.timerWarningNotificationSent = false;
     if (!(await trySave(gameData))) return 'skipped';
 
-    await tellNextPlayer(gameData, userList, missingName);
+    await tellNextPlayer(gameData, userList, missingName, finishBy);
     return 'dropped';
 }
 
@@ -270,6 +284,18 @@ async function sweepGame(gameId: string, finishBy: number): Promise<SweepOutcome
 
     const gameData: IGameDataDocument = found.game;
     if (!needsSweeping(gameData)) return 'skipped';
+
+    // A computer's turn that has stood too long (`needsSweeping` says so only
+    // past COMPUTER_TURN_STALE_MS) means its runner stopped, so it is played
+    // here. It is decided before anything below: a computer's seat is never
+    // timed out, warned or counted as a missed turn, and has no player to
+    // drop or abandon the game over. A seat of the computer's in a game that
+    // can't play it is left alone for the same reason.
+    if (isComputerSeat(gameData.currentTurn)) {
+        if (!isComputerTurn(gameData)) return 'skipped';
+        await playComputerTurns(gameId, { finishBy });
+        return 'computer';
+    }
 
     const { lastTurnTimestamp, turnTimer, currentTurn } = gameData;
 
@@ -323,7 +349,7 @@ export async function GET(request: NextRequest) {
     const hardStop = startedAt + maxDuration * 1000;
     const candidates: ISweepCandidate[] = await findSweepCandidates();
 
-    const tally: Record<SweepOutcome, number> = { expired: 0, dropped: 0, abandoned: 0, warned: 0, skipped: 0, declined: 0, stuck: 0 };
+    const tally: Record<SweepOutcome, number> = { expired: 0, dropped: 0, abandoned: 0, warned: 0, skipped: 0, declined: 0, stuck: 0, computer: 0 };
     let failed = 0;
     let unswept = 0;
 
@@ -363,6 +389,9 @@ export async function GET(request: NextRequest) {
         // without them (utils/games/playerDropout.ts), rather than ending it.
         dropped: tally.dropped,
         warned: tally.warned,
+        // Computer turns this run played where their own runner had stopped
+        // (utils/games/playComputerTurns.ts), however far each got.
+        computer: tally.computer,
         abandoned: tally.abandoned,
         skipped: tally.skipped,
         // The turns no adapter resolved. `declined` is expected — a game shape
