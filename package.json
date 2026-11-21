@@ -37,7 +37,7 @@
     "@capacitor/share": "^8.0.3",
     "@capacitor/splash-screen": "^8.0.2",
     "@capgo/capacitor-social-login": "^8.7.11",
-    "@clerk/nextjs": "^7.10.2",
+    "@clerk/nextjs": "^7.10.3",
     "bootstrap": "^5.3.9",
     "firebase": "^13.4.0",
     "firebase-admin": "^14.5.1",
@@ -54,7 +54,7 @@
   },
   "devDependencies": {
     "@capacitor/cli": "^8.6.2",
-    "@clerk/testing": "^2.3.1",
+    "@clerk/testing": "^2.3.2",
     "@playwright/test": "^1.65.1",
     "@types/node": "^24.19.2",
     "@types/react": "^19.3.0",
@@ -66,7 +66,7 @@
     "sharp": "^0.35.5",
     "tsx": "^4.23.15",
     "typescript": "~6.0.3",
-    "vitest": "^5.1.0"
+    "vitest": "^5.1.1"
   },
   "overrides": {
     "@firebase/firestore": {
