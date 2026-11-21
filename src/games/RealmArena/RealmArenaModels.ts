@@ -18,6 +18,7 @@ import { BATTLE_SIZE_NAMES, CHARACTERS, COOP_PLAYERS, coopTeamMax, DIFFICULTY_NA
 import { addTally, NO_TALLY, xpOf, type MasterySnapshot, type Tally } from "./mastery";
 import { battlefieldById, COOP_MAPS, DEPLOYMENT_NAMES, mapFor, type CoopMap, type RealmArenaMapId } from "./maps";
 import { allied, ENEMY_SIDE, fighterById, fogGhost, isStructure, isWarband, pickOf, squadSight, storedFighter, TEAM_SIDE, viewOf, warbandsFor, maxHpOf, actionPointsOf, type BattleEvent, type Fighter, type FogGhost, type MusterPick, type ToldEvent } from "./rules";
+import { computerHoldsTurn } from "@/utils/games/computerTurns";
 import type { IRealmArenaGameDataResponse, IRealmArenaSpecificGameStateResponse, IRealmArenaStepOutcome, IRealmArenaStepPart, RealmArenaPartState } from "./apiModels";
 import type { Square } from "@/utils/games/battlefield/terrain";
 import { addRecords, NO_RECORD, RECORD_KEYS, type BattleRecord, type FightingRecord, type FightingRow, type WaveRecord } from "./battleRecord";
@@ -143,8 +144,9 @@ export interface IRealmArenaSpecificGameState {
     rallyOwed?: string[];
     /**
      * The warband whose turn is due, while the turn is the computer's
-     * (docs/games/realm-arena-hold-out.md §3): `warband` its index, whose
-     * seat (`ai:k`, `warbandOwner`) holds `currentTurn`, and `from` the
+     * (docs/games/realm-arena-hold-out.md §3): `warband` its index — always
+     * one with someone standing — while `ENEMY_TURN_SEAT` holds `currentTurn`,
+     * and `from` the
      * player's seat the hand-off carries on from once the warbands have played
      * — the player who ended their turn, or the last seat round the table
      * when the warbands take their turns in a block. Set by an End turn played
@@ -538,8 +540,8 @@ var RealmArenaGameDataSchema = new Schema<IRealmArenaGameDataDocument>(
  */
 RealmArenaGameDataSchema.methods.CreateResponse = function(directory: UserDirectory): IGameResponse {
     const response: IGameResponse = GameDataSchema.methods.CreateResponse.call(this, directory);
-    return isWarband(response.currentTurn) && !response.complete
-        ? { ...response, currentTurnUsername: "The enemy" }
+    return computerHoldsTurn(response)
+        ? { ...response, currentTurnUsername: capitalise(UNKNOWN_ENEMY) }
         : response;
 };
 

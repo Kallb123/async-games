@@ -50,6 +50,7 @@ import { tutorialRun } from "@/utils/ui/gameTutorials";
 import { playerColourForId } from "@/utils/ui/playerColours";
 import { abandonedGameStatus, finishedGameCopy, isPlayersTurn, nameForUserId, scoreboardSeatOrder } from "@/utils/ui/players";
 import { capitalise } from "@/utils/ui/text";
+import { computerHoldsTurn } from "@/utils/games/computerTurns";
 
 /** The viewer's own action or End turn played over the board as it comes back: one playback, or a co-op End turn's parts one after another (`index`), resting a beat between (`rested`). */
 interface OwnPlayback {
@@ -129,7 +130,7 @@ export default function GameRealmArena({ params }: { params: Promise<{ gameid: u
     // recap is asked for again, so "since your last turn" shows what the enemy
     // did. A teammate whose turn it isn't just sees the board refresh.
     const liveTurn = gameData?.currentTurn ?? '';
-    const liveWarbandTurn = isWarband(liveTurn) && !gameData?.complete;
+    const liveWarbandTurn = !!gameData && computerHoldsTurn(gameData);
     const warbandHeldTurn = useRef(false);
     const refetchRecap = recap.refetch;
     useEffect(() => {

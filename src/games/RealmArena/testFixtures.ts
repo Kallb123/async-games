@@ -111,7 +111,7 @@ export async function playComputerTurnsIn(game: RealmArenaTestGame): Promise<Run
 export const muster = (sender: string, picks: MusterPick[]) => cmd(RealmArenaMuster, sender, { picks });
 export const actBy = (sender: string, action: Action | RallyAction) => cmd(RealmArenaAct, sender, { action });
 export const endTurnBy = (sender: string, keepStill: number[] = []) => cmd(RealmArenaEndTurn, sender, { keepStill });
-/** A warband's turn from `seat` (`ai:k`) with its actions and rolls scripted, as a replay carries them: `playOne` it once an End turn has handed the turn over. */
+/** A warband's turn from `seat` (`ENEMY_TURN_SEAT`) with its actions and rolls scripted, as a replay carries them: `playOne` it once an End turn has handed the turn over. */
 export const warbandTurnBy = (seat: string, recordedActions: Action[] = [], recordedRolls?: number[]) =>
     cmd(RealmArenaWarbandTurn, seat, { recordedActions, ...recordedRolls ? { recordedRolls } : {} });
 

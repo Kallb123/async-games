@@ -22,6 +22,14 @@ import { createAdapterRegistry } from "./adapterRegistry";
  */
 export const COMPUTER_SEAT_PREFIX = "ai:";
 
+/**
+ * The seat that holds `currentTurn` while the computer moves: one for every
+ * computer turn, whichever of its pieces is playing (the game keeps that in its
+ * own state), so `currentTurn` — on the wire, in every review step — never says
+ * which of them still has a turn to take, and the sweep can match it exactly.
+ */
+export const COMPUTER_TURN_SEAT = `${COMPUTER_SEAT_PREFIX}computer`;
+
 /** Whether `seat` is one of the computer's rather than a player's. */
 export const isComputerSeat = (seat: string | null | undefined): boolean => typeof seat === "string" && seat.startsWith(COMPUTER_SEAT_PREFIX);
 
@@ -53,7 +61,16 @@ export function getComputerTurnAdapter(className: string): IComputerTurnAdapter 
     return adapters.get(className);
 }
 
-/** Whether the turn is the computer's to play: a live game whose `currentTurn` is a computer's seat, in a game that can play it. */
+/**
+ * Whether a computer's seat holds the turn of a game still being played — read
+ * off a game, its response or its dashboard summary alike: the one test for
+ * "the computer is moving", so a board, a summary and the runner can't disagree.
+ */
+export function computerHoldsTurn(game: { complete: boolean; currentTurn: string }): boolean {
+    return !game.complete && isComputerSeat(game.currentTurn);
+}
+
+/** Whether the turn is the computer's to play: a computer holds it (`computerHoldsTurn`), in a game that can play it. */
 export function isComputerTurn(gameData: Pick<IGameData, "complete" | "currentTurn" | "gameType">): boolean {
-    return !gameData.complete && isComputerSeat(gameData.currentTurn) && adapters.has(gameData.gameType.className);
+    return computerHoldsTurn(gameData) && adapters.has(gameData.gameType.className);
 }

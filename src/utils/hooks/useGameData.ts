@@ -10,7 +10,7 @@ import { gameDataUrl, GAME_DATA_CACHE_MS } from "./prefetchGameData";
 import { useRefreshableData } from "./useRefreshableData";
 import type { IGameDataResponse } from "@/utils/apiModels/GameDataApi";
 import { gameHasOutOfTurnPlays, resultPath } from "@/utils/ui/games";
-import { isComputerSeat } from "@/utils/games/computerTurns";
+import { computerHoldsTurn } from "@/utils/games/computerTurns";
 
 /** What `/api/game/[gameid]` answers with. Nothing reads its `success` flag. */
 interface IGameDataBody<T> {
@@ -62,7 +62,7 @@ export function boardCanMove(game: IGameDataResponse | null | undefined, viewerI
  * interval whenever `boardCanMove`, and not at all when it can't.
  */
 export function boardPollMode(game: IGameDataResponse | null | undefined, viewerId: string | null | undefined): PollMode {
-    if (game && !game.complete && isComputerSeat(game.currentTurn)) {
+    if (game && computerHoldsTurn(game)) {
         return 'fast';
     }
     return boardCanMove(game, viewerId);

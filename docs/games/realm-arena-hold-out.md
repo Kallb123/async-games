@@ -162,19 +162,28 @@ to fit (`realm-arena.md` §39.9). A Brood of minions can't fit inside it at all.
 ### 3.6 What PR 1 settled
 
 - **The warband's turn is `RealmArenaWarbandTurn`**, a server-only command
-  (`gameCommands.ts`'s `SERVER_ONLY_COMMANDS`), its sender the warband's seat.
+  (`gameCommands.ts`'s `SERVER_ONLY_COMMANDS`), its sender the computer's seat.
   It records `recordedActions` and `recordedRolls`, as the End turn's
   `recordedEnemyActions` and `recordedRolls` were. Outside a block it also
   plays the empty turns of any warband with only a burning nest that the
   rotation passed over (`realm-arena.md` §39.7), as the End turn did, since
   they need no planning. In a block each warband's turn is its own command.
 - **What's due is stored**: `warbandDue: { warband, from }` on the battle,
-  while `currentTurn` is that warband's seat. `from` is the player's seat the
-  hand-off carries on from: the player who ended their turn, or the last seat
-  round the table when the warbands take their turns in a block. The hand-off
-  (`handOff`) is the one it was, stopping where it used to play a warband and
-  picked up again by the warband's command from the same place, so the round,
-  the wave, the rally and burning land exactly where they did.
+  never sent. `from` is the player's seat the hand-off carries on from: the
+  player who ended their turn, or the last seat round the table when the
+  warbands take their turns in a block. The hand-off (`handOff`) is the one it
+  was, stopping where it used to play a warband and picked up again by the
+  warband's command from the same place, so the round, the wave, the rally and
+  burning land exactly where they did.
+- **One seat holds the computer's turn**, `ai:computer` (`COMPUTER_TURN_SEAT`),
+  whichever warband's it is, rather than the warband's own `ai:k`: `currentTurn`
+  and a command's sender are on the wire, and which warband's turn came round
+  would tell a fogged team which warbands still stand.
+- **Only a warband with someone standing takes the turn.** The empty turn of
+  one with only a burning nest (`realm-arena.md` §39.7) is still played where
+  it falls — inside the End turn, or the warband command before it — since it
+  needs no planning, and handing it the turn would tell a fogged team a nest
+  still stands and burns.
 - **An End turn that hands to a warband is `turnOver`, even solo**, so
   `CheckEndTurn` gives the warband the turn. The warband's command is always
   `turnOver`, and after the last one the turn passes on from `from`, which in
