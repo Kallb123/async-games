@@ -183,8 +183,26 @@ to fit (`realm-arena.md` §39.9). A Brood of minions can't fit inside it at all.
   starting `ai:` (`COMPUTER_SEAT_PREFIX`, `src/utils/games/computerTurns.ts`),
   and a game that has them registers an `IComputerTurnAdapter` that builds the
   command for the seat on turn. The runner, `playComputerTurns`, knows no game.
+- **The runner** is `playComputerTurns(gameId, { finishBy })`
+  (`src/utils/games/playComputerTurns.ts`). It starts a warband turn only with
+  `COMPUTER_TURN_BUDGET_MS` (15 seconds) left before `finishBy`: the command
+  route declares `maxDuration` 60 and hands it 50 seconds from the request's
+  start; the cron its run's hard stop. A lost save reloads and carries on only
+  while the turn is still the computer's, giving up after three. When the turn
+  reaches a player it pushes them and judges turn-end achievements
+  (`announceTurnEnd`, shared with the route), pushing nobody in solo.
+- **The backstop** sweeps a computer's turn that has stood two minutes
+  (`COMPUTER_TURN_STALE_MS`), whatever the timer — solo's unlimited one
+  included — through a branch of `actionableTurnFilter` and a new
+  `{ complete, currentTurn, lastTurnTimestamp }` index. The sweep plays a
+  timed-out turn's warbands too, rather than pushing nobody.
 - **The planner's deadline** is 10 seconds a warband turn
-  (`WARBAND_DEADLINE_MS`).
+  (`WARBAND_DEADLINE_MS`). `planner.pace.test.ts` keeps its tighter budgets on
+  the planner's own time.
+- **The board** says "{The enemy} is moving…" while a warband holds the turn
+  and checks back every three seconds (`usePushEvents`'s `'fast'` poll), and
+  fetches the recap again when the turn comes back to the viewer. The
+  dashboard names the turn "The enemy's", and offers no nudge.
 - **The review's dock** names a warband's command "The enemy · took its
   turn", never by its faction, which a random enemy keeps hidden.
 

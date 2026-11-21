@@ -825,6 +825,26 @@ last setup placement — which is why its end-of-turn card draw waits for
 legs do. The ten-second window and the turn-clock staleness test the last
 three share live in `src/utils/games/undo.ts`.
 
+**Computer turns.** A game can hand the turn to a seat of the computer's — any
+`currentTurn` starting `ai:` (`COMPUTER_SEAT_PREFIX`,
+`src/utils/games/computerTurns.ts`), which no Clerk id can be — and register an
+`IComputerTurnAdapter` that builds the command playing that seat's turn. Realm
+Arena's co-op warbands are the one user
+([`docs/games/realm-arena-hold-out.md`](./docs/games/realm-arena-hold-out.md) §3):
+a player's End turn hands the turn to the warband due and returns at once, and
+each warband's turn is a server-only `RealmArenaWarbandTurn`, recorded on
+`commandHistory` like any move with its actions and rolls, so a replay never
+asks the planner again. `playComputerTurns(gameId, { finishBy })` plays them:
+one command at a time through `runCommand`, each saved on its own with
+`trySave` (a lost save reloads, and stops if the turn has moved on), stopping
+before a turn it couldn't finish by `finishBy`
+(`COMPUTER_TURN_BUDGET_MS`). Once the turn reaches a player it does what step
+13 does — the `YourTurn` push (not in a game of one) and the turn-end judging,
+both in `announceTurnEnd` (`src/utils/games/announceTurnEnd.ts`), which the
+route shares. The route runs it in `after()` in place of step 13 whenever the
+saved move left the turn with the computer (the route's `maxDuration` is 60 s
+for it); the turn-timer cron is its backstop (§7).
+
 The route checks the deserialised command against `COMMANDS_BY_GAME_TYPE` in
 `src/utils/games/gameCommands.ts` before executing it: every `Execute` casts the
 game to its own shape on its first line, so a command from another game would
@@ -894,6 +914,13 @@ enforcement job. It:
     starts over;
   - else sends a `TurnExpiringSoon` push and sets
     `timerWarningNotificationSent`.
+- plays a **computer's turn** left standing for `COMPUTER_TURN_STALE_MS` (two
+  minutes) with `playComputerTurns` (§6, "Computer turns"), the backstop for a
+  runner that stopped, whatever the game's timer — `actionableTurnFilter` has a
+  branch for it, served by the `{ complete, currentTurn, lastTurnTimestamp }`
+  index. A computer's turn is never expired, warned or counted as missed, and
+  when a timed-out turn hands the turn to the computer, the cron plays it rather
+  than pushing anyone;
 - sweeps each game inside its own `try`, so one Clerk or FCM failure costs that
   game rather than the rest of the run;
 - stops itself before the request deadline rather than being cut off mid-game,
