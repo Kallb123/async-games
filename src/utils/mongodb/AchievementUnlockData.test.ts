@@ -14,7 +14,7 @@
 // loaded, never from an import of "mongodb": recordUnlocks checks the errors it
 // catches against that copy, and a test that built them from another one would
 // stay green on the day the two stop being the same. Its types come from there
-// too — the root package's don't fit Mongoose's classes once the two differ.
+// too, as everywhere: "mongodb" is not a dependency of ours, only Mongoose's.
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { MockInstance } from 'vitest';
