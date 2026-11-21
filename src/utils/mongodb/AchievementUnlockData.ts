@@ -156,12 +156,12 @@ export async function recordUnlocks(unlocks: UnlockToRecord[], unlockedAt: strin
         // happens to hold code 11000 has no answer to give and is rethrown.
         //
         // The class is Mongoose's own copy of the driver (`mongoose.mongo`),
-        // not an import of "mongodb". Mongoose pins its driver (~7.2) while
-        // package.json only asks for ^7, so a later bump of the root package
-        // can leave two copies installed, and every error Mongoose throws would
-        // then fail `instanceof` against ours — sending the lost-race path to a
-        // rethrow while tests that build their errors from the same root import
-        // stay green.
+        // not an import of "mongodb". Mongoose pins its driver to a minor
+        // version, so were "mongodb" ever a dependency of our own again, a bump
+        // of it could leave two copies installed, and every error Mongoose
+        // throws would then fail `instanceof` against ours — sending the
+        // lost-race path to a rethrow while tests that build their errors from
+        // the same root import stay green.
         if (!(err instanceof mongoose.mongo.MongoBulkWriteError) || !isOnlyDuplicateKeyErrors(err)) {
             throw err;
         }
