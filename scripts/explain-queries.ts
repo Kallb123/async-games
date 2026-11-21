@@ -32,7 +32,7 @@
 import { writeFileSync } from 'node:fs';
 import { parseArgs } from 'node:util';
 import mongoose from 'mongoose';
-import type { CommandStartedEvent, Document } from 'mongodb';
+import type { mongo } from 'mongoose';
 // Registers every game's GameData discriminator, so a game reads as its own class.
 import '@/utils/mongodb/mongodb';
 import { GameDataModel } from '@/utils/mongodb/GameData';
@@ -55,14 +55,14 @@ const { values: args } = parseArgs({
 
 const READS = new Set(['find', 'aggregate', 'count', 'distinct']);
 // An aggregate is a read unless a stage of it writes its result somewhere.
-const writesOut = (command: Document) => Array.isArray(command.pipeline)
-    && command.pipeline.some((stage: Document) => '$out' in stage || '$merge' in stage);
+const writesOut = (command: mongo.Document) => Array.isArray(command.pipeline)
+    && command.pipeline.some((stage: mongo.Document) => '$out' in stage || '$merge' in stage);
 
 /** A reason to stop that this script gives in its own words, which carry no id: safe to print. */
 class ExplainRefusal extends Error {}
 const WRITES = new Set(['insert', 'update', 'delete', 'findAndModify', 'bulkWrite', 'create', 'createIndexes', 'drop', 'dropIndexes', 'dropDatabase', 'collMod', 'renameCollection']);
 
-interface Captured { step: string; name: string; collection: string; command: Document }
+interface Captured { step: string; name: string; collection: string; command: mongo.Document }
 
 async function main() {
     const uri = process.env.MONGODB_URI;
@@ -72,7 +72,7 @@ async function main() {
     let step: string | undefined;
 
     await mongoose.connect(uri, { bufferCommands: false, monitorCommands: true, ...NO_AUTO_BUILD });
-    mongoose.connection.getClient().on('commandStarted', (event: CommandStartedEvent) => {
+    mongoose.connection.getClient().on('commandStarted', (event: mongo.CommandStartedEvent) => {
         if (READS.has(event.commandName) && !writesOut(event.command)) {
             if (step) captured.push({ step, name: event.commandName, collection: String(event.command[event.commandName]), command: explainableCommand(event.command) });
         } else if (WRITES.has(event.commandName) || writesOut(event.command)) {
@@ -162,7 +162,7 @@ async function main() {
 
     const rows: string[] = [];
     for (const { step: label, name, collection, command } of captured) {
-        let explained: Document;
+        let explained: mongo.Document;
         try {
             explained = await db.command({ explain: command, verbosity: 'executionStats' });
         } catch (error) {

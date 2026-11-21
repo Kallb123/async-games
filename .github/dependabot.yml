@@ -47,8 +47,10 @@ updates:
         patterns: ['@clerk/*']
       firebase:
         patterns: ['firebase', 'firebase-admin']
+      # Mongoose brings its own pinned copy of the driver, so "mongodb" is not
+      # a dependency of ours to bump — its types are read as `mongoose.mongo`.
       mongo:
-        patterns: ['mongodb', 'mongoose']
+        patterns: ['mongoose']
       three:
         patterns: ['three', '@types/three']
       # Everything else: one pull request for the week's minor and patch
