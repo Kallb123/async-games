@@ -417,9 +417,10 @@ describe("what the turn's holder gives away in fog (§3, §3.6)", () => {
             game.specificGameState.rallyOwed = undefined;
             const sent = await playOne(game, endTurnBy(game.currentTurn));
             expect(sent.outcome.validMove, `end turn ${turn} by ${game.currentTurn}: ${JSON.stringify(sent.outcome).slice(0, 300)}`).toBe(true);
-            burns.push(enemyTurnsOf((sent.outcome as IRealmArenaOutcome).recap).filter(enemy => enemy.steps.length === 0).map(enemy => enemy.owner));
             note();
             const computer = await playComputerTurnsIn(game);
+            // An empty burn is played where it falls: in the End turn, or in the warband command before it, never a command of its own.
+            burns.push([sent, ...computer].flatMap(one => enemyTurnsOf((one.outcome as IRealmArenaOutcome).recap)).filter(enemy => enemy.steps.length === 0).map(enemy => enemy.owner));
             for (let step = 0; step < computer.length; step++) note();
         }
         const timeline = await buildTimeline(game, NAMES, [], undefined, "a");
@@ -429,7 +430,7 @@ describe("what the turn's holder gives away in fog (§3, §3.6)", () => {
 
     it("holds the turn with one seat, whichever warband is due, and never hands it to a warband that stands only on a burning nest", async () => {
         const burning = await played("burning");
-        // The burn happened, inside the End turn where it fell, so the difference was real; a wiped-out warband has none.
+        // The burn happened, inside the turn where it fell, so the difference was real; a wiped-out warband has none.
         expect(burning.burns[0]).toEqual([warbandOwner(0)]);
         expect((await played("wiped")).burns.flat()).toEqual([]);
         expect(burning.turns.some(turn => turn === ENEMY_TURN_SEAT)).toBe(true);
