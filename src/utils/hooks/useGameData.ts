@@ -5,11 +5,12 @@ import { useToast } from "@/components/ToastContext";
 import { useAchievementToaster } from "@/components/AchievementToaster";
 import { reloadForStaleSession } from "./fetchWithSessionRetry";
 import { useIsAuthorised } from "./useAuthGuard";
-import { BOARD_EVENTS } from "./usePushEvents";
+import { BOARD_EVENTS, type PollMode } from "./usePushEvents";
 import { gameDataUrl, GAME_DATA_CACHE_MS } from "./prefetchGameData";
 import { useRefreshableData } from "./useRefreshableData";
 import type { IGameDataResponse } from "@/utils/apiModels/GameDataApi";
 import { gameHasOutOfTurnPlays, resultPath } from "@/utils/ui/games";
+import { computerHoldsTurn } from "@/utils/games/computerTurns";
 
 /** What `/api/game/[gameid]` answers with. Nothing reads its `success` flag. */
 interface IGameDataBody<T> {
@@ -52,6 +53,19 @@ export function boardCanMove(game: IGameDataResponse | null | undefined, viewerI
         return false;
     }
     return game.currentTurn !== viewerId || gameHasOutOfTurnPlays(game.gameType);
+}
+
+/**
+ * How the board polls: `'fast'` while the computer holds the turn, because the
+ * server is playing it in the background and will hand the turn back within
+ * seconds (docs/games/realm-arena-hold-out.md §3.3); otherwise the ordinary
+ * interval whenever `boardCanMove`, and not at all when it can't.
+ */
+export function boardPollMode(game: IGameDataResponse | null | undefined, viewerId: string | null | undefined): PollMode {
+    if (game && computerHoldsTurn(game)) {
+        return 'fast';
+    }
+    return boardCanMove(game, viewerId);
 }
 
 /**
@@ -108,7 +122,7 @@ export function useGameData<T extends IGameDataResponse>(gameId: string) {
     const { data, setData, isLoading, isRefreshing, status, refresh } = useRefreshableData<IGameDataBody<T>>(
         gameDataUrl(gameId),
         BOARD_EVENTS,
-        { pollWhileWatching: (body) => boardCanMove(body?.gameData, user?.id), cacheFor: GAME_DATA_CACHE_MS },
+        { pollWhileWatching: (body) => boardPollMode(body?.gameData, user?.id), cacheFor: GAME_DATA_CACHE_MS },
     );
 
     // Null until the first response lands, rather than `{} as T`. The cast was

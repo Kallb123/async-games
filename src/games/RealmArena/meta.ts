@@ -52,7 +52,10 @@ export const meta: GameMeta = {
     // The loadout a muster's picks carry (§40) needs no version of its own: a
     // battle is created under rules version 12 only by a deploy whose clients
     // send command version 12 or later.
-    commandVersion: 12,
+    // Version 13 plays each warband's turn as a command of its own, once the
+    // End turn before it is saved (realm-arena-hold-out.md §3): an older tab
+    // would wait on an End turn's outcome for an enemy's turn it no longer holds.
+    commandVersion: 13,
     oldestReplayableCommandVersion: 2,
     available: true,
 };

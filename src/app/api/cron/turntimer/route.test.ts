@@ -26,12 +26,22 @@ vi.mock('next/server', async () => (await import('@/utils/testing/afterStub')).n
 vi.mock('@/utils/mongodb/mongodb', async () => (await import('@/utils/testing/apiRoute')).mongodbStub());
 vi.mock('@/utils/firebase/pushNotification', async () => (await import('@/utils/testing/apiRoute')).pushNotificationStub());
 vi.mock('@/utils/mongodb/GameResultData', async () => (await import('@/utils/testing/apiRoute')).gameResultDataStub({ recordGameResult }));
+// Watched, not replaced: the real runner still plays the turn, and the test
+// sees what it was handed (or stands a result in for it).
+vi.mock('@/utils/games/playComputerTurns', async importOriginal => {
+    const actual = await importOriginal<typeof import('@/utils/games/playComputerTurns')>();
+    return { ...actual, playComputerTurns: vi.fn(actual.playComputerTurns) };
+});
 
 import {
     ANN, BOB, get, resetApiRouteStubs, seedGame, seedSnakesAndLadders, sentPushes, storedGame, stubClerkUsers
 } from '@/utils/testing/apiRoute';
 import { baseState } from '@/games/FiresOut/testFixtures';
-import { GET } from './route';
+import { IS_REFUSED, STAYS_WITH_COMPUTER, registerFakeWarbands, warbandTurnsRun } from '@/utils/testing/computerTurnFixtures';
+import { COMPUTER_TURN_SEAT } from '@/utils/games/computerTurns';
+import { MAX_CONSECUTIVE_MISSED_TURNS } from '@/utils/games/TurnTimer';
+import { playComputerTurns } from '@/utils/games/playComputerTurns';
+import { GET, maxDuration } from './route';
 
 const SECRET = 'cron-s3cret';
 
@@ -209,3 +219,141 @@ describe('GET /api/cron/turntimer', () => {
         });
     });
 });
+
+// A computer's turn (computerTurns.ts) is never a player's to run out of. The
+// command route plays it in the background; the sweep plays what a stopped
+// runner left (§3.2), and is otherwise blind to it: no timeout, no warning, no
+// missed turn, no drop, no abandon.
+describe('GET /api/cron/turntimer, a computer\'s turn', () => {
+    const MINUTES_AGO = (minutes: number) => new Date(Date.now() - minutes * 60 * 1000).toISOString();
+
+    function seedWarbandsDue(overrides: Record<string, unknown> = {}) {
+        seedSnakesAndLadders({
+            turnTimer: '10m',
+            currentTurn: COMPUTER_TURN_SEAT,
+            lastTurnTimestamp: STALE,
+            timerWarningNotificationSent: false,
+            gameState: { turnOrder: [ANN.id, COMPUTER_TURN_SEAT, BOB.id], history: [], commandHistory: [] },
+            ...overrides,
+        });
+    }
+
+    beforeEach(() => registerFakeWarbands([BOB.id]));
+
+    it('plays a turn that has stood too long, and tells the player it reaches', async () => {
+        seedWarbandsDue();
+
+        const response = await GET(cronRequest());
+
+        expect(await response.json()).toMatchObject({ processed: 1, computer: 1, expired: 0, warned: 0, abandoned: 0, dropped: 0, failed: 0 });
+        const saved = storedGame('game_1')!;
+        expect(saved.currentTurn).toBe(BOB.id);
+        expect(saved.complete).toBe(false);
+        // Nothing was counted against anybody: not the computer, not Ann who ended her turn.
+        expect(saved.missedTurnCounts ?? {}).toEqual({});
+        expect(sentPushes.map(push => [push.data.event, push.userIds])).toEqual([['YourTurn', [BOB.id]]]);
+    });
+
+    it('plays it in a game with no timer at all', async () => {
+        seedWarbandsDue({ turnTimer: 'unlimited' });
+
+        const response = await GET(cronRequest());
+
+        expect(await response.json()).toMatchObject({ computer: 1 });
+        expect(storedGame('game_1')!.currentTurn).toBe(BOB.id);
+    });
+
+    it('leaves a turn alone while its own runner may still be playing it', async () => {
+        seedWarbandsDue({ lastTurnTimestamp: MINUTES_AGO(1), turnTimer: 'unlimited' });
+
+        const response = await GET(cronRequest());
+
+        expect(await response.json()).toMatchObject({ processed: 0, computer: 0 });
+        expect(storedGame('game_1')!.currentTurn).toBe(COMPUTER_TURN_SEAT);
+        expect(warbandTurnsRun.count).toBe(0);
+    });
+
+    it("hands the runner the run's own deadline, not the platform's hard stop", async () => {
+        seedWarbandsDue();
+        const before = Date.now();
+
+        await GET(cronRequest());
+
+        const { finishBy } = vi.mocked(playComputerTurns).mock.calls.at(-1)![1];
+        // Fifty seconds from the request's start: the sweep's budget, ten short of maxDuration.
+        expect(maxDuration).toBe(60);
+        expect(finishBy).toBeGreaterThanOrEqual(before + 50_000 - 1000);
+        expect(finishBy).toBeLessThanOrEqual(Date.now() + 50_000);
+    });
+
+    it('never times it out, warns about it or counts a missed turn against a player, even when it cannot be played', async () => {
+        seedWarbandsDue({ missedTurnCounts: { [ANN.id]: 2 } });
+        // The game has nothing to play for the seat, so the runner refuses.
+        registerFakeWarbands([]);
+        const error = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+        const response = await GET(cronRequest());
+
+        // Tallied as what it was: a turn that could not be played, not one played.
+        expect(await response.json()).toMatchObject({ processed: 1, computer: 0, stuck: 1, expired: 0, warned: 0, abandoned: 0, dropped: 0, declined: 0 });
+        const saved = storedGame('game_1')!;
+        expect(saved.currentTurn).toBe(COMPUTER_TURN_SEAT);
+        expect(saved.complete).toBe(false);
+        // Ann's count is untouched; the failure is the computer's, counted once.
+        expect(saved.missedTurnCounts).toEqual({ [ANN.id]: 2, [COMPUTER_TURN_SEAT]: 1 });
+        expect(sentPushes).toEqual([]);
+        error.mockRestore();
+    });
+
+    it('is not a candidate again until it has stood stale again, and is abandoned on the third failure', async () => {
+        seedWarbandsDue();
+        registerFakeWarbands([IS_REFUSED]);
+        const error = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+        for (let tick = 1; tick < MAX_CONSECUTIVE_MISSED_TURNS; tick++) {
+            expect(await (await GET(cronRequest())).json()).toMatchObject({ stuck: 1, abandoned: 0 });
+            // Bumped, so the very next tick doesn't meet it.
+            expect(await (await GET(cronRequest())).json()).toMatchObject({ processed: 0 });
+            storedGame('game_1')!.lastTurnTimestamp = STALE;
+        }
+
+        expect(await (await GET(cronRequest())).json()).toMatchObject({ processed: 1, abandoned: 1, stuck: 0, failed: 0 });
+        const saved = storedGame('game_1')!;
+        expect(saved.complete).toBe(true);
+        expect(saved.endReason).toBe('abandoned');
+        expect(saved.forfeitedBy).toBeUndefined();
+        expect(recordGameResult).toHaveBeenCalledTimes(1);
+        error.mockRestore();
+    });
+
+    it('tallies a run that had no time for the turn as stopped, and one that lost it to another runner as skipped', async () => {
+        seedWarbandsDue();
+        vi.mocked(playComputerTurns).mockResolvedValueOnce('stopped');
+        expect(await (await GET(cronRequest())).json()).toMatchObject({ processed: 1, stopped: 1, computer: 0, skipped: 0 });
+
+        vi.mocked(playComputerTurns).mockResolvedValueOnce('skipped');
+        expect(await (await GET(cronRequest())).json()).toMatchObject({ processed: 1, stopped: 0, computer: 0, skipped: 1 });
+    });
+
+    it('tallies a turn that kept the computer on its seat as played, not as stuck', async () => {
+        seedWarbandsDue();
+        registerFakeWarbands([STAYS_WITH_COMPUTER, BOB.id]);
+
+        expect(await (await GET(cronRequest())).json()).toMatchObject({ computer: 1, stuck: 0, stopped: 0 });
+    });
+
+    it('plays the warbands when a timed-out End turn hands the turn to them', async () => {
+        seedWarbandsDue({ currentTurn: ANN.id });
+
+        const response = await GET(cronRequest());
+
+        expect(await response.json()).toMatchObject({ processed: 1, expired: 1, failed: 0 });
+        const saved = storedGame('game_1')!;
+        expect(saved.currentTurn).toBe(BOB.id);
+        expect(saved.missedTurnCounts).toEqual({ [ANN.id]: 1 });
+        // The warband's turn is on the record, and Bob is told once, by the runner.
+        expect((saved.gameState as { commandHistory: { className: string }[] }).commandHistory.map(c => c.className)).toEqual(['FakeWarbandTurn']);
+        expect(sentPushes.map(push => push.userIds)).toEqual([[BOB.id]]);
+    });
+});
+

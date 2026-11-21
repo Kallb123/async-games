@@ -1,5 +1,6 @@
 import { readJsonBody } from '@/utils/api/requestBody';
 import { requireLiveGame } from '@/utils/games/liveGame';
+import { isComputerSeat } from '@/utils/games/computerTurns';
 import { isDropped } from '@/utils/games/playerDropout';
 import { sendPushToUsers, gameNotificationLink } from '@/utils/firebase/pushNotification';
 import { buildNudgeNotification } from '@/utils/firebase/notificationContent';
@@ -53,6 +54,12 @@ export async function POST(request: NextRequest) {
 
   if (gameData.currentTurn === userId) {
     return NextResponse.json({}, {status: 400, statusText: "It's already your turn"});
+  }
+
+  // A computer's seat is no player: there is no one to push, and the server is
+  // already playing its turn.
+  if (isComputerSeat(gameData.currentTurn)) {
+    return NextResponse.json({}, {status: 400, statusText: "It's the computer's turn"});
   }
 
   // Keyed on the nudger and the game, so one impatient player can't queue up

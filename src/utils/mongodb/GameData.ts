@@ -296,6 +296,15 @@ GameDataSchema.index({ userIdList: 1, complete: 1 });
 // one index serves each of the filter's per-timer branches and the sort across
 // them together.
 GameDataSchema.index({ complete: 1, turnTimer: 1, lastTurnTimestamp: 1 });
+// The same sweep's one branch that is not per-timer: a computer's turn that has
+// stood too long, whatever its game's timer (computerTurns.ts). The index above
+// can't serve it — it has no `currentTurn` — so with only that one the planner
+// would fall back to scanning every live game and reading each whose turn is
+// two minutes old, which is nearly all of them, on every tick. Leading with
+// `complete` and then `currentTurn` turns the computer's one seat (a point
+// range) into a seek, with `lastTurnTimestamp` still in order inside it, so only
+// games actually on that seat are visited and the `$or`'s sort can merge.
+GameDataSchema.index({ complete: 1, currentTurn: 1, lastTurnTimestamp: 1 });
 // The only link back from a game to the lobby it started from, looked up on
 // every poll from a host still sitting on their lobby screen once the
 // invitation is gone (GET /api/lobby/[inviteId]).
@@ -314,7 +323,7 @@ export var GameDataModel = models.GameData || model<IGameDataDocument, IGameData
  * decide every game was fine.
  */
 const SWEEP_CANDIDATE_FIELDS = [
-    'gameId', 'turnTimer', 'lastTurnTimestamp', 'timerWarningNotificationSent',
+    'gameId', 'turnTimer', 'lastTurnTimestamp', 'timerWarningNotificationSent', 'currentTurn',
 ] as const;
 
 /** A live game as the turn-timer sweep first sees it. */

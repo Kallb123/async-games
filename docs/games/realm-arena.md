@@ -2857,6 +2857,10 @@ sure it is.
   §29.3).
 - **No new command, no command version.** A co-op battle is a new kind of
   battle, and nothing about a free-for-all changes.
+  (Since command version 13 the warbands' turns are a command of their own,
+  `RealmArenaWarbandTurn`, which the server plays once the End turn before it
+  is saved: [`realm-arena-hold-out.md`](./realm-arena-hold-out.md) §3. An End
+  turn from before it still holds them, and replays as it was played.)
 
 **What PR 4a settled:**
 
@@ -6084,3 +6088,4 @@ Realm, its sibling in the same world.
 | 1.72 | Two §39.7 follow-ups before rules version 12 ships. Every nest destroyed now counts against its warband's next wave, whoever downed it, the Swarm's own burst, bile or burn included (#966). Only a nest the team downs scores, and in fog `nestsSeenDestroyed` still counts only falls the team was told of. A warband with only nests standing still takes an empty turn while one of them is burning or poisoned, after the turn of any warband the rotation passed it over for, so the damage ticks and a dying nest falls before the wave (#967). |
 | 1.73 | §39.9 releases rules version 12 (§39, §40): `WAVE_GROWTH_POINTS` tuned from 15 to 25 by the balance harness (new `--set` overrides), the planner sped up twice with every choice unchanged so the Swarm's twelve-strong waves fit their turn, the guide, tutorial and setup screen tell the new rules, and two achievements, *Regicide* and *Scorched Earth* (with a `nestsCleared` flag sent only once a battle is over). |
 | 1.74 | Hold Out's design moves to its own document, [`realm-arena-hold-out.md`](./realm-arena-hold-out.md): a plan to rethink the mission (the enemy's turn in the background, the Brood as an enemy-only Swarm, nests that produce the enemy, a shrine to defend, stars), and §41, the parked plan for Hold Out to the last enemy with its prototype's numbers, which is now that document's §9. |
+| 1.75 | The warbands' turns in co-op are commands of their own from command version 13 (`RealmArenaWarbandTurn`), played by the server once the player's End turn is saved, with ten seconds to plan rather than two: [`realm-arena-hold-out.md`](./realm-arena-hold-out.md) §3 (§29.8). |

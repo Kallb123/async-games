@@ -1,6 +1,9 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { buildTimeline } from "@/utils/games/replay";
 import { resolveStalledTurn } from "@/utils/games/turnTimeout";
+import { getComputerTurnAdapter } from "@/utils/games/computerTurns";
+import { gameCommandVersion } from "@/utils/ui/games";
+import { meta } from "./meta";
 import { rallyChoiceFor } from "../../../scripts/lib/realmArenaBalance";
 import { recordBattle } from "./recordBattle";
 import { gameStateToModel } from "./RealmArenaModels";
@@ -11,8 +14,8 @@ import { RealmArenaGameDataModel } from "./RealmArenaModels";
 import { rallyOptionsOf, rallyRefusal, rallyTally, rallyTotal, resupplyItems, type RallyAction } from "./rally";
 import { battlefieldById } from "./maps";
 import { distance } from "@/utils/games/battlefield/terrain";
-import { isStanding, isWarband, maxHpOf, newFighter, viewOf, warbandOwner, type Fighter } from "./rules";
-import { actBy, addFighter, battleOf, cmd, endTurnBy, makeGame, muster, musterAll, play, readyMadePicks, playScriptedBattle, responseFor, type RealmArenaTestGame } from "./testFixtures";
+import { ENEMY_TURN_SEAT, isStanding, isWarband, maxHpOf, newFighter, viewOf, warbandOwner, type Fighter } from "./rules";
+import { actBy, addFighter, battleOf, cmd, endTurnBy, makeGame, muster, musterAll, play, playComputerTurnsIn, playOne, readyMadePicks, playScriptedBattle, responseFor, type RealmArenaTestGame } from "./testFixtures";
 import { seedRolls } from "./seedRolls";
 
 // docs/games/realm-arena.md §39.4: from rules version 12 a Hold Out wave heals
@@ -339,6 +342,8 @@ describe("a timed-out turn that owes a rally (§39.4)", () => {
     it("takes Rally, then ends the turn on the next call", async () => {
         const game = await waveLanded(V12, g => mine(g, "a").forEach(hurt));
         expect(await resolveStalledTurn(game, "a", "a")).toBe("advanced");
+        // The End turn hands to the warband; the turn comes to b once it has played.
+        await playComputerTurnsIn(game);
         expect(game.specificGameState.rallyOwed).toEqual(["b"]);
         expect(mine(game, "a").every(fighter => fighter.hp > 1)).toBe(true);
         expect(game.currentTurn).toBe("b");
@@ -373,6 +378,11 @@ describe("the last choice, on a real document (§39.4)", () => {
         expect((await run(actBy("a", rally))).outcome.validMove).toBe(true);
         expect(doc.toObject().specificGameState.rallyOwed).toEqual(["b"]);
         expect((await run(endTurnBy("a"))).outcome.validMove).toBe(true);
+        // The End turn handed to the warband, whose own command (as the server's runner builds it) hands back.
+        expect(doc.currentTurn).toBe(ENEMY_TURN_SEAT);
+        const warband = getComputerTurnAdapter("RealmArenaGameType")!.buildCommand(doc as unknown as IGameData)!;
+        warband.version = gameCommandVersion(meta);
+        expect((await run(warband)).outcome.validMove).toBe(true);
         expect(doc.currentTurn).toBe("b");
         expect((await run(actBy("b", rally))).outcome.validMove).toBe(true);
         expect(doc.toObject().specificGameState.rallyOwed ?? undefined).toBeUndefined();
@@ -426,7 +436,8 @@ describe("Reinforce in fog of war (§39.4)", () => {
         expect(game.gameState.history[0].text).toBe("{{a}}'s squad rallies: there was no room to bring anyone back");
         // Recorded as the Rally it became, so a replay agrees.
         expect((game.gameState.commandHistory.at(-1) as unknown as { action: RallyAction }).action).toEqual(rally);
-        expect((await play(game, endTurnBy("a"))).outcome.validMove).toBe(true);
+        // Only the End turn: this contrived board (the zone full of blockers) holds the planner to its whole deadline.
+        expect((await playOne(game, endTurnBy("a"))).outcome.validMove).toBe(true);
     });
 
     it("does the same when the turn times out", async () => {

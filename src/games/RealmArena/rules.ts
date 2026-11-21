@@ -32,6 +32,7 @@ import { coverAgainst } from "@/utils/games/battlefield/cover";
 import { canSee } from "@/utils/games/battlefield/lineOfSight";
 import { DEFAULT_CLIMB, pathCost, pathTo, reachFrom, stepCost, type MoveRules, type Reach } from "@/utils/games/battlefield/pathfinding";
 import { coordsOf, distance, facingTowards, FULL_HEIGHT, isNeighbour, riseOf, squareAt, type Area, type Battlefield, type Cover, type Facing, type Square } from "@/utils/games/battlefield/terrain";
+import { COMPUTER_SEAT_PREFIX, COMPUTER_TURN_SEAT, isComputerSeat } from "@/utils/games/computerTurns";
 import {
     afflictionsOf, factionOf, isCharacterId, isItemId, isOptionId, isPoolEntry, kitOf, LINE_COOP_MAX, loadoutOf, loadoutPoolOf, squadPoints,
     type Ability, type AbilityId, type Affliction, type CharacterId, type Effect, type EffectId, type Faction, type FactionId, type Item, type ItemId, type OptionId, type PlayerCount, type Weapon, type WaveTheme,
@@ -274,17 +275,27 @@ export interface BattleSource {
  * opposite player `k`.
  */
 export const warbandOwner = (k: number): string => `${WARBAND_PREFIX}${k}`;
-const WARBAND_PREFIX = "ai:";
+// A computer's seat to the engine too (`COMPUTER_SEAT_PREFIX`), so it can hand a warband the turn.
+const WARBAND_PREFIX = COMPUTER_SEAT_PREFIX;
 
 /** The computer's warbands in co-op, one opposite each player (§29.1), in the order they deploy. */
 export const warbandsFor = (seats: readonly string[]): string[] => seats.map((_, k) => warbandOwner(k));
 
 /** Whether an owner is one of the computer's warbands rather than a player. */
-export const isWarband = (owner: string): boolean => owner.startsWith(WARBAND_PREFIX);
+export const isWarband = (owner: string): boolean => isComputerSeat(owner);
 
 /** The two sides of a co-op battle (§29.6): the players, and the computer's warbands. */
 export const TEAM_SIDE = "team";
 export const ENEMY_SIDE = "enemy";
+
+/**
+ * The seat that holds the turn while any warband's is due
+ * (docs/games/realm-arena-hold-out.md §3): one for them all, never a warband's
+ * own (`warbandOwner`), since `currentTurn` is on the wire and which warband's
+ * turn came round would tell a fogged team which of them still stand. A
+ * computer's seat to the engine, as a warband is, and owner of no character.
+ */
+export const ENEMY_TURN_SEAT = COMPUTER_TURN_SEAT;
 
 /**
  * The one way a `BattleState` is built (§29.6), so the board's previews and
