@@ -339,6 +339,31 @@ function enemyRows(base: RowBase, command: IGameCommand, turn: EnemyTurn, lines:
     return rows;
 }
 
+/**
+ * The rows of a hand-off, under its command's own (§29.4): the enemy's turns
+ * it held, each from its lines of the log, then what burning did as the next
+ * turn began, told in the line the hand-off wrote for it (§20.3) — more than
+ * one where it burned a squad out and passed on. None of them is anybody's to
+ * react to, and the next turn's burning is nobody's at all: as the sender's,
+ * it would close their own window after the enemy's turn, and they'd never see
+ * it. The lines are the command's, oldest first, under the battle's end if it
+ * ended it.
+ */
+function handOffRows(base: RowBase, command: IGameCommand, turns: readonly EnemyTurn[], recap: IRealmArenaOutcome["recap"], events: readonly BattleEvent[], lines: readonly IHistoryEntry[], prev: ITurnSnapshot, next: ITurnSnapshot, said: (told: Told | undefined, events: readonly BattleEvent[]) => readonly BattleEvent[]): IGameEvent[] {
+    const ended = next.complete && !prev.complete;
+    const rest = lines.slice(ended ? BATTLE_END_LINES : 0).filter(entry => entry.actorId === undefined).reverse();
+    const rows: IGameEvent[] = [];
+    // Each warband turn of a block (§29.4) wrote its lines in turn, and its rows are keyed apart.
+    let enemyLines = 0;
+    for (const [index, turn] of turns.entries()) {
+        const count = enemyLineCount(turn, said);
+        rows.push(...enemyRows(base, command, turn, rest.slice(enemyLines, enemyLines + count), state(next), said, index === 0 ? undefined : `${command.id}:enemy${index}`));
+        enemyLines += count;
+    }
+    rows.push(...burningRow({ ...base, actorId: "", actorUsername: "" }, `${command.id}:burning`, rest.slice(enemyLines), said(recap?.startedTold, recap?.started ?? events), state(next).fighters));
+    return rows;
+}
+
 /** Turns one replayed Realm Arena command into its recap rows, as `viewerId` is told them. */
 function toEvents(
     prev: ITurnSnapshot,
@@ -409,23 +434,17 @@ function toEvents(
             } else {
                 rows.push({ ...base, type: RA_END_TURN, glyph: "⏳", title: `${name} ended their turn`, quiet: true });
             }
-            // The rest of its lines, oldest first, under the battle's end if
-            // this ended it: the enemy's turn, in co-op, then what burning did
-            // as the next turn began, told in the line the hand-off wrote for
-            // it (§20.3) — more than one where it burned a squad out and passed
-            // on. None of them is anybody's to react to, and the next turn's
-            // burning is nobody's at all: as the sender's, it would close their
-            // own window after the enemy's turn, and they'd never see it.
-            const ended = next.complete && !prev.complete;
-            const rest = lines.slice(ended ? BATTLE_END_LINES : 0).filter(entry => entry.actorId === undefined).reverse();
-            // Each warband turn of a block (§29.4) wrote its lines in turn, and its rows are keyed apart.
-            let enemyLines = 0;
-            for (const [index, turn] of turns.entries()) {
-                const count = enemyLineCount(turn, said);
-                rows.push(...enemyRows(base, command, turn, rest.slice(enemyLines, enemyLines + count), state(next), said, index === 0 ? undefined : `${command.id}:enemy${index}`));
-                enemyLines += count;
-            }
-            rows.push(...burningRow({ ...base, actorId: "", actorUsername: "" }, `${command.id}:burning`, rest.slice(enemyLines), said(recap?.startedTold, recap?.started ?? events), state(next).fighters));
+            // The rest of its lines: the enemy's turn, in co-op before command
+            // version 13, then what burning did as the next turn began.
+            rows.push(...handOffRows(base, command, turns, recap, events, lines, prev, next, said));
+            break;
+        }
+        // A warband's turn of its own (realm-arena-hold-out.md §3): the rows an
+        // End turn before it gave the warband's turn it held, and what happened
+        // as the next turn began, with no player's End turn row above them.
+        case "RealmArenaWarbandTurn": {
+            const { events = [], recap } = outcome as Partial<IRealmArenaOutcome>;
+            rows.push(...handOffRows(base, command, toldTurns(enemyTurnsOf(recap), said), recap, events, lines, prev, next, said));
             break;
         }
         default:

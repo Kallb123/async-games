@@ -32,6 +32,7 @@ import { coverAgainst } from "@/utils/games/battlefield/cover";
 import { canSee } from "@/utils/games/battlefield/lineOfSight";
 import { DEFAULT_CLIMB, pathCost, pathTo, reachFrom, stepCost, type MoveRules, type Reach } from "@/utils/games/battlefield/pathfinding";
 import { coordsOf, distance, facingTowards, FULL_HEIGHT, isNeighbour, riseOf, squareAt, type Area, type Battlefield, type Cover, type Facing, type Square } from "@/utils/games/battlefield/terrain";
+import { COMPUTER_SEAT_PREFIX } from "@/utils/games/computerTurns";
 import {
     afflictionsOf, factionOf, isCharacterId, isItemId, isOptionId, isPoolEntry, kitOf, LINE_COOP_MAX, loadoutOf, loadoutPoolOf, squadPoints,
     type Ability, type AbilityId, type Affliction, type CharacterId, type Effect, type EffectId, type Faction, type FactionId, type Item, type ItemId, type OptionId, type PlayerCount, type Weapon, type WaveTheme,
@@ -274,7 +275,8 @@ export interface BattleSource {
  * opposite player `k`.
  */
 export const warbandOwner = (k: number): string => `${WARBAND_PREFIX}${k}`;
-const WARBAND_PREFIX = "ai:";
+// A computer's seat to the engine too (`COMPUTER_SEAT_PREFIX`), so it can hand a warband the turn.
+const WARBAND_PREFIX = COMPUTER_SEAT_PREFIX;
 
 /** The computer's warbands in co-op, one opposite each player (§29.1), in the order they deploy. */
 export const warbandsFor = (seats: readonly string[]): string[] => seats.map((_, k) => warbandOwner(k));

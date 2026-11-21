@@ -141,6 +141,19 @@ export interface IRealmArenaSpecificGameState {
      */
     rallyOwed?: string[];
     /**
+     * The warband whose turn is due, while the turn is the computer's
+     * (docs/games/realm-arena-hold-out.md §3): `warband` its index, whose
+     * seat (`ai:k`, `warbandOwner`) holds `currentTurn`, and `from` the
+     * player's seat the hand-off carries on from once the warbands have played
+     * — the player who ended their turn, or the last seat round the table
+     * when the warbands take their turns in a block. Set by an End turn played
+     * under `ENEMY_TURN_COMMAND_VERSION` or later and moved on by each
+     * `RealmArenaWarbandTurn`; absent the rest of the time, and in every
+     * battle from before it. Cleared by assigning `undefined`, never `delete`,
+     * as `rallyOwed` is. Never sent.
+     */
+    warbandDue?: { warband: number; from: string };
+    /**
      * How many of each warband's nests (§39.7) have been destroyed, whoever downed
      * them (the team, or the Swarm's own burst, bile or burn), since that
      * warband's last wave landed, by warband owner: each takes points off the
@@ -493,6 +506,8 @@ var RealmArenaGameDataSchema = new Schema<IRealmArenaGameDataDocument>(
             roundsPlayed: Number,
             // Mixed, so `markDirty` saves it whole. It is cleared by assigning `undefined` (`forgiveRally`), never `delete`: a deleted path stays cached on a document, and the save still writes the old list (§39.4).
             rallyOwed: Schema.Types.Mixed,
+            // Mixed, so `markDirty` saves it whole; cleared by assigning `undefined`, as `rallyOwed` is.
+            warbandDue: Schema.Types.Mixed,
             // Mixed, so `markDirty` saves it whole; replaced, never mutated, as `scores` is (`addScores`).
             nestsDestroyed: Schema.Types.Mixed,
             nestsSeenDestroyed: Number,
@@ -740,7 +755,8 @@ function partsOf(outcome: IRealmArenaOutcome, viewerId: string | null, gs: IReal
     if (turns.length === 0) return undefined;
     const started = recap.started ?? [];
     // The command's own events are the player's End turn, then the warband's
-    // turn, then what happened as the next turn began (`RealmArenaEndTurn`).
+    // turn, then what happened as the next turn began (`RealmArenaEndTurn`);
+    // a `RealmArenaWarbandTurn`'s have no player's End turn before them.
     const own = events.slice(0, events.length - all.reduce((sum, turn) => sum + enemyEvents(turn).length, 0) - started.length);
 
     const board = (after: RealmArenaBoard | undefined): RealmArenaPartState | undefined => {
@@ -752,7 +768,8 @@ function partsOf(outcome: IRealmArenaOutcome, viewerId: string | null, gs: IReal
     // part of their own, as the first is handed the player's End turn.
     const last = turns[turns.length - 1];
     const planned = [
-        { kind: "ended" as const, events: said(both(recap.told, turns[0].startedTold), [...own, ...turns[0].started]), after: turns[0].startedAfter },
+        // A warband's turn of its own (`RealmArenaWarbandTurn`) has no End turn of a player's to open it.
+        { kind: own.length > 0 ? "ended" as const : "enemy" as const, events: said(both(recap.told, turns[0].startedTold), [...own, ...turns[0].started]), after: turns[0].startedAfter },
         ...turns.flatMap((turn, index) => {
             const following = turns[index + 1];
             return [
