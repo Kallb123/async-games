@@ -24,7 +24,12 @@ const srcRoot = path.resolve(here, "../../..");
 function discoverSerialisableClasses(): { name: string; file: string }[] {
     const pattern = /@serializable\s+export\s+class\s+(\w+)/g;
     const found: { name: string; file: string }[] = [];
+    // Test helpers are left out with the tests: a fake command a route test
+    // registers for itself (utils/testing/computerTurnFixtures.ts) belongs to
+    // no game and is never loaded outside a test run.
+    const testHelpers = path.join(srcRoot, "utils", "testing") + path.sep;
     for (const file of walkFiles(srcRoot, (name) => name.endsWith(".ts") && !name.endsWith(".test.ts"))) {
+        if (file.startsWith(testHelpers)) continue;
         const source = readFileSync(file, "utf8");
         for (const match of source.matchAll(pattern)) {
             found.push({ name: match[1], file: path.relative(srcRoot, file) });

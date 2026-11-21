@@ -747,9 +747,10 @@ describe("a review's parts of a warband's turn (§29.9)", () => {
         await musterAll(game);
         for (let turn = 0; turn < turns && !game.complete; turn++) await playScriptedTurn(game);
         const raw = new Map<number, IRealmArenaOutcome>();
-        const timeline = await buildTimeline(game, NAMES, [], step => raw.set(step.next.index, step.outcome as IRealmArenaOutcome), viewer);
+        const classes = new Map<number, string>();
+        const timeline = await buildTimeline(game, NAMES, [], step => { raw.set(step.next.index, step.outcome as IRealmArenaOutcome); classes.set(step.next.index, step.command.className); }, viewer);
         const steps = timeline.snapshots.flatMap(snapshot => raw.has(snapshot.index)
-            ? [{ command: snapshot.command, outcome: snapshot.outcome as IRealmArenaStepOutcome | undefined, raw: raw.get(snapshot.index)! }] : []);
+            ? [{ command: { className: classes.get(snapshot.index)! }, outcome: snapshot.outcome as IRealmArenaStepOutcome | undefined, raw: raw.get(snapshot.index)! }] : []);
         return { game, steps };
     }
     const endTurns = <T extends { raw: IRealmArenaOutcome }>(steps: T[]) => steps.filter(step => step.raw.recap?.enemy);
