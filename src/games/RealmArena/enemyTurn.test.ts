@@ -5,9 +5,9 @@ import { isCommandForGameType } from "@/utils/games/gameCommands";
 import { isComputerTurn } from "@/utils/games/computerTurns";
 import { gameStateToModel, stepOutcomeToModel } from "./RealmArenaModels";
 import { ENEMY_TURN_COMMAND_VERSION, RealmArenaEndTurn, RealmArenaGameType, RealmArenaWarbandTurn, enemyTurnsOf, type IRealmArenaOutcome } from "./RealmArenaLogic";
-import { squadSight, warbandOwner, type BattleEvent } from "./rules";
+import { afflicted, ENEMY_TURN_SEAT, isStructure, squadSight, warbandOwner, type BattleEvent } from "./rules";
 import {
-    actBy, battleOf, endTurnBy, makeGame, musterAll, play, playOne, recordedWarbandActions, scriptedAction, warbandTurnBy, type RealmArenaTestGame,
+    actBy, battleOf, endTurnBy, makeGame, musterAll, play, playComputerTurnsIn, playOne, recordedWarbandActions, scriptedAction, warbandTurnBy, type RealmArenaTestGame,
 } from "./testFixtures";
 import { seedRolls } from "./seedRolls";
 
@@ -56,13 +56,13 @@ const warbandCommands = (game: RealmArenaTestGame) => game.gameState.commandHist
 const warbandsNow = (game: RealmArenaTestGame) => JSON.stringify(battleOf(game).fighters.filter(fighter => fighter.owner.startsWith("ai:")));
 
 describe("an End turn that hands to the warband (§3.2)", () => {
-    it("plays nothing of the enemy's: the turn goes to the warband's seat, with its turn due", async () => {
+    it("plays nothing of the enemy's: the turn goes to the computer's one seat, with the warband's turn due", async () => {
         const game = await battle();
         const before = warbandsNow(game);
         const ended = endTurnBy("a");
         const { outcome } = await playOne(game, ended);
         expect(outcome).toMatchObject({ validMove: true, turnOver: true });
-        expect(game.currentTurn).toBe(warbandOwner(0));
+        expect(game.currentTurn).toBe(ENEMY_TURN_SEAT);
         expect(game.specificGameState.warbandDue).toEqual({ warband: 0, from: "a" });
         expect(isComputerTurn(game)).toBe(true);
         // No warband character moved, spent AP or went on watch.
@@ -84,7 +84,7 @@ describe("an End turn that hands to the warband (§3.2)", () => {
         expect(game.currentTurn).toBe("b");
         expect(game.specificGameState.warbandDue).toBeUndefined();
         expect((await playOne(game, endTurnBy("b"))).outcome.validMove).toBe(true);
-        expect(game.currentTurn).toBe(warbandOwner(0));
+        expect(game.currentTurn).toBe(ENEMY_TURN_SEAT);
         expect(game.specificGameState.warbandDue).toEqual({ warband: 0, from: "b" });
         // The round hasn't turned: the block is still to play.
         expect(game.specificGameState.roundsPlayed).toBe(0);
@@ -114,7 +114,8 @@ describe("the warbands' commands one after another (§3.5)", () => {
         expect(game.specificGameState.roundsPlayed).toBe(1);
         expect(classes(game).slice(-4)).toEqual(["RealmArenaEndTurn", "RealmArenaWarbandTurn", "RealmArenaEndTurn", "RealmArenaWarbandTurn"]);
         const [one, two] = warbandCommands(game);
-        expect([one.senderId, two.senderId]).toEqual([warbandOwner(0), warbandOwner(1)]);
+        // Both are the computer's one seat; which warband it was is in the recap.
+        expect([one.senderId, two.senderId]).toEqual([ENEMY_TURN_SEAT, ENEMY_TURN_SEAT]);
         expect(one.recordedActions!.length).toBeGreaterThan(0);
         expect(two.recordedActions!.length).toBeGreaterThan(0);
         // Each command is outcome-shaped as an End turn's was, a turn over that hands on.
@@ -129,7 +130,8 @@ describe("the warbands' commands one after another (§3.5)", () => {
         expect((await play(game, endTurnBy("a"))).computer).toEqual([]);
         const { computer } = await play(game, endTurnBy("b"));
         expect(computer).toHaveLength(1);
-        expect(warbandCommands(game).map(command => command.senderId)).toEqual([warbandOwner(1)]);
+        expect(warbandCommands(game).map(command => command.senderId)).toEqual([ENEMY_TURN_SEAT]);
+        expect(enemyTurnsOf((computer[0].outcome as IRealmArenaOutcome).recap).map(turn => turn.owner)).toEqual([warbandOwner(1)]);
         expect(game.currentTurn).toBe("a");
         expect(game.specificGameState.roundsPlayed).toBe(1);
 
@@ -137,7 +139,8 @@ describe("the warbands' commands one after another (§3.5)", () => {
         await play(both, endTurnBy("a"));
         const played = await play(both, endTurnBy("b"));
         expect(played.computer).toHaveLength(2);
-        expect(warbandCommands(both).map(command => command.senderId)).toEqual([warbandOwner(0), warbandOwner(1)]);
+        expect(warbandCommands(both).map(command => command.senderId)).toEqual([ENEMY_TURN_SEAT, ENEMY_TURN_SEAT]);
+        expect(played.computer.map(({ outcome }) => enemyTurnsOf((outcome as IRealmArenaOutcome).recap).map(turn => turn.owner))).toEqual([[warbandOwner(0)], [warbandOwner(1)]]);
         expect(classes(both).slice(-4)).toEqual(["RealmArenaEndTurn", "RealmArenaEndTurn", "RealmArenaWarbandTurn", "RealmArenaWarbandTurn"]);
         expect(both.currentTurn).toBe("a");
         expect(both.specificGameState.roundsPlayed).toBe(1);
@@ -187,18 +190,18 @@ describe("a warband's command is the server's alone (§3.5)", () => {
         expect(game.currentTurn).toBe("a");
 
         await playOne(game, endTurnBy("a"));
-        expect(game.currentTurn).toBe(warbandOwner(0));
+        expect(game.currentTurn).toBe(ENEMY_TURN_SEAT);
         const before = warbandsNow(game);
-        // Due, but from the other warband, a player or a stranger.
-        for (const sender of [warbandOwner(1), "a", "b", "nobody"]) {
+        // Due, but sent as a warband's own seat, a player or a stranger: only the computer's one seat holds the turn.
+        for (const sender of [warbandOwner(0), warbandOwner(1), "a", "b", "nobody"]) {
             expect((await playOne(game, warbandTurnBy(sender))).outcome.validMove, `due ${warbandOwner(0)}, sent as ${sender}`).toBe(false);
         }
-        expect(game.currentTurn).toBe(warbandOwner(0));
+        expect(game.currentTurn).toBe(ENEMY_TURN_SEAT);
         expect(game.specificGameState.warbandDue).toEqual({ warband: 0, from: "a" });
         expect(warbandsNow(game)).toBe(before);
         expect(warbandCommands(game)).toEqual([]);
         // The right seat plays it.
-        expect((await playOne(game, warbandTurnBy(warbandOwner(0)))).outcome.validMove).toBe(true);
+        expect((await playOne(game, warbandTurnBy(ENEMY_TURN_SEAT))).outcome.validMove).toBe(true);
     });
 
     it("is refused once the turn is a player's again, however it is sent", async () => {
@@ -369,4 +372,79 @@ describe("the recap of a warband's command (§3.3, §3.5)", () => {
         }
         expect(rows.filter(row => /ended their turn/.test(row.title))).toHaveLength(2);
     });
+});
+
+describe("what the turn's holder gives away in fog (§3, §3.6)", () => {
+    const RULES = 12;
+    /**
+     * A fogged Swarm co-op battle in which warband 0 is down to its nests (or
+     * wiped out) and warband 1 still fights, the only difference being what is
+     * out of the team's sight: a nest burning, a nest idle, or the nests gone too.
+     */
+    async function fogged(variant: "burning" | "idle" | "wiped"): Promise<RealmArenaTestGame> {
+        seedRolls(7);
+        const game = makeGame(["a", "b"], {}, { rulesVersion: RULES, fog: true, coop: { enemy: "swarm", mission: "holdOut" } });
+        await musterAll(game);
+        const gs = game.specificGameState;
+        const context = { rulesVersion: RULES };
+        const own = warbandOwner(0);
+        gs.roundsPlayed = 2;
+        gs.rallyOwed = undefined;
+        const setter = gs.fighters.find(fighter => fighter.owner === "a")!.id;
+        let lit = false;
+        gs.fighters = gs.fighters.map(fighter => {
+            if (fighter.owner !== own) return fighter;
+            if (!isStructure(fighter, context)) return { ...fighter, hp: 0 };
+            if (variant === "wiped") return { ...fighter, hp: 0 };
+            if (variant === "burning" && !lit) {
+                lit = true;
+                return { ...afflicted({ ...fighter, hp: 1 }, "burning", setter, context)!.fighter, hp: 1 };
+            }
+            return fighter;
+        });
+        return game;
+    }
+
+    /** What a fogged viewer could read off the turn as three rounds are played: whose turn it was after each command, and how many commands there were. */
+    async function played(variant: "burning" | "idle" | "wiped") {
+        const game = await fogged(variant);
+        const turns: string[] = [];
+        const lengths: number[] = [];
+        const burns: string[][] = [];
+        const note = () => { turns.push(game.currentTurn); lengths.push(game.gameState.commandHistory.length); };
+        for (let turn = 0; turn < 6 && !game.complete; turn++) {
+            // A wave landing owes the team a rally, which has nothing to do with what is being compared.
+            game.specificGameState.rallyOwed = undefined;
+            const sent = await playOne(game, endTurnBy(game.currentTurn));
+            expect(sent.outcome.validMove, `end turn ${turn} by ${game.currentTurn}: ${JSON.stringify(sent.outcome).slice(0, 300)}`).toBe(true);
+            burns.push(enemyTurnsOf((sent.outcome as IRealmArenaOutcome).recap).filter(enemy => enemy.steps.length === 0).map(enemy => enemy.owner));
+            note();
+            const computer = await playComputerTurnsIn(game);
+            for (let step = 0; step < computer.length; step++) note();
+        }
+        const timeline = await buildTimeline(game, NAMES, [], undefined, "a");
+        const steps = timeline.snapshots.map(snapshot => `${snapshot.currentTurn}/${snapshot.command?.senderId ?? "-"}`);
+        return { game, turns, lengths, steps, burns };
+    }
+
+    it("holds the turn with one seat, whichever warband is due, and never hands it to a warband that stands only on a burning nest", async () => {
+        const burning = await played("burning");
+        // The burn happened, inside the End turn where it fell, so the difference was real; a wiped-out warband has none.
+        expect(burning.burns[0]).toEqual([warbandOwner(0)]);
+        expect((await played("wiped")).burns.flat()).toEqual([]);
+        expect(burning.turns.some(turn => turn === ENEMY_TURN_SEAT)).toBe(true);
+        expect(burning.turns.every(turn => turn === ENEMY_TURN_SEAT || !turn.startsWith("ai:"))).toBe(true);
+        expect(burning.game.gameState.commandHistory.every(command => !command.senderId.startsWith("ai:") || command.senderId === ENEMY_TURN_SEAT)).toBe(true);
+    }, 60_000);
+
+    it("is the same for a team whichever of an out-of-sight burning nest, an idle one or a wiped-out warband it is: the same turns, the same commands, the same review steps", async () => {
+        const burning = await played("burning");
+        for (const variant of ["idle", "wiped"] as const) {
+            const other = await played(variant);
+            expect(other.turns, `${variant}: currentTurn after each command`).toEqual(burning.turns);
+            expect(other.lengths, `${variant}: commandHistory.length after each command`).toEqual(burning.lengths);
+            expect(other.game.gameState.commandHistory.length).toBe(burning.game.gameState.commandHistory.length);
+            expect(other.steps, `${variant}: a viewer's timeline`).toEqual(burning.steps);
+        }
+    }, 120_000);
 });

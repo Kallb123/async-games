@@ -52,6 +52,7 @@ import {
 } from '@/utils/testing/apiRoute';
 import { baseState } from '@/games/FiresOut/testFixtures';
 import { race } from '@/games/RaceCars/testFixtures';
+import { ENEMY_TURN_SEAT } from '@/games/RealmArena/rules';
 import { makeGame as realmArenaGame, musterAll as realmArenaMuster } from '@/games/RealmArena/testFixtures';
 import { makeState, player } from '@/games/SettlementsAndCities/testFixtures';
 import { BOARD_TOPOLOGY, HEX_POSITIONS } from '@/games/SettlementsAndCities/board';
@@ -321,7 +322,7 @@ describe('POST /api/game/command', () => {
         const body = await response.json();
 
         expect(body.outcome).not.toHaveProperty('recap');
-        expect(body.gameData.currentTurn).toBe('ai:0');
+        expect(body.gameData.currentTurn).toBe(ENEMY_TURN_SEAT);
         expect(body.step?.parts).toBeUndefined();
         // The same step the sender's own review shows for that command, not a
         // second reading of the outcome: nothing here a timeline wouldn't send.

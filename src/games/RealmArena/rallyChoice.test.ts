@@ -14,7 +14,7 @@ import { RealmArenaGameDataModel } from "./RealmArenaModels";
 import { rallyOptionsOf, rallyRefusal, rallyTally, rallyTotal, resupplyItems, type RallyAction } from "./rally";
 import { battlefieldById } from "./maps";
 import { distance } from "@/utils/games/battlefield/terrain";
-import { isStanding, isWarband, maxHpOf, newFighter, viewOf, warbandOwner, type Fighter } from "./rules";
+import { ENEMY_TURN_SEAT, isStanding, isWarband, maxHpOf, newFighter, viewOf, warbandOwner, type Fighter } from "./rules";
 import { actBy, addFighter, battleOf, cmd, endTurnBy, makeGame, muster, musterAll, play, playComputerTurnsIn, playOne, readyMadePicks, playScriptedBattle, responseFor, type RealmArenaTestGame } from "./testFixtures";
 import { seedRolls } from "./seedRolls";
 
@@ -379,7 +379,7 @@ describe("the last choice, on a real document (§39.4)", () => {
         expect(doc.toObject().specificGameState.rallyOwed).toEqual(["b"]);
         expect((await run(endTurnBy("a"))).outcome.validMove).toBe(true);
         // The End turn handed to the warband, whose own command (as the server's runner builds it) hands back.
-        expect(doc.currentTurn).toBe("ai:0");
+        expect(doc.currentTurn).toBe(ENEMY_TURN_SEAT);
         const warband = getComputerTurnAdapter("RealmArenaGameType")!.buildCommand(doc as unknown as IGameData)!;
         warband.version = gameCommandVersion(meta);
         expect((await run(warband)).outcome.validMove).toBe(true);
