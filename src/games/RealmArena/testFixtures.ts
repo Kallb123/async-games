@@ -18,7 +18,7 @@ import { battlefieldById } from "./maps";
 import { CURRENT_RULESET_VERSION, rulesetOf } from "./rulesets";
 import { meta } from "./meta";
 import type { MasterySnapshot } from "./mastery";
-import { battleOf as battleOfState, budgetOf, owesRally, playableFactions, RealmArenaAct, RealmArenaEndTurn, RealmArenaGameType, RealmArenaMuster } from "./RealmArenaLogic";
+import { battleOf as battleOfState, budgetOf, owesRally, playableFactions, RealmArenaAct, RealmArenaEndTurn, RealmArenaGameType, RealmArenaMuster, RealmArenaWarbandTurn } from "./RealmArenaLogic";
 import { buildInitialRealmArenaState, RealmArenaGameDataModel, type IRealmArenaGameData, type RealmArenaSettings } from "./RealmArenaModels";
 import type { IRealmArenaGameDataResponse } from "./apiModels";
 import { pathTo } from "@/utils/games/battlefield/pathfinding";
@@ -85,8 +85,18 @@ export function playOne(game: RealmArenaTestGame, command: IGameCommand) {
  */
 export async function play(game: RealmArenaTestGame, command: IGameCommand): Promise<RunCommandResult & { computer: RunCommandResult[] }> {
     const result = await playOne(game, command);
+    return { ...result, computer: result.outcome.validMove ? await playComputerTurnsIn(game) : [] };
+}
+
+/**
+ * The warband turns the game is waiting on, played as the server's runner
+ * plays them: one `RealmArenaWarbandTurn` each, until the turn is a player's
+ * again or the battle is over. Their results, in order; none if the turn is
+ * already a player's.
+ */
+export async function playComputerTurnsIn(game: RealmArenaTestGame): Promise<RunCommandResult[]> {
     const computer: RunCommandResult[] = [];
-    for (let turn = 0; result.outcome.validMove && isComputerTurn(game); turn++) {
+    for (let turn = 0; isComputerTurn(game); turn++) {
         if (turn > 50) throw new Error("the warbands never handed the turn back");
         const warband = getComputerTurnAdapter(game.gameType.className)?.buildCommand(game);
         if (!warband) throw new Error(`no warband turn to play for ${game.currentTurn}`);
@@ -95,12 +105,28 @@ export async function play(game: RealmArenaTestGame, command: IGameCommand): Pro
         if (!played.outcome.validMove) throw new Error(`${game.currentTurn}'s turn was refused`);
         computer.push(played);
     }
-    return { ...result, computer };
+    return computer;
 }
 
 export const muster = (sender: string, picks: MusterPick[]) => cmd(RealmArenaMuster, sender, { picks });
 export const actBy = (sender: string, action: Action | RallyAction) => cmd(RealmArenaAct, sender, { action });
 export const endTurnBy = (sender: string, keepStill: number[] = []) => cmd(RealmArenaEndTurn, sender, { keepStill });
+/** A warband's turn from `seat` (`ai:k`) with its actions and rolls scripted, as a replay carries them: `playOne` it once an End turn has handed the turn over. */
+export const warbandTurnBy = (seat: string, recordedActions: Action[] = [], recordedRolls?: number[]) =>
+    cmd(RealmArenaWarbandTurn, seat, { recordedActions, ...recordedRolls ? { recordedRolls } : {} });
+
+/**
+ * Every action the warbands took in a battle, as its command history recorded
+ * them: in each `RealmArenaWarbandTurn`, and, in a battle played under an older
+ * command version, on the End turns that held their turns.
+ */
+export function recordedWarbandActions(game: RealmArenaTestGame): Action[] {
+    return game.gameState.commandHistory.flatMap(command => {
+        if (command.className === "RealmArenaWarbandTurn") return (command as RealmArenaWarbandTurn).recordedActions ?? [];
+        const ended = command as RealmArenaEndTurn;
+        return [...ended.recordedEnemyActions ?? [], ...(ended.recordedMoreEnemyActions ?? []).flat()];
+    });
+}
 
 /** The ready-made squad for a seat, where a timed-out muster would put it. */
 export function readyMadePicks(game: RealmArenaTestGame, seat: number): MusterPick[] {

@@ -15,7 +15,7 @@ import { hitChance, rangeSquares, reactionPreviews, rollsToHit } from "./tactics
 import { characterStats } from "./stats";
 import { abilityWait, eventLines, hpFraction } from "./ui";
 import { nextAction } from "./ai";
-import { actBy, battleOf, endTurnBy, makeGame, musterAll, play, playScriptedBattle, type RealmArenaTestGame } from "./testFixtures";
+import { actBy, battleOf, endTurnBy, makeGame, musterAll, play, playOne, playScriptedBattle, warbandTurnBy, type RealmArenaTestGame } from "./testFixtures";
 import { CURRENT_RULESET_VERSION, rulesetFor, rulesetOf } from "./rulesets";
 
 // docs/games/realm-arena-balance.md: the rebalance that command version 7
@@ -675,7 +675,9 @@ describe("the team's armour against the Realm in Hold Out", () => {
             .find(square => field.tiles[square]?.terrain.standable && !gs.fighters.some(one => one.square === square))!;
         gs.fighters = gs.fighters.map(one => one.id === bloater.id ? { ...one, character: "bloater" as const, square: beside, hp: 1, spent: [], effects: { burning: 2 }, burnedBy: victim.id } : one.id === victim.id || one.id === far.id ? one : { ...one, hp: 0 });
 
-        const { outcome } = await play(game, Object.assign(endTurnBy(game.currentTurn), { recordedEnemyActions: [], recordedRolls: [] }));
+        // The End turn hands to the warband; the warband's own command, with nothing for it to plan, takes its turn.
+        expect((await playOne(game, endTurnBy(game.currentTurn))).outcome.validMove).toBe(true);
+        const { outcome } = await playOne(game, warbandTurnBy(game.currentTurn, [], []));
         expect(outcome.validMove).toBe(true);
         const events = (outcome as IRealmArenaOutcome).events;
         expect(events).toContainEqual(expect.objectContaining({ kind: "burst", fighter: bloater.id, downed: true, targets: expect.arrayContaining([victim.id]) }));
@@ -704,8 +706,8 @@ describe("the team's armour against the Realm in Hold Out", () => {
             .find(square => field.tiles[square]?.terrain.standable && field.tiles[square].elevation === field.tiles[victim.square].elevation && !gs.fighters.some(one => one.square === square))!;
         gs.fighters = gs.fighters.map(one => one.id === striker.id ? { ...one, square: beside } : one.id === victim.id || one.id === far.id ? one : { ...one, hp: 0 });
 
-        const end = Object.assign(endTurnBy(game.currentTurn), { recordedEnemyActions: [{ kind: "attack", fighter: striker.id, target: victim.id }], recordedRolls: [1] });
-        const { outcome } = await play(game, end);
+        expect((await playOne(game, endTurnBy(game.currentTurn))).outcome.validMove).toBe(true);
+        const { outcome } = await playOne(game, warbandTurnBy(game.currentTurn, [{ kind: "attack", fighter: striker.id, target: victim.id }], [1]));
         expect(outcome.validMove).toBe(true);
         // The blow was armoured: 4 became 3.
         expect((outcome as IRealmArenaOutcome).events).toContainEqual(expect.objectContaining({ kind: "struck", fighter: striker.id, target: victim.id, damage: CHARACTERS.manAtArms.weapon.damage - ARMOUR }));

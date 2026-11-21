@@ -3,9 +3,8 @@ import { FACTION_IDS, FACTIONS, type CharacterId } from "./characters";
 import { FOUR_GATE_FORT } from "./maps/fourGateFort";
 import { act, endTurn, newFighter, readyMadeMuster, startTurn, viewOf, type BattleState, type Fighter } from "./rules";
 import { nextAction, turnMemo } from "./ai";
-import type { RealmArenaEndTurn } from "./RealmArenaLogic";
 import { COOP_MAPS } from "./maps";
-import { battleOf, coopBattle, FOUR_TEAM, TEAMS, warbandsOf } from "./testFixtures";
+import { battleOf, coopBattle, FOUR_TEAM, recordedWarbandActions, TEAMS, warbandsOf } from "./testFixtures";
 import { seedRolls } from "./seedRolls";
 
 // docs/games/realm-arena.md §29.7, §29.11: the planner held to its time. A
@@ -95,7 +94,7 @@ describe("the computer in whole battles (§29.11)", () => {
                     expect(["teamwin", "teamloss"]).toContain(battle.game.endReason);
                     expect(battle.game.winner).toBe("");
                     // Every warband fought: each took turns, and the rotation came round.
-                    const recorded = battle.game.gameState.commandHistory.flatMap(command => (command as RealmArenaEndTurn).recordedEnemyActions ?? []);
+                    const recorded = recordedWarbandActions(battle.game);
                     const owners = new Set(recorded.map(action => battleOf(battle.game).fighters[action.fighter].owner));
                     expect(owners).toEqual(new Set(warbandsOf(battle.game)));
                 }
