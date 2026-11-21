@@ -296,11 +296,10 @@ describe('POST /api/game/command', () => {
         expect(saved.currentTurn).toBe(BOB.id);
     });
 
-    it("sends a Realm Arena co-op End turn back with the review's step for it, part by part, as the timeline would", async () => {
-        // The warband's turn rides inside the player's End turn, and `outcome`
-        // is cut to its events (`outcomeFor` leaves out the recap the parts
-        // are made of), so the board can only play it action by action from
-        // the step.
+    it("sends a Realm Arena co-op End turn back at once, handed to the warband, and plays the warband's turn after the response (realm-arena-hold-out.md §3)", async () => {
+        // The End turn holds no enemy's turn any more: it hands the turn to the
+        // warband and returns, and the warband's turn is a command of its own,
+        // played in the route's `after()`, whose step is the one with the parts.
         const game = realmArenaGame([ANN.id, BOB.id], {}, { coop: { enemy: 'realm' } });
         await realmArenaMuster(game);
         const { markModified: _, ...data } = game;
@@ -322,14 +321,23 @@ describe('POST /api/game/command', () => {
         const body = await response.json();
 
         expect(body.outcome).not.toHaveProperty('recap');
-        const kinds = (body.step.parts as { kind: string }[]).map(part => part.kind);
-        expect(kinds[0]).toBe('ended');
-        expect(kinds).toContain('enemy');
+        expect(body.gameData.currentTurn).toBe('ai:0');
+        expect(body.step?.parts).toBeUndefined();
         // The same step the sender's own review shows for that command, not a
         // second reading of the outcome: nothing here a timeline wouldn't send.
         signIn(ANN);
-        const reviewed = await (await timeline(jsonPost('/api/game/game_1/timeline', { plannedCommands: [] }), { params: Promise.resolve({ gameid: 'game_1' }) })).json();
-        expect(body.step).toEqual(reviewed.snapshots.at(-1).outcome);
+        const before = await (await timeline(jsonPost('/api/game/game_1/timeline', { plannedCommands: [] }), { params: Promise.resolve({ gameid: 'game_1' }) })).json();
+        expect(body.step).toEqual(before.snapshots.at(-1).outcome);
+
+        // Once the response has gone, the warband plays, and its turn is the
+        // review's next step, part by part, and the turn is Bob's.
+        await runAfterCallbacks();
+        signIn(ANN);
+        const after = await (await timeline(jsonPost('/api/game/game_1/timeline', { plannedCommands: [] }), { params: Promise.resolve({ gameid: 'game_1' }) })).json();
+        const last = after.snapshots.at(-1);
+        expect(last.currentTurn).toBe(BOB.id);
+        expect(last.command.senderUsername).toBe('The enemy');
+        expect(((last.outcome?.parts ?? []) as { kind: string }[]).some(part => part.kind === 'enemy')).toBe(true);
     });
 
     it("still answers a move that stands when its step can't be worked out, without the step", async () => {
