@@ -113,6 +113,17 @@ export function useTurnRecap<T extends IGameDataResponse>(gameId: string, { view
         };
     }, [gameId, enabled, fetchRecap]);
 
+    // Asks for the recap again now, for a caller that knows something has just
+    // happened which the load and the foreground return can't: Realm Arena's
+    // warbands play their turn in the background (docs/games/realm-arena-hold-out.md
+    // §3), so the turn coming back to the viewer is when what the enemy did
+    // becomes worth showing. Like those two, it re-shows a recap only when it
+    // covers turns the player hasn't dismissed. Fire and forget: nothing to cancel,
+    // since an answer landing after the screen has gone changes nothing visible.
+    const refetch = useCallback(() => {
+        fetchRecap();
+    }, [fetchRecap]);
+
     const dismiss = useCallback(() => {
         dismissedSignature.current = recapSignature(recap);
         setDismissed(true);
@@ -182,6 +193,7 @@ export function useTurnRecap<T extends IGameDataResponse>(gameId: string, { view
         hasRecap: !loading && ready,
         dismiss,
         reshow,
+        refetch,
         react,
     };
 }

@@ -82,6 +82,11 @@ export const WHATS_NEW: WhatsNewGroup[] = [
         icon: "✨",
         items: [
             {
+                title: "Realm Arena: the enemy takes its turn while you get on with yours",
+                detail: "In a battle against the computer, End turn now comes back straight away, and the enemy's warbands move on their own — with more time to think about it — while the board says they're moving. You'll see what they did as soon as it's your turn, and your teammates are told when theirs comes round.",
+                game: "realmarena",
+            },
+            {
                 title: "Realm Arena: pick your abilities, and a Swarm worth fighting in Hold Out",
                 detail: "Each of your Realm characters now picks two of its abilities at the muster, so two Archers can carry different arrows. Against the Swarm, the waves come themed — some led by a Bile Lobber, a Carapace Brute or a Brood Queen — nests at the edges cost the next wave if you burn them out, Bloaters burst when they fall, and a Knight's Taunt braces every ally around it. After each wave, every player picks their own rally: heal, bring someone back, or refill items. Two new achievements: Regicide and Scorched Earth.",
                 game: "realmarena",
@@ -124,10 +129,6 @@ export const WHATS_NEW: WhatsNewGroup[] = [
                 title: "Realm Arena: a new Hold Out battlefield, the Sunken Village",
                 detail: "For a team of three: hold a village green sunk below hedges, lanes and roofless cottages that hide the enemy until it's close, so archers can't pick you off from across the map. Nobody sees through a hedge, but anyone can push through one, and a fireball burns it away.",
                 game: "realmarena",
-            },
-            {
-                title: "Quicker when you come back to the app",
-                detail: "Switching back to the app, or opening it from a notification, now renews your sign-in before your games refresh, so they no longer stall for a few seconds first — and a move you make the moment you're back goes through. Players' names show straight away too, even when you've been away a while.",
             },
         ],
     },

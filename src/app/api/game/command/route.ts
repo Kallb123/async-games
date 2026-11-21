@@ -1,9 +1,7 @@
-import { sendPushToUsers, gameNotificationLink } from '@/utils/firebase/pushNotification';
-import { buildAchievementNotification, buildYourTurnNotification } from '@/utils/firebase/notificationContent';
-import { buildUserDirectory, userListToUserIdNameMap, usersById } from '@/utils/users/clerk';
+import { buildUserDirectory } from '@/utils/users/clerk';
 import { UNKNOWN_PLAYER_NAME } from '@/utils/ui/players';
 import { FIRST_COMMAND_VERSION, gameCommandVersion } from '@/utils/ui/games';
-import { auth, User } from '@clerk/nextjs/server';
+import { auth } from '@clerk/nextjs/server';
 import { after, NextRequest, NextResponse } from 'next/server';
 import { dbConnect } from '@/utils/mongodb/mongodb';
 import { ICommandOutcome, IGameCommand, IGameType, playableOutOfTurn, serializeOutcomeMaps, stripRecordedRandomness } from '@/utils/apiModels/GameLogic';
@@ -18,10 +16,10 @@ import { IGameDataResponse, uuidString } from '@/utils/apiModels/GameDataApi';
 import { v4 as uuidv4 } from 'uuid';
 import { attachHistoryReactions } from '@/utils/games/historyReactions';
 import { unlockedHere } from '@/utils/games/unlockedHere';
-import { hasTurnEndAchievements, judgeTurnEnd, TURN_END_BUDGET_MS, TURN_END_PUSH_GRACE_MS } from '@/utils/games/awardAchievements';
-import type { EarnedAchievement } from '@/utils/games/awardAchievements';
-import type { Achievement } from '@/utils/games/achievements';
-import { withTimeout } from '@/utils/withTimeout';
+import { hasTurnEndAchievements } from '@/utils/games/awardAchievements';
+import { announceTurnEnd } from '@/utils/games/announceTurnEnd';
+import { isComputerTurn } from '@/utils/games/computerTurns';
+import { playComputerTurns } from '@/utils/games/playComputerTurns';
 import { getReplayAdapter } from '@/utils/games/replay';
 
 export interface ICommandResponse {
@@ -113,65 +111,15 @@ function lastRecordedName(gameData: IGameData, userId: string): string | undefin
   return undefined;
 }
 
-/**
- * Tells the player whose turn it now is. `userList` is the roster the caller
- * already resolved, so this one is not another Clerk lookup.
- *
- * Its own `try`: a failure here can't cost a move that's already saved, and it
- * can't stop the judging beside it either, so it's logged and swallowed rather
- * than turned into an error. The `!turnUser` early return guards only this
- * push; judging doesn't need the next player to be found.
- */
-async function notifyNextPlayer(gameData: IGameData, userList: User[]): Promise<void> {
-  try {
-    const turnUser = userList.find(u => u.id === gameData.currentTurn);
-
-    if (!turnUser) {
-      console.error(`Next user not found for game ${gameData.gameId}`);
-      return;
-    }
-
-    await sendPushToUsers([turnUser], {
-      event: 'YourTurn',
-      gameId: gameData.gameId,
-      link: gameNotificationLink(gameData.gameType.url, gameData.gameId)
-    }, await buildYourTurnNotification(gameData, turnUser.id, userListToUserIdNameMap(userList)), {
-      channel: 'yourTurn'
-    });
-  } catch (error) {
-    console.error(`Post-response turn-notification work failed for game ${gameData.gameId}`, error);
-  }
-}
-
-/**
- * Pushes each player what a turn end unlocked for them that is marked `notify`
- * (docs/achievements.md §7.4): one push per player however many it names, on
- * the `achievements` channel, tagged by game so a second unlock in the same game
- * replaces the first on the lock screen. Tapping it opens the board. Everything
- * else a turn end unlocks is celebrated by the toast alone.
- *
- * Chained onto the judging itself rather than sent after its deadline: a
- * judgment that lands late must still push, or it would write a row whose push
- * nobody sends and the next turn end would see as already held. The `after()`
- * waits `TURN_END_PUSH_GRACE_MS` past the budget for exactly this.
- * `sendPushToUsers` never throws.
- */
-async function pushNotifyUnlocks(gameData: IGameData, userList: User[], unlocks: readonly EarnedAchievement[]): Promise<void> {
-  const byUser = new Map<string, Achievement[]>();
-  for (const { userId, achievement } of unlocks) {
-    if (achievement.notify) byUser.set(userId, [...(byUser.get(userId) ?? []), achievement]);
-  }
-  await Promise.all([...byUser].map(([userId, achievements]) => {
-    const user = userList.find(u => u.id === userId);
-    return user && sendPushToUsers([user], {
-      event: 'AchievementUnlocked',
-      gameId: gameData.gameId,
-      link: gameNotificationLink(gameData.gameType.url, gameData.gameId),
-    }, buildAchievementNotification(gameData, achievements), { channel: 'achievements' });
-  }));
-}
+// The warbands' turns run in this function's `after()`, a few seconds each, so a
+// whole enemy phase needs more than the platform's default (see
+// `playComputerTurns`). What it can't finish the turn-timer cron does.
+export const maxDuration = 60;
 
 export async function POST(request: NextRequest) {
+  // The function's clock starts now, so the warbands' turns, which run after
+  // the response, know how long they really have.
+  const startedAt = Date.now();
   console.log(`POST ${request.nextUrl.pathname}`);
   const { userId } = await auth();
   if (!userId) {
@@ -418,6 +366,22 @@ export async function POST(request: NextRequest) {
     ...stepForSender()
   }
 
+  // A turn handed to the computer has nobody on it yet, so there is no one to
+  // push and nothing to judge: pushes follow the turn (docs/games/realm-arena-hold-out.md
+  // §3.2), and the runner does both once it hands the turn to a player. The
+  // player's request returns at once; the warbands play in the background,
+  // with ten seconds left of the function's time to save and announce.
+  if (turnBoundary && isComputerTurn(gameData)) {
+    after(async () => {
+      try {
+        await playComputerTurns(gameData.gameId, { finishBy: startedAt + (maxDuration - 10) * 1000 });
+      } catch (error) {
+        console.error(`Playing the computer's turns failed for game ${gameData.gameId}`, error);
+      }
+    });
+    return NextResponse.json(response, {status: 200});
+  }
+
   // The pipeline already refuses an out-of-turn `turnOver` that didn't end
   // the game; `onTurn` keeps this work from ever resting on that alone.
   //
@@ -429,56 +393,10 @@ export async function POST(request: NextRequest) {
     return NextResponse.json(response, {status: 200});
   }
 
-  // Notifying the next player — the Clerk lookup and building their "your move"
-  // body (which replays the whole game through the recap engine) — is the
-  // slowest part of a turn and none of it is anything the player who just moved
-  // is waiting on. Run it after the response has flushed. A failure here can't
-  // cost a move that's already saved, so it's logged and swallowed rather than
-  // turned into an error. Judging achievements for the turn that just ended
-  // (docs/achievements.md §4.2) shares that slot and that guarantee.
-  after(async () => {
-    // Resolved once, for both halves. With no roster there is nobody to push
-    // and no way to tell an exhibition table from a counted one, so neither
-    // half has anything to do.
-    let userList: User[];
-    try {
-      userList = await usersById(gameData.userIdList);
-    } catch (error) {
-      console.error(`Couldn't resolve the roster for the post-response work on game ${gameData.gameId}`, error);
-      return;
-    }
-
-    // Side by side, not queued. The push replays the whole game and sends
-    // through FCM with no deadline of its own, so judging queued behind it
-    // could run out of the function's time before it ever started, and nothing
-    // would say so. Beside it, judging usually finishes first: one read, one
-    // view, a few checks. The two never interleave on the shared document,
-    // because building the view (`toResponseState`) is synchronous.
-    //
-    // `notifyNextPlayer` has its own `try`, and `withTimeout` catches and logs
-    // a judge that throws (and stops waiting on one that stalls), so neither
-    // half can fail the other and this needs no `try` of its own. The earner's
-    // `notify` push rides inside the timed work (see pushNotifyUnlocks); the
-    // toast needs nothing from here, since every board response carries what
-    // its viewer has unlocked.
-    //
-    // Started once and waited on twice. `withTimeout` stops *waiting* at the
-    // budget, but `after()` ends — and the platform may stop the function —
-    // once this callback returns, so a judgment that lands late would write its
-    // rows and never send the push chained onto them. So after the budget, the
-    // callback stays a while longer for that push alone (TURN_END_PUSH_GRACE_MS),
-    // which holds nobody up: the response and the next player's push are
-    // already gone.
-    const label = `Judging achievements for ${gameData.gameId}`;
-    const judging = judgeTurnEnd(gameData, userList)
-      .then(unlocks => pushNotifyUnlocks(gameData, userList, unlocks))
-      .catch(error => console.error(`${label} failed`, error));
-    await Promise.all([
-      commandOutcome.turnOver ? notifyNextPlayer(gameData, userList) : undefined,
-      withTimeout(() => judging, TURN_END_BUDGET_MS, undefined, label),
-    ]);
-    await withTimeout(() => judging, TURN_END_PUSH_GRACE_MS, undefined, `${label}, and its push,`);
-  });
+  // Notifying the next player and judging achievements for the turn that just
+  // ended share one slot after the response has flushed (announceTurnEnd.ts).
+  // A failure there can't cost a move that's already saved.
+  after(() => announceTurnEnd(gameData, { push: commandOutcome.turnOver }));
 
   return NextResponse.json(response, {status: 200});
 }

@@ -1,8 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { buildTimeline } from "@/utils/games/replay";
 import { gameStateToModel } from "./RealmArenaModels";
-import type { RealmArenaEndTurn } from "./RealmArenaLogic";
-import { playScriptedBattle, battleOf } from "./testFixtures";
+import { playScriptedBattle, battleOf, recordedWarbandActions } from "./testFixtures";
 import { seedRolls } from "./seedRolls";
 import { isWarband } from "./rules";
 
@@ -27,7 +26,7 @@ describe("a replay of a Hold Out against a Swarm of elites (§39.5)", () => {
         seedRolls(4);
         const game = await playScriptedBattle({ rulesVersion: 12, fog, coop: { enemy: "swarm", mission: "holdOut" } });
         const history = game.gameState.commandHistory;
-        const recorded = history.flatMap(command => (command as RealmArenaEndTurn).recordedEnemyActions ?? []);
+        const recorded = recordedWarbandActions(game);
         const kinds = new Set(recorded.map(action => action.kind));
         // The Queen hatched, and a Lobber's bile fell, in the battle that is replayed.
         expect(kinds.has("hatch")).toBe(true);

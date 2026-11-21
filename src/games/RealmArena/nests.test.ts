@@ -7,7 +7,7 @@ import { achievements } from "./achievements";
 import { battlefieldById, REALM_ARENA_MAPS } from "./maps";
 import { gameStateToModel } from "./RealmArenaModels";
 import { recordBattle } from "./recordBattle";
-import { nextWaveOf, RealmArenaEndTurn, RealmArenaGameType, warbandBudgetOf, waveBudgetOf, waveOf } from "./RealmArenaLogic";
+import { enemyTurnsOf, nextWaveOf, RealmArenaEndTurn, RealmArenaGameType, warbandBudgetOf, waveBudgetOf, waveOf } from "./RealmArenaLogic";
 import {
     act, actionPointsOf, areaAround, afflicted, alliesWithin, canAct, centreHolders, centrePoints, check, endTurn, fixedRolls, isBattleOver, isCombatant, isStanding, isStructure, isWarband,
     knockoutPoints, maxHpOf, musterRefusal, newFighter, nextFighterId, purified, shovePath, sidesStanding, squadHp, squadsStanding, squadSight, startTurn, temporaryCover,
@@ -15,7 +15,7 @@ import {
 } from "./rules";
 import { ruleValuesOf, rulesetFor } from "./rulesets";
 import { targetsOf } from "./tactics";
-import { actBy, addFighter, battleOf, cmd, endTurnBy, makeGame, musterAll, play, playScriptedBattle, readyMadePicks, responseFor, warbandsOf, type RealmArenaTestGame } from "./testFixtures";
+import { actBy, addFighter, battleOf, cmd, endTurnBy, makeGame, musterAll, play, playOne, playScriptedBattle, readyMadePicks, recordedWarbandActions, responseFor, warbandsOf, type RealmArenaTestGame } from "./testFixtures";
 import { seedRolls } from "./seedRolls";
 import type { IRealmArenaOutcome } from "./RealmArenaLogic";
 
@@ -643,7 +643,7 @@ describe("a replay of a Hold Out with nests destroyed (§39.7)", () => {
             expect(last.specificGameState).toEqual(gameStateToModel(game.specificGameState, "a", history.at(-1)?.id ?? null, true));
             // The server-only state the response leaves out, as the replay left it: the tallies, and where every nest stands and how hurt.
             expect(replayed).toEqual(rawOf(game.specificGameState));
-            expect(history.some(command => ((command as RealmArenaEndTurn).recordedEnemyActions ?? []).length > 0)).toBe(true);
+            expect(recordedWarbandActions(game).length).toBeGreaterThan(0);
 
             const record = await recordBattle(game);
             expect(record!.fighting.some(row => row.character === "nest")).toBe(false);
@@ -656,7 +656,15 @@ describe("a replay of a Hold Out with nests destroyed (§39.7)", () => {
 // A warband with only nests standing still takes a turn while one of them burns or is poisoned (§39.7):
 // an empty one, so the damage lands as its turn begins and not a wave later.
 describe("a nest burns down once its warband has only nests left (§39.7, #967)", () => {
-    const enemyOf = (outcome: unknown) => (outcome as IRealmArenaOutcome).recap?.enemy;
+    /** The first warband turn a command handed on to played, as its own command's recap holds it: undefined when none was due. */
+    /**
+     * Every warband turn a played End turn brought: a nest-only warband's empty burn is
+     * played where it falls, so it is in the End turn's own recap (or the warband command's
+     * before it in a block), never a command of its own (§3.6).
+     */
+    const turnsOf = ({ outcome, computer }: { outcome: unknown; computer: { outcome: unknown }[] }) =>
+        [outcome, ...computer.map(one => one.outcome)].flatMap(one => enemyTurnsOf((one as IRealmArenaOutcome | undefined)?.recap));
+    const enemyOf = (played: Parameters<typeof turnsOf>[0], owner: string) => turnsOf(played).find(turn => turn.owner === owner);
 
     /** A battle whose first warband has only nests, one of them at 1 HP and under `effect`, lit by the team's first character. */
     async function burning(effect: "burning" | "poisoned" | undefined, settings: Parameters<typeof makeGame>[2] = {}) {
@@ -682,8 +690,8 @@ describe("a nest burns down once its warband has only nests left (§39.7, #967)"
                 const whole = wavePurchase(SWARM, base(gs, 4), 4, CONTEXT);
                 const thinned = wavePurchase(SWARM, base(gs, 4) - 15, 4, CONTEXT);
                 expect([...thinned].sort()).not.toEqual([...whole].sort());
-                const { outcome } = await play(game, endTurnBy("b"));
-                if (teamBlocks) expect(enemyOf(outcome)).toMatchObject({ owner, steps: [] });
+                const played = await play(game, endTurnBy("b"));
+                if (teamBlocks) expect(enemyOf(played, owner)).toMatchObject({ owner, steps: [] });
                 expect(gs.roundsPlayed).toBe(3);
                 expect(combatantsOf(game, owner).map(one => one.character).sort()).toEqual([...thinned].sort());
                 expect(combatantsOf(game, other).map(one => one.character).sort()).toEqual([...whole].sort());
@@ -697,20 +705,24 @@ describe("a nest burns down once its warband has only nests left (§39.7, #967)"
     it("the burn is an empty turn: no actions, no 'ended their turn' line, recorded and replayed as such", async () => {
         const live = await burning("burning");
         const turn = await play(live.game, endTurnBy("a"));
-        const enemy = (turn.outcome as IRealmArenaOutcome).recap!.enemy!;
+        // Played inside the End turn itself: no command of the warband's, and no turn handed to it.
+        expect(turn.computer).toEqual([]);
+        const enemy = enemyOf(turn, live.owner)!;
         expect(enemy).toMatchObject({ owner: live.owner, steps: [] });
         expect(enemy.started.some(event => event.kind === "downed")).toBe(true);
         expect(enemy.ended).toBeUndefined();
         expect(text(live.game).some(line => /ended their turn/.test(line) && line.startsWith("The Swarm"))).toBe(false);
-        const command = live.game.gameState.commandHistory.at(-1) as RealmArenaEndTurn;
-        expect(command.recordedEnemyActions).toEqual([]);
+        const command = live.game.gameState.commandHistory.at(-1)!;
+        expect(command.className).toBe("RealmArenaEndTurn");
+        expect(live.game.gameState.commandHistory.some(one => one.className === "RealmArenaWarbandTurn")).toBe(false);
+        expect(command).not.toHaveProperty("recordedEnemyActions");
 
         // The same turn replayed from what was recorded, on an identical battle, lands on the same state and consumes nothing.
         const replay = await burning("burning");
         const random = vi.spyOn(Math, "random").mockImplementation(() => { throw new Error("replay consumed randomness"); });
         try {
-            const again = cmd(RealmArenaEndTurn, command.senderId, JSON.parse(JSON.stringify(command)));
-            expect((await play(replay.game, again)).outcome.validMove).toBe(true);
+            const again = cmd(RealmArenaEndTurn, "a", JSON.parse(JSON.stringify(command)));
+            expect((await playOne(replay.game, again)).outcome.validMove).toBe(true);
         } finally {
             random.mockRestore();
         }
@@ -721,8 +733,10 @@ describe("a nest burns down once its warband has only nests left (§39.7, #967)"
     it("a nest-only warband with nothing burning takes no turn, and the round still passes", async () => {
         const { game, gs } = await burning(undefined);
         const first = await play(game, endTurnBy("a"));
-        expect(enemyOf(first.outcome)).toBeUndefined();
-        expect((game.gameState.commandHistory.at(-1) as RealmArenaEndTurn).recordedEnemyActions).toEqual([]);
+        // No warband is due, so none is handed the turn and none takes one.
+        expect(turnsOf(first)).toEqual([]);
+        expect(first.computer).toEqual([]);
+        expect(game.gameState.commandHistory.at(-1)?.className).toBe("RealmArenaEndTurn");
         await play(game, endTurnBy("b"));
         expect(gs.roundsPlayed).toBe(3);
         expect(nestsOf(game)).toHaveLength(4);
@@ -732,13 +746,12 @@ describe("a nest burns down once its warband has only nests left (§39.7, #967)"
         const { game, nest, owner } = await burning("burning");
         game.specificGameState.fighters = game.specificGameState.fighters.map(one => one.id === nest.id ? { ...one, hp: 10 } : one);
         const first = await play(game, endTurnBy("a"));
-        expect(enemyOf(first.outcome)).toMatchObject({ owner, steps: [] });
+        expect(enemyOf(first, owner)).toMatchObject({ owner, steps: [] });
         // Burning counts down as it hurts, so the turns stop on their own.
         let turns = 1;
         for (const player of ["b", "a", "b", "a", "b", "a"]) {
             if (!fighters(game).find(one => one.id === nest.id)!.effects.burning) break;
-            const { outcome } = await play(game, endTurnBy(player));
-            if (enemyOf(outcome)) turns++;
+            if (enemyOf(await play(game, endTurnBy(player)), owner)) turns++;
         }
         expect(fighters(game).find(one => one.id === nest.id)!.effects.burning).toBeFalsy();
         expect(turns).toBeGreaterThan(1);
@@ -757,8 +770,9 @@ describe("a nest burns down once its warband has only nests left (§39.7, #967)"
             afflictNest(gs, nest, "burning", fighters(game).find(one => one.owner === "a")!.id);
             const ended = () => text(game).filter(line => line.startsWith("The Swarm") && /ended their turn/.test(line)).length;
             const before = ended();
-            const { outcome } = await play(game, endTurnBy("a"));
-            const recap = (outcome as IRealmArenaOutcome).recap!;
+            const { computer } = await play(game, endTurnBy("a"));
+            expect(computer).toHaveLength(1);
+            const recap = (computer[0].outcome as IRealmArenaOutcome).recap!;
             expect(recap.enemy).toMatchObject({ owner: other });
             expect(recap.enemy!.ended).toBeDefined();
             expect(recap.thenEnemy).toEqual([expect.objectContaining({ owner, steps: [] })]);

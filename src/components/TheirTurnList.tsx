@@ -11,6 +11,7 @@ import { useIsAuthorised } from "@/utils/hooks/useAuthGuard";
 import { formatRemainingTimeShort } from "@/utils/games/TurnTimer";
 import { useNowToTheMinute } from "@/utils/hooks/useNow";
 import { useToast } from "@/components/ToastContext";
+import { isComputerSeat } from "@/utils/games/computerTurns";
 
 interface TheirTurnListProps {
     isLoading: boolean;
@@ -75,15 +76,19 @@ export default function TheirTurnList({ games, isLoading }: TheirTurnListProps) 
                         </GameLink>
                         {timeLeft && <span className="ag-list-row-time">{timeLeft}</span>}
                         <UnreadChatBadge count={game.unreadChatCount ?? 0} />
-                        <button
-                            type="button"
-                            className="ag-pill-action"
-                            aria-label={`Nudge ${opponentName}`}
-                            disabled={alreadyNudged}
-                            onClick={() => handleNudge(game.gameId, opponentName)}
-                        >
-                            👉
-                        </button>
+                        {/* The computer has no phone to buzz: a game waiting on it
+                            is waiting on the server, which is already playing. */}
+                        {!isComputerSeat(game.currentTurn) && (
+                            <button
+                                type="button"
+                                className="ag-pill-action"
+                                aria-label={`Nudge ${opponentName}`}
+                                disabled={alreadyNudged}
+                                onClick={() => handleNudge(game.gameId, opponentName)}
+                            >
+                                👉
+                            </button>
+                        )}
                     </div>
                 );
             })}

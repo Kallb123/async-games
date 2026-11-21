@@ -1,4 +1,6 @@
-import type { Document } from 'mongodb';
+import type { mongo } from 'mongoose';
+
+type Document = mongo.Document;
 
 /** An `explain` result's planner and stats, wherever an aggregate or a sharded cluster nested them. */
 export function findExplain(node: unknown): { queryPlanner?: Document; executionStats?: Document } | undefined {
