@@ -1,5 +1,5 @@
 'use client'
-import { use, useEffect, useMemo, useState } from "react";
+import { use, useEffect, useMemo, useRef, useState } from "react";
 import { usePathname } from "next/navigation";
 import { FcmTokenComp } from "@/components/FirebaseForeground";
 import { uuidString } from "@/utils/apiModels/GameDataApi";
@@ -123,6 +123,19 @@ export default function GameRealmArena({ params }: { params: Promise<{ gameid: u
         awaitsStepEnd: true,
     });
     const recap = useTurnRecap(gameId, { viewerId: user?.id, setGameData, getGameData });
+    // The warbands play their turn on the server after the last player's End
+    // turn (docs/games/realm-arena-hold-out.md §3). The board polls quickly
+    // meanwhile (`useGameData`), and when the turn comes back to the viewer the
+    // recap is asked for again, so "since your last turn" shows what the enemy
+    // did. A teammate whose turn it isn't just sees the board refresh.
+    const liveTurn = gameData?.currentTurn ?? '';
+    const liveWarbandTurn = isWarband(liveTurn) && !gameData?.complete;
+    const warbandHeldTurn = useRef(false);
+    const refetchRecap = recap.refetch;
+    useEffect(() => {
+        if (warbandHeldTurn.current && liveTurn === user?.id) refetchRecap();
+        warbandHeldTurn.current = liveWarbandTurn;
+    }, [liveTurn, liveWarbandTurn, user?.id, refetchRecap]);
     // The first-match welcome: the guided tour, with the guide behind it in ⋮.
     const gameIntro = useGameIntro('realmarena');
 
@@ -473,9 +486,14 @@ export default function GameRealmArena({ params }: { params: Promise<{ gameid: u
                 : <>{currentTurnName} is mustering</>;
         } else {
             const round = `round ${gs.round} of ${gs.battleRounds}`;
+            // A warband isn't a player in the directory, and a random enemy
+            // stays "the enemy" until it is seen, so it is named by `enemyName`.
+            const mover = isWarband(currentTurn) ? capitalise(enemyName) : currentTurnName;
             subtitle = isMyTurn
                 ? <><span className="ag-hi">Your move</span> · {round}</>
-                : <>{currentTurnName}&apos;s move · {round}</>;
+                : nav.isLive && liveWarbandTurn
+                    ? <>{mover} is moving… · {round}</>
+                    : <>{mover}&apos;s move · {round}</>;
         }
     }
 

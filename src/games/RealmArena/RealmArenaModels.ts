@@ -1,8 +1,9 @@
-import { GameDataModel, IGameData, IGameDataDocument, publicGameState } from "@/utils/mongodb/GameData";
+import { GameDataModel, GameDataSchema, IGameData, IGameDataDocument, publicGameState } from "@/utils/mongodb/GameData";
 import { IInvitationData, IInvitationDataDocument, InvitationModel, IInvitationRequest } from "@/utils/mongodb/InvitationData";
 import { Model, Schema, models } from "mongoose";
 import { v4 as uuidv4 } from 'uuid';
-import { compactCharts, formatPerTurnChart, gameResultEventSchemaDef, type GameResultAnyChart, type GameResultBarChart, type GameResultChartSeries, type GameResultStatGroup, type GameResultTable, type StoredGameResultEvent, type uuidString } from "@/utils/apiModels/GameDataApi";
+import type { UserDirectory } from "@/utils/users/clerk";
+import { compactCharts, formatPerTurnChart, gameResultEventSchemaDef, type GameResultAnyChart, type IGameResponse, type GameResultBarChart, type GameResultChartSeries, type GameResultStatGroup, type GameResultTable, type StoredGameResultEvent, type uuidString } from "@/utils/apiModels/GameDataApi";
 import { mongoMap } from "@/utils/games/mongoMaps";
 import { capitalise, pluralize } from "@/utils/ui/text";
 import { userIdListToNamesAndMap } from "@/utils/users/clerk";
@@ -526,6 +527,21 @@ var RealmArenaGameDataSchema = new Schema<IRealmArenaGameDataDocument>(
     },
     { discriminatorKey: 'kind' },
 );
+
+/**
+ * The dashboard's summary of a battle. A warband's turn is the computer's, played
+ * in the background (docs/games/realm-arena-hold-out.md §3), and its seat is no
+ * player in the directory, so the generic summary would leave the turn nameless
+ * and the dashboard would fall back to naming the opponents. It reads "The
+ * enemy's turn" instead, never the faction: a random enemy stays hidden until
+ * it is seen (§29.3).
+ */
+RealmArenaGameDataSchema.methods.CreateResponse = function(directory: UserDirectory): IGameResponse {
+    const response: IGameResponse = GameDataSchema.methods.CreateResponse.call(this, directory);
+    return isWarband(response.currentTurn) && !response.complete
+        ? { ...response, currentTurnUsername: "The enemy" }
+        : response;
+};
 
 RealmArenaGameDataSchema.methods.CreateDataResponse = async function(viewerId: string | null): Promise<IRealmArenaGameDataResponse> {
     console.log('CreateDataResponse: Realm Arena game');

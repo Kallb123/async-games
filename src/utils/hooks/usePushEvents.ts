@@ -111,6 +111,9 @@ export const DASHBOARD_EVENTS = [
     ...CHAT_EVENTS,
 ] as const;
 
+/** What `pollWhileWatching` asks for: no polling, the ordinary interval, or the fast one. */
+export type PollMode = boolean | 'fast';
+
 export interface PushEventsOptions {
     /**
      * Also re-run `handler` whenever the tab returns to the foreground. FCM only
@@ -134,8 +137,12 @@ export interface PushEventsOptions {
      * who has no working push to begin with. Callers should pass a condition
      * narrow enough that the polling stops as soon as there is nothing to wait
      * for — see `useGameData`. Defaults to `false`.
+     *
+     * `'fast'` polls every `FAST_POLL_MS` instead, for a screen waiting on
+     * something the server is doing right now rather than on a person — Realm
+     * Arena's warbands playing their turn in the background.
      */
-    pollWhileWatching?: boolean;
+    pollWhileWatching?: PollMode;
 }
 
 /**
@@ -144,6 +151,18 @@ export interface PushEventsOptions {
  * real-time — and every tick is a request per watching player.
  */
 const POLL_MS = 10000;
+
+/**
+ * The interval of a `'fast'` poll: the enemy's turn in the background takes a
+ * few seconds, and the player is looking at the board saying so.
+ */
+const FAST_POLL_MS = 3000;
+
+/**
+ * How often the poll timer wakes to ask whether a refetch is due. One second,
+ * a divisor of both intervals above, so each fires exactly on its own beat.
+ */
+const POLL_TICK_MS = 1000;
 
 /**
  * How long the viewer can go without interacting before polling stops. A board
@@ -224,7 +243,7 @@ export function usePushEvents(
     // through a ref for the same reason the handler is: as a dependency it
     // would tear down and rebuild every listener on every turn change, and the
     // teardown would discard a refetch already coalesced and waiting.
-    const pollRef = useRef(pollWhileWatching);
+    const pollRef = useRef<PollMode>(pollWhileWatching);
     // Set by the effect below, which owns the interval; a no-op until it has
     // mounted and again once it has torn down.
     const restartPollRef = useRef<() => void>(() => {});
@@ -265,15 +284,24 @@ export function usePushEvents(
         // them: waking to compare two booleans costs nothing next to the request
         // it skips, which is the part worth gating. Ticks go through `schedule`,
         // so a poll landing next to a push still refetches once.
+        // The timer wakes every second and the interval is how long it has
+        // been since the last request — rather than two timers, or a timer
+        // torn down and rebuilt whenever the mode flips, which would restart
+        // the countdown each time the caller changes its mind.
+        let lastPoll = Date.now();
         const tick = () => {
-            if (pollRef.current && isWatching()) {
+            const mode = pollRef.current;
+            if (!mode || !isWatching()) {
+                return;
+            }
+            if (Date.now() - lastPoll >= (mode === 'fast' ? FAST_POLL_MS : POLL_MS)) {
+                lastPoll = Date.now();
                 schedule();
             }
         };
-        let poll = setInterval(tick, POLL_MS);
+        const poll = setInterval(tick, POLL_TICK_MS);
         restartPollRef.current = () => {
-            clearInterval(poll);
-            poll = setInterval(tick, POLL_MS);
+            lastPoll = Date.now();
         };
 
         return () => {

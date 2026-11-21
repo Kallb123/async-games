@@ -7,7 +7,7 @@ import { describe, expect, it, vi } from "vitest";
 vi.mock("@clerk/nextjs", () => ({ useUser: () => ({ user: null, isLoaded: false }) }));
 
 // Below the mock on purpose: vitest hoists `vi.mock` above the imports.
-import { boardCanMove } from "./useGameData";
+import { boardCanMove, boardPollMode } from "./useGameData";
 import { OUT_OF_TURN_TEST_GAME as INTERRUPTS, registerOutOfTurnTestGame } from "@/utils/testing/outOfTurnGame";
 import { testBoard } from "@/utils/testing/testBoard";
 
@@ -42,5 +42,18 @@ describe("boardCanMove", () => {
 
     it("doesn't take a game it has never heard of as one with out-of-turn plays", () => {
         expect(boardCanMove(testBoard("nosuchgame"), "me")).toBe(false);
+    });
+});
+
+describe("boardPollMode", () => {
+    it("polls fast while the computer holds the turn, and only while the game is live", () => {
+        expect(boardPollMode(testBoard("realmarena", { currentTurn: "ai:0" }), "me")).toBe("fast");
+        expect(boardPollMode(testBoard("realmarena", { currentTurn: "ai:0", complete: true }), "me")).toBe(false);
+    });
+
+    it("otherwise answers as boardCanMove does", () => {
+        expect(boardPollMode(testBoard("snakesandladders", { currentTurn: "them" }), "me")).toBe(true);
+        expect(boardPollMode(testBoard("snakesandladders"), "me")).toBe(false);
+        expect(boardPollMode(null, "me")).toBe(false);
     });
 });
