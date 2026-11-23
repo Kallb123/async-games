@@ -19,8 +19,8 @@
 // go to the lower id, then the lower square: the same view always gets the same
 // actions.
 //
-// **Where a minion is headed** is one function, `goalOf`, which is where the
-// Shrine (§5.2) will join the team.
+// **Where a minion is headed** is one function, `goalOf`: the team it sees,
+// else the Shrine (§5.2), else where it hunts the team.
 //
 // Pure and browser-safe, like rules.ts and ai.ts.
 
@@ -29,7 +29,7 @@ import { distance, type Battlefield, type Square } from "@/utils/games/battlefie
 import { searched } from "./ai";
 import { ruleValuesOf, rulesetOf } from "./rulesets";
 import {
-    allied, burstArea, canAct, CENTRE, check, isCombatant, isMinion, isStanding, moveApAt, movementOf, reachOf, shotOdds, weaponOf, weaponReaches,
+    allied, burstArea, canAct, CENTRE, check, isCombatant, isMinion, isStanding, moveApAt, movementOf, reachOf, shotOdds, SHRINE_OWNER, weaponOf, weaponReaches,
     type Action, type BattleState, type Fighter, type FogGhost,
 } from "./rules";
 
@@ -55,6 +55,9 @@ const minionsOf = (view: BattleState, owner: string): Fighter[] =>
 const teamOf = (view: BattleState, owner: string): Fighter[] =>
     view.fighters.filter(fighter => isCombatant(fighter, view) && !allied(view, fighter.owner, owner)).sort((a, b) => a.id - b.id);
 
+/** The team's Shrine (§5.2), if one stands: always in a warband's view, since where it stands is no secret. */
+const shrineOf = (view: BattleState): Fighter | undefined => view.fighters.find(fighter => fighter.owner === SHRINE_OWNER && isStanding(fighter));
+
 /**
  * The next action of the warband's swarm step, or undefined once it is over:
  * every minion's move, then every minion's strike. `hunt` is where the warband
@@ -64,29 +67,31 @@ export function swarmAction(view: BattleState, owner: string, hunt: readonly Fog
     const { fog: _fog, ...state } = view;
     done.fogged = view.fog === true;
     const team = teamOf(state, owner);
+    const shrine = shrineOf(state);
     for (const minion of minionsOf(state, owner)) {
         if (done.moved.has(minion.id)) continue;
         done.moved.add(minion.id);
-        const move = moveOf(state, owner, minion, team, hunt, done);
+        const move = moveOf(state, owner, minion, team, shrine, hunt, done);
         if (move) return move;
     }
     for (const minion of minionsOf(state, owner)) {
         if (done.struck.has(minion.id)) continue;
         done.struck.add(minion.id);
-        const strike = strikeOf(state, owner, minion, team);
+        const strike = strikeOf(state, owner, minion, team, shrine);
         if (strike) return strike;
     }
     return undefined;
 }
 
 /**
- * The squares a minion walks toward: the team it sees, else where it last saw
- * the team, else where the team is likeliest to be (`searched`) — the keep and
- * the team's zones — as the planner hunts them (`planFor`). This is the one
- * place a minion's goal is decided.
+ * The squares a minion walks toward: the team it sees, else the Shrine (§5.2),
+ * else where it last saw the team, else where the team is likeliest to be
+ * (`searched`) — the keep and the team's zones — as the planner hunts them
+ * (`planFor`). This is the one place a minion's goal is decided.
  */
-function goalOf(state: BattleState, owner: string, team: readonly Fighter[], hunt: readonly FogGhost[] | undefined, fogged: boolean): readonly Square[] {
+function goalOf(state: BattleState, owner: string, team: readonly Fighter[], shrine: Fighter | undefined, hunt: readonly FogGhost[] | undefined, fogged: boolean): readonly Square[] {
     if (team.length > 0) return team.map(fighter => fighter.square);
+    if (shrine) return [shrine.square];
     if (hunt && hunt.length > 0) return hunt.map(ghost => ghost.square);
     return fogged ? searched(state, owner) : state.field.objectives[CENTRE] ?? [];
 }
@@ -106,11 +111,11 @@ function strikesFrom(state: BattleState, fighter: Fighter, square: Square, targe
     return weaponOf(state, fighter).kind === "ranged" ? shotOdds(state, there, target) !== undefined : weaponReaches(state, there, target.square);
 }
 
-/** Who a minion would hit first, in order: a Spitter the nearest, the rest the most hurt, ties the lower id. */
-function priorityOf(state: BattleState, minion: Fighter, team: readonly Fighter[]): Fighter[] {
+/** Who a minion would hit first, in order: a Spitter the nearest, the rest the most hurt, ties the lower id; the Shrine (§5.2) after every one of the team. */
+function priorityOf(state: BattleState, minion: Fighter, team: readonly Fighter[], shrine: Fighter | undefined): Fighter[] {
     const nearest = weaponOf(state, minion).kind === "ranged";
     const key = (target: Fighter) => nearest ? distance(state.field, minion.square, target.square) : target.hp;
-    return [...team].sort((a, b) => key(a) - key(b) || a.id - b.id);
+    return [...[...team].sort((a, b) => key(a) - key(b) || a.id - b.id), ...shrine ? [shrine] : []];
 }
 
 const moveBy = (state: BattleState, owner: string, minion: Fighter, to: Square, reach: Reach): Action | undefined => {
@@ -133,14 +138,14 @@ function burstHaul(state: BattleState, owner: string, minion: Fighter, square: S
 }
 
 /** A minion's move: to where it strikes from, to where its burst lands best, or toward its goal; or none, when it stays where it is. */
-function moveOf(state: BattleState, owner: string, minion: Fighter, team: readonly Fighter[], hunt: readonly FogGhost[] | undefined, done: SwarmMemo): Action | undefined {
+function moveOf(state: BattleState, owner: string, minion: Fighter, team: readonly Fighter[], shrine: Fighter | undefined, hunt: readonly FogGhost[] | undefined, done: SwarmMemo): Action | undefined {
     const reach = reachOf(state, minion);
     const movement = movementOf(minion, state);
     const costOf = (square: Square) => moveApAt(movement, reach.costs[square], false, state);
     const stops: Square[] = [];
     reach.costs.forEach((cost, square) => { if (cost !== Infinity) stops.push(square); });
     const { ATTACK_AP } = ruleValuesOf(state);
-    const walk = walkTo(done, state.field, goalOf(state, owner, team, hunt, done.fogged), rulesetOf(state).CHARACTERS[minion.character].climb ?? DEFAULT_CLIMB);
+    const walk = walkTo(done, state.field, goalOf(state, owner, team, shrine, hunt, done.fogged), rulesetOf(state).CHARACTERS[minion.character].climb ?? DEFAULT_CLIMB);
     const toGoal = (square: Square) => walk[square];
     const nearer = (a: Square, b: Square) => reach.costs[a] - reach.costs[b] || a - b;
 
@@ -162,7 +167,7 @@ function moveOf(state: BattleState, owner: string, minion: Fighter, team: readon
 
     // Anyone it can hit after a move: the first in its order it has a square to hit from, the nearest by walk.
     const striking = stops.filter(square => costOf(square) <= minion.ap - ATTACK_AP).sort(nearer);
-    for (const target of priorityOf(state, minion, team)) {
+    for (const target of priorityOf(state, minion, team, shrine)) {
         const square = striking.find(from => strikesFrom(state, minion, from, target));
         if (square !== undefined) return square === minion.square ? undefined : moveBy(state, owner, minion, square, reach);
     }
@@ -174,7 +179,7 @@ function moveOf(state: BattleState, owner: string, minion: Fighter, team: readon
 }
 
 /** A minion's strike from where it stands: a Bloater's burst when it takes more of the team than of its own side, else a blow on the first in its order that `check` allows. */
-function strikeOf(state: BattleState, owner: string, minion: Fighter, team: readonly Fighter[]): Action | undefined {
+function strikeOf(state: BattleState, owner: string, minion: Fighter, team: readonly Fighter[], shrine: Fighter | undefined): Action | undefined {
     if (!isStanding(minion) || !canAct(minion, state)) return undefined;
     const allowed = (action: Action) => !("refused" in check(state, owner, action));
     if (bursts(state, minion)) {
@@ -182,7 +187,7 @@ function strikeOf(state: BattleState, owner: string, minion: Fighter, team: read
         const burst: Action = { kind: "burst", fighter: minion.id };
         if (caught > 0 && caught > own && allowed(burst)) return burst;
     }
-    for (const target of priorityOf(state, minion, team)) {
+    for (const target of priorityOf(state, minion, team, shrine)) {
         const attack: Action = { kind: "attack", fighter: minion.id, target: target.id };
         if (allowed(attack)) return attack;
     }

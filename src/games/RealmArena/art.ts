@@ -114,6 +114,12 @@ export const ART_SHEETS = {
      * by `npm run ra-marks`.
      */
     nest: { href: "/art/realmarena/nest.png", width: 256, height: CHARACTER_CELL_HEIGHT },
+    /**
+     * The team's shrine (rules version 13): standing, then destroyed, a
+     * character's cell each. Rendered from `art-masters/realmarena/shrine.svg`
+     * by `npm run ra-marks`.
+     */
+    shrine: { href: "/art/realmarena/shrine.png", width: 256, height: CHARACTER_CELL_HEIGHT },
     /** The owner's colour on the characters, grey and shaded, cell for cell with `characters`: tinted per seat. */
     charactersTeam: { href: "/art/realmarena/characters-team.png", ...CHARACTER_SHEET },
 } as const;
@@ -365,6 +371,10 @@ export const STRUCTURE_ART: Partial<Record<CharacterId, Readonly<Record<Characte
     nest: {
         standing: { sheet: "nest", x: 0, y: 0, width: CHARACTER_CELL.width, height: CHARACTER_CELL.height, tile: CHARACTER_CELL.tile },
         fallen: { sheet: "nest", x: CHARACTER_CELL.width, y: 0, width: CHARACTER_CELL.width, height: CHARACTER_CELL.height, tile: CHARACTER_CELL.tile },
+    },
+    shrine: {
+        standing: { sheet: "shrine", x: 0, y: 0, width: CHARACTER_CELL.width, height: CHARACTER_CELL.height, tile: CHARACTER_CELL.tile },
+        fallen: { sheet: "shrine", x: CHARACTER_CELL.width, y: 0, width: CHARACTER_CELL.width, height: CHARACTER_CELL.height, tile: CHARACTER_CELL.tile },
     },
 };
 

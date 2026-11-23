@@ -1,0 +1,81 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  The team's shrine (docs/games/realm-arena-hold-out.md §5.2): two 128x160
+  cells, left to right — standing, then destroyed — each the size of a
+  character's cell (`CHARACTER_CELL`), as the nest's are, so the board stands it
+  on a square as it stands a figure: the square's diamond is the bottom 32px of
+  the cell, its middle at (64, 128).
+
+  One drawing a pose, no facing, no owner's colour: a small stone altar on two
+  steps, a warm flame burning in a bowl on top, a gold-ringed crystal in front;
+  and, destroyed, the altar broken and toppled, the bowl on its side and the
+  flame out. It is the friendly counterpart of the nest's organic mound.
+
+  `npm run ra-marks` renders this to public/art/realmarena/shrine.png.
+-->
+<svg xmlns="http://www.w3.org/2000/svg" width="256" height="160" viewBox="0 0 256 160">
+  <defs>
+    <linearGradient id="stone" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#d8d0c0"/>
+      <stop offset="1" stop-color="#8f8676"/>
+    </linearGradient>
+    <linearGradient id="step" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#bdb4a2"/>
+      <stop offset="1" stop-color="#7c7466"/>
+    </linearGradient>
+    <linearGradient id="rubble" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#a39a89"/>
+      <stop offset="1" stop-color="#5f584c"/>
+    </linearGradient>
+    <radialGradient id="flame" cx="0.5" cy="0.7" r="0.6">
+      <stop offset="0" stop-color="#fff6c0"/>
+      <stop offset="0.5" stop-color="#ffb938"/>
+      <stop offset="1" stop-color="#e8641c"/>
+    </radialGradient>
+    <radialGradient id="gem" cx="0.35" cy="0.3" r="0.8">
+      <stop offset="0" stop-color="#fff4c4"/>
+      <stop offset="0.6" stop-color="#f2b33a"/>
+      <stop offset="1" stop-color="#b9741a"/>
+    </radialGradient>
+    <radialGradient id="glow" cx="0.5" cy="0.5" r="0.5">
+      <stop offset="0" stop-color="#ffc85a" stop-opacity="0.6"/>
+      <stop offset="1" stop-color="#ffc85a" stop-opacity="0"/>
+    </radialGradient>
+    <ellipse id="shadow" cx="64" cy="124" rx="52" ry="22" fill="#24150f" fill-opacity="0.28" stroke="none"/>
+  </defs>
+
+  <g stroke="#24150f" stroke-width="3" stroke-linejoin="round" stroke-linecap="round">
+    <!-- Standing: two steps, a plinth, a bowl with a flame, a crystal at its foot. -->
+    <g>
+      <use href="#shadow"/>
+      <ellipse cx="64" cy="64" rx="48" ry="44" fill="url(#glow)" stroke="none"/>
+      <path d="M12 122 L20 106 L108 106 L116 122 C96 132 32 132 12 122 Z" fill="url(#step)"/>
+      <path d="M26 106 L34 94 L94 94 L102 106 Z" fill="url(#step)"/>
+      <path d="M40 94 L44 56 L84 56 L88 94 Z" fill="url(#stone)"/>
+      <path d="M52 86 L54 64 M74 86 L76 64" fill="none" stroke="#6b6356" stroke-width="2.5"/>
+      <path d="M34 56 L94 56 L90 48 L38 48 Z" fill="url(#stone)"/>
+      <path d="M42 48 C42 58 86 58 86 48 Z" fill="#4a3f33"/>
+      <!-- The flame. -->
+      <path d="M64 14 C74 26 82 34 74 46 C70 50 58 50 54 46 C46 36 58 28 64 14 Z" fill="url(#flame)"/>
+      <path d="M64 30 C68 36 70 40 66 45 C62 45 58 41 64 30 Z" fill="#fff6c0" stroke="none"/>
+      <!-- The crystal. -->
+      <path d="M64 96 L74 108 L64 124 L54 108 Z" fill="url(#gem)"/>
+      <path d="M64 96 L64 124 M54 108 L74 108" fill="none" stroke="#fff4c4" stroke-width="2" opacity="0.7"/>
+    </g>
+
+    <!-- Destroyed: the plinth snapped, the bowl on its side, the flame out. -->
+    <g transform="translate(128 0)">
+      <use href="#shadow"/>
+      <path d="M12 122 L22 108 L60 108 L56 122 C40 128 26 126 12 122 Z" fill="url(#step)"/>
+      <path d="M70 120 L78 104 L116 110 L112 124 C96 130 80 126 70 120 Z" fill="url(#rubble)"/>
+      <path d="M38 108 L44 90 L58 98 L56 108 Z" fill="url(#rubble)"/>
+      <path d="M82 104 L92 90 L100 106 Z" fill="url(#stone)"/>
+      <!-- The bowl tipped over, cold ash spilled. -->
+      <path d="M50 120 L60 108 L80 116 L74 124 C64 128 56 126 50 120 Z" fill="#4a3f33"/>
+      <ellipse cx="88" cy="122" rx="12" ry="4" fill="#3a3330" fill-opacity="0.8" stroke="none"/>
+      <path d="M30 118 C40 114 50 116 58 120 M84 112 C92 110 100 112 106 116" fill="none" stroke="#3b3329" stroke-width="2.5"/>
+      <!-- The crystal cracked, its light gone. -->
+      <path d="M64 112 L72 120 L66 126 L58 118 Z" fill="#8a7a58"/>
+    </g>
+  </g>
+</svg>

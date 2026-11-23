@@ -78,6 +78,13 @@ export interface IRealmArenaSpecificGameStateResponse {
      */
     nestSquares?: Square[];
     /**
+     * The team's rallies where nests produce the enemy (realm-arena-hold-out.md
+     * §5.3): how many are banked, and the round the next is taken in, if one is
+     * to come before the cap (`nextRallyOf`). Both public. Absent in every other
+     * battle, and once it is over.
+     */
+    rally?: { banked: number; next?: number };
+    /**
      * Only once the battle is over: every nest (§39.7) was down at once at some
      * point with a wave still to land. Absent otherwise, and never sent mid-battle
      * since it says whether nests stand.

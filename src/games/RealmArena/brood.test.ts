@@ -96,11 +96,11 @@ describe("minions (§4.3)", () => {
 });
 
 describe("what a horde buys (§4.2, §4.4)", () => {
-    it("buys the elite first, then the list round and round, in threat", () => {
+    it("buys the list round and round, in threat", () => {
         // The Rush at 14: two rounds of Skitterling, Skitterling, Ravager.
         expect(hordePurchase(BROOD, 14, 1, V13)).toEqual(["broodSkitterling", "broodSkitterling", "broodRavager", "broodSkitterling", "broodSkitterling", "broodRavager"]);
-        // The Bile at 19: the Lobber's 10, then Spitter, Bloater, Spitter (6), then a Spitter (2); 1 left buys nothing.
-        expect(hordePurchase(BROOD, 19, 7, V13)).toEqual(["bileLobber", "broodSpitter", "broodBloater", "broodSpitter", "broodSpitter"]);
+        // The Bile at 7: Spitter, Bloater, Spitter (6); 1 left buys nothing. Its elite comes on the schedule (§5.1), not in its list.
+        expect(hordePurchase(BROOD, 7, 7, V13)).toEqual(["broodSpitter", "broodBloater", "broodSpitter"]);
         expect(hordePurchase(rulesetFor(13).FACTIONS.realm, 50, 4, V13)).toEqual([]);
     });
 
@@ -124,32 +124,25 @@ describe("what a horde buys (§4.2, §4.4)", () => {
         expect(full.filter(id => !CHARACTERS[id].minion)).toHaveLength(HORDE_REAL_CAP!);
     });
 
-    it("lands a wave that never takes a warband past the caps, survivors and hatchlings counted", async () => {
+    it("lands no wave in a Hold Out against it: its nests produce it (§5.1)", async () => {
         const game = makeGame(["a", "b", "c"], {}, { ...V13, coop: { mission: "holdOut", enemy: "brood" } });
         await musterAll(game);
         const gs = game.specificGameState;
-        const [owner] = warbandsOf(game);
-        // Fill the warband with survivors: 14 minions and 3 others standing.
-        const zone = battleOf(game).field.tiles.map((_, square) => square).filter(square => !gs.fighters.some(one => one.square === square) && battleOf(game).field.tiles[square].terrain.standable);
-        for (let k = 0; gs.fighters.filter(one => one.owner === owner && isCombatant(one, gs) && isMinion(one, gs)).length < 14; k++) gs.fighters.push(newFighter(nextFighterId(gs.fighters), owner, "broodSkitterling", zone[k], null, undefined, undefined, false, V13));
         gs.roundsPlayed = 3;
-        const wave = waveOf(gs, owner, true);
-        const after = [...gs.fighters.filter(one => one.owner === owner && isCombatant(one, gs)), ...wave];
-        expect(after.filter(one => isMinion(one, gs)).length).toBeLessThanOrEqual(16);
-        expect(after.filter(one => !isMinion(one, gs)).length).toBeLessThanOrEqual(4);
+        for (const owner of warbandsOf(game)) expect(waveOf(gs, owner, true), owner).toEqual([]);
     });
 
-    it("musters each warband of a Hold Out against the Brood from its points, a threat for every five, and lands its waves within the caps", async () => {
+    it("musters each warband of a Hold Out against the Brood as a starting horde of STARTING_HORDE threat on its first theme (§5.1)", async () => {
         const game = makeGame(["a", "b", "c"], {}, { ...V13, coop: { mission: "holdOut", enemy: "brood" } });
         await musterAll(game);
         const gs = game.specificGameState;
-        const threat = Math.floor(warbandBudgetOf(gs) / ruleValuesOf(V13).POINTS_PER_THREAT!);
+        expect(ruleValuesOf(V13).STARTING_HORDE).toBe(10);
         for (const owner of warbandsOf(game)) {
             const own = gs.fighters.filter(one => one.owner === owner && isCombatant(one, gs)).map(one => one.character);
-            expect(own, owner).toEqual(hordePurchase(BROOD, threat, 1, V13));
+            expect(own, owner).toEqual(hordePurchase(BROOD, 10, 1, V13));
         }
-        // Nests stand as the Swarm's did in version 12.
-        expect(gs.fighters.filter(one => one.character === "nest").length).toBeGreaterThan(0);
+        // Two nests a warband stand from the start, on the ruleset's sites.
+        expect(gs.fighters.filter(one => one.character === "nest").length).toBe(6);
         expect(battleOf(game).fighters.every(one => one.owner.startsWith("ai") ? CHARACTERS[one.character].threat !== undefined || one.character === "nest" : true)).toBe(true);
     });
 });
