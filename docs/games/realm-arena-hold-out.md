@@ -528,7 +528,8 @@ nests' are today.
 - **The elites** are the faction's `eliteSchedule`, as rounds 5, 9 and 13
   begin (`eliteArrivals`). The themes no longer carry an elite. Scheduled elites
   are not held to `HORDE_REAL_CAP`: a warband of four Ravagers would otherwise
-  keep the Queen away for good. No line tells their arrival, since who fields
+  keep the Queen away for good. One with no free square by any of its warband's
+  nests doesn't come, and isn't owed later. No line tells their arrival, since who fields
   one says whose nests still stand. The theme's change is told to everyone ("The
   Bile begins").
 - **What fog still gives away** (a `croupier` pass, §4.6). Three channels
