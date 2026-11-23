@@ -18,6 +18,7 @@ import { Color, Group } from "three";
 import { EFFECT_ART, ITEM_ART, spriteBox, WATCH_ART, type Sprite } from "@/games/RealmArena/art";
 import type { EffectId, ItemId } from "@/games/RealmArena/characters";
 import type { Fighter } from "@/games/RealmArena/rules";
+import type { RulesContext } from "@/games/RealmArena/rulesets";
 import {
     AP_PIP_OFFSET, AP_PIP_RADIUS, AP_PIP_STEP, apPips, EFFECT_MARK_OFFSET, EFFECT_MARK_SIZE, EFFECT_MARK_STEP, effectsOn, FIGURE_RISE, ITEM_MARK_OFFSET, ITEM_MARK_SIZE, MARK_SHADOW,
 } from "@/games/RealmArena/ui";
@@ -94,10 +95,10 @@ export type MarkLevel = "all" | "item" | "none";
  * that changed them lands (`toldAt`) — and `acting` that it's its owner's turn
  * in battle, so its AP shows.
  */
-export function marksOf(level: MarkLevel, drawn: Fighter, acting: boolean): FigureMarkInput {
+export function marksOf(level: MarkLevel, drawn: Fighter, acting: boolean, context: RulesContext): FigureMarkInput {
     if (level === "none") return { effects: [], watching: false };
     if (level === "item") return { effects: [], watching: false, item: drawn.item };
-    return { effects: effectsOn(drawn), watching: drawn.banked > 0, item: drawn.item, pips: acting ? apPips(drawn) : [] };
+    return { effects: effectsOn(drawn), watching: drawn.banked > 0, item: drawn.item, pips: acting ? apPips(drawn, context) : [] };
 }
 
 /** Drawn after the HP bars (2 and 3, board3d.ts) and over the figures. */

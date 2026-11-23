@@ -6,7 +6,7 @@ import { RUINED_FORT } from "./maps/ruinedFort";
 import { squareAt } from "@/utils/games/battlefield/terrain";
 import { isoCentre, isoView, ISO_HALF_HEIGHT, ISO_HALF_WIDTH } from "@/utils/ui/isometric";
 import { at, fieldOf, hillOf } from "@/utils/games/battlefield/testFixtures";
-import { ACTION_POINTS, isWarband, newFighter, reachOf, warbandOwner, type BattleEvent, type Fighter, type ToldEvent } from "./rules";
+import { ACTION_POINTS, actionPointsOf, isWarband, newFighter, reachOf, warbandOwner, type BattleEvent, type Fighter, type ToldEvent } from "./rules";
 import { ABILITIES, kitOf, type CharacterId } from "./characters";
 import { EFFECT_ART, ITEM_ART, type Missile } from "./art";
 import { abilityWait, ringOf, shieldPath, shadedSquares, SHIELD_WIDTH, actionFollow, boardFocus, oddsLines, aimFocus, coopColourOf, ALLY_COLOUR, ENEMY_COLOUR, TEAM_COLOUR, actionSquares, apPips, friendlySquares, spreadWide, areaRect, battleCues, canAct, effectsOn, eventLines, facingOf, fighterName, fighterStatus, focusOn, handItem, handOut, hpFraction, itemsOf, NO_ITEMS, numberedName, placeTap, reachFocus, reachShading, squadCounts, squadOf, whoseName, FLIGHT_PACE, CLIMB_LEG, DIAGONAL_LEG, flightMs, legWeight, HIT_TEXT_MS, PLAYBACK_MS, WALK_STEP_MS, moveFrame, isUnplaced, type BattleCue, type Placement, waveLineOf, reviewParts, withPartState, partLabel, HP_CHIP_MS, HP_TWEEN_MS, stepped, toldAt, toldOf, foundBy, type TextCue, IMPACT_MS, KNOCK, LUNGE, SHAKE, SHAKE_MS, WALK_BOB, WALK_HOP, shakeAt, shakesOf, shoveAt, shovesOf, endOf, captionAt, legLengthOn, walkEase, walkerAt, walkerGroundAt, walkCameraAt, walkLift, walkSquares, flightAt, hitTextAt, POP_MS, burstAt, slashAt, progressOf, fadeOutAt, fadeInAt, FLIGHT_ARC, type FxPoints, type CaptionCue, type FallCue, type FlightCue, type SlashCue, type WalkCue, BOARD_ZOOM, boardZoomFor, FALLEN_OPACITY, PATH_DASH, PATH_WIDTH } from "./ui";
@@ -177,25 +177,25 @@ describe("canAct, apPips and hpFraction", () => {
     });
 
     it("lights a pip for each AP left, out of the full allowance", () => {
-        expect(apPips(knight)).toEqual([true, true, true, false]);
-        expect(apPips({ ...knight, ap: 0 })).toHaveLength(ACTION_POINTS);
+        expect(apPips(knight, {})).toEqual([true, true, true, false]);
+        expect(apPips({ ...knight, ap: 0 }, {})).toHaveLength(ACTION_POINTS);
     });
 
     it("reads the HP bar against the character's own maximum", () => {
-        expect(hpFraction(knight)).toBe(1);
-        expect(hpFraction({ ...knight, hp: 0 })).toBe(0);
+        expect(hpFraction(knight, {})).toBe(1);
+        expect(hpFraction({ ...knight, hp: 0 }, {})).toBe(0);
     });
 
     it("reads what the bar would be after a blow, never below empty", () => {
         const max = knight.hp;
-        expect(hpFraction(knight, 1)).toBe((max - 1) / max);
-        expect(hpFraction(knight, max + 5)).toBe(0);
+        expect(hpFraction(knight, {}, 1)).toBe((max - 1) / max);
+        expect(hpFraction(knight, {}, max + 5)).toBe(0);
     });
 
     it("reads what the bar would be after a heal, never past full", () => {
         const max = knight.hp;
-        expect(hpFraction({ ...knight, hp: 1 }, -2)).toBe(3 / max);
-        expect(hpFraction({ ...knight, hp: max - 1 }, -5)).toBe(1);
+        expect(hpFraction({ ...knight, hp: 1 }, {}, -2)).toBe(3 / max);
+        expect(hpFraction({ ...knight, hp: max - 1 }, {}, -5)).toBe(1);
     });
 });
 
@@ -1245,7 +1245,7 @@ describe("an HP bar through an action", () => {
     const before = ready(0, "a", "knight", 10);
     const max = before.hp;
     const text = (start: number, hpChange?: number): TextCue => ({ kind: "text", fighter: 0, square: 10, value: "−", tone: "hit", start, length: HIT_TEXT_MS, hpChange });
-    const told = (cues: TextCue[], after: Fighter, still = false) => toldOf(cues, before, after, still)!;
+    const told = (cues: TextCue[], after: Fighter, still = false) => toldOf(cues, before, after, still, {})!;
     const hurt = (hp: number): Fighter => ({ ...before, hp });
 
     it("holds the HP it was found at until its cue, then tweens to the new HP over the tween", () => {
@@ -1285,7 +1285,7 @@ describe("an HP bar through an action", () => {
         ], [mover, ...watchers], [left, ...watchers]);
         const blows = cues.filter((cue): cue is TextCue => cue.kind === "text" && cue.fighter === 0 && cue.hpChange !== undefined);
         expect(blows.map(cue => cue.hpChange)).toEqual([-3, -2]);
-        const one = toldOf(cues, mover, left, false)!;
+        const one = toldOf(cues, mover, left, false, {})!;
         expect(one.steps.map(step => step.at)).toEqual(blows.map(cue => cue.start));
         // Full HP through the walk and the arrow's flight; each blow takes its HP only as it lands.
         expect(toldAt(one, left, blows[0].start - 1).drawn.hp).toBe(mover.hp);
@@ -1329,10 +1329,10 @@ describe("an HP bar through an action", () => {
     });
 
     it("tells nothing of a fighter with no cue, not there before, down, or unchanged", () => {
-        expect(toldOf([], before, hurt(max - 1), false)).toBeNull();
-        expect(toldOf([text(0, -1)], undefined, hurt(max - 1), false)).toBeNull();
-        expect(toldOf([text(0, -1)], before, hurt(0), false)).toBeNull();
-        expect(toldOf([text(0, 0)], before, { ...before }, false)).toBeNull();
+        expect(toldOf([], before, hurt(max - 1), false, {})).toBeNull();
+        expect(toldOf([text(0, -1)], undefined, hurt(max - 1), false, {})).toBeNull();
+        expect(toldOf([text(0, -1)], before, hurt(0), false, {})).toBeNull();
+        expect(toldOf([text(0, 0)], before, { ...before }, false, {})).toBeNull();
     });
 
     it("steps a value through each step, jumping when there's no tween", () => {
@@ -1495,7 +1495,7 @@ describe("impact", () => {
     });
 
     it("tells a striker whose own bar and marks don't change, and no one else without a cue", () => {
-        const told = toldOf([slash()], archer, archer, false);
+        const told = toldOf([slash()], archer, archer, false, {});
         expect(told).not.toBeNull();
         expect(told!.steps).toEqual([]);
         expect(told!.until).toBe(350);
@@ -1503,12 +1503,12 @@ describe("impact", () => {
         expect(toldAt(told!, archer, 0).drawn).toEqual(archer);
         expect(shoveAt(told!.shoves, 225, project).x).toBeCloseTo(LUNGE, 10);
         // Someone else with the same cues, and nothing changing, is told nothing.
-        expect(toldOf([slash()], knight, knight, false)).toBeNull();
-        expect(toldOf([], archer, archer, false)).toBeNull();
+        expect(toldOf([slash()], knight, knight, false, {})).toBeNull();
+        expect(toldOf([], archer, archer, false, {})).toBeNull();
     });
 
     it("carries a target's knock and runs its clock until the knock is over", () => {
-        const told = toldOf([blow(0)], knight, hurt, false)!;
+        const told = toldOf([blow(0)], knight, hurt, false, {})!;
         expect(shoveAt(told.shoves, IMPACT_MS / 2, project).x).toBeCloseTo(KNOCK, 10);
         expect(told.until).toBeGreaterThanOrEqual(IMPACT_MS);
     });
@@ -1516,8 +1516,8 @@ describe("impact", () => {
     it("moves nothing with reduced motion", () => {
         expect(shovesOf([blow(0), slash()], 0, true)).toEqual([]);
         expect(shovesOf([blow(0), slash()], 1, true)).toEqual([]);
-        expect(toldOf([slash()], archer, archer, true)).toBeNull();
-        const told = toldOf([blow(0)], knight, hurt, true)!;
+        expect(toldOf([slash()], archer, archer, true, {})).toBeNull();
+        const told = toldOf([blow(0)], knight, hurt, true, {})!;
         expect(told.shoves).toEqual([]);
         expect(shoveAt(told.shoves, IMPACT_MS / 2, project)).toEqual({ x: 0, y: 0 });
     });
@@ -1571,7 +1571,7 @@ describe("the board at a moment", () => {
             const cues = battleCues(FIELD, [shot], [knight, archer]);
             const hit = cues.find((cue): cue is TextCue => cue.kind === "text" && cue.fighter === 0 && cue.hpChange !== undefined)!;
             const hurt = { ...knight, hp: knight.hp - 3 };
-            const told = toldOf(cues, knight, hurt, false)!;
+            const told = toldOf(cues, knight, hurt, false, {})!;
             expect(toldAt(told, hurt, hit.start).drawn.hp).toBe(knight.hp);
             expect(toldAt(told, hurt, hit.start).chip).toBe(knight.hp);
             expect(toldAt(told, hurt, hit.start + HP_TWEEN_MS + HP_CHIP_MS).drawn.hp).toBe(hurt.hp);
@@ -2367,5 +2367,31 @@ describe("a warband's minions on the timeline (§4.5)", () => {
         const many = Array.from({ length: 40 }, (_, index) => brood(100 + index, "w", "broodSkitterling", 1 + index));
         const cues = battleCues(FIELD, many.map(fighter => strike(fighter.id)), [...crowd, ...many], [], rules);
         expect(endOf(cues)).toBeLessThanOrEqual(PLAYBACK_MS);
+    });
+});
+
+describe("board helpers on a fighter only a later rules version has", () => {
+    // Rules version 13's brood is in no other catalogue, so today's one (no context) has never heard of it.
+    const context = { rulesVersion: 13 };
+    const skitterling = newFighter(0, "ai:0", "broodSkitterling", 0, null, undefined, undefined, false, context);
+
+    it("counts its AP pips by its own catalogue", () => {
+        // A fighter that carries `maxAp` never asks the catalogue; one that does not is the case this guards.
+        const bare = { ...skitterling, maxAp: undefined };
+        expect(apPips(bare, context)).toHaveLength(Math.max(actionPointsOf(bare, context), bare.ap));
+        expect(apPips({ ...skitterling, ap: 0 }, context).every(on => !on)).toBe(true);
+    });
+
+    it("fills its HP bar by its own maximum", () => {
+        expect(hpFraction(skitterling, context)).toBe(1);
+        expect(hpFraction(skitterling, context, skitterling.hp)).toBe(0);
+    });
+
+    it("tells what an action did to it", () => {
+        const cue: TextCue = { kind: "text", fighter: 0, square: 0, value: "−", tone: "hit", start: 0, length: HIT_TEXT_MS };
+        const watching = { ...skitterling, banked: 1 };
+        const told = toldOf([cue], skitterling, watching, false, context);
+        expect(told).not.toBeNull();
+        expect(told!.steps).toEqual([]);
     });
 });

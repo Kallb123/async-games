@@ -20,6 +20,7 @@ import { Color, Matrix4, OrthographicCamera, Scene, Vector3, WebGLRenderer, type
 import { structureArt } from "@/games/RealmArena/art";
 import type { CharacterId } from "@/games/RealmArena/characters";
 import { isStanding, type Fighter, type FogGhost, type MusterPick } from "@/games/RealmArena/rules";
+import type { RulesContext } from "@/games/RealmArena/rulesets";
 import { CLIMB_LEG, endOf, fadeOutAt, FALLEN_OPACITY, shakeAt, shovesOf, toldAt, toldOf, walkerAt, walkFacing, walkLift, type BattleCue, type FallCue, type Ring, type ScorchCue, type Shove, type Told, type WalkCue } from "@/games/RealmArena/ui";
 import { type Battlefield, type Facing, type Square } from "@/utils/games/battlefield/terrain";
 import { easeInOut } from "@/utils/ui/boardZoom";
@@ -142,6 +143,8 @@ export class Board3D {
 
     private readonly pools = new FigurePools(this.scene);
     private figures: FigureSpec[] = [];
+    /** The rules version of the battle the figures are in, which says what each character is (`setFigures`). */
+    private rules: RulesContext = {};
     private ghosts: { ghost: FogGhost; facing: Facing; tint: Color | null }[] = [];
     private placed: Placed[] = [];
 
@@ -303,8 +306,9 @@ export class Board3D {
     }
 
     /** Everyone on the battlefield, and the stale sightings in the fog (§27), drawn faint. */
-    setFigures(figures: FigureSpec[], ghosts: { ghost: FogGhost; facing: Facing; tint: Color | null }[]): void {
+    setFigures(figures: FigureSpec[], ghosts: { ghost: FogGhost; facing: Facing; tint: Color | null }[], context: RulesContext): void {
         this.figures = figures;
+        this.rules = context;
         this.ghosts = ghosts;
         this.layFigures();
         this.layStanding();
@@ -505,7 +509,7 @@ export class Board3D {
             const before = new Map(playback.before.map(fighter => [fighter.id, fighter]));
             const told = new Map<number, Told>();
             for (const { fighter } of this.figures) {
-                const one = toldOf(playback.cues, before.get(fighter.id), fighter, still);
+                const one = toldOf(playback.cues, before.get(fighter.id), fighter, still, this.rules);
                 if (one) told.set(fighter.id, one);
             }
             const arrivals = new Map([...walks].map(([id, one]) => [id, endOf(one)]));
@@ -647,7 +651,7 @@ export class Board3D {
                 const fell = squareCentre(field, fall.fighter.square);
                 if (falling.standing > 0) {
                     lay(fighter.character, fell.map((n, i) => n + knock[i]) as Vec3, spec.facing, false, spec.tint, falling.standing);
-                    if (spec.bar !== false) bars.push({ feet: fell, ...barLevels(drawn, drawn, undefined, undefined), tint: spec.tint, fade: falling.standing });
+                    if (spec.bar !== false) bars.push({ feet: fell, ...barLevels(drawn, drawn, undefined, undefined, this.rules), tint: spec.tint, fade: falling.standing });
                 }
                 // Up to the opacity a body at rest is drawn at, so nothing pops when the action is over.
                 if (falling.lying !== null && falling.lying > 0) lay(fighter.character, at, spec.facing, true, spec.tint, falling.lying * FALLEN_OPACITY);
@@ -664,7 +668,7 @@ export class Board3D {
             // Standing figures only: a body on the ground is never the faint figure a wall hides.
             if (standing && !structureArt(fighter.character, "standing") && mayBeHidden(field, this.basis, body, this.top)) this.pools.place(models, fighter.character, "hidden", matrix, spec.tint);
             this.placed.push({ id: fighter.id, feet: at, standing });
-            if (standing && spec.bar !== false) bars.push({ feet: at, ...barLevels(drawn, fighter, chip, this.hpChange?.get(fighter.id)), tint: spec.tint });
+            if (standing && spec.bar !== false) bars.push({ feet: at, ...barLevels(drawn, fighter, chip, this.hpChange?.get(fighter.id), this.rules), tint: spec.tint });
             this.layMarks(at, fighter, drawn, level);
         }
         this.layMuster(models, matrix);
@@ -686,7 +690,7 @@ export class Board3D {
     private layMarks(feet: Vec3, fighter: Fighter, drawn: Fighter, level: MarkLevel): void {
         const { marks, marking } = this;
         if (!marks || !marking) return;
-        const worn = marksOf(level, drawn, fighter.owner === marking.acting);
+        const worn = marksOf(level, drawn, fighter.owner === marking.acting, this.rules);
         marks.figure(feet, worn);
         const ring = marking.rings.get(fighter.id);
         if (ring) marks.ring(feet, ring);

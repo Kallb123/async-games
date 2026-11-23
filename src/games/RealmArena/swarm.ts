@@ -62,7 +62,7 @@ const teamOf = (view: BattleState, owner: string): Fighter[] =>
  */
 export function swarmAction(view: BattleState, owner: string, hunt: readonly FogGhost[] | undefined, done: SwarmMemo): Action | undefined {
     const { fog: _fog, ...state } = view;
-    done.fogged = view.fog !== undefined;
+    done.fogged = view.fog === true;
     const team = teamOf(state, owner);
     for (const minion of minionsOf(state, owner)) {
         if (done.moved.has(minion.id)) continue;

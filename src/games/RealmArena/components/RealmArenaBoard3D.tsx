@@ -151,7 +151,7 @@ export default function RealmArenaBoard3D({ field, fighters, fogGhosts = [], uns
     useEffect(() => {
         if (!board) return;
         const figures: FigureSpec[] = fighters.map(fighter => ({ fighter, facing: facingOf(field, fighter), tint: tintOf(fighter.owner), bar: hasHpBar(fighter, { rulesVersion }) }));
-        board.setFigures(figures, fogGhosts.map(ghost => ({ ghost, facing: facingOf(field, ghost), tint: tintOf(ghost.owner) })));
+        board.setFigures(figures, fogGhosts.map(ghost => ({ ghost, facing: facingOf(field, ghost), tint: tintOf(ghost.owner) })), { rulesVersion });
     }, [board, field, fighters, fogGhosts, tintOf, rulesVersion]);
     // What hangs round them: a ring each for who is chosen, a candidate, aimed at or a watcher a move would set off; and the AP of whoever's turn it is.
     useEffect(() => {

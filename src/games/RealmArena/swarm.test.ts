@@ -189,7 +189,7 @@ describe("the planner leaves minions to the swarm step", () => {
 
 describe("a Brood battle (§4)", () => {
     it("plays to its end through the turn loop, and replays to the same board", async () => {
-        const { game, times } = await coopBattle(["a", "b", "c"], { rulesVersion: 13, coop: { mission: "holdOut", enemy: "brood" } });
+        const { game } = await coopBattle(["a", "b", "c"], { rulesVersion: 13, coop: { mission: "holdOut", enemy: "brood" } });
         expect(game.complete).toBe(true);
         const names = { a: "Alice", b: "Bob", c: "Cat" };
         const brood = (id: number) => game.specificGameState.fighters.find(fighter => fighter.id === id)?.character.startsWith("brood");
@@ -200,13 +200,11 @@ describe("a Brood battle (§4)", () => {
         try {
             const timeline = await buildTimeline(game, names, [], undefined, null);
             const last = timeline.snapshots[timeline.currentIndex];
-            // (The finished battle's own response still names the next wave, which a replay's last snapshot doesn't: not the swarm step's to settle.)
-            const { nextWave: _wave, ...live } = gameStateToModel(game.specificGameState, null, game.gameState.commandHistory.at(-1)?.id ?? null);
+            const live = gameStateToModel(game.specificGameState, null, game.gameState.commandHistory.at(-1)?.id ?? null, game.complete);
             expect(last.specificGameState).toEqual(live);
         } finally {
             entropy.mockRestore();
             random.mockRestore();
         }
-        console.info(`Brood battle: ${times.length} turns, slowest ${Math.max(...times).toFixed(0)} ms, total ${times.reduce((a, b) => a + b, 0).toFixed(0)} ms`);
     }, 120_000);
 });

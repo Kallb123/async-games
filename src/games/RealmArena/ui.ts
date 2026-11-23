@@ -577,8 +577,8 @@ export function fighterStatus(fighter: Fighter): string[] {
 export { canAct } from "./rules";
 
 /** A character's AP as pips, one of `ACTION_POINTS` each, lit while unspent: the board and the units strip draw the same row. */
-export function apPips(fighter: Fighter): boolean[] {
-    return Array.from({ length: Math.max(fighter.maxAp ?? actionPointsOf(fighter), fighter.ap) }, (_, i) => i < fighter.ap);
+export function apPips(fighter: Fighter, context: RulesContext): boolean[] {
+    return Array.from({ length: Math.max(fighter.maxAp ?? actionPointsOf(fighter, context), fighter.ap) }, (_, i) => i < fighter.ap);
 }
 
 /**
@@ -593,8 +593,8 @@ export function facingOf(field: Pick<Battlefield, "width" | "height">, { square,
 }
 
 /** How full a character's HP bar is, 0–1 — or would be, were it to lose `lost` HP (gain, if negative), never below empty or past full. */
-export function hpFraction(fighter: Fighter, lost = 0): number {
-    return Math.min(1, Math.max(0, fighter.hp - lost) / maxHpOf(fighter));
+export function hpFraction(fighter: Fighter, context: RulesContext, lost = 0): number {
+    return Math.min(1, Math.max(0, fighter.hp - lost) / maxHpOf(fighter, context));
 }
 
 /** One line of the "why" behind a chance to hit: what moved it, and by how much. */
@@ -1911,12 +1911,12 @@ export interface Told {
  * aren't. With `still` the bar jumps at its cue, no chip drains and nothing is
  * knocked or lunged.
  */
-export function toldOf(cues: readonly BattleCue[], before: Fighter | undefined, fighter: Fighter, still: boolean): Told | null {
+export function toldOf(cues: readonly BattleCue[], before: Fighter | undefined, fighter: Fighter, still: boolean, context: RulesContext): Told | null {
     if (!before || !isStanding(fighter)) return null;
     const texts = cues.filter((cue): cue is TextCue => cue.kind === "text" && cue.fighter === fighter.id);
     const shoves = shovesOf(cues, fighter.id, still);
     if (texts.length === 0 && shoves.length === 0) return null;
-    const max = maxHpOf(fighter);
+    const max = maxHpOf(fighter, context);
     const blows = texts.filter(cue => cue.hpChange !== undefined).sort((a, b) => a.start - b.start);
     let level = before.hp;
     const steps = blows.map((cue, index): HpStep => {
