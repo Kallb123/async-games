@@ -979,12 +979,12 @@ export function formatRealmArenaResultStats(stats: IRealmArenaGameResultStats, u
         lines.push(`${pluralize(score, "point")}: ${centre(userId)} for the centre, ${total.knockoutPoints} for knock-outs${assisted > 0 ? `, ${assisted} for assists` : ""}`);
         lines.push(`Downed ${pluralize(total.knockouts, "enemy", "enemies")}, lost ${pluralize(total.downed, "character")}`);
         lines.push(`Dealt ${total.dealt} damage, healed ${total.healed} HP`);
-        if (top) lines.push(`Top fighter: ${CHARACTERS[top.character]?.name ?? top.character}, with ${top.dealt} damage`);
+        if (top) lines.push(`Top fighter: ${characterNameOf(top.character)}, with ${top.dealt} damage`);
     }
     for (const row of stats.mastery ?? []) {
         // A row is one battle's worth. Its counts are read by name, as above.
         const { attacks, abilities, items } = row;
-        linesOf(row.userId).push(`${CHARACTERS[row.character]?.name ?? row.character}: ${xpOf({ battles: 1, attacks, abilities, items })} XP`);
+        linesOf(row.userId).push(`${characterNameOf(row.character)}: ${xpOf({ battles: 1, attacks, abilities, items })} XP`);
     }
     // The enemy's column in co-op is its warbands together (§29.6), and nobody's to name.
     const holdOut = holdOutGroup(stats);
@@ -1082,11 +1082,18 @@ function formatRaceChart(stats: IRealmArenaGameResultStats, perRound: Map<string
     return formatPerTurnChart(perRound?.map(bySide), title, yLabel, 1, SIDE_SERIES, teamEvents);
 }
 
+/**
+ * A character's name in a result, which carries no rules version: by whichever
+ * registered catalogue holds it, the latest's name winning — an elite (§39.5)
+ * is in no catalogue before version 12, nor the Brood (realm-arena-hold-out.md
+ * §4) before 13.
+ */
+const CHARACTER_NAMES = new Map(registeredRulesets.flatMap(ruleset => Object.entries(ruleset.CHARACTERS)).map(([id, character]) => [id, character.name]));
+const characterNameOf = (character: string): string => CHARACTER_NAMES.get(character) ?? character;
+
 /** The damage each kind of character dealt, a bar each in the muster's order, stacked by whose it was. */
 function formatDamageChart(stats: IRealmArenaGameResultStats): GameResultBarChart | undefined {
     const rows = stats.fighting ?? [];
-    // Named by whichever catalogue holds the character: an elite (§39.5) is in no catalogue before version 12.
-    const names = new Map(registeredRulesets.flatMap(ruleset => Object.entries(ruleset.CHARACTERS)).map(([id, character]) => [id, character.name]));
     // The art's roster first, as before, then the characters drawn as another's (the Brood's), which have no row of their own.
     const roster = [...new Set([...ART_CHARACTER_IDS, ...registeredRulesets.flatMap(ruleset =>
         Object.entries(ruleset.CHARACTERS).flatMap(([id, character]) => (character as Character).structure ? [] : [id as CharacterId]))])];
@@ -1095,7 +1102,7 @@ function formatDamageChart(stats: IRealmArenaGameResultStats): GameResultBarChar
         if (kind.length === 0) return [];
         const segments: Record<string, number> = {};
         for (const row of kind) segments[row.userId] = (segments[row.userId] ?? 0) + row.dealt;
-        return [{ label: names.get(character) ?? character, value: kind.reduce((sum, row) => sum + row.dealt, 0), segments }];
+        return [{ label: characterNameOf(character), value: kind.reduce((sum, row) => sum + row.dealt, 0), segments }];
     });
     if (bars.length === 0) return undefined;
     return { kind: "bar", title: "Damage by character", yLabel: "Damage", bars, ...(isCoopRecord(stats) ? { extraSeries: [ENEMY_SERIES] } : {}) };
