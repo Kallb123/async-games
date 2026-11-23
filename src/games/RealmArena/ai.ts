@@ -35,7 +35,7 @@ import { costsFrom, DEFAULT_CLIMB, reachFrom, pathTo, type Reach } from "@/utils
 import { battlefieldWith, coordsOf, type Battlefield, type Square } from "@/utils/games/battlefield/terrain";
 import { type AbilityId, type CharacterId } from "./characters";
 import {
-    abilitiesOf, alliesWithin, activeEffects, act, canAct, allied, areaAround, blastedIn, burstArea, CENTRE, centrePoints, check, type Check, fighterById, isCombatant, isMinion, isStanding, isStructure, landedSmoke, SHRINE_OWNER,
+    abilitiesOf, alliesWithin, activeEffects, act, canAct, allied, areaAround, blastedIn, burstArea, CENTRE, centrePoints, check, type Check, fighterById, isCombatant, isMinion, isStanding, isStructure, landedSmoke, shrineOf,
     damageTo, dodgeReach, givesCover, inMeleeReach, leapTargets, maxHpOf, moveApAt, movementOf, reachOf, ROLL_SIDES, shotOdds, squadSight, strikeChance, watchedSquares, weaponOf,
     type Action, type BattleEvent, type BattleState, type Fighter, type FogGhost, type ShotOdds,
 } from "./rules";
@@ -247,10 +247,10 @@ function planFor(view: BattleState, owner: string, round: number, memo: TurnMemo
     // A nest (§39.7) is nobody to hunt: the team's planner may hit one it reaches, and never walks to one.
     const seenEnemies = state.fighters.filter(fighter => isCombatant(fighter, state) && !allied(state, fighter.owner, owner));
     // Then the team's Shrine, where there is one (realm-arena-hold-out.md §5.2), which every side's view holds.
-    const shrine = state.fighters.find(fighter => fighter.owner === SHRINE_OWNER && isStanding(fighter) && !allied(state, fighter.owner, owner));
+    const shrine = shrineOf(state);
     const hunted = hunt === undefined ? []
         : seenEnemies.length > 0 ? seenEnemies.map(fighter => fighter.square)
-        : shrine ? [shrine.square]
+        : shrine && isStanding(shrine) ? [shrine.square]
         : hunt.length > 0 ? hunt.map(ghost => ghost.square)
         : view.fog ? searched(state, owner) : [];
     const objective = hunted.length > 0 ? hunted : field.objectives[CENTRE] ?? [];

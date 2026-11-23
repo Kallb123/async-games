@@ -29,7 +29,7 @@ import { distance, type Battlefield, type Square } from "@/utils/games/battlefie
 import { searched } from "./ai";
 import { ruleValuesOf, rulesetOf } from "./rulesets";
 import {
-    allied, burstArea, canAct, CENTRE, check, isCombatant, isMinion, isStanding, moveApAt, movementOf, reachOf, shotOdds, SHRINE_OWNER, weaponOf, weaponReaches,
+    allied, burstArea, canAct, CENTRE, check, isCombatant, isMinion, isStanding, moveApAt, movementOf, reachOf, shotOdds, shrineOf, weaponOf, weaponReaches,
     type Action, type BattleState, type Fighter, type FogGhost,
 } from "./rules";
 
@@ -55,9 +55,6 @@ const minionsOf = (view: BattleState, owner: string): Fighter[] =>
 const teamOf = (view: BattleState, owner: string): Fighter[] =>
     view.fighters.filter(fighter => isCombatant(fighter, view) && !allied(view, fighter.owner, owner)).sort((a, b) => a.id - b.id);
 
-/** The team's Shrine (§5.2), if one stands: always in a warband's view, since where it stands is no secret. */
-const shrineOf = (view: BattleState): Fighter | undefined => view.fighters.find(fighter => fighter.owner === SHRINE_OWNER && isStanding(fighter));
-
 /**
  * The next action of the warband's swarm step, or undefined once it is over:
  * every minion's move, then every minion's strike. `hunt` is where the warband
@@ -67,7 +64,9 @@ export function swarmAction(view: BattleState, owner: string, hunt: readonly Fog
     const { fog: _fog, ...state } = view;
     done.fogged = view.fog === true;
     const team = teamOf(state, owner);
-    const shrine = shrineOf(state);
+    // Always in a warband's view, since where it stands is no secret (§5.2).
+    const standing = shrineOf(state);
+    const shrine = standing && isStanding(standing) ? standing : undefined;
     for (const minion of minionsOf(state, owner)) {
         if (done.moved.has(minion.id)) continue;
         done.moved.add(minion.id);

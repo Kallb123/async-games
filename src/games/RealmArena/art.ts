@@ -367,15 +367,14 @@ export const CHARACTER_ART = Object.fromEntries(ART_CHARACTER_IDS.map((character
  * no team layer, since the owner's colour is its HP bar's and ring's. The one
  * answer to which characters are drawn as one, so a new one is a line here.
  */
+const structureCells = (sheet: keyof typeof ART_SHEETS): Readonly<Record<CharacterPose, Sprite>> => ({
+    standing: { sheet, x: 0, y: 0, width: CHARACTER_CELL.width, height: CHARACTER_CELL.height, tile: CHARACTER_CELL.tile },
+    fallen: { sheet, x: CHARACTER_CELL.width, y: 0, width: CHARACTER_CELL.width, height: CHARACTER_CELL.height, tile: CHARACTER_CELL.tile },
+});
+
 export const STRUCTURE_ART: Partial<Record<CharacterId, Readonly<Record<CharacterPose, Sprite>>>> = {
-    nest: {
-        standing: { sheet: "nest", x: 0, y: 0, width: CHARACTER_CELL.width, height: CHARACTER_CELL.height, tile: CHARACTER_CELL.tile },
-        fallen: { sheet: "nest", x: CHARACTER_CELL.width, y: 0, width: CHARACTER_CELL.width, height: CHARACTER_CELL.height, tile: CHARACTER_CELL.tile },
-    },
-    shrine: {
-        standing: { sheet: "shrine", x: 0, y: 0, width: CHARACTER_CELL.width, height: CHARACTER_CELL.height, tile: CHARACTER_CELL.tile },
-        fallen: { sheet: "shrine", x: CHARACTER_CELL.width, y: 0, width: CHARACTER_CELL.width, height: CHARACTER_CELL.height, tile: CHARACTER_CELL.tile },
-    },
+    nest: structureCells("nest"),
+    shrine: structureCells("shrine"),
 };
 
 /** The sprite for `pose` where `character` is a structure drawn as one (`STRUCTURE_ART`), and nothing for a character drawn as a figure. */

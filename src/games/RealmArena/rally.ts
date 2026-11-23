@@ -1,5 +1,5 @@
 import { rulesetOf, type RulesContext } from "@/games/RealmArena/rulesets";
-import { freeSquares, freshTurn, isStanding, maxHpOf, SHRINE_OWNER, viewOf, type BattleState, type Fighter } from "@/games/RealmArena/rules";
+import { freeSquares, freshTurn, isStanding, maxHpOf, SHRINE_OWNER, shrineOf, viewOf, type BattleState, type Fighter } from "@/games/RealmArena/rules";
 import type { ItemId } from "@/games/RealmArena/characters";
 import { pluralize } from "@/utils/ui/text";
 import type { Square } from "@/utils/games/battlefield/terrain";
@@ -85,9 +85,6 @@ export function reinforceSquare(state: BattleState, seats: readonly string[], se
     return index < 0 ? undefined : freeSquares(state, state.field.deployments[index] ?? [])[0];
 }
 
-/** The battle's Shrine, standing or not (realm-arena-hold-out.md §5.2): undefined in a battle without one. */
-const shrineIn = (state: Pick<BattleState, "fighters">): Fighter | undefined => state.fighters.find(fighter => fighter.owner === SHRINE_OWNER);
-
 /** Whether a standing character of the seat has used up the item it mustered with. */
 const usedUp = (fighter: Fighter, seat: string): boolean =>
     fighter.owner === seat && isStanding(fighter) && fighter.musteredItem !== undefined && fighter.item === null;
@@ -112,7 +109,7 @@ export function rallyOptionsOf(battle: BattleState, seats: readonly string[], se
     const downed = downedOf(state, seat);
     const square = reinforceSquare(state, seats, seat);
     const used = resuppliable(state, seat);
-    const shrine = shrineIn(state);
+    const shrine = shrineOf(state);
     return RALLY_CHOICES.filter(choice => choice !== "mend" || shrine !== undefined).map((choice): RallyOption => {
         switch (choice) {
             case "rally": return { choice, available: true };

@@ -6,7 +6,7 @@ import { commandVersion, type ICommandOutcome, type IGameCommand, type IGameType
 import { serializable } from "@/utils/apiModels/Serialisable";
 import { markDirty } from "@/utils/games/markDirty";
 import { recordedRolls } from "@/utils/games/recordedRolls";
-import { isDropped, nextActivePlayer, registerPlayerDropoutAdapter } from "@/utils/games/playerDropout";
+import { activeTurnOrder, isDropped, nextActivePlayer, registerPlayerDropoutAdapter } from "@/utils/games/playerDropout";
 import { registerComputerTurnAdapter } from "@/utils/games/computerTurns";
 import { v4 as uuidv4, NIL as NIL_UUID } from 'uuid';
 import type { NextWave } from "@/games/RealmArena/apiModels";
@@ -31,7 +31,7 @@ import {
     ENEMY_TURN_SEAT,
     fighterById,
     fogGhost,
-    eliteArrivals, hatchSquares, hordePurchase, hordeSpawn, nestsProduce, SHRINE_OWNER, spawnThemeOf, spawnThreatOf,
+    eliteArrivals, hatchSquares, hordeSpawn, nestsProduce, SHRINE_OWNER, shrineOf, spawnThemeOf, spawnThreatOf,
     isBattleOver,
     isCombatant,
     isMinion,
@@ -152,7 +152,9 @@ export function warbandBudgetOf(gs: IRealmArenaSpecificGameState): Budget {
  */
 function warbandSquad(gs: IRealmArenaSpecificGameState): readonly CharacterId[] {
     const faction = factionById(gs.coop?.enemy, gs);
-    return faction.horde ? hordePurchase(faction, ruleValuesOf(gs).STARTING_HORDE ?? 0, 1, gs) : readyMadeSquad(faction, warbandBudgetOf(gs));
+    if (!faction.horde) return readyMadeSquad(faction, warbandBudgetOf(gs));
+    const theme = spawnThemeOf(faction, 1, gs);
+    return theme ? hordeSpawn(theme, ruleValuesOf(gs).STARTING_HORDE ?? 0, { minions: 0, others: 0 }, gs).bought : [];
 }
 
 /** What a warband of a horde stands now (realm-arena-hold-out.md §4.4): its minions and its others standing, hatchlings counted. */
@@ -1029,7 +1031,7 @@ export class RealmArenaGameType implements IGameType {
  */
 function endInCoop(data: IRealmArenaGameData, battle: BattleState, coop: IRealmArenaCoop): void {
     const gs = data.specificGameState;
-    const { won, detail, roundsLeft }: { won: boolean; detail: string; roundsLeft?: number } = coop.mission === "holdOut"
+    const { won, detail, roundsLeft }: CoopEnding = coop.mission === "holdOut"
         // Only ever asked once the battle is over, which in Hold Out is when it has an ending.
         ? holdOutEnding(gs)!
         : holdTheCentreEnding(data, battle, coop);
@@ -1037,6 +1039,9 @@ function endInCoop(data: IRealmArenaGameData, battle: BattleState, coop: IRealmA
     const onDifficulty = coop.difficulty ? `, on ${DIFFICULTY_NAMES[coop.difficulty]}` : "";
     endAsTeam(data, won ? "teamwin" : "teamloss", `The team ${won ? "wins" : "loses"} the battle`, `${detail}${onDifficulty}`);
 }
+
+/** How a co-op battle has ended: won or lost, the result's detail, and in a Hold Out won by breaking the Brood the rounds left for its bonus (realm-arena-hold-out.md §5.4). */
+type CoopEnding = { won: boolean; detail: string; roundsLeft?: number };
 
 /** How a battle of Hold the Centre has ended (§29.5), once it's over, with its final line written. */
 function holdTheCentreEnding(data: IRealmArenaGameData, battle: BattleState, coop: IRealmArenaCoop): { won: boolean; detail: string } {
@@ -1066,7 +1071,7 @@ function battleIsOver(gs: IRealmArenaSpecificGameState): boolean {
  * nobody of the team is standing; won once the last round is played, or once
  * the last wave has landed and nobody of the enemy is standing.
  */
-function holdOutEnding(gs: IRealmArenaSpecificGameState): { won: boolean; detail: string; roundsLeft?: number } | undefined {
+function holdOutEnding(gs: IRealmArenaSpecificGameState): CoopEnding | undefined {
     const rounds = battleRoundsOf(gs);
     const standing = sidesStanding(battleOf(gs));
     const round = Math.min(gs.roundsPlayed + 1, rounds);
@@ -1083,11 +1088,10 @@ function holdOutEnding(gs: IRealmArenaSpecificGameState): { won: boolean; detail
  * moment the Shrine falls; won the moment the last nest falls, with the rounds
  * left before the cap for the bonus; won, too, once the last round is played.
  */
-function broodEnding(gs: IRealmArenaSpecificGameState, round: number, rounds: number): { won: boolean; detail: string; roundsLeft?: number } | undefined {
-    const shrine = shrineOf(gs.fighters);
+function broodEnding(gs: IRealmArenaSpecificGameState, round: number, rounds: number): CoopEnding | undefined {
+    const shrine = shrineOf(gs);
     if (shrine && !isStanding(shrine)) return { won: false, detail: `the Shrine fell in round ${round}` };
-    const nests = gs.fighters.filter(fighter => isWarband(fighter.owner) && isStructure(fighter, gs));
-    if (nests.length > 0 && !nests.some(isStanding)) return { won: true, detail: `broke the Brood in round ${round}`, roundsLeft: rounds - round };
+    if (warbandsFor(gs.seats).every(owner => standingNestsOf(gs, owner).length === 0)) return { won: true, detail: `broke the Brood in round ${round}`, roundsLeft: rounds - round };
     if (gs.roundsPlayed >= rounds) return { won: true, detail: `held the Shrine for all ${rounds} rounds` };
     return undefined;
 }
@@ -1100,10 +1104,11 @@ function broodEnding(gs: IRealmArenaSpecificGameState, round: number, rounds: nu
  */
 function breakTheBrood(data: IRealmArenaGameData, roundsLeft: number): void {
     const gs = data.specificGameState;
-    const scattered = gs.fighters.filter(fighter => isWarband(fighter.owner) && isCombatant(fighter, gs)).length;
-    gs.fighters = gs.fighters.filter(fighter => !isWarband(fighter.owner) || !isCombatant(fighter, gs));
+    const fleeing = new Set(gs.fighters.filter(fighter => isWarband(fighter.owner) && isCombatant(fighter, gs)));
+    const scattered = fleeing.size;
+    gs.fighters = gs.fighters.filter(fighter => !fleeing.has(fighter));
     const bonus = (ruleValuesOf(gs).ROUND_BONUS ?? 0) * roundsLeft;
-    const players = gs.seats.filter(seat => data.gameState.turnOrder.includes(seat) && !isDropped(data, seat));
+    const players = activeTurnOrder(data);
     if (bonus > 0 && players.length > 0) gs.scores = { ...gs.scores, ...Object.fromEntries(players.map(seat => [seat, (gs.scores[seat] ?? 0) + bonus / players.length])) };
     const fled = scattered > 0 ? `, and the ${pluralize(scattered, "character")} of it still standing ${scattered === 1 ? "scatters" : "scatter"}` : "";
     data.gameState.history.unshift({ text: `The last nest falls: the Brood breaks${fled}` });
@@ -1243,12 +1248,9 @@ function shrineFighter(gs: IRealmArenaSpecificGameState, fighters: readonly Figh
     return [{ ...newFighter(nextFighterId(fighters), SHRINE_OWNER, "shrine", square, null, undefined, undefined, false, gs), hp, maxHp: hp }];
 }
 
-/** The battle's Shrine (realm-arena-hold-out.md §5.2), standing or not; undefined where there is none. */
-export const shrineOf = (fighters: readonly Fighter[]): Fighter | undefined => fighters.find(fighter => fighter.owner === SHRINE_OWNER);
-
-/** How many of warband `owner`'s nests are standing (§39.7). */
-const nestsStanding = (gs: IRealmArenaSpecificGameState, owner: string): number =>
-    gs.fighters.filter(fighter => fighter.owner === owner && isStructure(fighter, gs) && isStanding(fighter)).length;
+/** Warband `owner`'s nests still standing (§39.7), in id order. */
+const standingNestsOf = (gs: IRealmArenaSpecificGameState, owner: string): Fighter[] =>
+    gs.fighters.filter(fighter => fighter.owner === owner && isStructure(fighter, gs) && isStanding(fighter)).sort((a, b) => a.id - b.id);
 
 /**
  * The nests an enemy that has them stands on the map's nest squares at the first
@@ -1331,7 +1333,7 @@ function standByNest(gs: IRealmArenaSpecificGameState, owner: string, character:
  */
 function spawn(gs: IRealmArenaSpecificGameState, owner: string): void {
     if (!nestsProduce(gs.coop?.mission, gs)) return;
-    const nests = gs.fighters.filter(fighter => fighter.owner === owner && isStructure(fighter, gs) && isStanding(fighter)).sort((a, b) => a.id - b.id);
+    const nests = standingNestsOf(gs, owner);
     const round = gs.roundsPlayed + 1;
     const theme = spawnThemeOf(factionById(gs.coop?.enemy, gs), round, gs);
     if (nests.length === 0 || !theme) return;
@@ -1360,17 +1362,33 @@ function beginRound(data: IRealmArenaGameData): void {
     const theme = spawnThemeOf(faction, round, gs);
     if (theme && round > 1 && theme !== spawnThemeOf(faction, round - 1, gs)) data.gameState.history.unshift({ text: `${theme.name} begins: the nests produce it from now on` });
     const warbands = warbandsFor(gs.seats);
-    const nests = warbands.map(owner => gs.fighters.filter(fighter => fighter.owner === owner && isStructure(fighter, gs) && isStanding(fighter)).sort((a, b) => a.id - b.id));
+    const nests = warbands.map(owner => standingNestsOf(gs, owner));
+    // Not held to HORDE_REAL_CAP: a warband of four Ravagers would otherwise keep the Queen away for good (§5.6).
     for (const { warband, elite } of eliteArrivals(faction, round, nests.map(standing => standing.length))) standByNest(gs, warbands[warband], elite, nests[warband], 0);
     if (ruleValuesOf(gs).RALLY_ROUNDS?.includes(round)) earnRally(data, "The team earns a rally");
-    if ((gs.ralliesBanked ?? 0) > 0 && gs.lastRally !== round - 1) {
+    if ((gs.ralliesBanked ?? 0) > 0 && rested(gs, round)) {
         gs.ralliesBanked = (gs.ralliesBanked ?? 0) - 1;
         gs.lastRally = round;
-        gs.rallyOwed = gs.seats.filter(seat => data.gameState.turnOrder.includes(seat) && !isDropped(data, seat));
-        data.gameState.history.unshift({ text: "The team must each choose how to rally: rally the squad, reinforce with a fallen character, resupply, or mend the Shrine" });
+        oweRally(data);
     }
     noteSighting(gs);
 }
+
+/**
+ * Every player of the team still in the battle owes a rally choice (§39.4),
+ * made as their next turn begins: the choices as the battle offers them, Mend
+ * among them where it has a Shrine (realm-arena-hold-out.md §5.3).
+ */
+function oweRally(data: IRealmArenaGameData): void {
+    const gs = data.specificGameState;
+    const playing = activeTurnOrder(data);
+    gs.rallyOwed = gs.seats.filter(seat => playing.includes(seat));
+    const choices = shrineOf(gs) ? "rally the squad, reinforce with a fallen character, resupply, or mend the Shrine" : "rally the squad, reinforce with a fallen character, or resupply";
+    data.gameState.history.unshift({ text: `The team must each choose how to rally: ${choices}` });
+}
+
+/** Whether a rally may be taken as `round` begins (realm-arena-hold-out.md §5.3): none was taken as the round before it began. */
+const rested = (gs: IRealmArenaSpecificGameState, round: number): boolean => gs.lastRally !== round - 1;
 
 /** One more rally banked for the team (realm-arena-hold-out.md §5.3), with the line that says what earned it: public, as everyone saw it. */
 function earnRally(data: IRealmArenaGameData, text: string): void {
@@ -1393,7 +1411,7 @@ function noteBroken(data: IRealmArenaGameData, events: readonly BattleEvent[]): 
         const nest = gs.fighters.find(fighter => fighter.id === event.fighter);
         return nest && isWarband(nest.owner) && isStructure(nest, gs) ? [nest.owner] : [];
     }));
-    for (const owner of owners) if (nestsStanding(gs, owner) === 0) earnRally(data, "A warband's last nest falls, and the team earns a rally");
+    for (const owner of owners) if (standingNestsOf(gs, owner).length === 0) earnRally(data, "A warband's last nest falls, and the team earns a rally");
 }
 
 /**
@@ -1406,7 +1424,7 @@ function noteBroken(data: IRealmArenaGameData, events: readonly BattleEvent[]): 
 export function nextRallyOf(gs: IRealmArenaSpecificGameState): number | undefined {
     if (gs.phase !== "battle" || !nestsProduce(gs.coop?.mission, gs)) return undefined;
     const round = gs.roundsPlayed + 1;
-    const after = (next: number) => next === round + 1 && gs.lastRally === round ? next + 1 : next;
+    const after = (next: number) => rested(gs, next) ? next : next + 1;
     const scheduled = ruleValuesOf(gs).RALLY_ROUNDS?.find(one => one > round);
     const next = (gs.ralliesBanked ?? 0) > 0 ? after(round + 1) : scheduled === undefined ? undefined : after(scheduled);
     return next !== undefined && next <= battleRoundsOf(gs) ? next : undefined;
@@ -1436,8 +1454,7 @@ function landWave(data: IRealmArenaGameData, version: number): void {
         // From rules version 12 nobody is healed by the wave itself: every
         // player of the team still in the battle owes a choice (§39.4), made
         // as their next turn begins.
-        gs.rallyOwed = gs.seats.filter(seat => data.gameState.turnOrder.includes(seat) && !isDropped(data, seat));
-        data.gameState.history.unshift({ text: "The team must each choose how to rally: rally the squad, reinforce with a fallen character, or resupply" });
+        oweRally(data);
     } else if (version >= RALLYING_VERSION) {
         rally(gs);
         data.gameState.history.unshift({ text: "The team rallies: everyone standing regains half their HP" });
@@ -2165,7 +2182,7 @@ export const WARBAND_DEADLINE_MS = 10_000;
  * them, so a warband of nests alone still takes its turn and spawns.
  */
 const warbandFights = (gs: IRealmArenaSpecificGameState, k: number): boolean =>
-    squadsStanding(battleOf(gs), [warbandOwner(k)]).length > 0 || (nestsProduce(gs.coop?.mission, gs) && nestsStanding(gs, warbandOwner(k)) > 0);
+    squadsStanding(battleOf(gs), [warbandOwner(k)]).length > 0 || (nestsProduce(gs.coop?.mission, gs) && standingNestsOf(gs, warbandOwner(k)).length > 0);
 /** Whether warband `k` has only nests left, one of them burning or poisoned (§39.7): an empty turn to take, so the damage lands. */
 const nestsBurning = (gs: IRealmArenaSpecificGameState, k: number): boolean => !warbandFights(gs, k) && structureBurning(battleOf(gs), warbandOwner(k));
 
@@ -2366,6 +2383,12 @@ function handOff(data: IRealmArenaGameData, from: string, moves: WarbandMoves, v
     const started: BattleEvent[] = [];
     // In fog, what each player was told of it all, line by line (§27.2).
     const startedTold: Told | undefined = gs.fog ? Object.fromEntries(order.map(viewer => [viewer, []])) : undefined;
+    // A turn beginning, kept for the recap with what each player was told of it.
+    const begin = (owner: string) => {
+        const { events, told } = beginTurn(data, owner);
+        started.push(...events);
+        for (const viewer of order) startedTold?.[viewer].push(...told?.[viewer] ?? []);
+    };
     // A block that has just been played, its last turn the one that resumed this.
     let blockPlayed = resumed && blocks;
     for (let seat = from; ;) {
@@ -2391,20 +2414,14 @@ function handOff(data: IRealmArenaGameData, from: string, moves: WarbandMoves, v
             if (nestsProduce(gs.coop?.mission, gs)) {
                 if (!battleIsOver(gs)) beginRound(data);
                 // The Shrine has no turn of its own: what burns it ticks as each round begins (realm-arena-hold-out.md §5.2).
-                if (shrineOf(gs.fighters) && !battleIsOver(gs)) {
-                    const { events, told } = beginTurn(data, SHRINE_OWNER);
-                    started.push(...events);
-                    for (const viewer of order) startedTold?.[viewer].push(...told?.[viewer] ?? []);
-                }
+                if (shrineOf(gs) && !battleIsOver(gs)) begin(SHRINE_OWNER);
             } else landWave(data, version);
             // A wave that left a wiped-out squad a choice to make gives it its turn back (§39.4).
             if (gs.rallyOwed) next = nextSeat(data, seat);
         }
         if (battleIsOver(gs)) return { enemy, started, startedTold };
 
-        const { events, told } = beginTurn(data, next);
-        started.push(...events);
-        for (const viewer of order) startedTold?.[viewer].push(...told?.[viewer] ?? []);
+        begin(next);
         if (battleIsOver(gs) || takesTurn(gs, battleOf(gs), next)) return { enemy, started, startedTold };
         seat = next;
     }

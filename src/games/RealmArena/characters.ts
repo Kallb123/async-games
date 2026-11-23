@@ -604,8 +604,8 @@ export interface Faction {
     computerOnly?: true;
     /**
      * Its warbands are bought rather than mustered (the Brood,
-     * realm-arena-hold-out.md §4.2, §4.4): each muster and wave is spent in its
-     * characters' `threat` on its themes (`hordePurchase`), never past
+     * realm-arena-hold-out.md §4.2, §4.4, §5.1): its starting horde and what its nests produce are spent in its
+     * characters' `threat` on its themes (`hordeSpawn`), never past
      * `HORDE_CAP` minions and `HORDE_REAL_CAP` others a warband, survivors
      * counted. Absent, its warbands muster `readyMade`, which a horde leaves
      * empty: nobody musters it.

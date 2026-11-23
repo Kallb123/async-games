@@ -295,6 +295,9 @@ export const ENEMY_SIDE = "enemy";
  */
 export const SHRINE_OWNER = "shrine";
 
+/** The battle's Shrine (realm-arena-hold-out.md §5.2), standing or not: undefined where there is none. */
+export const shrineOf = (state: Pick<BattleState, "fighters">): Fighter | undefined => state.fighters.find(fighter => fighter.owner === SHRINE_OWNER);
+
 /**
  * The seat that holds the turn while any warband's is due
  * (docs/games/realm-arena-hold-out.md §3): one for them all, never a warband's
@@ -2360,37 +2363,6 @@ export function wavePurchase(faction: Faction, budget: number, round: number, co
     return bought;
 }
 
-/**
- * What a horde (`Faction.horde`, realm-arena-hold-out.md §4.2, §4.4) buys with
- * `threat` for the wave landing as `round` begins — or, at round 1, its first
- * muster: the theme's elite first if the threat covers it, then its buy list
- * round and round in each character's `threat`, skipping whatever is too dear
- * or would buy more than `HORDE_CAP` minions or `HORDE_REAL_CAP` others,
- * until nothing on it can be bought. Survivors are `waveOf`'s to count against
- * the caps: this is what the warband would stand at full. No draw, so the same
- * every time. Empty for a faction whose waves aren't themed.
- */
-export function hordePurchase(faction: Faction, threat: number, round: number, context?: RulesContext): CharacterId[] {
-    const theme = waveThemeOf(faction, round);
-    if (!theme) return [];
-    const { CHARACTERS } = rulesetOf(context);
-    const { HORDE_CAP = Infinity, HORDE_REAL_CAP = Infinity } = ruleValuesOf(context);
-    const bought: CharacterId[] = [];
-    let left = threat, minions = 0, others = 0;
-    const buy = (character: CharacterId): boolean => {
-        const { threat: cost = Infinity, minion } = CHARACTERS[character];
-        if (cost > left || (minion ? minions >= HORDE_CAP : others >= HORDE_REAL_CAP)) return false;
-        bought.push(character);
-        left -= cost;
-        if (minion) minions++;
-        else others++;
-        return true;
-    };
-    if (theme.elite) buy(theme.elite);
-    while (theme.buys.map(buy).some(Boolean)) { /* round again while anything was bought */ }
-    return bought;
-}
-
 // ─── Nests that produce the enemy (realm-arena-hold-out.md §5.1) ───────────
 
 /** Whether a Hold Out battle's nests produce its enemy every round, rather than waves landing (realm-arena-hold-out.md §5.1): from rules version 13. */
@@ -2411,7 +2383,8 @@ export function spawnThemeOf(faction: Faction, round: number, context: RulesCont
 }
 
 /**
- * What a horde warband's nests produce with `threat` on `theme` (§5.1): its buy
+ * What a horde warband (`Faction.horde`) buys with `threat` on `theme` (§4.2,
+ * §5.1) — its starting horde, and what its nests produce each turn: its buy
  * list in order, round and round, stopping at the first it can't afford — saving
  * up for it — and passing over any its caps (`HORDE_CAP`, `HORDE_REAL_CAP`, with
  * `standing` already counted) leave no room for. What's `left` is banked, never
