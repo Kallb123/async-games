@@ -341,9 +341,9 @@ the board, and their strikes follow one after another, quickly.
 - **Threat, until nests produce the Brood.** The Brood is a `horde`: it is
   bought, never mustered, so its `readyMade` is empty. `hordePurchase` buys in
   each character's `threat`, as `wavePurchase` buys in points. The elite comes
-  first, then the theme's list round and round, and it never takes a warband
-  past `HORDE_CAP` (16) minions or `HORDE_REAL_CAP` (4) others, survivors and
-  hatchlings counted. Until PR 3 makes the nests produce it (§5.1), the Brood
+  first, then the theme's list round and round, and it never buys more than
+  `HORDE_CAP` (16) minions or `HORDE_REAL_CAP` (4) others. `waveOf` holds a
+  landing wave to the same caps with survivors and hatchlings counted. Until PR 3 makes the nests produce it (§5.1), the Brood
   musters and lands its waves on version 12's schedule. Each spends the points
   the Swarm's would have had (`waveBudgetOf`: size, difficulty, growth and
   nests destroyed), a threat for every `POINTS_PER_THREAT` (5). On Normal, a

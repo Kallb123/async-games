@@ -314,6 +314,12 @@ function Figure({ artId, view, square, character, facing, pose = 'standing', ite
 /** The top-left corner of the HP bar over the figure standing on the square whose middle is (`x`, `y`). */
 const hpBarCorner = (x: number, y: number): Point => ({ x: x - HP_BAR_WIDTH / 2, y: y - HP_BAR_RISE - HP_BAR_HEIGHT });
 
+/** The battle's rules version, provided at the board's root: a figure's character is read in its battle's catalogue (a v13-only one is in no other). */
+const RulesVersionContext = createContext<number | undefined>(undefined);
+
+/** The battle's rules, as the board provides them (`RulesVersionContext`), for a helper that reads a fighter's character. */
+const useRulesContext = (): RulesContext => ({ rulesVersion: useContext(RulesVersionContext) });
+
 /**
  * A standing figure's HP bar, over the figure standing on the square whose
  * middle is (`x`, `y`), in its owner's colour, as its figure is. Given what the
@@ -322,11 +328,6 @@ const hpBarCorner = (x: number, y: number): Point => ({ x: x - HP_BAR_WIDTH / 2,
  * drains away, are set a frame at a time from the playback's clock
  * (`toldAt`) — so they are no props of the rects they draw.
  */
-const RulesVersionContext = createContext<number | undefined>(undefined);
-
-/** The battle's rules, as the board provides them (`RulesVersionContext`), for a helper that reads a fighter's character. */
-const useRulesContext = (): RulesContext => ({ rulesVersion: useContext(RulesVersionContext) });
-
 function HpBar({ x, y, fighter, colour, told }: { x: number; y: number; fighter: Fighter; colour: string; told?: Told }) {
     const corner = hpBarCorner(x, y);
     // A minion has no bar (§4.3), read by the battle's rules version.
