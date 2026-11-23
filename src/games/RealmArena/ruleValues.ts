@@ -61,5 +61,20 @@ export interface RealmArenaRuleValues {
      * §39.7). Absent before version 12, and for a faction without nests.
      */
     NEST_POINTS?: number;
+    /**
+     * The most minions (`Character.minion`) a horde warband (`Faction.horde`)
+     * stands at once, survivors and hatchlings counted, beside at most
+     * `HORDE_REAL_CAP` of its other characters and elites
+     * (realm-arena-hold-out.md §4.4). Absent before version 13.
+     */
+    HORDE_CAP?: number;
+    /** The most characters that aren't minions, elites among them, a horde warband stands at once (§4.4). Absent before version 13. */
+    HORDE_REAL_CAP?: number;
+    /**
+     * How many of a warband's points buy one threat, for a horde bought in waves
+     * (realm-arena-hold-out.md §4.2): its muster's and each wave's points budget,
+     * as the Swarm's were, spent in threat. Absent before version 13.
+     */
+    POINTS_PER_THREAT?: number;
     BATTLE_ROUNDS: Readonly<Record<PlayerCount, number>>;
 }

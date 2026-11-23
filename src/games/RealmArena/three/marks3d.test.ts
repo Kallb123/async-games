@@ -49,21 +49,21 @@ describe("what a figure wears", () => {
     const worn = fighter({ banked: 2, effects: { burning: 2 }, item: "fireFlask", ap: 3 });
 
     it("wears everything at rest: the watch, its effects, its item and, on its owner's turn, its AP", () => {
-        const all = marksOf("all", worn, true);
+        const all = marksOf("all", worn, true, {});
         expect(all.watching).toBe(true);
         expect(all.effects).toEqual(["burning"]);
         expect(all.item).toBe("fireFlask");
         expect(all.pips).toHaveLength(ACTION_POINTS);
         expect(all.pips!.filter(Boolean)).toHaveLength(3);
-        expect(marksOf("all", worn, false).pips).toEqual([]);
+        expect(marksOf("all", worn, false, {}).pips).toEqual([]);
     });
 
     it("wears only its item while it walks, as the isometric board draws a walker", () => {
-        expect(marksOf("item", worn, true)).toEqual({ effects: [], watching: false, item: "fireFlask" });
+        expect(marksOf("item", worn, true, {})).toEqual({ effects: [], watching: false, item: "fireFlask" });
     });
 
     it("wears nothing once it's down", () => {
-        expect(marksOf("none", worn, true)).toEqual({ effects: [], watching: false });
+        expect(marksOf("none", worn, true, {})).toEqual({ effects: [], watching: false });
     });
 });
 

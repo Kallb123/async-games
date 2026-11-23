@@ -1,5 +1,5 @@
 'use client'
-import React, { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import React, { createContext, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { TurnButtons, useBoardRotation } from '@/games/RealmArena/components/RealmArenaTurn';
 import { useBoardFocus } from '@/games/RealmArena/useBoardFocus';
 import BoardZoom, { useBoardCentre, type BoardZoomFocus, type BoardZoomPivot } from '@/components/ui/BoardZoom';
@@ -19,7 +19,8 @@ import { usePrefersReducedMotion } from '@/utils/hooks/usePrefersReducedMotion';
 import { PlaybackProvider, setAttributes, translation, usePlaybackFrame, usePlaybackRef, usePlaybackValue } from '@/utils/hooks/usePlayback';
 import { facingCell, figureSprites, ITEM_ART, SMOKE_ART, spriteBox, TERRAIN_ART, type CharacterPose } from '@/games/RealmArena/art';
 import { ITEMS, type CharacterId, type ItemId } from '@/games/RealmArena/characters';
-import { rulesetOf } from '@/games/RealmArena/rulesets';
+import { rulesetOf, type RulesContext } from '@/games/RealmArena/rulesets';
+import { hasHpBar } from '@/games/RealmArena/hpBar';
 import { CENTRE, isStanding, isWarband, maxHpOf, smokeSquares, type BattleState, type Fighter, type FogGhost, type MusterPick, type ToldEvent } from '@/games/RealmArena/rules';
 import type { AttackOption } from '@/games/RealmArena/tactics';
 import { AP_PIP_OFFSET, AP_PIP_RADIUS, AP_PIP_STEP, apPips, areaRect, BOARD_ZOOM, CENTRE_LABEL, EFFECT_MARK_OFFSET, EFFECT_MARK_SIZE, EFFECT_MARK_STEP, FIGURE_RADIUS, FIGURE_RISE, figureRectAt, fxPointsAt, HP_BAR_HEIGHT, HP_BAR_RISE, HP_BAR_WIDTH, ITEM_MARK_OFFSET, ITEM_MARK_SIZE, MARKER_RADIUS, ODDS_FLANK_DROP, ODDS_FLANK_EXTRA, ODDS_FLANK_WORD, ODDS_HEIGHT, ODDS_RISE, ODDS_WIDTH, PATH_END_RADIUS, RING_RADIUS, ringOf, shadedSquares, SHADOW_ALPHA, SHADOW_RADIUS, shieldPath, SMOKE_SIZE, type GroundShade, type Marker, type ShadeKind, type Ring, type BattleCue, type BoardFollow, type FallCue, type FxPoints, type ScorchCue, type Shove, type Timed, type WalkCue, effectsOn, facingOf, fadeInAt, fadeOutAt, fighterStatus, endOf, hpFraction, legLengthOn, progressOf, shakeAt, shakesOf, shovesOf, shoveAt, terrainLetter, toldAt, toldOf, walkerAt, walkCameraAt, walkFacing, legPoint, walkLift, walkSquares, type Told, type WalkMotion } from '@/games/RealmArena/ui';
@@ -313,6 +314,12 @@ function Figure({ artId, view, square, character, facing, pose = 'standing', ite
 /** The top-left corner of the HP bar over the figure standing on the square whose middle is (`x`, `y`). */
 const hpBarCorner = (x: number, y: number): Point => ({ x: x - HP_BAR_WIDTH / 2, y: y - HP_BAR_RISE - HP_BAR_HEIGHT });
 
+/** The battle's rules version, provided at the board's root: a figure's character is read in its battle's catalogue (a v13-only one is in no other). */
+const RulesVersionContext = createContext<number | undefined>(undefined);
+
+/** The battle's rules, as the board provides them (`RulesVersionContext`), for a helper that reads a fighter's character. */
+const useRulesContext = (): RulesContext => ({ rulesVersion: useContext(RulesVersionContext) });
+
 /**
  * A standing figure's HP bar, over the figure standing on the square whose
  * middle is (`x`, `y`), in its owner's colour, as its figure is. Given what the
@@ -323,23 +330,27 @@ const hpBarCorner = (x: number, y: number): Point => ({ x: x - HP_BAR_WIDTH / 2,
  */
 function HpBar({ x, y, fighter, colour, told }: { x: number; y: number; fighter: Fighter; colour: string; told?: Told }) {
     const corner = hpBarCorner(x, y);
+    // A minion has no bar (§4.3), read by the battle's rules version.
+    const context = useRulesContext();
+    const bar = hasHpBar(fighter, context);
     // The fill and the chip each read `toldAt` for themselves: cheap, and it
     // keeps each draw to its own element.
     const fill = usePlaybackRef<SVGRectElement>((rect, ms) => {
         if (!told) return;
-        setAttributes(rect, { width: HP_BAR_WIDTH * hpFraction(toldAt(told, fighter, ms).drawn) });
+        setAttributes(rect, { width: HP_BAR_WIDTH * hpFraction(toldAt(told, fighter, ms).drawn, context) });
     });
     const chip = usePlaybackRef<SVGRectElement>((rect, ms) => {
         if (!told) return;
         const { drawn, chip: level } = toldAt(told, fighter, ms);
-        const width = HP_BAR_WIDTH * hpFraction(drawn);
-        const lagging = level === undefined ? 0 : HP_BAR_WIDTH * hpFraction(drawn, drawn.hp - level) - width;
+        const width = HP_BAR_WIDTH * hpFraction(drawn, context);
+        const lagging = level === undefined ? 0 : HP_BAR_WIDTH * hpFraction(drawn, context, drawn.hp - level) - width;
         setAttributes(rect, { x: corner.x + width, width: Math.max(0, lagging) });
     });
+    if (!bar) return null;
     return (
         <>
             <rect className="ag-ra-hp" x={corner.x} y={corner.y} width={HP_BAR_WIDTH} height={HP_BAR_HEIGHT} />
-            <rect ref={fill} className="ag-ra-hp-fill" style={{ fill: colour }} x={corner.x} y={corner.y} width={told ? undefined : HP_BAR_WIDTH * hpFraction(fighter)} height={HP_BAR_HEIGHT} />
+            <rect ref={fill} className="ag-ra-hp-fill" style={{ fill: colour }} x={corner.x} y={corner.y} width={told ? undefined : HP_BAR_WIDTH * hpFraction(fighter, context)} height={HP_BAR_HEIGHT} />
             {told && <rect ref={chip} className="ag-ra-hp-chip" y={corner.y} height={HP_BAR_HEIGHT} />}
             {/* A dark edge round the whole bar, over what's in it, so it reads on grass, stone or a figure alike. */}
             <rect className="ag-ra-hp-edge" x={corner.x} y={corner.y} width={HP_BAR_WIDTH} height={HP_BAR_HEIGHT} />
@@ -357,8 +368,10 @@ function HpBar({ x, y, fighter, colour, told }: { x: number; y: number; fighter:
 function HpChange({ view, fighter, change }: { view: IsoView; fighter: Fighter; change: number }) {
     const { x, y } = isoCentre(view, fighter.square);
     const corner = hpBarCorner(x, y);
-    const after = HP_BAR_WIDTH * hpFraction(fighter, -change);
-    const now = HP_BAR_WIDTH * hpFraction(fighter);
+    const context = useRulesContext();
+    if (!hasHpBar(fighter, context)) return null;
+    const after = HP_BAR_WIDTH * hpFraction(fighter, context, -change);
+    const now = HP_BAR_WIDTH * hpFraction(fighter, context);
     if (now === after) return null;
     return (
         <rect
@@ -511,7 +524,7 @@ function SmokePuff({ artId, view, square }: { artId: string; view: IsoView; squa
 
 /** A character's AP left this turn as a column of pips centred on `y` — the same pips the units strip shows. */
 function ApPips({ x, y, fighter }: { x: number; y: number; fighter: Fighter }) {
-    const pips = apPips(fighter);
+    const pips = apPips(fighter, useRulesContext());
     const top = y - (AP_PIP_STEP * (pips.length - 1)) / 2;
     return pips.map((on, i) => (
         <circle key={i} className={`ag-ra-ap${on ? ' ag-ra-ap--on' : ''}`} cx={x} cy={top + i * AP_PIP_STEP} r={AP_PIP_RADIUS} />
@@ -655,6 +668,7 @@ function FighterNode({ artId, view, fighter, ring, selected, acting, colour, fac
     const feet = isoCentre(view, fighter.square);
     const standing = isStanding(fighter);
     const watching = standing && drawn.banked > 0;
+    const rules = useRulesContext();
     return (
         <ClickableMapNode
             x={x} y={y} radius={FIGURE_RADIUS}
@@ -662,7 +676,7 @@ function FighterNode({ artId, view, fighter, ring, selected, acting, colour, fac
             isSelected={selected}
             showRing={false}
             onClick={() => onSelect(fighter.id)}
-            title={[`${characterName} · ${nameFor(fighter.owner)}`, `${fighter.hp}/${maxHpOf(fighter)} HP`, ...fighterStatus(fighter)].join(' · ')}
+            title={[`${characterName} · ${nameFor(fighter.owner)}`, `${fighter.hp}/${maxHpOf(fighter, rules)} HP`, ...fighterStatus(fighter)].join(' · ')}
         >
             <Figure
                 ring={ring}
@@ -1010,7 +1024,7 @@ export default function RealmArenaBoard({ field, fighters, fogGhosts = [], unsee
     const toldCache = new Map<number, Told | null>();
     const toldFor = (fighter: Fighter): Told | null => {
         if (!playback) return null;
-        if (!toldCache.has(fighter.id)) toldCache.set(fighter.id, toldOf(playback.cues, found.get(fighter.id), fighter, still));
+        if (!toldCache.has(fighter.id)) toldCache.set(fighter.id, toldOf(playback.cues, found.get(fighter.id), fighter, still, { rulesVersion }));
         return toldCache.get(fighter.id)!;
     };
     // Whoever the action being played walks is drawn walking (`WalkerSlot`), and
@@ -1106,6 +1120,7 @@ export default function RealmArenaBoard({ field, fighters, fogGhosts = [], unsee
     const figureRects = [...fighters, ...(sealed ?? [])].map(({ square }) => figureRect(view, square));
 
     return (
+        <RulesVersionContext.Provider value={rulesVersion}>
         <div className="ag-board-frame ag-realmarena-frame">
             <PlaybackProvider playKey={playback?.key ?? null} end={playback ? endOf(playback.cues) : 0} held={held} onEnd={onPlayed}>
                 <BoardZoom zoomWidth={BOARD_ZOOM.zoomWidth} maxWidth={BOARD_ZOOM.maxWidth} viewBox={view.size} focus={focus} onFocused={onFocused} pivot={pivot}>
@@ -1228,5 +1243,6 @@ export default function RealmArenaBoard({ field, fighters, fogGhosts = [], unsee
             </PlaybackProvider>
             <UnplacedMark unplaced={unplaced} />
         </div>
+        </RulesVersionContext.Provider>
     );
 }

@@ -9,6 +9,7 @@
 
 import { Color } from "three";
 import type { Fighter } from "@/games/RealmArena/rules";
+import type { RulesContext } from "@/games/RealmArena/rulesets";
 import { HP_BAR_HEIGHT, HP_BAR_RISE, HP_BAR_WIDTH, hpFraction } from "@/games/RealmArena/ui";
 import { Billboards, CanvasAtlas, type BillboardAxes } from "./billboards";
 import { solidRect, type BoardLook } from "./canvasShapes";
@@ -46,12 +47,12 @@ export interface BarSpec {
  * — the HP an action lined up on it would add, negative for a blow — is
  * measured from.
  */
-export function barLevels(drawn: Fighter, fighter: Fighter, chip: number | undefined, change: number | undefined): Pick<BarSpec, "fill" | "chip" | "preview"> {
-    const fill = hpFraction(drawn);
-    const now = hpFraction(fighter), after = change ? hpFraction(fighter, -change) : now;
+export function barLevels(drawn: Fighter, fighter: Fighter, chip: number | undefined, change: number | undefined, context: RulesContext): Pick<BarSpec, "fill" | "chip" | "preview"> {
+    const fill = hpFraction(drawn, context);
+    const now = hpFraction(fighter, context), after = change ? hpFraction(fighter, context, -change) : now;
     return {
         fill,
-        chip: chip === undefined ? fill : Math.max(fill, hpFraction(drawn, drawn.hp - chip)),
+        chip: chip === undefined ? fill : Math.max(fill, hpFraction(drawn, context, drawn.hp - chip)),
         preview: now === after ? null : { from: Math.min(now, after), to: Math.max(now, after), gain: after > now },
     };
 }

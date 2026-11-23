@@ -5,6 +5,7 @@ import { catalogueV9 } from "./catalogues/v9";
 import { catalogueV10 } from "./catalogues/v10";
 import { catalogueV11 } from "./catalogues/v11";
 import { catalogueV12 } from "./catalogues/v12";
+import { catalogueV13 } from "./catalogues/v13";
 import type { Ability, AbilityId, Character, CharacterId, CharacterOption, Effect, EffectId, Faction, FactionId, Item, ItemId, OptionId, Weapon } from "./characters";
 
 /** Independent of commandVersion: a protocol change need not change a match's rules. */
@@ -24,7 +25,9 @@ export interface RealmArenaRuleset {
         : CharacterOption & { replaces: AbilityId; ability: AbilityId } };
     readonly ITEMS: Readonly<Partial<Record<ItemId, Item>>> & Table<typeof catalogueV7.ITEMS, Item>;
     readonly EFFECTS: Readonly<Partial<Record<EffectId, Effect>>> & Table<typeof catalogueV7.EFFECTS, Effect>;
-    readonly FACTIONS: Readonly<Partial<Record<FactionId, Faction>>> & Readonly<Record<keyof typeof catalogueV7.FACTIONS, Faction>>;
+    // Every id, though the Brood (realm-arena-hold-out.md §4.1) is in no catalogue before version 13:
+    // a battle reads its enemy through `factionById`, which asks the catalogue itself.
+    readonly FACTIONS: Readonly<Record<FactionId, Faction>>;
 }
 
 /** Runtime freezing also protects nested weapons, ability lists and ready-made squads. */
@@ -36,9 +39,12 @@ function freeze<T>(value: T): T {
     return value;
 }
 
-type CatalogueBeforeElites = Omit<RealmArenaRuleset, "CHARACTERS"> & { CHARACTERS: Readonly<Record<keyof typeof catalogueV7.CHARACTERS, Character>> };
+type CatalogueBeforeElites = Omit<RealmArenaRuleset, "CHARACTERS" | "FACTIONS"> & {
+    CHARACTERS: Readonly<Record<keyof typeof catalogueV7.CHARACTERS, Character>>;
+    FACTIONS: Readonly<Record<keyof typeof catalogueV7.FACTIONS, Faction>>;
+};
 
-/** No battle before version 12 holds an elite (§39.5), so its catalogue may be typed as holding every id. */
+/** No battle before version 12 holds an elite (§39.5), nor before 13 the Brood, so a catalogue may be typed as holding every id. */
 const registered = (catalogue: CatalogueBeforeElites): RealmArenaRuleset => freeze(catalogue) as RealmArenaRuleset;
 
 const rulesetV7: RealmArenaRuleset = registered(catalogueV7);
@@ -46,8 +52,10 @@ const rulesetV8: RealmArenaRuleset = registered(catalogueV8);
 const rulesetV9: RealmArenaRuleset = registered(catalogueV9);
 const rulesetV10: RealmArenaRuleset = registered(catalogueV10);
 const rulesetV11: RealmArenaRuleset = registered(catalogueV11);
-// Version 12 is the current release (§39.9); it is the one catalogue not run through `registered`, which only types the pre-elite ones.
-const rulesetV12: RealmArenaRuleset = freeze(catalogueV12);
+// Version 12 is the current release (§39.9).
+const rulesetV12: RealmArenaRuleset = registered(catalogueV12);
+// Version 13 is registered but not current until Hold Out's rethink is released (realm-arena-hold-out.md §8).
+const rulesetV13: RealmArenaRuleset = freeze(catalogueV13);
 
 // Games created before the balance release had no stamp, or one below 7.
 // These are complete definitions, including the old descriptions and limits.
@@ -68,7 +76,7 @@ const legacyRuleset: RealmArenaRuleset = registered({
 
 const RULESETS: Readonly<Record<number, RealmArenaRuleset>> = Object.freeze({
     0: legacyRuleset, 1: legacyRuleset, 2: legacyRuleset, 3: legacyRuleset,
-    4: legacyRuleset, 5: legacyRuleset, 6: legacyRuleset, 7: rulesetV7, 8: rulesetV8, 9: rulesetV9, 10: rulesetV10, 11: rulesetV11, 12: rulesetV12,
+    4: legacyRuleset, 5: legacyRuleset, 6: legacyRuleset, 7: rulesetV7, 8: rulesetV8, 9: rulesetV9, 10: rulesetV10, 11: rulesetV11, 12: rulesetV12, 13: rulesetV13,
 });
 
 /** Every registered catalogue once, oldest first, whether or not a match can still start on it. */

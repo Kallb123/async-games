@@ -27,10 +27,33 @@ import { registeredRulesets } from "./rulesets";
  * introduced them, so a character's row never moves when a release lands.
  * The sheets, `characters.json` and the sheet script are all laid out from it.
  * A structure (the Swarm's nest, §39.7) isn't one: it's no figure with eight
- * facings and a fallen pose, but a mark of its own, so it has no row.
+ * facings and a fallen pose, but a mark of its own, so it has no row. Nor is a
+ * character drawn as another (`artCharacterOf`): it shares that one's row.
  */
 export const ART_CHARACTER_IDS: readonly CharacterId[] = [...new Set(registeredRulesets.flatMap(ruleset =>
-    Object.entries(ruleset.CHARACTERS).flatMap(([id, character]) => (character as Character).structure ? [] : [id as CharacterId])))];
+    Object.entries(ruleset.CHARACTERS).flatMap(([id, character]) => {
+        const { structure, drawnAs } = character as Character;
+        return structure || drawnAs ? [] : [id as CharacterId];
+    })))];
+
+/** Every character drawn with another's art (`Character.drawnAs`), by registered catalogue: the Brood's are the Swarm's. */
+const DRAWN_AS: ReadonlyMap<CharacterId, CharacterId> = new Map(registeredRulesets.flatMap(ruleset =>
+    Object.entries(ruleset.CHARACTERS).flatMap(([id, character]) => {
+        const { drawnAs } = character as Character;
+        return drawnAs ? [[id as CharacterId, drawnAs] as const] : [];
+    })));
+
+/**
+ * The character whose art `character` is drawn with: its `drawnAs` in whichever
+ * registered catalogue defines it, else itself. Every lookup of a character's
+ * sprites, model or missile goes through it, so a character that borrows a
+ * look (the Brood's Skitterling is a Swarm Skitterling to the eye) has no row
+ * or model of its own.
+ */
+export const artCharacterOf = (character: CharacterId): CharacterId => DRAWN_AS.get(character) ?? character;
+
+/** Every character drawn as another (`artCharacterOf`), in the order the catalogues introduced them: the ones `ART_CHARACTER_IDS` leaves out. */
+export const DRAWN_AS_IDS: readonly CharacterId[] = [...DRAWN_AS.keys()];
 
 /** The poses a character is drawn in, in the order their rows come down the characters' sheet. */
 export const CHARACTER_POSES = ["standing", "fallen"] as const;
@@ -319,7 +342,8 @@ const characterCells = (sheet: ArtSheet, row: number) => Array.from({ length: FA
  * Every character in every pose (`CHARACTER_POSES`): a row of the
  * characters' sheet each — every character standing, in `ART_CHARACTER_IDS`
  * order, then every one fallen — and a cell a facing along it. The team sheet
- * holds the owner's colour in the same cells.
+ * holds the owner's colour in the same cells. A character drawn as another
+ * has no entry: ask for it through `artCharacterOf`, as `figureSprites` does.
  */
 export const CHARACTER_ART = Object.fromEntries(ART_CHARACTER_IDS.map((character, index) => {
     const poses = {} as Record<CharacterPose, CharacterArt>;
@@ -345,13 +369,13 @@ export const STRUCTURE_ART: Partial<Record<CharacterId, Readonly<Record<Characte
 };
 
 /** The sprite for `pose` where `character` is a structure drawn as one (`STRUCTURE_ART`), and nothing for a character drawn as a figure. */
-export const structureArt = (character: CharacterId, pose: CharacterPose): Sprite | undefined => STRUCTURE_ART[character]?.[pose];
+export const structureArt = (character: CharacterId, pose: CharacterPose): Sprite | undefined => STRUCTURE_ART[artCharacterOf(character)]?.[pose];
 
 /** What a fighter is drawn with on the isometric board: its body, and the layer its owner's colour is laid on, which a structure has none of. */
 export function figureSprites(character: CharacterId, pose: CharacterPose, cell: number): { body: Sprite; team: Sprite | null } {
     const structure = structureArt(character, pose);
     if (structure) return { body: structure, team: null };
-    const art = CHARACTER_ART[character][pose];
+    const art = CHARACTER_ART[artCharacterOf(character)][pose];
     return { body: art.body[cell], team: art.team[cell] };
 }
 

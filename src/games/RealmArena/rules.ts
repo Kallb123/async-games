@@ -442,6 +442,14 @@ export const isStanding = (fighter: Fighter): boolean => fighter.hp > 0;
 export const isStructure = (fighter: Pick<Fighter, "character">, context?: RulesContext): boolean => rulesetOf(context).CHARACTERS[fighter.character]?.structure === true;
 
 /**
+ * Whether a fighter is a minion — one of the Brood's horde (realm-arena-hold-out.md
+ * §4.3) — rather than a character: downed by anything that does it damage, worn
+ * no armour, healed by nothing, and moved by the swarm step, not the planner.
+ * As `isStructure`, always pass the battle's context.
+ */
+export const isMinion = (fighter: Pick<Fighter, "character">, context?: RulesContext): boolean => rulesetOf(context).CHARACTERS[fighter.character]?.minion === true;
+
+/**
  * Whether a fighter is someone standing: on its feet and not a structure (§39.7).
  * `isStanding` still says whether it stands — a nest in the way blocks a square,
  * can be hit and burned — but a nest isn't someone left to fight, so whatever
@@ -534,6 +542,8 @@ const bodyArmour = (state: RulesContext, fighter: Pick<Fighter, "character">): n
 
 /** What a character wears: its own kind's, the team's armour against the warbands, and what its effects add against any blow (`Effect.armour`). */
 export function armourOf(state: Pick<BattleState, "armoured" | "rulesVersion">, fighter: Pick<Fighter, "owner" | "character"> & Partial<Pick<Fighter, "effects">>): number {
+    // A minion wears none, whatever its effects say (realm-arena-hold-out.md §4.3).
+    if (isMinion(fighter, state)) return 0;
     return bodyArmour(state, fighter) + teamArmour(state, fighter) + effectTotal(fighter, "armour", state);
 }
 
@@ -553,7 +563,7 @@ export type BlowSource = "weapon" | "ability" | "item";
 export function damageTo(state: Pick<BattleState, "armoured" | "rulesVersion">, by: Pick<Fighter, "owner" | "character" | "option"> & Partial<Pick<Fighter, "effects">>, target: Pick<Fighter, "owner" | "character"> & Partial<Pick<Fighter, "effects">>, blow = weaponOf(state, by).damage, via: BlowSource = "weapon"): number {
     if (blow <= 0) return blow;
     const dealt = blow + effectTotal(by, "damageBonus", state) + (via === "ability" ? effectTotal(by, "abilityDamageBonus", state) : 0);
-    const armour = (isWarband(by.owner) ? teamArmour(state, target) : 0) + bodyArmour(state, target) + effectTotal(target, "armour", state);
+    const armour = isMinion(target, state) ? 0 : (isWarband(by.owner) ? teamArmour(state, target) : 0) + bodyArmour(state, target) + effectTotal(target, "armour", state);
     return armour > 0 ? Math.max(1, dealt - armour) : dealt;
 }
 
@@ -1521,6 +1531,8 @@ function aimRefusal(state: BattleState, actor: Fighter, at: unknown, range: numb
  */
 function healRefusal(state: BattleState, healer: Fighter, target: Fighter | undefined, draught: boolean, range = 0): string | undefined {
     if (!target || !allied(state, target.owner, healer.owner) || !isStanding(target)) return "Pick an ally to heal";
+    // Nothing heals a minion: it's downed by anything, or untouched (realm-arena-hold-out.md §4.3).
+    if (isMinion(target, state)) return "A minion can't be healed";
     const far = draught ? undefined : aimRefusal(state, healer, target.square, range);
     if (far) return far;
     if (draught && target.id !== healer.id && !nextTo(state.field, healer.square, target.square)) return "Too far away to heal";
@@ -1695,7 +1707,8 @@ function resolver(state: BattleState, roll: Roll) {
     const wound = (by: Pick<Fighter, "id" | "owner">, target: Fighter, damage: number) => {
         const enemy = !allied(battle, by.owner, target.owner);
         if (enemy && damage > 0 && !target.woundedBy?.includes(by.owner)) target.woundedBy = [...target.woundedBy ?? [], by.owner];
-        target.hp = Math.max(0, target.hp - damage);
+        // A minion is downed by anything that does it damage (realm-arena-hold-out.md §4.3).
+        target.hp = damage > 0 && isMinion(target, state) ? 0 : Math.max(0, target.hp - damage);
         if (isStanding(target)) return;
         const assists = enemy ? (target.woundedBy ?? []).filter(owner => !allied(battle, owner, by.owner)) : [];
         Object.assign(target, { ap: 0, banked: 0, effects: {} });
@@ -2328,6 +2341,37 @@ export function wavePurchase(faction: Faction, budget: number, round: number, co
         if (cost > left || bought.length >= cap) return false;
         bought.push(character);
         left -= cost;
+        return true;
+    };
+    if (theme.elite) buy(theme.elite);
+    while (theme.buys.map(buy).some(Boolean)) { /* round again while anything was bought */ }
+    return bought;
+}
+
+/**
+ * What a horde (`Faction.horde`, realm-arena-hold-out.md §4.2, §4.4) buys with
+ * `threat` for the wave landing as `round` begins — or, at round 1, its first
+ * muster: the theme's elite first if the threat covers it, then its buy list
+ * round and round in each character's `threat`, skipping whatever is too dear
+ * or would buy more than `HORDE_CAP` minions or `HORDE_REAL_CAP` others,
+ * until nothing on it can be bought. Survivors are `waveOf`'s to count against
+ * the caps: this is what the warband would stand at full. No draw, so the same
+ * every time. Empty for a faction whose waves aren't themed.
+ */
+export function hordePurchase(faction: Faction, threat: number, round: number, context?: RulesContext): CharacterId[] {
+    const theme = waveThemeOf(faction, round);
+    if (!theme) return [];
+    const { CHARACTERS } = rulesetOf(context);
+    const { HORDE_CAP = Infinity, HORDE_REAL_CAP = Infinity } = ruleValuesOf(context);
+    const bought: CharacterId[] = [];
+    let left = threat, minions = 0, others = 0;
+    const buy = (character: CharacterId): boolean => {
+        const { threat: cost = Infinity, minion } = CHARACTERS[character];
+        if (cost > left || (minion ? minions >= HORDE_CAP : others >= HORDE_REAL_CAP)) return false;
+        bought.push(character);
+        left -= cost;
+        if (minion) minions++;
+        else others++;
         return true;
     };
     if (theme.elite) buy(theme.elite);

@@ -2,7 +2,7 @@ import { readFileSync } from "node:fs";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
 import { describe, expect, it } from "vitest";
-import { ART_CHARACTER_IDS, CHARACTER_MODELS_HREF } from "@/games/RealmArena/art";
+import { artCharacterOf, ART_CHARACTER_IDS, CHARACTER_MODELS_HREF } from "@/games/RealmArena/art";
 import { modelsJson } from "../../../../scripts/lib/characterModels.mjs";
 import { characterGeometry, type CharacterModels } from "./characterModels";
 
@@ -31,5 +31,10 @@ describe("the 3D board's characters", () => {
             expect(center.z - radius, id).toBeGreaterThan(-0.5);
             expect(center.z + radius, id).toBeLessThan(1.6);
         }
+    });
+
+    it("finds a character drawn as another's model through it: the same geometry, built once", () => {
+        expect(characterGeometry(served, "broodSkitterling")).toBe(characterGeometry(served, artCharacterOf("broodSkitterling")));
+        expect(characterGeometry(served, "broodSkitterling")).toBe(characterGeometry(served, "skitterling"));
     });
 });

@@ -31,8 +31,10 @@ import {
     ENEMY_TURN_SEAT,
     fighterById,
     fogGhost,
+    hordePurchase,
     isBattleOver,
     isCombatant,
+    isMinion,
     isStanding,
     isStructure,
     isWarband,
@@ -76,6 +78,7 @@ import {
 } from "@/games/RealmArena/rules";
 import { distance, facingTowards, type Facing, type Square } from "@/utils/games/battlefield/terrain";
 import { nextAction, turnMemo } from "@/games/RealmArena/ai";
+import { swarmAction, swarmMemo } from "@/games/RealmArena/swarm";
 import { playerHistory, tellEveryone, userToken, type IHistoryEntry } from "@/utils/games/history";
 import { randomInt } from "@/utils/games/random";
 import { endAsTeam } from "@/utils/games/endAsTeam";
@@ -141,9 +144,32 @@ export function warbandBudgetOf(gs: IRealmArenaSpecificGameState): Budget {
     return warbandBudget(gs.seats.length, gs.size, gs.coop?.difficulty, warbandSteps(gs.coop?.mission, gs.rulesVersion));
 }
 
-/** The squad every warband musters, and each wave refills it to (§29.7, §30.3): its faction's ready-made squad for its budget. */
+/**
+ * The squad every warband musters, and each wave refills it to (§29.7, §30.3):
+ * its faction's ready-made squad for its budget — or, for a horde
+ * (realm-arena-hold-out.md §4.2), the threat that budget buys on its first theme.
+ */
 function warbandSquad(gs: IRealmArenaSpecificGameState): readonly CharacterId[] {
-    return readyMadeSquad(factionById(gs.coop?.enemy, gs), warbandBudgetOf(gs));
+    const faction = factionById(gs.coop?.enemy, gs);
+    return faction.horde ? hordePurchase(faction, hordeThreatOf(gs, 1), 1, gs) : readyMadeSquad(faction, warbandBudgetOf(gs));
+}
+
+/**
+ * The threat a horde warband spends on its muster (`round` 1) or on the wave
+ * landing as `round` begins (realm-arena-hold-out.md §4.2): the points the
+ * Swarm's would have had (`waveBudgetOf`), a threat for every
+ * `POINTS_PER_THREAT` of them, rounded down. Until nests produce the Brood
+ * (§5.1), this is how much of it there is.
+ */
+function hordeThreatOf(gs: IRealmArenaSpecificGameState, round: number, owner?: string): number {
+    return Math.floor(waveBudgetOf(gs, round, owner) / (ruleValuesOf(gs).POINTS_PER_THREAT ?? 1));
+}
+
+/** What a warband of a horde stands now (realm-arena-hold-out.md §4.4): its minions and its others standing, hatchlings counted. */
+function hordeCountOf(gs: IRealmArenaSpecificGameState, owner: string): { minions: number; others: number } {
+    const standing = gs.fighters.filter(fighter => fighter.owner === owner && isCombatant(fighter, gs));
+    const minions = standing.filter(fighter => isMinion(fighter, gs)).length;
+    return { minions, others: standing.length - minions };
 }
 
 /**
@@ -1098,6 +1124,7 @@ export function waveBudgetOf(gs: IRealmArenaSpecificGameState, round: number, ow
  */
 function waveBuyOf(gs: IRealmArenaSpecificGameState, round: number, growing: boolean, owner?: string): CharacterId[] {
     const faction = factionById(gs.coop?.enemy, gs);
+    if (faction.horde) return hordePurchase(faction, hordeThreatOf(gs, round, owner), round, gs);
     return faction.waves ? wavePurchase(faction, waveBudgetOf(gs, round, owner), round, gs) : waveStrength(warbandSquad(gs), round, growing);
 }
 
@@ -1117,8 +1144,15 @@ export function waveOf(gs: IRealmArenaSpecificGameState, owner: string, growing:
         const index = missing.findIndex(pick => pick.character === fighter.character);
         if (index >= 0) missing.splice(index, 1);
     }
-    // A themed wave never takes a warband past the cap, survivors and hatchlings counted (§39.6).
-    if (factionById(gs.coop?.enemy, gs).waves) {
+    const faction = factionById(gs.coop?.enemy, gs);
+    if (faction.horde) {
+        // A horde never stands past its caps, survivors and hatchlings counted (realm-arena-hold-out.md §4.4).
+        const { HORDE_CAP = Infinity, HORDE_REAL_CAP = Infinity } = ruleValuesOf(gs);
+        let { minions, others } = hordeCountOf(gs, owner);
+        const kept = missing.filter(pick => isMinion(pick, gs) ? minions++ < HORDE_CAP : others++ < HORDE_REAL_CAP);
+        missing.splice(0, missing.length, ...kept);
+    } else if (faction.waves) {
+        // A themed wave never takes a warband past the cap, survivors and hatchlings counted (§39.6).
         missing.splice(Math.max(0, (ruleValuesOf(gs).WAVE_CAP ?? Infinity) - gs.fighters.filter(one => one.owner === owner && isCombatant(one, gs)).length));
     }
     const preferred = planned.map(pick => pick.square);
@@ -2047,7 +2081,13 @@ function warbandTurn(data: IRealmArenaGameData, moves: { recorded: readonly unkn
     const cap = battleOf(gs).fighters.filter(fighter => fighter.owner === owner && isCombatant(fighter, gs)).reduce((sum, fighter) => sum + actionPointsOf(fighter, gs), 0);
     const deadline = Date.now() + WARBAND_DEADLINE_MS;
     const memo = turnMemo();
-    for (let step = 0; !over(); step++) {
+    // Live, a warband with minions plays their swarm step before the planner's
+    // characters (§4.5). Its actions are steps like the planner's, in the same
+    // list, so a replay plays them back from `moves.recorded` and never asks.
+    let swarming = !moves.recorded && battleOf(gs).fighters.some(fighter => fighter.owner === owner && isCombatant(fighter, gs) && isMinion(fighter, gs)) ? swarmMemo() : undefined;
+    const hunt = gs.coop?.mission === "holdOut" ? gs.sightings?.[owner] ?? [] : undefined;
+    while (!over()) {
+        const step = turn.steps.length;
         if (!moves.recorded && (step === cap || Date.now() > deadline)) break;
         let action: unknown, applied: Applied | undefined;
         // The planner, and any rule an action it chose trips over, can't fail
@@ -2055,18 +2095,25 @@ function warbandTurn(data: IRealmArenaGameData, moves: { recorded: readonly unkn
         // every sweep. `applyAction` changes nothing until the action has
         // been worked out, so the battle stands as the last one left it.
         try {
-            action = moves.recorded ? moves.recorded[step] : nextAction(
-                viewOf(battleOf(gs), owner), owner, gs.roundsPlayed + 1,
-                gs.coop?.mission === "holdOut" ? gs.sightings?.[owner] ?? [] : undefined, memo,
-            );
-            if (action === undefined) break;
+            const view = moves.recorded ? undefined : viewOf(battleOf(gs), owner);
+            action = view === undefined ? moves.recorded?.[step]
+                : swarming ? swarmAction(view, owner, hunt, swarming)
+                : nextAction(view, owner, gs.roundsPlayed + 1, hunt, memo);
+            if (action === undefined) {
+                // The swarm step is over: the planner's turn begins.
+                if (swarming) { swarming = undefined; continue; }
+                break;
+            }
             applied = applyAction(data, owner, action, moves.roll);
         } catch (error) {
             console.error(`Realm Arena game ${data.gameId}: ${owner}'s turn threw, so it ends here`, error);
+            // A swarm step that fails ends there, and the planner still plays.
+            if (swarming) { swarming = undefined; continue; }
             break;
         }
         if (!applied) {
             console.warn(`Realm Arena game ${data.gameId}: ${owner}'s ${(action as Partial<Action>)?.kind} was refused, so its turn ends here`);
+            if (swarming) { swarming = undefined; continue; }
             break;
         }
         turn.steps.push({ action: applied.action, events: applied.events, told: applied.told, after: boardOf(gs) });

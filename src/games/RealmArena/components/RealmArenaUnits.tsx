@@ -2,6 +2,7 @@
 import React from 'react';
 import Section from '@/components/ui/Section';
 import { CHARACTERS } from '@/games/RealmArena/characters';
+import type { RulesContext } from '@/games/RealmArena/rulesets';
 import { isStanding, maxHpOf, type BattleState, type Fighter } from '@/games/RealmArena/rules';
 import RealmArenaCrosshair from './RealmArenaCrosshair';
 import { RealmArenaStatusList } from './RealmArenaEffects';
@@ -56,17 +57,17 @@ export default function RealmArenaUnits({ battle, player, colourFor, acting, sho
                             mark={standing ? CHARACTER_MARK[fighter.character] : '✕'}
                             colour={standing ? colourFor(fighter.owner) : undefined}
                             name={fighterName(fighters, fighter, battle)}
-                            sub={[`${fighter.hp}/${maxHpOf(fighter)} HP`, loadoutLine(fighter, battle)].filter(Boolean).join(' · ')}
+                            sub={[`${fighter.hp}/${maxHpOf(fighter, battle)} HP`, loadoutLine(fighter, battle)].filter(Boolean).join(' · ')}
                             selected={fighter.id === selectedId}
                             dim={done || !standing}
                             onClick={() => onSelect(fighter.id)}
                         >
                             <span className="ag-ra-unit-hp">
-                                <span style={{ width: `${hpFraction(fighter) * 100}%` }} />
+                                <span style={{ width: `${hpFraction(fighter, battle) * 100}%` }} />
                             </span>
                             <RealmArenaStatusList effects={effectsOn(fighter)} item={fighter.item} />
                             <span className={`ag-ra-unit-foot${done ? ' ag-ra-unit-foot--done' : ''}`}>
-                                <UnitStatus fighter={fighter} acting={acting} done={done} />
+                                <UnitStatus fighter={fighter} acting={acting} done={done} context={battle} />
                                 {standing && showReach && <TargetCount count={attackOptions(battle, fighter).length} />}
                             </span>
                         </UnitBox>
@@ -117,14 +118,14 @@ export function UnitBox({ mark, colour, name, sub, selected, dim, onClick, child
 }
 
 /** The start of a unit's last line: down, done, its AP pips on the viewer's turn, or whether it's on watch off it. */
-function UnitStatus({ fighter, acting, done }: { fighter: Fighter; acting: boolean; done: boolean }) {
+function UnitStatus({ fighter, acting, done, context }: { fighter: Fighter; acting: boolean; done: boolean; context: RulesContext }) {
     if (!isStanding(fighter)) return <span>✕ Down</span>;
     if (done) return <span>✓ Done</span>;
     if (!acting) return <span>{watchStatus(fighter) ?? 'Waiting'}</span>;
     return (
-        <span className="ag-ra-unit-ap" aria-label={`${fighter.ap} of ${apPips(fighter).length} AP left`}>
+        <span className="ag-ra-unit-ap" aria-label={`${fighter.ap} of ${apPips(fighter, context).length} AP left`}>
             <span className="ag-ra-unit-pips" aria-hidden="true">
-                {apPips(fighter).map((on, i) => (
+                {apPips(fighter, context).map((on, i) => (
                     <span key={i} className={`ag-ra-unit-pip${on ? ' ag-ra-unit-pip--on' : ''}`} />
                 ))}
             </span>

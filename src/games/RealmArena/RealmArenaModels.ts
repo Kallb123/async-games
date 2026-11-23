@@ -8,16 +8,16 @@ import { mongoMap } from "@/utils/games/mongoMaps";
 import { capitalise, pluralize } from "@/utils/ui/text";
 import { userIdListToNamesAndMap } from "@/utils/users/clerk";
 import { RealmArenaGameType, type IGameCommand } from "@/utils/apiModels/GameLogic";
-import { battleOf, battleRoundsOf, budgetOf, enemyEvents, enemyHidden, enemyTurnsOf, nestSquaresOf, nextWaveOf, toldTo, toldTurns, unnamed, warbandBudgetOf, type IRealmArenaOutcome, type RealmArenaBoard, type Told } from "./RealmArenaLogic";
+import { battleOf, battleRoundsOf, budgetOf, enemyEvents, enemyHidden, enemyTurnsOf, nestSquaresOf, nextWaveOf, toldTo, toldTurns, unnamed, warbandBudgetOf, type EnemyStep, type IRealmArenaOutcome, type RealmArenaBoard, type Told } from "./RealmArenaLogic";
 import { rollOffTurnOrder } from "@/utils/games/rollOff";
-import { CURRENT_RULESET_VERSION, registeredRulesets } from "./rulesets";
-import { ART_CHARACTER_IDS } from "./art";
+import { CURRENT_RULESET_VERSION, registeredRulesets, type RulesContext } from "./rulesets";
+import { ART_CHARACTER_IDS, DRAWN_AS_IDS } from "./art";
 import { randomInt } from "@/utils/games/random";
 import { userToken } from "@/utils/games/history";
-import { BATTLE_SIZE_NAMES, CHARACTERS, COOP_PLAYERS, coopTeamMax, DIFFICULTY_NAMES, FACTION_IDS, factionById, FACTIONS, fitsCoop, isFactionId, playableFactionsOf, RANDOM_ENEMY, REALM_ONLY, UNKNOWN_ENEMY, type BattleSize, type CharacterId, type Difficulty, type FactionId } from "./characters";
+import { BATTLE_SIZE_NAMES, CHARACTERS, COOP_PLAYERS, coopTeamMax, DIFFICULTY_NAMES, FACTION_IDS, factionById, FACTIONS, fitsCoop, isFactionId, playableFactionsOf, RANDOM_ENEMY, REALM_ONLY, UNKNOWN_ENEMY, type BattleSize, type Character, type CharacterId, type Difficulty, type FactionId } from "./characters";
 import { addTally, NO_TALLY, xpOf, type MasterySnapshot, type Tally } from "./mastery";
 import { battlefieldById, COOP_MAPS, DEPLOYMENT_NAMES, mapFor, type CoopMap, type RealmArenaMapId } from "./maps";
-import { allied, ENEMY_SIDE, fighterById, fogGhost, isStructure, isWarband, pickOf, squadSight, storedFighter, TEAM_SIDE, viewOf, warbandsFor, maxHpOf, actionPointsOf, type BattleEvent, type Fighter, type FogGhost, type MusterPick, type ToldEvent } from "./rules";
+import { isMinion, type Action, allied, ENEMY_SIDE, fighterById, fogGhost, isStructure, isWarband, pickOf, squadSight, storedFighter, TEAM_SIDE, viewOf, warbandsFor, maxHpOf, actionPointsOf, type BattleEvent, type Fighter, type FogGhost, type MusterPick, type ToldEvent } from "./rules";
 import { computerHoldsTurn } from "@/utils/games/computerTurns";
 import type { IRealmArenaGameDataResponse, IRealmArenaSpecificGameStateResponse, IRealmArenaStepOutcome, IRealmArenaStepPart, RealmArenaPartState } from "./apiModels";
 import type { Square } from "@/utils/games/battlefield/terrain";
@@ -768,6 +768,21 @@ function partsOf(outcome: IRealmArenaOutcome, viewerId: string | null, gs: IReal
     // Two runs of events told in a row: nothing was recorded for one that had no events.
     const both = (first: Told | undefined, second: Told | undefined): Told | undefined =>
         first || second ? Object.fromEntries(Object.keys({ ...first, ...second }).map(viewer => [viewer, [...first?.[viewer] ?? [], ...second?.[viewer] ?? []]])) : undefined;
+    // A warband's minions move together and strike one after another (§4.5):
+    // a run of minion moves, or of minion strikes, is one part (`swarmRun`).
+    const swarmed = (steps: readonly EnemyStep[]): EnemyStep[][] => {
+        const groups: EnemyStep[][] = [];
+        let before: readonly Fighter[] = battle.fighters;
+        let run: "move" | "strike" | undefined;
+        for (const step of steps) {
+            const kind = swarmRun(step.action, step.after?.fighters ?? before, gs);
+            if (kind !== undefined && kind === run) groups[groups.length - 1].push(step);
+            else groups.push([step]);
+            run = kind;
+            before = step.after?.fighters ?? before;
+        }
+        return groups;
+    };
     // An empty turn the viewer was told nothing of has no seam of its own (§39.7).
     const turns = toldTurns(all, said);
     if (turns.length === 0) return undefined;
@@ -791,7 +806,7 @@ function partsOf(outcome: IRealmArenaOutcome, viewerId: string | null, gs: IReal
         ...turns.flatMap((turn, index) => {
             const following = turns[index + 1];
             return [
-                ...turn.steps.map(step => ({ kind: "enemy" as const, events: said(step.told, step.events), after: step.after })),
+                ...swarmed(turn.steps).map(group => ({ kind: "enemy" as const, events: group.flatMap(step => said(step.told, step.events)), after: group[group.length - 1].after })),
                 ...following ? [{ kind: "enemy" as const, events: said(both(turn.endedTold, following.startedTold), [...turn.ended ?? [], ...following.started]), after: following.startedAfter }] : [],
             ];
         }),
@@ -802,6 +817,20 @@ function partsOf(outcome: IRealmArenaOutcome, viewerId: string | null, gs: IReal
         const state = index < planned.length - 1 ? board(after) : undefined;
         return { kind, events: withoutRolls(told), ...state ? { state } : {} };
     });
+}
+
+/**
+ * Which run of a warband's swarm step (§4.5) an action belongs to, if either:
+ * a minion's move, or a minion's strike (an attack, or a Bloater's burst).
+ * Whether the actor is a minion is read from the board, where a character
+ * never changes, so the board after the step reads as well as the one before.
+ */
+function swarmRun(action: Action, fighters: readonly Fighter[], context: RulesContext): "move" | "strike" | undefined {
+    const strike = action.kind === "attack" || action.kind === "burst";
+    if (action.kind !== "move" && !strike) return undefined;
+    const actor = fighters.find(fighter => fighter.id === action.fighter);
+    if (!actor || !isMinion(storedFighter(actor), context)) return undefined;
+    return strike ? "strike" : "move";
 }
 
 /**
@@ -950,12 +979,12 @@ export function formatRealmArenaResultStats(stats: IRealmArenaGameResultStats, u
         lines.push(`${pluralize(score, "point")}: ${centre(userId)} for the centre, ${total.knockoutPoints} for knock-outs${assisted > 0 ? `, ${assisted} for assists` : ""}`);
         lines.push(`Downed ${pluralize(total.knockouts, "enemy", "enemies")}, lost ${pluralize(total.downed, "character")}`);
         lines.push(`Dealt ${total.dealt} damage, healed ${total.healed} HP`);
-        if (top) lines.push(`Top fighter: ${CHARACTERS[top.character]?.name ?? top.character}, with ${top.dealt} damage`);
+        if (top) lines.push(`Top fighter: ${characterNameOf(top.character)}, with ${top.dealt} damage`);
     }
     for (const row of stats.mastery ?? []) {
         // A row is one battle's worth. Its counts are read by name, as above.
         const { attacks, abilities, items } = row;
-        linesOf(row.userId).push(`${CHARACTERS[row.character]?.name ?? row.character}: ${xpOf({ battles: 1, attacks, abilities, items })} XP`);
+        linesOf(row.userId).push(`${characterNameOf(row.character)}: ${xpOf({ battles: 1, attacks, abilities, items })} XP`);
     }
     // The enemy's column in co-op is its warbands together (§29.6), and nobody's to name.
     const holdOut = holdOutGroup(stats);
@@ -1053,17 +1082,26 @@ function formatRaceChart(stats: IRealmArenaGameResultStats, perRound: Map<string
     return formatPerTurnChart(perRound?.map(bySide), title, yLabel, 1, SIDE_SERIES, teamEvents);
 }
 
+/**
+ * A character's name in a result, which carries no rules version: by whichever
+ * registered catalogue holds it, the latest's name winning — an elite (§39.5)
+ * is in no catalogue before version 12, nor the Brood (realm-arena-hold-out.md
+ * §4) before 13.
+ */
+const CHARACTER_NAMES = new Map(registeredRulesets.flatMap(ruleset => Object.entries(ruleset.CHARACTERS)).map(([id, character]) => [id, character.name]));
+const characterNameOf = (character: string): string => CHARACTER_NAMES.get(character) ?? character;
+
 /** The damage each kind of character dealt, a bar each in the muster's order, stacked by whose it was. */
 function formatDamageChart(stats: IRealmArenaGameResultStats): GameResultBarChart | undefined {
     const rows = stats.fighting ?? [];
-    // Named by whichever catalogue holds the character: an elite (§39.5) is in no catalogue before version 12.
-    const names = new Map(registeredRulesets.flatMap(ruleset => Object.entries(ruleset.CHARACTERS)).map(([id, character]) => [id, character.name]));
-    const bars = ART_CHARACTER_IDS.flatMap(character => {
+    // The art's roster first, as before, then the characters drawn as another's (the Brood's), which have no row of their own.
+    const roster = [...ART_CHARACTER_IDS, ...DRAWN_AS_IDS];
+    const bars = roster.flatMap(character => {
         const kind = rows.filter(row => row.character === character);
         if (kind.length === 0) return [];
         const segments: Record<string, number> = {};
         for (const row of kind) segments[row.userId] = (segments[row.userId] ?? 0) + row.dealt;
-        return [{ label: names.get(character) ?? character, value: kind.reduce((sum, row) => sum + row.dealt, 0), segments }];
+        return [{ label: characterNameOf(character), value: kind.reduce((sum, row) => sum + row.dealt, 0), segments }];
     });
     if (bars.length === 0) return undefined;
     return { kind: "bar", title: "Damage by character", yLabel: "Damage", bars, ...(isCoopRecord(stats) ? { extraSeries: [ENEMY_SERIES] } : {}) };
