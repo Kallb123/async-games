@@ -37,6 +37,12 @@ export const CHARACTER_MARK: Readonly<Record<CharacterId, string>> = {
     carapaceBrute: "🪨",
     bileLobber: "🤮",
     nest: "🪺",
+    // The Brood's wear the Swarm characters' marks they're drawn as (realm-arena-hold-out.md §4.3).
+    broodSkitterling: "🦗",
+    broodSpitter: "🧪",
+    broodBloater: "🫧",
+    broodRavager: "🦂",
+    broodBroodmother: "👑",
 };
 
 /** Every character, in §13.6's table's order. */

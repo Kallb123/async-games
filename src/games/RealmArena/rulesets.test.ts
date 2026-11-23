@@ -5,6 +5,7 @@ import { nextAction } from "./ai";
 import { distance } from "@/utils/games/battlefield/terrain";
 import { buildTimeline } from "@/utils/games/replay";
 import { masteryRoster, weaponLine } from "./roster";
+import type { CharacterId } from "./characters";
 import { eventLines } from "./ui";
 import { realmArenaRecapAdapter } from "./recap";
 import type { ITurnSnapshot } from "@/utils/games/replay";
@@ -76,14 +77,14 @@ const stateFor = (rulesVersion: number): BattleState => battleFrom(FIELD, {
 describe("Realm Arena ruleset compatibility", () => {
     it("keeps registered catalogues deeply frozen and refuses unknown versions", async () => {
         const real = await vi.importActual<typeof import("./rulesets")>("./rulesets");
-        for (const version of [undefined, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]) {
+        for (const version of [undefined, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13]) {
             const rules = real.rulesetFor(version);
             expect(Object.isFrozen(rules)).toBe(true);
             expect(Object.isFrozen(rules.CHARACTERS.knight.abilities)).toBe(true);
             expect(Object.isFrozen(rules.FACTIONS.realm.readyMade[100])).toBe(true);
         }
         expect(() => { real.rulesetFor(7).CHARACTERS.knight.weapon.damage = 99; }).toThrow();
-        for (const version of [-1, 1.5, NaN, 13]) expect(() => real.rulesetFor(version)).toThrow(/Unsupported/);
+        for (const version of [-1, 1.5, NaN, 14]) expect(() => real.rulesetFor(version)).toThrow(/Unsupported/);
         expect(real.rulesetFor(undefined).CHARACTERS.mage.weapon).toMatchObject({ accuracy: 70, range: 10 });
         expect(real.rulesetFor(undefined).ABILITIES.raise.oncePerBattle).toBe(true);
         expect(real.rulesetFor(7).ABILITIES.heal.oncePerTurn).toBe(true);
@@ -231,6 +232,44 @@ describe("Realm Arena ruleset compatibility", () => {
             expect(Object.hasOwn(real.rulesetFor(version).CHARACTERS, "nest")).toBe(false);
             expect(real.rulesetFor(version).FACTIONS.swarm.nest).toBeUndefined();
         }
+    });
+
+    it("adds the Brood in v13, the computer's own Swarm, and changes nothing else of v12 but what it takes from the Swarm (realm-arena-hold-out.md §4)", async () => {
+        const real = await vi.importActual<typeof import("./rulesets")>("./rulesets");
+        const before = real.rulesetFor(12), after = real.rulesetFor(13);
+        const brood = after.FACTIONS.brood;
+        expect(brood).toMatchObject({ name: "The Brood", enemyName: "the Brood", computerOnly: true, horde: true, nest: "nest",
+            characters: ["broodSkitterling", "broodSpitter", "broodBloater", "broodRavager", "broodBroodmother"], elites: ["broodQueen", "carapaceBrute", "bileLobber"] });
+        for (const version of [7, 8, 9, 10, 11, 12]) expect(Object.hasOwn(real.rulesetFor(version).FACTIONS, "brood")).toBe(false);
+        // §4.3's table: kind, move, weapon, threat and points.
+        const { CHARACTERS: C } = after;
+        expect(C.broodSkitterling).toMatchObject({ minion: true, hp: 1, movement: 8, threat: 1, points: 2, drawnAs: "skitterling", weapon: { kind: "melee", damage: 2 } });
+        expect(C.broodSpitter).toMatchObject({ minion: true, hp: 1, movement: 5, threat: 2, points: 3, drawnAs: "spitter", weapon: { kind: "ranged", accuracy: 70, range: 12, damage: 2, effect: "corroded" } });
+        expect(C.broodBloater).toMatchObject({ minion: true, hp: 1, movement: 4, threat: 2, points: 3, drawnAs: "bloater", burstsWhenDowned: true, abilities: ["burst"], weapon: { kind: "melee", damage: 1 } });
+        expect(C.broodRavager).toMatchObject({ hp: 9, movement: 5, threat: 5, points: 10, drawnAs: "ravager", abilities: ["rend"], weapon: { kind: "melee", damage: 4 } });
+        expect(C.broodBroodmother).toMatchObject({ hp: 8, movement: 5, threat: 5, points: 10, drawnAs: "broodmother", abilities: ["regrowth"], weapon: { kind: "melee", damage: 3 } });
+        for (const id of ["broodRavager", "broodBroodmother"] as const) expect(C[id].minion).toBeUndefined();
+        // The elites as in v12, priced in threat.
+        expect(C.bileLobber).toEqual({ ...before.CHARACTERS.bileLobber, threat: 10 });
+        expect(C.carapaceBrute).toEqual({ ...before.CHARACTERS.carapaceBrute, threat: 12 });
+        expect(C.broodQueen).toEqual({ ...before.CHARACTERS.broodQueen, threat: 15 });
+        expect(after.ABILITIES.hatch).toEqual({ ...before.ABILITIES.hatch, hatches: "broodSkitterling", description: after.ABILITIES.hatch!.description });
+        // The Brood's themes are v12's, with its characters in the Swarm's places.
+        const asSwarm = (id: string) => (C[id as CharacterId].drawnAs ?? id);
+        expect(brood.waves!.map(theme => ({ ...theme, buys: theme.buys.map(asSwarm) }))).toEqual(before.FACTIONS.swarm.waves);
+        // The Swarm keeps its roster and squads, and gives up to the Brood what only the computer fielded.
+        const { elites: _e, waves: _w, nest: _n, ...swarm } = before.FACTIONS.swarm;
+        expect(after.FACTIONS.swarm).toEqual(swarm);
+        expect(after.FACTIONS.realm).toBe(before.FACTIONS.realm);
+        expect(after.FACTIONS.miners).toBe(before.FACTIONS.miners);
+        // Nothing else of v12's characters, abilities or rules changes.
+        const brood13 = new Set<string>([...brood.characters, ...brood.elites!]);
+        const others = (catalogue: typeof C) => Object.fromEntries(Object.entries(catalogue).filter(([id]) => !brood13.has(id)));
+        expect(others(C)).toEqual(others(before.CHARACTERS));
+        const { hatch: _h, ...abilities } = after.ABILITIES;
+        const { hatch: _h2, ...abilities12 } = before.ABILITIES;
+        expect(abilities).toEqual(abilities12);
+        expect(after.RULES).toEqual({ ...before.RULES, HORDE_CAP: 16, HORDE_REAL_CAP: 4, POINTS_PER_THREAT: 5 });
     });
 
     it("pins HP, movement and available abilities to the game, including an added ability", () => {

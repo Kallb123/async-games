@@ -26,7 +26,9 @@ export type CharacterId =
     // The Swarm's elites (§39.5): the computer's alone, in rules version 12.
     | "broodQueen" | "carapaceBrute" | "bileLobber"
     // The Swarm's nest (§39.7): a structure, not a character anyone fields.
-    | "nest";
+    | "nest"
+    // The Brood's (realm-arena-hold-out.md §4): the computer's own Swarm, in rules version 13.
+    | "broodSkitterling" | "broodSpitter" | "broodBloater" | "broodRavager" | "broodBroodmother";
 
 export type AbilityId =
     | "cleave" | "shieldWall" | "aimedShot" | "sneak" | "fireball" | "heal" | "raise"
@@ -229,6 +231,27 @@ export interface Character {
      * its whole kit, as every character does before version 12.
      */
     loadout?: { fixed: readonly AbilityId[]; picks: number; defaults: readonly AbilityId[] };
+    /**
+     * One of a horde rather than a character (the Brood's from rules version 13,
+     * realm-arena-hold-out.md §4.3): 1 HP and no armour, so anything that does
+     * it damage downs it, whatever else the blow would have done; no heal
+     * reaches it; the board draws no HP bar over it; and it takes the swarm
+     * step rather than the planner's search (`swarmAction`). Absent, a character.
+     */
+    minion?: true;
+    /**
+     * What producing it costs a horde (realm-arena-hold-out.md §4.2), in steps of
+     * 1, apart from the `points` its knock-out scores and the planner values it at,
+     * so a retune of either leaves the other alone. Only a horde faction's
+     * characters (`Faction.horde`) and the elites it fields have one.
+     */
+    threat?: number;
+    /**
+     * The character whose art and model it is drawn with (realm-arena-hold-out.md
+     * §4.3): the Brood's are drawn as the Swarm's, so they add no row to the
+     * sheets. Absent, its own.
+     */
+    drawnAs?: CharacterId;
 }
 
 
@@ -553,9 +576,24 @@ export interface Faction {
      * Archer". Its own name, unless the players could be fighting as it too.
      */
     enemyName: string;
+    /**
+     * Fielded by the computer alone (the Brood, realm-arena-hold-out.md §4.1):
+     * in no list a player picks a faction from, to muster or to fight, nor among
+     * the factions Random draws from. Absent, anyone's.
+     */
+    computerOnly?: true;
+    /**
+     * Its warbands are bought rather than mustered (the Brood,
+     * realm-arena-hold-out.md §4.2, §4.4): each muster and wave is spent in its
+     * characters' `threat` on its themes (`hordePurchase`), never past
+     * `HORDE_CAP` minions and `HORDE_REAL_CAP` others a warband, survivors
+     * counted. Absent, its warbands muster `readyMade`, which a horde leaves
+     * empty: nobody musters it.
+     */
+    horde?: true;
 }
 
-export type FactionId = "realm" | "swarm" | "miners";
+export type FactionId = "realm" | "swarm" | "miners" | "brood";
 
 /**
  * Every faction, by the id a battle stores. An id, once used, is never
@@ -566,17 +604,23 @@ export type FactionId = "realm" | "swarm" | "miners";
 /** The faction a character is mustered from: each is in one roster alone (§29.3). */
 export function factionOf(character: CharacterId, context?: RulesContext): FactionId {
     const { FACTIONS } = rulesetOf(context);
-    return FACTION_IDS.find(id => FACTIONS[id].characters.includes(character) || FACTIONS[id].elites?.includes(character))!;
+    // The catalogue's own factions, not today's: a computer-only one (the Brood) may be in no other.
+    return (Object.keys(FACTIONS) as FactionId[]).find(id => FACTIONS[id].characters.includes(character) || FACTIONS[id].elites?.includes(character))!;
 }
 
 /** The Realm: the first faction, and the one every player fought as before a squad could choose its own (B6). */
 export const REALM = FACTIONS.realm;
 
-/** Every faction's id: what Random is drawn from (§29.3), and what the host can let the players muster from (B6). */
-export const FACTION_IDS = Object.keys(FACTIONS) as FactionId[];
+/**
+ * Every faction a player can pick: what Random is drawn from (§29.3), and what
+ * the host can let the players muster from (B6). A computer-only one (the
+ * Brood, realm-arena-hold-out.md §4.1) is in none of them.
+ */
+export const FACTION_IDS = (Object.keys(FACTIONS) as FactionId[]).filter(id => !FACTIONS[id].computerOnly);
 
+/** Whether a value names a faction a player can pick (`FACTION_IDS`). */
 export function isFactionId(value: unknown): value is FactionId {
-    return typeof value === "string" && Object.hasOwn(FACTIONS, value);
+    return typeof value === "string" && (FACTION_IDS as readonly string[]).includes(value);
 }
 
 /** The factions a battle that predates the host's choice lets its players muster from: the Realm alone. */
@@ -597,7 +641,8 @@ export function playableFactionsOf(value: unknown): FactionId[] | undefined {
 /** The faction a stored id names: the Realm for an id no release knows, as an unknown map reads as the Ruined Fort (§29.3). */
 export function factionById(id: unknown, context?: RulesContext): Faction {
     const { FACTIONS } = rulesetOf(context);
-    return isFactionId(id) ? FACTIONS[id] : FACTIONS.realm;
+    // The battle's own catalogue decides, so a computer-only faction (the Brood) is found where it is fielded.
+    return typeof id === "string" && Object.hasOwn(FACTIONS, id) ? FACTIONS[id as FactionId] : FACTIONS.realm;
 }
 
 /** What the team calls an enemy it hasn't seen yet: a random one, until one of its characters is (§29.3). */

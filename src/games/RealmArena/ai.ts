@@ -35,7 +35,7 @@ import { costsFrom, DEFAULT_CLIMB, reachFrom, pathTo, type Reach } from "@/utils
 import { battlefieldWith, coordsOf, type Battlefield, type Square } from "@/utils/games/battlefield/terrain";
 import { type AbilityId, type CharacterId } from "./characters";
 import {
-    abilitiesOf, alliesWithin, activeEffects, act, canAct, allied, areaAround, blastedIn, burstArea, CENTRE, centrePoints, check, type Check, fighterById, isCombatant, isStanding, isStructure, landedSmoke,
+    abilitiesOf, alliesWithin, activeEffects, act, canAct, allied, areaAround, blastedIn, burstArea, CENTRE, centrePoints, check, type Check, fighterById, isCombatant, isMinion, isStanding, isStructure, landedSmoke,
     damageTo, dodgeReach, givesCover, inMeleeReach, leapTargets, maxHpOf, moveApAt, movementOf, reachOf, ROLL_SIDES, shotOdds, squadSight, strikeChance, watchedSquares, weaponOf,
     type Action, type BattleEvent, type BattleState, type Fighter, type FogGhost, type ShotOdds,
 } from "./rules";
@@ -97,6 +97,9 @@ export const TEMPERAMENTS: Readonly<Partial<Record<CharacterId, Temperament>>> =
     // Leads from the back, and lets the brood do the fighting.
     broodmother: { exposure: 2, threat: 0.5 },
     broodQueen: { exposure: 2, threat: 0.5 },
+    // The Brood's real characters play as the Swarm's (§4.3); its minions take the swarm step and have no row.
+    broodRavager: { exposure: 0.5, threat: 1 },
+    broodBroodmother: { exposure: 2, threat: 0.5 },
 };
 
 /**
@@ -211,7 +214,8 @@ export function nextAction(view: BattleState, owner: string, round: number, hunt
     const plan = planFor(view, owner, Number.isFinite(round) ? Math.max(1, round) : 1, memo, hunt);
     let best: Action | undefined;
     let bestScore = score(plan, plan.state, []) + LEAST_GAIN;
-    const ready = plan.state.fighters.filter(fighter => fighter.owner === owner && canAct(fighter, plan.state)).sort((a, b) => a.id - b.id);
+    // A minion takes the swarm step instead (`swarmAction`, §4.5): it is on the field, and is planned around, but never planned for.
+    const ready = plan.state.fighters.filter(fighter => fighter.owner === owner && canAct(fighter, plan.state) && !isMinion(fighter, plan.state)).sort((a, b) => a.id - b.id);
     for (const fighter of ready) {
         for (const action of optionsFor(plan, fighter)) {
             const value = judge(plan, action);
@@ -268,7 +272,7 @@ function planFor(view: BattleState, owner: string, round: number, memo: TurnMemo
  * of those in sight, every square it can't see. So it sweeps on from the keep
  * rather than standing in it waiting for a team that isn't there.
  */
-function searched(state: BattleState, owner: string): Square[] {
+export function searched(state: BattleState, owner: string): Square[] {
     const { field } = state;
     const seen = squadSight(state, owner);
     // The sides are in seat order, the team's first, as the deployment zones are (`battleFrom`).

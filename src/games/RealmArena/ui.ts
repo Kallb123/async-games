@@ -12,8 +12,8 @@ import { coordsOf, distance, FACING_COUNT, facingTowards, riseOf, squareAt, TERR
 import { EFFECT_IDS, EFFECTS, ITEM_IDS, ITEMS, type AbilityId, type CharacterId, type EffectId, type Item, type ItemId } from "./characters";
 import { ABILITY_MARK, CHARACTER_IDS } from "./roster";
 import { battlefieldOf } from "./maps";
-import { EFFECT_ART, ITEM_ART, type BurstKind, type Missile, type Sprite, type ThrownItem } from "./art";
-import { areaDamage, actionPointsOf, CENTRE, SCORED_FOR, squadSight, hasEffect, isStanding, isWarband, maxHpOf, moveAp, pickOf, reachOf, shoots, type BattleState, type Fighter, type MusterPick, type OddsBreakdown, type OddsFactor, type ShotResult, type ToldEvent } from "./rules";
+import { artCharacterOf, EFFECT_ART, ITEM_ART, type BurstKind, type Missile, type Sprite, type ThrownItem } from "./art";
+import { areaDamage, actionPointsOf, CENTRE, SCORED_FOR, squadSight, hasEffect, isMinion, isStanding, isWarband, maxHpOf, moveAp, pickOf, reachOf, shoots, type BattleState, type Fighter, type MusterPick, type OddsBreakdown, type OddsFactor, type ShotResult, type ToldEvent } from "./rules";
 
 const LETTER_OF = new Map<Terrain, TerrainLetter>(
     (Object.entries(TERRAIN) as [TerrainLetter, Terrain][]).map(([letter, terrain]) => [terrain, letter]),
@@ -1422,9 +1422,27 @@ function timeline(field: Battlefield, events: readonly ToldEvent[], before: read
      * When the next thing lands, `lead` after it sets off: no sooner than the
      * last one landed, and far enough after it to be seen on its own.
      */
-    const beat = (lead = 0) => {
-        landed = landed === null ? lead : landed + Math.max(pace.cueStepMs, lead);
+    const beat = (lead = 0, step = pace.cueStepMs) => {
+        landed = landed === null ? lead : landed + Math.max(step, lead);
         return landed;
+    };
+    /**
+     * A warband's minions move together and strike one after another, quickly
+     * (§4.5): a plain move straight after a plain move by someone else starts
+     * with it (`swarm`, the walk before it began), and a minion's strike
+     * straight after another minion's lands at the least step the pace ever
+     * squeezes to. Decided from the events alone, so an action by one character
+     * — a move and its reactions, a Slash and Dash — plays as it always did.
+     */
+    let swarm: { before: number | null; end: number | null } | null = null;
+    let lastStriker: number | undefined;
+    /** The step to the next strike by `striker`: the quick one when another minion struck just before. */
+    const strikeStep = (striker: number) => {
+        const fighter = as.get(striker);
+        const minion = fighter !== undefined && isMinion(fighter, options);
+        const quick = !still && minion && lastStriker !== undefined && lastStriker !== striker;
+        lastStriker = minion ? striker : undefined;
+        return quick ? Math.min(pace.cueStepMs, MIN_CUE_STEP_MS) : pace.cueStepMs;
     };
     const text = (fighter: number, when: number, value: string, tone: HitTone, extra: Pick<TextCue, "label" | "mark" | "hpChange" | "from"> = {}) => {
         const square = at.get(fighter);
@@ -1487,7 +1505,14 @@ function timeline(field: Battlefield, events: readonly ToldEvent[], before: read
         switch (event.kind) {
             case "moved": {
                 const motion = event.via && MOTION_OF[event.via];
+                const previous = events[index - 1];
+                const joins = swarm !== null && previous?.kind === "moved" && previous.fighter !== event.fighter && !previous.via && !event.via;
+                // Together with the walk before: it starts where that one did, and what follows waits for the longest.
+                if (joins) landed = swarm!.before;
+                else swarm = { before: landed, end: null };
                 walk(event.fighter, event.path, motion);
+                if (joins) landed = landed === null ? swarm!.end : swarm!.end === null ? landed : Math.max(landed, swarm!.end);
+                swarm!.end = landed;
                 const arrived = walked.get(event.fighter) ?? landed ?? 0;
                 // A Leap comes down in a cloud of dust, and everyone beside it is hit as it does (`struck`, `via`).
                 if (motion === "leap" && event.path.length > 1) {
@@ -1506,10 +1531,10 @@ function timeline(field: Battlefield, events: readonly ToldEvent[], before: read
             case "shot": {
                 // The Mage's bolt, the Spitter's acid; anyone else who shoots has a bow.
                 const shooter = as.get(event.fighter)?.character;
-                const missile = (event.via && SHOT_VIA_MISSILE[event.via]) ?? (shooter && SHOT_MISSILE[shooter]) ?? "arrow";
+                const missile = (event.via && SHOT_VIA_MISSILE[event.via]) ?? (shooter && SHOT_MISSILE[artCharacterOf(shooter)]) ?? "arrow";
                 const to = at.get(event.target);
                 const flight = flightOf(event.fighter, to, missile);
-                const land = beat(flight);
+                const land = beat(flight, strikeStep(event.fighter));
                 shotAt = to;
                 // Thunder cracks where it strikes.
                 if (event.via === "thunder" && event.result !== "miss") burst("thunder", to, land);
@@ -1541,7 +1566,7 @@ function timeline(field: Battlefield, events: readonly ToldEvent[], before: read
                     text(event.target, start, minus(event.damage), "hit", { hpChange: -event.damage, from: at.get(event.fighter) });
                     break;
                 }
-                const land = beat(SLASH_MS);
+                const land = beat(SLASH_MS, strikeStep(event.fighter));
                 const square = at.get(event.target);
                 if (event.reaction) say(event.fighter, land - SLASH_MS, GUARD_WORD);
                 const from = at.get(event.fighter);
@@ -1607,7 +1632,7 @@ function timeline(field: Battlefield, events: readonly ToldEvent[], before: read
                     from = at.get(event.fighter);
                     if (from !== undefined) cues.push({ kind: "slash", square: event.at, striker: event.fighter, from, start: land - SLASH_MS, length: 2 * SLASH_MS });
                 } else {
-                    land = beat();
+                    land = beat(0, strikeStep(event.fighter));
                     from = at.get(event.fighter);
                     burst("acid", from, land, 1);
                 }

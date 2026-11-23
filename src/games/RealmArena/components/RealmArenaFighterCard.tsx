@@ -42,12 +42,14 @@ export default function RealmArenaFighterCard({ fighter, battle, label, children
     const effects = effectsOn(fighter);
     // A structure (the Swarm's nest, §39.7) has no AP, no weapon and no sheet of stats: its HP and what it is.
     const structure = character.structure === true;
+    // A minion (the Brood's, §4.3) is one HP: it reads as that, not as a bar to wear down.
+    const minion = character.minion === true;
     return (
         <Section label={label} action={structure ? undefined : <InfoButton label={`Info about ${character.name}`} onClick={() => setInfo(true)} />}>
             {info && <RealmArenaUnitInfo context={battle} unit={{ kind: 'character', id: fighter.character }} onClose={() => setInfo(false)} />}
             <div className="ag-stack">
                 <div className="ag-stat-row">
-                    <Stat value={`${fighter.hp}/${maxHpOf(fighter, battle)}`} label="HP" />
+                    {minion ? <Stat value="Minion" label="Downed by any damage" /> : <Stat value={`${fighter.hp}/${maxHpOf(fighter, battle)}`} label="HP" />}
                     {!structure && <Stat value={fighter.ap} label="AP left" />}
                     {!structure && <Stat value={fighter.banked} label="AP banked" />}
                     {armourOf(battle, fighter) > 0 && <Stat value={armourOf(battle, fighter)} label="Armour" />}

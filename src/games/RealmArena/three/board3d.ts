@@ -65,6 +65,8 @@ export interface FigureSpec {
     facing: Facing;
     /** Its owner's colour, its team parts tinted with; none for one nobody owns. */
     tint: Color | null;
+    /** Whether it carries an HP bar, which a minion doesn't (`hasHpBar`); drawn with one where it isn't said. */
+    bar?: boolean;
 }
 
 /** A pick of the viewer's sealed squad (the muster), and which way it's drawn facing. */
@@ -645,7 +647,7 @@ export class Board3D {
                 const fell = squareCentre(field, fall.fighter.square);
                 if (falling.standing > 0) {
                     lay(fighter.character, fell.map((n, i) => n + knock[i]) as Vec3, spec.facing, false, spec.tint, falling.standing);
-                    bars.push({ feet: fell, ...barLevels(drawn, drawn, undefined, undefined), tint: spec.tint, fade: falling.standing });
+                    if (spec.bar !== false) bars.push({ feet: fell, ...barLevels(drawn, drawn, undefined, undefined), tint: spec.tint, fade: falling.standing });
                 }
                 // Up to the opacity a body at rest is drawn at, so nothing pops when the action is over.
                 if (falling.lying !== null && falling.lying > 0) lay(fighter.character, at, spec.facing, true, spec.tint, falling.lying * FALLEN_OPACITY);
@@ -662,7 +664,7 @@ export class Board3D {
             // Standing figures only: a body on the ground is never the faint figure a wall hides.
             if (standing && !structureArt(fighter.character, "standing") && mayBeHidden(field, this.basis, body, this.top)) this.pools.place(models, fighter.character, "hidden", matrix, spec.tint);
             this.placed.push({ id: fighter.id, feet: at, standing });
-            if (standing) bars.push({ feet: at, ...barLevels(drawn, fighter, chip, this.hpChange?.get(fighter.id)), tint: spec.tint });
+            if (standing && spec.bar !== false) bars.push({ feet: at, ...barLevels(drawn, fighter, chip, this.hpChange?.get(fighter.id)), tint: spec.tint });
             this.layMarks(at, fighter, drawn, level);
         }
         this.layMuster(models, matrix);

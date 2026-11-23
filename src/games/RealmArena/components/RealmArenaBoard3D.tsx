@@ -6,6 +6,7 @@ import { useBoardView, type BoardView } from '@/components/ui/boardView';
 import type RealmArenaBoard from '@/games/RealmArena/components/RealmArenaBoard';
 import { CAPTION_INSET, PlaybackCaption, UnplacedMark } from '@/games/RealmArena/components/RealmArenaCaption';
 import { TurnButtons, useBoardRotation } from '@/games/RealmArena/components/RealmArenaTurn';
+import { hasHpBar } from '@/games/RealmArena/hpBar';
 import { Board3D, type FigureSpec, type Outline } from '@/games/RealmArena/three/board3d';
 import { boardLook } from '@/games/RealmArena/three/canvasShapes';
 import { cssColour } from '@/games/RealmArena/three/cssColour';
@@ -149,9 +150,9 @@ export default function RealmArenaBoard3D({ field, fighters, fogGhosts = [], uns
     }, [owners, colourFor]);
     useEffect(() => {
         if (!board) return;
-        const figures: FigureSpec[] = fighters.map(fighter => ({ fighter, facing: facingOf(field, fighter), tint: tintOf(fighter.owner) }));
+        const figures: FigureSpec[] = fighters.map(fighter => ({ fighter, facing: facingOf(field, fighter), tint: tintOf(fighter.owner), bar: hasHpBar(fighter, { rulesVersion }) }));
         board.setFigures(figures, fogGhosts.map(ghost => ({ ghost, facing: facingOf(field, ghost), tint: tintOf(ghost.owner) })));
-    }, [board, field, fighters, fogGhosts, tintOf]);
+    }, [board, field, fighters, fogGhosts, tintOf, rulesVersion]);
     // What hangs round them: a ring each for who is chosen, a candidate, aimed at or a watcher a move would set off; and the AP of whoever's turn it is.
     useEffect(() => {
         if (!board) return;

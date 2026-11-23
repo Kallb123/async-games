@@ -2324,3 +2324,48 @@ describe("what both boards draw by", () => {
         expect(rule(".ag-ra-path")).toContain(`stroke-dasharray: ${PATH_DASH.join(" ")};`);
     });
 });
+
+describe("a warband's minions on the timeline (§4.5)", () => {
+    const rules = { rulesVersion: 13 };
+    /** A fighter of rules version 13, where the Brood's minions are. */
+    const brood = (id: number, owner: string, character: CharacterId, square: number): Fighter =>
+        ({ ...newFighter(id, owner, character, square, null, undefined, undefined, false, rules), ap: ACTION_POINTS });
+    const crowd = [brood(0, "a", "knight", 55), brood(1, "w", "broodSkitterling", 10), brood(2, "w", "broodSkitterling", 20), brood(3, "w", "broodSkitterling", 30), brood(4, "w", "broodSkitterling", 54)];
+    const walks = (cues: BattleCue[]) => cues.filter((cue): cue is WalkCue => cue.kind === "walk");
+    const hits = (cues: BattleCue[]) => cues.filter((cue): cue is TextCue => cue.kind === "text" && cue.tone === "hit");
+    const move = (fighter: number, path: number[]): ToldEvent => ({ kind: "moved", fighter, path, sneaking: false });
+    const strike = (fighter: number): ToldEvent => ({ kind: "struck", fighter, target: 0, damage: 1, reaction: false });
+
+    it("starts the walks of different fighters together, and waits for the longest", () => {
+        const cues = battleCues(FIELD, [move(1, [10, 11, 12]), move(2, [20, 21, 22, 23]), move(3, [30, 31])], crowd, [], rules);
+        expect(walks(cues).map(cue => cue.start)).toEqual([0, 0, 0]);
+        expect(walks(cues).map(cue => cue.length)).toEqual([2 * WALK_STEP_MS, 3 * WALK_STEP_MS, WALK_STEP_MS]);
+        // The next thing to land waits for the longest walk.
+        const after = battleCues(FIELD, [move(1, [10, 11, 12]), move(2, [20, 21, 22, 23]), strike(4)], crowd, [], rules);
+        expect(hits(after)[0].start).toBe(3 * WALK_STEP_MS + 450);
+    });
+
+    it("plays one fighter's moves, and a move after anything else, one after another as before", () => {
+        const alone = battleCues(FIELD, [move(1, [10, 11, 12]), move(1, [12, 13])], crowd, [], rules);
+        expect(walks(alone).map(cue => cue.start)).toEqual([0, 2 * WALK_STEP_MS]);
+        const reacted = battleCues(FIELD, [move(1, [10, 11]), strike(4), move(2, [20, 21])], crowd, [], rules);
+        expect(walks(reacted)[1].start).toBeGreaterThan(walks(reacted)[0].start + WALK_STEP_MS);
+    });
+
+    it("spaces a run of strikes by different minions by the quicker step", () => {
+        const run = hits(battleCues(FIELD, [strike(1), strike(2), strike(3)], crowd, [], rules)).map(cue => cue.start);
+        expect(run[1] - run[0]).toBe(250);
+        expect(run[2] - run[1]).toBe(250);
+        // One character's blows, or a real character's, keep the usual step.
+        const same = hits(battleCues(FIELD, [strike(1), strike(1)], crowd, [], rules)).map(cue => cue.start);
+        expect(same[1] - same[0]).toBe(450);
+        const real = hits(battleCues(FIELD, [{ kind: "struck", fighter: 0, target: 1, damage: 1, reaction: false }, strike(1)], crowd, [], rules)).map(cue => cue.start);
+        expect(real[1] - real[0]).toBe(450);
+    });
+
+    it("still fits a crowd of strikes in the playback", () => {
+        const many = Array.from({ length: 40 }, (_, index) => brood(100 + index, "w", "broodSkitterling", 1 + index));
+        const cues = battleCues(FIELD, many.map(fighter => strike(fighter.id)), [...crowd, ...many], [], rules);
+        expect(endOf(cues)).toBeLessThanOrEqual(PLAYBACK_MS);
+    });
+});

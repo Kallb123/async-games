@@ -3,7 +3,7 @@ import path from "node:path";
 import { describe, expect, it } from "vitest";
 import { FACING_COUNT, TERRAIN, type Facing, type TerrainLetter } from "@/utils/games/battlefield/terrain";
 import { EFFECT_IDS, ITEM_IDS } from "./characters";
-import { ART_CHARACTER_IDS, ART_SHEETS, BLOCK_SKIN, BURST_ART, CHARACTER_ART, CHARACTER_CELL, CHARACTER_POSES, CLIPS, EFFECT_ART, facingCell, GRASS, ITEM_ART, MISSILE_ART, SLASH_ART, SMOKE_ART, grassOf, SPRITES, spriteBox, TERRAIN_ART, variantOf } from "./art";
+import { artCharacterOf, ART_CHARACTER_IDS, figureSprites, ART_SHEETS, BLOCK_SKIN, BURST_ART, CHARACTER_ART, CHARACTER_CELL, CHARACTER_POSES, CLIPS, EFFECT_ART, facingCell, GRASS, ITEM_ART, MISSILE_ART, SLASH_ART, SMOKE_ART, grassOf, SPRITES, spriteBox, TERRAIN_ART, variantOf } from "./art";
 import { FLIGHT_PACE } from "./ui";
 
 /** A PNG's size, read off its header: the served sheet is the one the sprites are cut from. */
@@ -36,6 +36,24 @@ describe("the art sheets", () => {
             expect(sprite.x + sprite.width).toBeLessThanOrEqual(sheet.width);
             expect(sprite.y + sprite.height).toBeLessThanOrEqual(sheet.height);
         }
+    });
+});
+
+describe("a character drawn as another's (Character.drawnAs)", () => {
+    const BROOD = { broodSkitterling: "skitterling", broodSpitter: "spitter", broodBloater: "bloater", broodRavager: "ravager", broodBroodmother: "broodmother" } as const;
+
+    it("has no row of the sheets: ART_CHARACTER_IDS names only the figures that are drawn as themselves", () => {
+        for (const id of Object.keys(BROOD)) expect(ART_CHARACTER_IDS).not.toContain(id);
+        for (const id of Object.values(BROOD)) expect(ART_CHARACTER_IDS).toContain(id);
+    });
+
+    it("is drawn with the sprites of the character it is drawn as", () => {
+        for (const [id, as] of Object.entries(BROOD) as [keyof typeof BROOD, string][]) {
+            expect(artCharacterOf(id)).toBe(as);
+            expect(figureSprites(id, "standing", 3)).toEqual(figureSprites(as as never, "standing", 3));
+            expect(figureSprites(id, "fallen", 5)).toEqual(figureSprites(as as never, "fallen", 5));
+        }
+        expect(artCharacterOf("knight")).toBe("knight");
     });
 });
 

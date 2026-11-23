@@ -314,6 +314,54 @@ the board, and their strikes follow one after another, quickly.
 - A warband's threat, banked or spent, is server-only.
 - A `croupier` pass is due.
 
+### 4.7 What PR 2 settled
+
+- **The catalogue.** `catalogues/v13.ts` is registered in `RULESETS` and is
+  not current: `CURRENT_RULESET_VERSION` stays 12 until PR 5. Tests build their
+  battles at 13 through `rulesVersion`.
+- **The Brood is the faction `brood`**, `computerOnly`: it is in no list a
+  player picks from (`FACTION_IDS`, `isFactionId`, Random's draw). A battle
+  finds it through its own catalogue (`factionById`, `factionOf`), never
+  today's. Its characters have ids of their own: `broodSkitterling`,
+  `broodSpitter`, `broodBloater`, `broodRavager` and `broodBroodmother`, named
+  as the Swarm's characters they're drawn as.
+- **The elites, the themes and the nests move to the Brood in version 13.**
+  The elites keep their ids, and a character is in one faction alone, so
+  version 13's Swarm is the playable faction alone: its roster and its squads,
+  with no elites, themes or nests. Hatch makes the Brood's minion Skitterlings.
+- **Character data** gains three fields, each absent before version 13:
+  `minion`, `threat` and `drawnAs`.
+  - `isMinion` (`rules.ts`) is read wherever a minion differs. Any damage takes
+    it to 0 HP, in `wound`, so a burning or poison tick downs it too. It wears
+    no armour (`armourOf`, `damageTo`). `healRefusal` refuses it: "A minion
+    can't be healed". The board draws no HP bar over it (`hasHpBar`).
+  - `drawnAs` keeps the Brood off the sheets. `ART_CHARACTER_IDS` leaves its
+    characters out, so the sheets are byte-identical. `artCharacterOf` answers
+    the art, the 3D model and a shot's missile through it.
+- **Threat, until nests produce the Brood.** The Brood is a `horde`: it is
+  bought, never mustered, so its `readyMade` is empty. `hordePurchase` buys in
+  each character's `threat`, as `wavePurchase` buys in points. The elite comes
+  first, then the theme's list round and round, and it never takes a warband
+  past `HORDE_CAP` (16) minions or `HORDE_REAL_CAP` (4) others, survivors and
+  hatchlings counted. Until PR 3 makes the nests produce it (§5.1), the Brood
+  musters and lands its waves on version 12's schedule. Each spends the points
+  the Swarm's would have had (`waveBudgetOf`: size, difficulty, growth and
+  nests destroyed), a threat for every `POINTS_PER_THREAT` (5). On Normal, a
+  team of three's warbands each muster 14 threat: four Skitterlings and two
+  Ravagers. `POINTS_PER_THREAT` is a bridge that PR 3 removes.
+- **The swarm step** is `swarmAction` (`swarm.ts`). At the start of each
+  warband turn the minions step first, all of them, then strike, all of them.
+  Only then does the planner plan the real characters (`nextAction` passes over
+  minions). Both kinds of action are recorded in one list, so a replay never
+  asks either.
+- **Playback.** A review merges a warband's run of minion moves into one part,
+  and its run of minion strikes into another (`partsOf`). A run of walks by
+  different characters in one part sets off together, and a run of strikes
+  follows one after another at a quicker step (`timeline`).
+- **Still to measure** (§4.4): whether a phone can read the board with the full
+  horde, and `ra-bench` with one. Both belong with the balance in PR 5, before
+  `HORDE_CAP` is set.
+
 ---
 
 ## 5. The mission: break the Brood, keep the Shrine
@@ -499,8 +547,8 @@ nests' are today.
 
 | PR | What | Versions |
 |---|---|---|
-| 1 | The enemy's turn in the background (§3) | Command 13 |
-| 2 | The Brood: minions, threat, the swarm step, playback (§4) | Rules 13, unreleased |
+| 1 | The enemy's turn in the background (§3) — **built** (§3.6) | Command 13 |
+| 2 | The Brood: minions, threat, the swarm step, playback (§4) — **built** (§4.7) | Rules 13, unreleased |
 | 3 | Nests that produce, the Shrine, Mend, the rally's two triggers, the new ending and its bonus, Hold Out against the Brood only (§5) | Rules 13, unreleased |
 | 4 | Stars, the result, achievements, the guide and setup copy (§6) | Rules 13, unreleased |
 | 5 | The harness's raid policy, balance, release, What's new (§7) | Rules 13 released |
@@ -812,3 +860,4 @@ A `rulebook` pass checks this against `docs/achievements.md`.
 | 0.3 | The rally is earned on a schedule and when a warband is broken, and taken only as a round begins, never in two rounds running, with none lost (§5.3). The open questions are spelt out (§8.1). |
 | 0.4 | More answers on review (§8.1): a bonus for each round left large enough that a faster win outscores a slower one, held by a test; elites counted by the elite (a Lobber a warband, a Brute every two, one Queen); nest and Shrine squares in the ruleset; friendly fire hurts the Shrine; Solo keeps both jobs; and achievements change in place. |
 | 0.5 | PR 1 built (§3.6): the warbands' turns are `RealmArenaWarbandTurn`s from command version 13, played by the server once the End turn is saved, with the turn-timer cron as the backstop. |
+| 0.6 | PR 2 built (§4.7): the Brood in rules version 13, unreleased, with its minions, threat and horde caps, the swarm step and its playback. Until nests produce it, it is bought in threat on version 12's waves. |

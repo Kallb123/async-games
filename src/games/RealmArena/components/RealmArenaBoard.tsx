@@ -1,5 +1,5 @@
 'use client'
-import React, { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import React, { createContext, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { TurnButtons, useBoardRotation } from '@/games/RealmArena/components/RealmArenaTurn';
 import { useBoardFocus } from '@/games/RealmArena/useBoardFocus';
 import BoardZoom, { useBoardCentre, type BoardZoomFocus, type BoardZoomPivot } from '@/components/ui/BoardZoom';
@@ -20,6 +20,7 @@ import { PlaybackProvider, setAttributes, translation, usePlaybackFrame, usePlay
 import { facingCell, figureSprites, ITEM_ART, SMOKE_ART, spriteBox, TERRAIN_ART, type CharacterPose } from '@/games/RealmArena/art';
 import { ITEMS, type CharacterId, type ItemId } from '@/games/RealmArena/characters';
 import { rulesetOf } from '@/games/RealmArena/rulesets';
+import { hasHpBar } from '@/games/RealmArena/hpBar';
 import { CENTRE, isStanding, isWarband, maxHpOf, smokeSquares, type BattleState, type Fighter, type FogGhost, type MusterPick, type ToldEvent } from '@/games/RealmArena/rules';
 import type { AttackOption } from '@/games/RealmArena/tactics';
 import { AP_PIP_OFFSET, AP_PIP_RADIUS, AP_PIP_STEP, apPips, areaRect, BOARD_ZOOM, CENTRE_LABEL, EFFECT_MARK_OFFSET, EFFECT_MARK_SIZE, EFFECT_MARK_STEP, FIGURE_RADIUS, FIGURE_RISE, figureRectAt, fxPointsAt, HP_BAR_HEIGHT, HP_BAR_RISE, HP_BAR_WIDTH, ITEM_MARK_OFFSET, ITEM_MARK_SIZE, MARKER_RADIUS, ODDS_FLANK_DROP, ODDS_FLANK_EXTRA, ODDS_FLANK_WORD, ODDS_HEIGHT, ODDS_RISE, ODDS_WIDTH, PATH_END_RADIUS, RING_RADIUS, ringOf, shadedSquares, SHADOW_ALPHA, SHADOW_RADIUS, shieldPath, SMOKE_SIZE, type GroundShade, type Marker, type ShadeKind, type Ring, type BattleCue, type BoardFollow, type FallCue, type FxPoints, type ScorchCue, type Shove, type Timed, type WalkCue, effectsOn, facingOf, fadeInAt, fadeOutAt, fighterStatus, endOf, hpFraction, legLengthOn, progressOf, shakeAt, shakesOf, shovesOf, shoveAt, terrainLetter, toldAt, toldOf, walkerAt, walkCameraAt, walkFacing, legPoint, walkLift, walkSquares, type Told, type WalkMotion } from '@/games/RealmArena/ui';
@@ -321,8 +322,12 @@ const hpBarCorner = (x: number, y: number): Point => ({ x: x - HP_BAR_WIDTH / 2,
  * drains away, are set a frame at a time from the playback's clock
  * (`toldAt`) — so they are no props of the rects they draw.
  */
+const RulesVersionContext = createContext<number | undefined>(undefined);
+
 function HpBar({ x, y, fighter, colour, told }: { x: number; y: number; fighter: Fighter; colour: string; told?: Told }) {
     const corner = hpBarCorner(x, y);
+    // A minion has no bar (§4.3), read by the battle's rules version.
+    const bar = hasHpBar(fighter, { rulesVersion: useContext(RulesVersionContext) });
     // The fill and the chip each read `toldAt` for themselves: cheap, and it
     // keeps each draw to its own element.
     const fill = usePlaybackRef<SVGRectElement>((rect, ms) => {
@@ -336,6 +341,7 @@ function HpBar({ x, y, fighter, colour, told }: { x: number; y: number; fighter:
         const lagging = level === undefined ? 0 : HP_BAR_WIDTH * hpFraction(drawn, drawn.hp - level) - width;
         setAttributes(rect, { x: corner.x + width, width: Math.max(0, lagging) });
     });
+    if (!bar) return null;
     return (
         <>
             <rect className="ag-ra-hp" x={corner.x} y={corner.y} width={HP_BAR_WIDTH} height={HP_BAR_HEIGHT} />
@@ -357,6 +363,7 @@ function HpBar({ x, y, fighter, colour, told }: { x: number; y: number; fighter:
 function HpChange({ view, fighter, change }: { view: IsoView; fighter: Fighter; change: number }) {
     const { x, y } = isoCentre(view, fighter.square);
     const corner = hpBarCorner(x, y);
+    if (!hasHpBar(fighter, { rulesVersion: useContext(RulesVersionContext) })) return null;
     const after = HP_BAR_WIDTH * hpFraction(fighter, -change);
     const now = HP_BAR_WIDTH * hpFraction(fighter);
     if (now === after) return null;
@@ -1106,6 +1113,7 @@ export default function RealmArenaBoard({ field, fighters, fogGhosts = [], unsee
     const figureRects = [...fighters, ...(sealed ?? [])].map(({ square }) => figureRect(view, square));
 
     return (
+        <RulesVersionContext.Provider value={rulesVersion}>
         <div className="ag-board-frame ag-realmarena-frame">
             <PlaybackProvider playKey={playback?.key ?? null} end={playback ? endOf(playback.cues) : 0} held={held} onEnd={onPlayed}>
                 <BoardZoom zoomWidth={BOARD_ZOOM.zoomWidth} maxWidth={BOARD_ZOOM.maxWidth} viewBox={view.size} focus={focus} onFocused={onFocused} pivot={pivot}>
@@ -1228,5 +1236,6 @@ export default function RealmArenaBoard({ field, fighters, fogGhosts = [], unsee
             </PlaybackProvider>
             <UnplacedMark unplaced={unplaced} />
         </div>
+        </RulesVersionContext.Provider>
     );
 }
