@@ -9,7 +9,7 @@ import { at, fieldOf, hillOf } from "@/utils/games/battlefield/testFixtures";
 import { ACTION_POINTS, actionPointsOf, isWarband, newFighter, reachOf, warbandOwner, type BattleEvent, type Fighter, type ToldEvent } from "./rules";
 import { ABILITIES, kitOf, type CharacterId } from "./characters";
 import { EFFECT_ART, ITEM_ART, type Missile } from "./art";
-import { abilityWait, ringOf, shieldPath, shadedSquares, SHIELD_WIDTH, actionFollow, boardFocus, oddsLines, aimFocus, coopColourOf, ALLY_COLOUR, ENEMY_COLOUR, TEAM_COLOUR, actionSquares, apPips, friendlySquares, spreadWide, areaRect, battleCues, canAct, effectsOn, eventLines, facingOf, fighterName, fighterStatus, focusOn, handItem, handOut, hpFraction, itemsOf, NO_ITEMS, numberedName, placeTap, reachFocus, reachShading, squadCounts, squadOf, whoseName, FLIGHT_PACE, CLIMB_LEG, DIAGONAL_LEG, flightMs, legWeight, HIT_TEXT_MS, PLAYBACK_MS, WALK_STEP_MS, moveFrame, isUnplaced, type BattleCue, type Placement, waveLineOf, reviewParts, withPartState, partLabel, HP_CHIP_MS, HP_TWEEN_MS, stepped, toldAt, toldOf, foundBy, type TextCue, IMPACT_MS, KNOCK, LUNGE, SHAKE, SHAKE_MS, WALK_BOB, WALK_HOP, shakeAt, shakesOf, shoveAt, shovesOf, endOf, captionAt, legLengthOn, walkEase, walkerAt, walkerGroundAt, walkCameraAt, walkLift, walkSquares, flightAt, hitTextAt, POP_MS, burstAt, slashAt, progressOf, fadeOutAt, fadeInAt, FLIGHT_ARC, type FxPoints, type CaptionCue, type FallCue, type FlightCue, type SlashCue, type WalkCue, BOARD_ZOOM, boardZoomFor, FALLEN_OPACITY, PATH_DASH, PATH_WIDTH } from "./ui";
+import { abilityWait, ringOf, shieldPath, shadedSquares, SHIELD_WIDTH, actionFollow, boardFocus, oddsLines, aimFocus, coopColourOf, ALLY_COLOUR, ENEMY_COLOUR, TEAM_COLOUR, actionSquares, apPips, friendlySquares, spreadWide, areaRect, battleCues, canAct, effectsOn, eventLines, facingOf, fighterName, fighterStatus, focusOn, handItem, handOut, hpFraction, itemsOf, NO_ITEMS, numberedName, placeTap, reachFocus, reachShading, squadCounts, squadOf, whoseName, FLIGHT_PACE, CLIMB_LEG, DIAGONAL_LEG, flightMs, legWeight, HIT_TEXT_MS, PLAYBACK_MS, WALK_STEP_MS, moveFrame, isUnplaced, type BattleCue, type Placement, waveLineOf, rallyLineOf, forcedHoldOutEnemy, reviewParts, withPartState, partLabel, HP_CHIP_MS, HP_TWEEN_MS, stepped, toldAt, toldOf, foundBy, type TextCue, IMPACT_MS, KNOCK, LUNGE, SHAKE, SHAKE_MS, WALK_BOB, WALK_HOP, shakeAt, shakesOf, shoveAt, shovesOf, endOf, captionAt, legLengthOn, walkEase, walkerAt, walkerGroundAt, walkCameraAt, walkLift, walkSquares, flightAt, hitTextAt, POP_MS, burstAt, slashAt, progressOf, fadeOutAt, fadeInAt, FLIGHT_ARC, type FxPoints, type CaptionCue, type FallCue, type FlightCue, type SlashCue, type WalkCue, BOARD_ZOOM, boardZoomFor, FALLEN_OPACITY, PATH_DASH, PATH_WIDTH } from "./ui";
 import type { OddsBreakdown } from "./rules";
 import { REALM_ARENA_MAPS } from "./maps";
 import { azimuthOf, boardFrame, cameraBasis, topOf } from "./three/iso3d";
@@ -1042,6 +1042,22 @@ describe("moveFrame", () => {
         expect(moveFrame([move([10])], [mover], [])).toBeNull();
         expect(moveFrame([{ kind: "hunkered", fighter: 0 }], [mover], [arrived])).toBeNull();
         expect(moveFrame([move([10, 11, 10])], [mover], [mover])).toBeNull();
+    });
+});
+
+describe("forcedHoldOutEnemy", () => {
+    it("names the one enemy a ruleset gives Hold Out, and none before it", () => {
+        expect(forcedHoldOutEnemy({ rulesVersion: 12 })).toBeUndefined();
+        expect(forcedHoldOutEnemy({ rulesVersion: 13 })?.id).toBe("brood");
+        expect(forcedHoldOutEnemy({ rulesVersion: 13 })?.name).toBeTruthy();
+    });
+});
+
+describe("rallyLineOf", () => {
+    it("says when the next rally comes", () => {
+        expect(rallyLineOf({ banked: 0, next: 5 }, 4)).toBe("Rally next round");
+        expect(rallyLineOf({ banked: 1, next: 7 }, 4)).toBe("Rally in round 7");
+        expect(rallyLineOf({ banked: 0 }, 4)).toBeUndefined();
     });
 });
 

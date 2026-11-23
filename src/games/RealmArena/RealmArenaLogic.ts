@@ -1306,13 +1306,15 @@ function regrowNests(gs: IRealmArenaSpecificGameState, owner: string): boolean {
 
 /**
  * Stands `character` for `owner` on the free square next to one of `nests`
- * that Hatch would pick (`hatchSquares`), trying them from `start` round; with
- * 0 AP, so it acts from its warband's next turn. False when no nest has room.
+ * that Hatch would pick (`hatchSquares`) from the warband's own view, trying
+ * them from `start` round; with 0 AP, so it acts from its warband's next turn.
+ * False when no nest has room, in truth: a hidden character holds its square.
  */
 function standByNest(gs: IRealmArenaSpecificGameState, owner: string, character: CharacterId, nests: readonly Fighter[], start: number): boolean {
     const battle = battleOf(gs);
+    const view = viewOf(battle, owner);
     for (let tried = 0; tried < nests.length; tried++) {
-        const square = hatchSquares(battle, nests[(start + tried) % nests.length])[0];
+        const square = hatchSquares(view, nests[(start + tried) % nests.length]).find(one => freeSquares(battle, [one]).length > 0);
         if (square === undefined) continue;
         gs.fighters = [...gs.fighters, newFighter(nextFighterId(gs.fighters), owner, character, square, null, undefined, undefined, false, gs)];
         return true;

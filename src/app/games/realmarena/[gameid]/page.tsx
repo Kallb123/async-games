@@ -22,8 +22,8 @@ import RealmArenaRallySheet, { rallyTarget } from "@/games/RealmArena/components
 import type { RallyAction } from "@/games/RealmArena/rally";
 import { reachAfter, useTurnDraft } from "@/games/RealmArena/useTurnDraft";
 import { battlefieldOf } from "@/games/RealmArena/maps";
-import { canAct, allied, armouredTeam, battleFrom, centreHolders, ENEMY_SIDE, isStanding, isStructure, isWarband, sideScore, squadHp, stoutTeam, TEAM_SIDE, warbandsFor, type Action, type BattleEvent, type Fighter } from "@/games/RealmArena/rules";
-import { actionFollow, battleCues, centreInSight, endOf, coopColourOf, ENEMY_COLOUR, fighterName, foundBy, friendlySquares, isFollowedPart, isUnplaced, partFollow, partLabel, reviewParts, STEP_BEAT_MS, STEP_MIN_MS, TEAM_COLOUR, TEAM_NAME, unseenSquares, waveLineOf, withPartState } from "@/games/RealmArena/ui";
+import { canAct, allied, armouredTeam, battleFrom, centreHolders, ENEMY_SIDE, isStanding, isStructure, isWarband, SHRINE_OWNER, sideScore, squadHp, stoutTeam, TEAM_SIDE, warbandsFor, type Action, type BattleEvent, type Fighter } from "@/games/RealmArena/rules";
+import { actionFollow, battleCues, centreInSight, endOf, coopColourOf, ENEMY_COLOUR, fighterName, foundBy, friendlySquares, isFollowedPart, isUnplaced, partFollow, partLabel, reviewParts, STEP_BEAT_MS, STEP_MIN_MS, TEAM_COLOUR, TEAM_NAME, unseenSquares, rallyLineOf, waveLineOf, withPartState } from "@/games/RealmArena/ui";
 import type { IRealmArenaOutcome } from "@/games/RealmArena/RealmArenaLogic";
 import type { ICommandResponse } from "@/app/api/game/command/route";
 import TurnNavControls from "@/components/games/TurnNavControls";
@@ -250,7 +250,7 @@ export default function GameRealmArena({ params }: { params: Promise<{ gameid: u
     // enemy's name and in one colour whichever it is, or in co-op a side.
     const playerName = (owner?: string): string => {
         if (owner === myUserId) return 'You';
-        if (owner === TEAM_SIDE) return TEAM_NAME;
+        if (owner === TEAM_SIDE || owner === SHRINE_OWNER) return TEAM_NAME;
         if (owner === ENEMY_SIDE || (owner && isWarband(owner))) return enemyName;
         return nameForUserId(gameData, owner);
     };
@@ -548,7 +548,7 @@ export default function GameRealmArena({ params }: { params: Promise<{ gameid: u
             id: ENEMY_SIDE,
             name: capitalise(enemyName),
             color: ENEMY_COLOUR,
-            sub: mustering ? 'musters last' : gs.mission === 'holdOut' && !complete ? `${enemyStanding} · ${waveLineOf(gs.nextWave, gs.round)}` : enemyStanding,
+            sub: mustering ? 'musters last' : gs.mission === 'holdOut' && !complete ? [enemyStanding, gs.rally ? rallyLineOf(gs.rally, gs.round) : waveLineOf(gs.nextWave, gs.round)].filter(Boolean).join(' · ') : enemyStanding,
             score: sideScore(battle, scores, ENEMY_SIDE),
         },
     ] : seatOrder.map(userId => ({

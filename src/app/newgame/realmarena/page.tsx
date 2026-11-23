@@ -17,6 +17,7 @@ import { useStartSoloGame } from "@/utils/hooks/useStartSoloGame";
 import { GAME_META, gameCommandVersion, partySizeRange } from "@/utils/ui/games";
 import { readRematchFlag, readRematchPlayers, readRematchTurnTimer } from "@/utils/ui/rematch";
 import type { RealmArenaCoopInvite, RealmArenaInvitationRequest } from "@/games/RealmArena/RealmArenaModels";
+import { forcedHoldOutEnemy } from "@/games/RealmArena/ui";
 import { fittingHoldOutMap } from "@/games/RealmArena/maps/holdOut";
 import { factionRosterLine } from "@/games/RealmArena/roster";
 import { warbandSteps } from "@/games/RealmArena/rules";
@@ -126,6 +127,9 @@ function NewGameRealmArenaForm() {
   const needsOwnMap = !solo && !fitsCoop(partySize);
   const missionChoices = needsOwnMap ? MISSION_CHOICES.filter(choice => choice.id === 'holdOut') : MISSION_CHOICES;
   const pickedMission = needsOwnMap ? 'holdOut' : mission;
+  // Where the rules give Hold Out its one enemy the host picks none: the server
+  // sets it, so what is posted stands in only for a valid `coop.enemy`.
+  const forcedEnemy = pickedMission === 'holdOut' ? forcedHoldOutEnemy() : undefined;
   const battlefieldChoices = BATTLEFIELD_CHOICES.filter(choice => choice.id === 'line' ? !needsOwnMap : fittingHoldOutMap(choice.id, partySize) === choice.id);
   const pickedBattlefield = battlefield !== 'line'
     ? fittingHoldOutMap(battlefield, partySize) ?? 'line'
@@ -142,7 +146,7 @@ function NewGameRealmArenaForm() {
       factions: [...factions],
       ...(size !== 'normal' ? { size } : {}),
       ...(coop ? { coop: {
-        enemy,
+        enemy: forcedEnemy?.id ?? enemy,
         ...(pickedMission === 'holdOut' ? { mission: pickedMission, ...(map ? { map } : {}) } : {}),
         ...(difficulty !== 'normal' ? { difficulty } : {}),
         // A team of one has nothing to take turns in blocks of, so solo never sends it.
@@ -185,7 +189,8 @@ function NewGameRealmArenaForm() {
       />
       {/* Nothing to choose while there's one faction to fight (§29.3): the
           section appears the day a second is added. */}
-      {coop && FACTION_IDS.length > 1 && (
+      {coop && forcedEnemy && <p className="ag-hint">You fight {forcedEnemy.name}.</p>}
+      {coop && !forcedEnemy && FACTION_IDS.length > 1 && (
         <OptionChoiceSection label="Enemy" value={enemy} onChange={setEnemy} choices={ENEMY_CHOICES} />
       )}
       {coop && (

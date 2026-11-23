@@ -9,11 +9,11 @@ import type { NextWave, IRealmArenaStepOutcome, IRealmArenaStepPart, RealmArenaP
 import { andList, capitalise, pluralize, possessive } from "@/utils/ui/text";
 import type { Reach } from "@/utils/games/battlefield/pathfinding";
 import { coordsOf, distance, FACING_COUNT, facingTowards, riseOf, squareAt, TERRAIN, type Battlefield, type Facing, type Square, type Terrain, type TerrainLetter } from "@/utils/games/battlefield/terrain";
-import { EFFECT_IDS, EFFECTS, ITEM_IDS, ITEMS, type AbilityId, type CharacterId, type EffectId, type Item, type ItemId } from "./characters";
+import { EFFECT_IDS, EFFECTS, ITEM_IDS, ITEMS, type AbilityId, type CharacterId, type EffectId, type FactionId, type Item, type ItemId } from "./characters";
 import { ABILITY_MARK, CHARACTER_IDS } from "./roster";
 import { battlefieldOf } from "./maps";
 import { artCharacterOf, EFFECT_ART, ITEM_ART, type BurstKind, type Missile, type Sprite, type ThrownItem } from "./art";
-import { areaDamage, actionPointsOf, CENTRE, SCORED_FOR, squadSight, hasEffect, isMinion, isStanding, isWarband, maxHpOf, moveAp, pickOf, reachOf, shoots, type BattleState, type Fighter, type MusterPick, type OddsBreakdown, type OddsFactor, type ShotResult, type ToldEvent } from "./rules";
+import { areaDamage, actionPointsOf, CENTRE, SCORED_FOR, squadSight, hasEffect, isMinion, isStanding, isWarband, maxHpOf, moveAp, pickOf, reachOf, shoots, SHRINE_OWNER, type BattleState, type Fighter, type MusterPick, type OddsBreakdown, type OddsFactor, type ShotResult, type ToldEvent } from "./rules";
 
 const LETTER_OF = new Map<Terrain, TerrainLetter>(
     (Object.entries(TERRAIN) as [TerrainLetter, Terrain][]).map(([letter, terrain]) => [terrain, letter]),
@@ -35,6 +35,8 @@ export const ENEMY_COLOUR = "var(--ra-enemy)";
 /** The colour an owner's characters wear in co-op, to `viewerId`: their own, a teammate's or the enemy's. */
 export function coopColourOf(viewerId: string, owner: string): string {
     if (isWarband(owner)) return ENEMY_COLOUR;
+    // The Shrine is the team's own, not any one player's: the team's colour.
+    if (owner === SHRINE_OWNER) return TEAM_COLOUR;
     return owner === viewerId ? TEAM_COLOUR : ALLY_COLOUR;
 }
 
@@ -53,6 +55,26 @@ export function waveLineOf(nextWave: NextWave | undefined, round: number): strin
     if (nextWave.name) return `Round ${nextWave.round}: ${nextWave.name}${count && `, ${count}`}${nests}`;
     const when = nextWave.round === round + 1 ? 'wave next round' : `next wave ${nextWave.round}`;
     return `${count ? `${when} · ${count}` : when}${nests}`;
+}
+
+/**
+ * The enemy Hold Out is fought against where the rules give the host no choice
+ * of one (`HOLD_OUT_ENEMY`, from version 13): its faction and the name the
+ * setup screen says it by. Undefined where the host chooses.
+ */
+export function forcedHoldOutEnemy(context?: RulesContext): { id: FactionId; name: string } | undefined {
+    const id = ruleValuesOf(context).HOLD_OUT_ENEMY;
+    return id === undefined ? undefined : { id, name: rulesetOf(context).FACTIONS[id].enemyName };
+}
+
+/**
+ * What the enemy's line says where the rally comes on a timer rather than with
+ * a wave (rules version 13): when the next one is due, in battle round `round`.
+ * Nothing once no rally is left to come.
+ */
+export function rallyLineOf(rally: { banked: number; next?: number }, round: number): string | undefined {
+    if (rally.next === undefined) return undefined;
+    return rally.next === round + 1 ? 'Rally next round' : `Rally in round ${rally.next}`;
 }
 
 /** The letter a square's terrain is drawn with on the map: what the board styles it by. */
