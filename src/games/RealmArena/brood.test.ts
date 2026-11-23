@@ -1,9 +1,9 @@
 import { describe, expect, it, vi } from "vitest";
 import { at, fieldOf } from "@/utils/games/battlefield/testFixtures";
 import { FACTION_IDS, factionById, factionOf, isFactionId, type CharacterId } from "./characters";
-import { warbandBudgetOf } from "./RealmArenaLogic";
+import { warbandBudgetOf, waveOf } from "./RealmArenaLogic";
 import { rulesetFor, ruleValuesOf } from "./rulesets";
-import { act, armourOf, check, damageTo, fixedRolls, hordePurchase, isCombatant, isMinion, newFighter, startTurn, type BattleState, type Fighter } from "./rules";
+import { act, armourOf, check, damageTo, fixedRolls, hordePurchase, isCombatant, isMinion, newFighter, nextFighterId, startTurn, type BattleState, type Fighter } from "./rules";
 import { battleOf, makeGame, musterAll, warbandsOf } from "./testFixtures";
 
 vi.mock("./masteryRecord", () => ({ masterySnapshotOf: vi.fn(async () => ({})) }));
@@ -104,22 +104,39 @@ describe("what a horde buys (§4.2, §4.4)", () => {
         expect(hordePurchase(rulesetFor(13).FACTIONS.realm, 50, 4, V13)).toEqual([]);
     });
 
-    it("never spends more than its threat, nor stands past the caps, survivors counted, and is the same every time", () => {
+    it("never spends more than its threat, nor buys past the caps, and is the same every time", () => {
         const { HORDE_CAP, HORDE_REAL_CAP } = ruleValuesOf(V13);
         expect([HORDE_CAP, HORDE_REAL_CAP]).toEqual([16, 4]);
         for (const round of [1, 4, 7, 10, 13]) {
             for (const threat of [0, 5, 14, 30, 60, 200]) {
-                for (const standing of [{ minions: 0, others: 0 }, { minions: 12, others: 3 }, { minions: 16, others: 4 }]) {
-                    const bought = hordePurchase(BROOD, threat, round, V13, standing);
-                    const label = `round ${round}, ${threat} threat, ${JSON.stringify(standing)}`;
-                    expect(threatOf(bought), label).toBeLessThanOrEqual(threat);
-                    const minions = bought.filter(id => CHARACTERS[id].minion).length;
-                    expect(standing.minions + minions, label).toBeLessThanOrEqual(HORDE_CAP!);
-                    expect(standing.others + bought.length - minions, label).toBeLessThanOrEqual(HORDE_REAL_CAP!);
-                    expect(hordePurchase(BROOD, threat, round, V13, standing), label).toEqual(bought);
-                }
+                const bought = hordePurchase(BROOD, threat, round, V13);
+                const label = `round ${round}, ${threat} threat`;
+                expect(threatOf(bought), label).toBeLessThanOrEqual(threat);
+                const minions = bought.filter(id => CHARACTERS[id].minion).length;
+                expect(minions, label).toBeLessThanOrEqual(HORDE_CAP!);
+                expect(bought.length - minions, label).toBeLessThanOrEqual(HORDE_REAL_CAP!);
+                expect(hordePurchase(BROOD, threat, round, V13), label).toEqual(bought);
             }
         }
+        // At 200 the Queen's theme stands at both caps.
+        const full = hordePurchase(BROOD, 200, 13, V13);
+        expect(full.filter(id => CHARACTERS[id].minion)).toHaveLength(HORDE_CAP!);
+        expect(full.filter(id => !CHARACTERS[id].minion)).toHaveLength(HORDE_REAL_CAP!);
+    });
+
+    it("lands a wave that never takes a warband past the caps, survivors and hatchlings counted", async () => {
+        const game = makeGame(["a", "b", "c"], {}, { ...V13, coop: { mission: "holdOut", enemy: "brood" } });
+        await musterAll(game);
+        const gs = game.specificGameState;
+        const [owner] = warbandsOf(game);
+        // Fill the warband with survivors: 14 minions and 3 others standing.
+        const zone = battleOf(game).field.tiles.map((_, square) => square).filter(square => !gs.fighters.some(one => one.square === square) && battleOf(game).field.tiles[square].terrain.standable);
+        for (let k = 0; gs.fighters.filter(one => one.owner === owner && isCombatant(one, gs) && isMinion(one, gs)).length < 14; k++) gs.fighters.push(newFighter(nextFighterId(gs.fighters), owner, "broodSkitterling", zone[k], null, undefined, undefined, false, V13));
+        gs.roundsPlayed = 3;
+        const wave = waveOf(gs, owner, true);
+        const after = [...gs.fighters.filter(one => one.owner === owner && isCombatant(one, gs)), ...wave];
+        expect(after.filter(one => isMinion(one, gs)).length).toBeLessThanOrEqual(16);
+        expect(after.filter(one => !isMinion(one, gs)).length).toBeLessThanOrEqual(4);
     });
 
     it("musters each warband of a Hold Out against the Brood from its points, a threat for every five, and lands its waves within the caps", async () => {

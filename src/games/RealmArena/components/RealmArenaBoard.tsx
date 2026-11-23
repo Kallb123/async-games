@@ -19,7 +19,7 @@ import { usePrefersReducedMotion } from '@/utils/hooks/usePrefersReducedMotion';
 import { PlaybackProvider, setAttributes, translation, usePlaybackFrame, usePlaybackRef, usePlaybackValue } from '@/utils/hooks/usePlayback';
 import { facingCell, figureSprites, ITEM_ART, SMOKE_ART, spriteBox, TERRAIN_ART, type CharacterPose } from '@/games/RealmArena/art';
 import { ITEMS, type CharacterId, type ItemId } from '@/games/RealmArena/characters';
-import { rulesetOf } from '@/games/RealmArena/rulesets';
+import { rulesetOf, type RulesContext } from '@/games/RealmArena/rulesets';
 import { hasHpBar } from '@/games/RealmArena/hpBar';
 import { CENTRE, isStanding, isWarband, maxHpOf, smokeSquares, type BattleState, type Fighter, type FogGhost, type MusterPick, type ToldEvent } from '@/games/RealmArena/rules';
 import type { AttackOption } from '@/games/RealmArena/tactics';
@@ -324,10 +324,13 @@ const hpBarCorner = (x: number, y: number): Point => ({ x: x - HP_BAR_WIDTH / 2,
  */
 const RulesVersionContext = createContext<number | undefined>(undefined);
 
+/** The battle's rules, as the board provides them (`RulesVersionContext`), for a helper that reads a fighter's character. */
+const useRulesContext = (): RulesContext => ({ rulesVersion: useContext(RulesVersionContext) });
+
 function HpBar({ x, y, fighter, colour, told }: { x: number; y: number; fighter: Fighter; colour: string; told?: Told }) {
     const corner = hpBarCorner(x, y);
     // A minion has no bar (§4.3), read by the battle's rules version.
-    const context = { rulesVersion: useContext(RulesVersionContext) };
+    const context = useRulesContext();
     const bar = hasHpBar(fighter, context);
     // The fill and the chip each read `toldAt` for themselves: cheap, and it
     // keeps each draw to its own element.
@@ -364,7 +367,7 @@ function HpBar({ x, y, fighter, colour, told }: { x: number; y: number; fighter:
 function HpChange({ view, fighter, change }: { view: IsoView; fighter: Fighter; change: number }) {
     const { x, y } = isoCentre(view, fighter.square);
     const corner = hpBarCorner(x, y);
-    const context = { rulesVersion: useContext(RulesVersionContext) };
+    const context = useRulesContext();
     if (!hasHpBar(fighter, context)) return null;
     const after = HP_BAR_WIDTH * hpFraction(fighter, context, -change);
     const now = HP_BAR_WIDTH * hpFraction(fighter, context);
@@ -520,7 +523,7 @@ function SmokePuff({ artId, view, square }: { artId: string; view: IsoView; squa
 
 /** A character's AP left this turn as a column of pips centred on `y` — the same pips the units strip shows. */
 function ApPips({ x, y, fighter }: { x: number; y: number; fighter: Fighter }) {
-    const pips = apPips(fighter, { rulesVersion: useContext(RulesVersionContext) });
+    const pips = apPips(fighter, useRulesContext());
     const top = y - (AP_PIP_STEP * (pips.length - 1)) / 2;
     return pips.map((on, i) => (
         <circle key={i} className={`ag-ra-ap${on ? ' ag-ra-ap--on' : ''}`} cx={x} cy={top + i * AP_PIP_STEP} r={AP_PIP_RADIUS} />
@@ -664,7 +667,7 @@ function FighterNode({ artId, view, fighter, ring, selected, acting, colour, fac
     const feet = isoCentre(view, fighter.square);
     const standing = isStanding(fighter);
     const watching = standing && drawn.banked > 0;
-    const rulesVersion = useContext(RulesVersionContext);
+    const rules = useRulesContext();
     return (
         <ClickableMapNode
             x={x} y={y} radius={FIGURE_RADIUS}
@@ -672,7 +675,7 @@ function FighterNode({ artId, view, fighter, ring, selected, acting, colour, fac
             isSelected={selected}
             showRing={false}
             onClick={() => onSelect(fighter.id)}
-            title={[`${characterName} · ${nameFor(fighter.owner)}`, `${fighter.hp}/${maxHpOf(fighter, { rulesVersion })} HP`, ...fighterStatus(fighter)].join(' · ')}
+            title={[`${characterName} · ${nameFor(fighter.owner)}`, `${fighter.hp}/${maxHpOf(fighter, rules)} HP`, ...fighterStatus(fighter)].join(' · ')}
         >
             <Figure
                 ring={ring}

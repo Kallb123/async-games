@@ -84,7 +84,7 @@ interface Temperament {
  * Realm's and the Miners' characters have none (a test holds it): the Swarm
  * alone plays out of character, and so can be tuned without touching them.
  */
-export const TEMPERAMENTS: Readonly<Partial<Record<CharacterId, Temperament>>> = {
+const SWARM_TEMPERAMENTS = {
     // Throws itself at the team, and is happiest where its pack closes round one enemy.
     skitterling: { exposure: 0.25, threat: 1, extra: "pack" },
     ravager: { exposure: 0.5, threat: 1 },
@@ -97,9 +97,13 @@ export const TEMPERAMENTS: Readonly<Partial<Record<CharacterId, Temperament>>> =
     // Leads from the back, and lets the brood do the fighting.
     broodmother: { exposure: 2, threat: 0.5 },
     broodQueen: { exposure: 2, threat: 0.5 },
-    // The Brood's real characters play as the Swarm's (§4.3); its minions take the swarm step and have no row.
-    broodRavager: { exposure: 0.5, threat: 1 },
-    broodBroodmother: { exposure: 2, threat: 0.5 },
+} satisfies Partial<Record<CharacterId, Temperament>>;
+
+export const TEMPERAMENTS: Readonly<Partial<Record<CharacterId, Temperament>>> = {
+    ...SWARM_TEMPERAMENTS,
+    // The Brood's real characters play as the Swarm's they're drawn as (realm-arena-hold-out.md §4.3); its minions take the swarm step and have no row.
+    broodRavager: SWARM_TEMPERAMENTS.ravager,
+    broodBroodmother: SWARM_TEMPERAMENTS.broodmother,
 };
 
 /**

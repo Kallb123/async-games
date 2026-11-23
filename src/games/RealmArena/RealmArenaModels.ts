@@ -11,7 +11,7 @@ import { RealmArenaGameType, type IGameCommand } from "@/utils/apiModels/GameLog
 import { battleOf, battleRoundsOf, budgetOf, enemyEvents, enemyHidden, enemyTurnsOf, nestSquaresOf, nextWaveOf, toldTo, toldTurns, unnamed, warbandBudgetOf, type EnemyStep, type IRealmArenaOutcome, type RealmArenaBoard, type Told } from "./RealmArenaLogic";
 import { rollOffTurnOrder } from "@/utils/games/rollOff";
 import { CURRENT_RULESET_VERSION, registeredRulesets, type RulesContext } from "./rulesets";
-import { ART_CHARACTER_IDS } from "./art";
+import { ART_CHARACTER_IDS, DRAWN_AS_IDS } from "./art";
 import { randomInt } from "@/utils/games/random";
 import { userToken } from "@/utils/games/history";
 import { BATTLE_SIZE_NAMES, CHARACTERS, COOP_PLAYERS, coopTeamMax, DIFFICULTY_NAMES, FACTION_IDS, factionById, FACTIONS, fitsCoop, isFactionId, playableFactionsOf, RANDOM_ENEMY, REALM_ONLY, UNKNOWN_ENEMY, type BattleSize, type Character, type CharacterId, type Difficulty, type FactionId } from "./characters";
@@ -1095,8 +1095,7 @@ const characterNameOf = (character: string): string => CHARACTER_NAMES.get(chara
 function formatDamageChart(stats: IRealmArenaGameResultStats): GameResultBarChart | undefined {
     const rows = stats.fighting ?? [];
     // The art's roster first, as before, then the characters drawn as another's (the Brood's), which have no row of their own.
-    const roster = [...new Set([...ART_CHARACTER_IDS, ...registeredRulesets.flatMap(ruleset =>
-        Object.entries(ruleset.CHARACTERS).flatMap(([id, character]) => (character as Character).structure ? [] : [id as CharacterId]))])];
+    const roster = [...ART_CHARACTER_IDS, ...DRAWN_AS_IDS];
     const bars = roster.flatMap(character => {
         const kind = rows.filter(row => row.character === character);
         if (kind.length === 0) return [];

@@ -2348,27 +2348,23 @@ export function wavePurchase(faction: Faction, budget: number, round: number, co
     return bought;
 }
 
-/** What a horde warband stands already (realm-arena-hold-out.md §4.4): its minions and its others, both counted against the horde's caps. */
-export interface HordeCount { minions: number; others: number }
-
 /**
  * What a horde (`Faction.horde`, realm-arena-hold-out.md §4.2, §4.4) buys with
  * `threat` for the wave landing as `round` begins — or, at round 1, its first
  * muster: the theme's elite first if the threat covers it, then its buy list
  * round and round in each character's `threat`, skipping whatever is too dear
- * or would take the warband past its caps, until nothing on it can be bought.
- * `standing` is what the warband already stands, counted against
- * `HORDE_CAP` minions and `HORDE_REAL_CAP` others. No draw, so the same every
- * time. Empty for a faction whose waves aren't themed.
+ * or would buy more than `HORDE_CAP` minions or `HORDE_REAL_CAP` others,
+ * until nothing on it can be bought. Survivors are `waveOf`'s to count against
+ * the caps: this is what the warband would stand at full. No draw, so the same
+ * every time. Empty for a faction whose waves aren't themed.
  */
-export function hordePurchase(faction: Faction, threat: number, round: number, context?: RulesContext, standing: HordeCount = { minions: 0, others: 0 }): CharacterId[] {
+export function hordePurchase(faction: Faction, threat: number, round: number, context?: RulesContext): CharacterId[] {
     const theme = waveThemeOf(faction, round);
     if (!theme) return [];
     const { CHARACTERS } = rulesetOf(context);
     const { HORDE_CAP = Infinity, HORDE_REAL_CAP = Infinity } = ruleValuesOf(context);
     const bought: CharacterId[] = [];
-    let left = threat;
-    let { minions, others } = standing;
+    let left = threat, minions = 0, others = 0;
     const buy = (character: CharacterId): boolean => {
         const { threat: cost = Infinity, minion } = CHARACTERS[character];
         if (cost > left || (minion ? minions >= HORDE_CAP : others >= HORDE_REAL_CAP)) return false;

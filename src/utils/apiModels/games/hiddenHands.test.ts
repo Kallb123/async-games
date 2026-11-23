@@ -1229,6 +1229,33 @@ describe("Realm Arena's rally choice in fog of war (§39.4)", () => {
     });
 });
 
+describe("Realm Arena's Brood in fog of war (realm-arena-hold-out.md §4.6)", () => {
+    // A Brood Queen of rules version 13 hatches a minion Skitterling: told only to whoever sees it, as a hatchling was.
+    const field = realmArenaFieldOf(...Array(4).fill(".".repeat(60)));
+    const make = (id: number, owner: string, character: "broodQueen" | "knight" | "mage" | "broodSkitterling", col: number) =>
+        ({ ...realmArenaNewFighter(id, owner, character, realmArenaSquareAt(field, col, 1), null, undefined, undefined, false, { rulesVersion: 13 }), ap: 4 });
+    const SENTINEL = 5353;
+    const battle = { field, fighters: [make(0, "a", "broodQueen", 3), make(1, "b", "knight", 10), make(SENTINEL - 1, "c", "mage", 58)], rulesVersion: 13, fog: true as const };
+    const { events, fighters } = realmArenaActRules(battle, "a", { kind: "hatch", fighter: 0 }, realmArenaFixedRolls([]));
+    const after = { ...battle, fighters };
+
+    it("hatches a minion only the viewers who see it are told of, and none of it reaches one who doesn't", () => {
+        expect(fighters.find(one => one.id === SENTINEL)).toMatchObject({ character: "broodSkitterling", hp: 1, hatchedBy: 0 });
+        for (const viewer of ["a", "b"]) expect(realmArenaToldTo(events, after, viewer), viewer).toEqual(events);
+        for (const viewer of ["c", null]) {
+            expect(realmArenaToldTo(events, after, viewer)).toEqual([]);
+            expect(JSON.stringify(realmArenaToldTo(events, after, viewer))).not.toContain(String(SENTINEL));
+        }
+    });
+
+    it("draws a minion out of sight on nobody's board", () => {
+        const gs = makeRealmArenaGame(["a", "b"], {}, { fog: true, rulesVersion: 13 }).specificGameState;
+        gs.phase = "battle";
+        gs.fighters = [make(0, "a", "knight", 3), make(SENTINEL, "ai:0", "broodSkitterling", 58)];
+        for (const viewer of ["a", null]) expect(JSON.stringify(realmArenaStateToModel(gs, viewer, null).fighters), String(viewer)).not.toContain(`"id":${SENTINEL}`);
+    });
+});
+
 describe("Realm Arena's Hatch in fog of war (§39.5)", () => {
     // a's Brood Queen hatches beside itself; b's Knight is 7 squares east and sees it, c's Mage is at the far edge and sees nothing of it.
     const field = realmArenaFieldOf(...Array(4).fill(".".repeat(60)));

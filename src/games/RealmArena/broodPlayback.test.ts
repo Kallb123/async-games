@@ -13,8 +13,8 @@ vi.mock("@/utils/users/clerk", () => ({ userIdListToNamesAndMap: async (ids: str
 // and strike one after another, so a review plays each run as one part.
 
 /** A Hold Out against the Brood, where the warband's own fighters are stood as the test wants and the team's first character is the one struck. */
-async function broodBattle() {
-    const game = makeGame(["a", "b"], {}, { rulesVersion: 13, coop: { mission: "holdOut", enemy: "brood" } });
+async function broodBattle(fog = false) {
+    const game = makeGame(["a", "b"], {}, { rulesVersion: 13, fog, coop: { mission: "holdOut", enemy: "brood" } });
     await musterAll(game);
     const gs = game.specificGameState;
     const victim = gs.fighters.find(one => one.owner === "a")!;
@@ -96,5 +96,24 @@ describe("playing a warband's minions (§4.5)", () => {
         const { step } = await warbandTurn(game, [oneStep(game, brute), oneStep(game, walkers[0]), oneStep(game, walkers[1])], []);
         const moves = step!.parts!.filter(part => part.events.some(event => event.kind === "moved"));
         expect(moves.map(part => part.events.length)).toEqual([1, 2]);
+    });
+
+    it("tells a fogged viewer a merged run only of the moves it saw, and nothing of a minion it never did", async () => {
+        const { game, walkers } = await broodBattle(true);
+        expect((await playOne(game, endTurnBy(game.currentTurn))).outcome.validMove).toBe(true);
+        const { outcome } = await warbandTurn(game, walkers.map(walker => oneStep(game, walker)), []);
+        let hidden = 0;
+        for (const viewer of ["a", "b", null]) {
+            const step = stepOutcomeToModel(outcome, viewer, game.specificGameState);
+            const told = new Set((step?.events ?? []).flatMap(event => "fighter" in event ? [event.fighter] : []));
+            const unseen = walkers.filter(walker => !told.has(walker.id) && !game.specificGameState.sightings?.[viewer ?? ""]?.some(ghost => ghost.id === walker.id));
+            hidden += unseen.length;
+            const wire = JSON.stringify(step ?? {});
+            for (const walker of unseen) expect(wire, `${viewer} and ${walker.id}`).not.toMatch(new RegExp(`"(id|fighter)":${walker.id}[,}]`));
+            // Whatever it was told is still all in the parts, in order.
+            if (step?.parts) expect(step.parts.flatMap(part => part.events)).toEqual(step.events);
+        }
+        // The walkers start far from the team, so some viewer was told nothing of one.
+        expect(hidden).toBeGreaterThan(0);
     });
 });

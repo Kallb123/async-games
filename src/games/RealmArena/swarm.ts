@@ -120,6 +120,18 @@ const moveBy = (state: BattleState, owner: string, minion: Fighter, to: Square, 
     return "refused" in check(state, owner, action) ? undefined : action;
 };
 
+/** Whether a minion bursts (the Bloater's Burst). */
+const bursts = (state: BattleState, minion: Fighter): boolean => rulesetOf(state).CHARACTERS[minion.character].abilities.includes("burst");
+
+/** What a minion's burst from `square` would take with it: how many of the team, and how many of its own side but itself. */
+function burstHaul(state: BattleState, owner: string, minion: Fighter, square: Square, team: readonly Fighter[]): { caught: number; own: number } {
+    const area = new Set(burstArea(state.field, square));
+    return {
+        caught: team.filter(fighter => area.has(fighter.square)).length,
+        own: state.fighters.filter(fighter => fighter.id !== minion.id && isStanding(fighter) && allied(state, fighter.owner, owner) && area.has(fighter.square)).length,
+    };
+}
+
 /** A minion's move: to where it strikes from, to where its burst lands best, or toward its goal; or none, when it stays where it is. */
 function moveOf(state: BattleState, owner: string, minion: Fighter, team: readonly Fighter[], hunt: readonly FogGhost[] | undefined, done: SwarmMemo): Action | undefined {
     const reach = reachOf(state, minion);
@@ -127,22 +139,19 @@ function moveOf(state: BattleState, owner: string, minion: Fighter, team: readon
     const costOf = (square: Square) => moveApAt(movement, reach.costs[square], false, state);
     const stops: Square[] = [];
     reach.costs.forEach((cost, square) => { if (cost !== Infinity) stops.push(square); });
-    const bursts = rulesetOf(state).CHARACTERS[minion.character].abilities.includes("burst");
     const { ATTACK_AP } = ruleValuesOf(state);
     const walk = walkTo(done, state.field, goalOf(state, owner, team, hunt, done.fogged), rulesetOf(state).CHARACTERS[minion.character].climb ?? DEFAULT_CLIMB);
     const toGoal = (square: Square) => walk[square];
     const nearer = (a: Square, b: Square) => reach.costs[a] - reach.costs[b] || a - b;
 
     // A Bloater goes where its burst takes the most of the team with it.
-    if (bursts) {
+    if (bursts(state, minion)) {
         const left = minion.ap - rulesetOf(state).ABILITIES.burst.ap;
         let best: { square: Square; caught: number; own: number } | undefined;
         for (const square of stops) {
             if (costOf(square) > left) continue;
-            const area = new Set(burstArea(state.field, square));
-            const caught = team.filter(fighter => area.has(fighter.square)).length;
+            const { caught, own } = burstHaul(state, owner, minion, square, team);
             if (caught === 0) continue;
-            const own = state.fighters.filter(fighter => fighter.id !== minion.id && isStanding(fighter) && allied(state, fighter.owner, owner) && area.has(fighter.square)).length;
             if (!best || caught > best.caught || (caught === best.caught && (own < best.own
                 || (own === best.own && (toGoal(square) < toGoal(best.square) || (toGoal(square) === toGoal(best.square) && square < best.square)))))) {
                 best = { square, caught, own };
@@ -168,10 +177,8 @@ function moveOf(state: BattleState, owner: string, minion: Fighter, team: readon
 function strikeOf(state: BattleState, owner: string, minion: Fighter, team: readonly Fighter[]): Action | undefined {
     if (!isStanding(minion) || !canAct(minion, state)) return undefined;
     const allowed = (action: Action) => !("refused" in check(state, owner, action));
-    if (rulesetOf(state).CHARACTERS[minion.character].abilities.includes("burst")) {
-        const area = new Set(burstArea(state.field, minion.square));
-        const caught = team.filter(fighter => area.has(fighter.square)).length;
-        const own = state.fighters.filter(fighter => fighter.id !== minion.id && isStanding(fighter) && allied(state, fighter.owner, owner) && area.has(fighter.square)).length;
+    if (bursts(state, minion)) {
+        const { caught, own } = burstHaul(state, owner, minion, minion.square, team);
         const burst: Action = { kind: "burst", fighter: minion.id };
         if (caught > 0 && caught > own && allowed(burst)) return burst;
     }

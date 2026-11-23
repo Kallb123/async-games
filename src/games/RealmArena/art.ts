@@ -52,6 +52,9 @@ const DRAWN_AS: ReadonlyMap<CharacterId, CharacterId> = new Map(registeredRulese
  */
 export const artCharacterOf = (character: CharacterId): CharacterId => DRAWN_AS.get(character) ?? character;
 
+/** Every character drawn as another (`artCharacterOf`), in the order the catalogues introduced them: the ones `ART_CHARACTER_IDS` leaves out. */
+export const DRAWN_AS_IDS: readonly CharacterId[] = [...DRAWN_AS.keys()];
+
 /** The poses a character is drawn in, in the order their rows come down the characters' sheet. */
 export const CHARACTER_POSES = ["standing", "fallen"] as const;
 
@@ -340,21 +343,16 @@ const characterCells = (sheet: ArtSheet, row: number) => Array.from({ length: FA
  * characters' sheet each — every character standing, in `ART_CHARACTER_IDS`
  * order, then every one fallen — and a cell a facing along it. The team sheet
  * holds the owner's colour in the same cells. A character drawn as another
- * (`artCharacterOf`) is an alias for that one's entry, not a row of its own.
+ * has no entry: ask for it through `artCharacterOf`, as `figureSprites` does.
  */
-export const CHARACTER_ART = (() => {
-    const art = Object.fromEntries(ART_CHARACTER_IDS.map((character, index) => {
-        const poses = {} as Record<CharacterPose, CharacterArt>;
-        CHARACTER_POSES.forEach((pose, p) => {
-            const row = p * ART_CHARACTER_IDS.length + index;
-            poses[pose] = { body: characterCells("characters", row), team: characterCells("charactersTeam", row) };
-        });
-        return [character, poses];
-    })) as Record<CharacterId, Readonly<Record<CharacterPose, CharacterArt>>>;
-    // A character drawn as another answers with that one's art, the very same cells.
-    for (const [character, as] of DRAWN_AS) if (art[as]) art[character] = art[as];
-    return art as Readonly<typeof art>;
-})();
+export const CHARACTER_ART = Object.fromEntries(ART_CHARACTER_IDS.map((character, index) => {
+    const poses = {} as Record<CharacterPose, CharacterArt>;
+    CHARACTER_POSES.forEach((pose, p) => {
+        const row = p * ART_CHARACTER_IDS.length + index;
+        poses[pose] = { body: characterCells("characters", row), team: characterCells("charactersTeam", row) };
+    });
+    return [character, poses];
+})) as Readonly<Record<CharacterId, Readonly<Record<CharacterPose, CharacterArt>>>>;
 
 /**
  * The structures (§39.7), each in every pose, by character: a structure has no
@@ -377,7 +375,7 @@ export const structureArt = (character: CharacterId, pose: CharacterPose): Sprit
 export function figureSprites(character: CharacterId, pose: CharacterPose, cell: number): { body: Sprite; team: Sprite | null } {
     const structure = structureArt(character, pose);
     if (structure) return { body: structure, team: null };
-    const art = CHARACTER_ART[character][pose];
+    const art = CHARACTER_ART[artCharacterOf(character)][pose];
     return { body: art.body[cell], team: art.team[cell] };
 }
 
