@@ -19,7 +19,7 @@ import type { IReplayStep } from "@/utils/games/replay";
 import { factionById, type CharacterId } from "./characters";
 import type { IRealmArenaSpecificGameState } from "./RealmArenaModels";
 import { isRallyAction, type RallyChoice } from "./rally";
-import { areaDamage, allied, battleRounds, BLAST_EVENT_KINDS, ENEMY_SIDE, isCombatant, isStanding, isStructure, isWarband, knockoutPoints, maxHpOf, nestsProduce, shrineOf, sideOf, spawnThemeOf, squadHp, TEAM_SIDE, waveArrives, waveThemeOf, type BattleEvent, type BattleState, type Fighter } from "./rules";
+import { areaDamage, allied, battleRounds, BLAST_EVENT_KINDS, ENEMY_SIDE, isCombatant, isStanding, isStructure, isWarband, knockoutPoints, maxHpOf, nestsProduce, shrineOf, sideOf, spawnThemeOf, squadHp, TEAM_SIDE, waveArrives, waveThemeOf, warbandNests, type BattleEvent, type BattleState, type Fighter } from "./rules";
 
 /** What one player's characters of one kind did in a battle, pooled as their mastery is (§23.1). */
 export interface FightingRecord {
@@ -323,24 +323,15 @@ export function battleRecorder(seats: readonly string[], sides?: BattleState["si
             holdOut = gs.coop?.mission === "holdOut";
             if (holdOut) {
                 produced = nestsProduce(gs.coop?.mission, gs);
-                if (produced) {
-                    // A stage of the horde (realm-arena-hold-out.md §5.1) starts each round its theme differs from the round before's.
-                    const faction = factionById(gs.coop?.enemy, gs);
-                    const themeIn = (index: number) => spawnThemeOf(faction, index + 1, gs)?.name;
-                    if (waves.length === 0) waves.push({ round: 0, arrived: 0, downed: new Map(), ...(themeIn(0) ? { name: themeIn(0) } : {}) });
-                    for (let begun = round + 1; begun <= Math.min(gs.roundsPlayed, lastRound); begun++) {
-                        const name = themeIn(begun);
-                        if (name !== themeIn(begun - 1)) waves.push({ round: begun, arrived: 0, downed: new Map(), ...(name ? { name } : {}) });
-                    }
-                } else {
-                    if (waves.length === 0) waves.push({ round: 0, arrived: 0, downed: new Map() });
-                    for (let begun = round + 1; begun <= Math.min(gs.roundsPlayed, lastRound); begun++) {
-                        if (!waveArrives(begun + 1, lastRound + 1)) continue;
-                        // A faction with themes (§39.6) names its waves.
-                        const name = waveThemeOf(factionById(gs.coop?.enemy, gs), begun + 1)?.name;
-                        waves.push({ round: begun, arrived: 0, downed: new Map(), ...(name ? { name } : {}) });
-                    }
-                }
+                // A new record starts as round `begun + 1` begins: with nests, each round the
+                // horde's theme differs from the round before's (realm-arena-hold-out.md §5.1);
+                // without, each round a wave is due (§39.6 names it by its theme).
+                const faction = factionById(gs.coop?.enemy, gs);
+                const nameOf = (index: number) => (produced ? spawnThemeOf(faction, index + 1, gs) : waveThemeOf(faction, index + 1))?.name;
+                const starts = (begun: number) => produced ? nameOf(begun) !== nameOf(begun - 1) : waveArrives(begun + 1, lastRound + 1);
+                const start = (begun: number) => { const name = nameOf(begun); waves.push({ round: begun, arrived: 0, downed: new Map(), ...(name ? { name } : {}) }); };
+                if (waves.length === 0) { const name = produced ? nameOf(0) : undefined; waves.push({ round: 0, arrived: 0, downed: new Map(), ...(name ? { name } : {}) }); }
+                for (let begun = round + 1; begun <= Math.min(gs.roundsPlayed, lastRound); begun++) if (starts(begun)) start(begun);
                 // A hatchling (§39.5) stands up in the middle of a turn: nobody brought it as a wave.
                 waves.at(-1)!.arrived += fighters.filter(fighter => isWarband(fighter.owner) && !known.has(fighter.id) && fighter.hatchedBy === undefined && !isStructure(fighter, context)).length;
             }
@@ -379,7 +370,7 @@ export function battleRecorder(seats: readonly string[], sides?: BattleState["si
             if (produced) {
                 const keep = shrineOf({ fighters });
                 shrine = keep ? { hp: keep.hp, maxHp: maxHpOf(keep, context ?? gs) } : undefined;
-                const brood = fighters.filter(fighter => isWarband(fighter.owner) && isStructure(fighter, context));
+                const brood = warbandNests(fighters, context);
                 nests = { standing: brood.filter(isStanding).length, total: brood.length };
             }
             round = gs.roundsPlayed;

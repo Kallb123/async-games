@@ -17,7 +17,7 @@ import { userToken } from "@/utils/games/history";
 import { BATTLE_SIZE_NAMES, CHARACTERS, COOP_PLAYERS, coopTeamMax, DIFFICULTY_NAMES, FACTION_IDS, factionById, FACTIONS, fitsCoop, isFactionId, playableFactionsOf, RANDOM_ENEMY, REALM_ONLY, UNKNOWN_ENEMY, type BattleSize, type Character, type CharacterId, type Difficulty, type FactionId } from "./characters";
 import { addTally, NO_TALLY, xpOf, type MasterySnapshot, type Tally } from "./mastery";
 import { battlefieldById, COOP_MAPS, DEPLOYMENT_NAMES, mapFor, type CoopMap, type RealmArenaMapId } from "./maps";
-import { HOLD_OUT_STAR_INFO, HOLD_OUT_STARS, starLine, isMinion, isStanding, nestsProduce, type HoldOutStar, type Action, allied, ENEMY_SIDE, fighterById, fogGhost, isStructure, isWarband, pickOf, squadSight, storedFighter, TEAM_SIDE, viewOf, warbandsFor, maxHpOf, actionPointsOf, type BattleEvent, type Fighter, type FogGhost, type MusterPick, type ToldEvent } from "./rules";
+import { HOLD_OUT_STAR_INFO, HOLD_OUT_STARS, starLine, starMark, warbandNests, isMinion, isStanding, nestsProduce, type HoldOutStar, type Action, allied, ENEMY_SIDE, fighterById, fogGhost, isStructure, isWarband, pickOf, squadSight, storedFighter, TEAM_SIDE, viewOf, warbandsFor, maxHpOf, actionPointsOf, type BattleEvent, type Fighter, type FogGhost, type MusterPick, type ToldEvent } from "./rules";
 import { computerHoldsTurn } from "@/utils/games/computerTurns";
 import type { IRealmArenaGameDataResponse, IRealmArenaSpecificGameStateResponse, IRealmArenaStepOutcome, IRealmArenaStepPart, RealmArenaPartState } from "./apiModels";
 import type { Square } from "@/utils/games/battlefield/terrain";
@@ -663,8 +663,8 @@ export function gameStateToModel(
         ...(nestSquares ? { nestSquares } : {}),
         ...(rally ? { rally } : {}),
         // How many nests still stand, where nests produce the enemy (realm-arena-hold-out.md §6): public, as
-        // `enemiesDefeated` is, though a nest can fall out of the team's sight (§5.6).
-        ...(gs.phase === "battle" && nestsProduce(gs.coop?.mission, gs) ? { nestsLeft: gs.fighters.filter(fighter => isWarband(fighter.owner) && isStructure(fighter, gs) && isStanding(fighter)).length } : {}),
+        // `enemiesDefeated` is, though a nest can fall out of the team's sight (§6.1 records what that gives away in fog).
+        ...(gs.phase === "battle" && nestsProduce(gs.coop?.mission, gs) ? { nestsLeft: warbandNests(gs.fighters, gs).filter(isStanding).length } : {}),
         ...(complete && gs.stars ? { stars: [...gs.stars] } : {}),
         // Whether nests stand is unseen in fog until the battle is over, so this waits for it too.
         ...(complete && gs.nestsCleared ? { nestsCleared: true as const } : {}),
@@ -1072,12 +1072,11 @@ const downedIn = (wave: WaveRecord): number => [...downedOf(wave).values()].redu
  * and in which round, how many of the enemy its waves brought and how many the
  * team downed, then each wave's. None for any other battle, nor for a result
  * recorded before waves were. One whose nests produce the enemy tells it its
- * own way (`producedGroup`).
+ * own way, in the same group.
  */
 function holdOutGroup(stats: IRealmArenaGameResultStats): GameResultStatGroup | undefined {
-    const { waves, standingPerRound, battleRounds: rounds } = stats;
-    if (stats.produced || (!waves?.length && stats.stars?.length)) return producedGroup(stats);
-    if (!waves?.length || !standingPerRound?.length || !rounds) return undefined;
+    const { waves, standingPerRound, battleRounds: rounds, produced, shrine, nests, stars } = stats;
+    if (!waves?.length || !standingPerRound?.length || !rounds) return stars && (produced || (!waves?.length && stars.length)) ? { username: "Hold Out", lines: starLines(stars, shrine) } : undefined;
     const lasted = standingPerRound.length;
     const overrun = (mongoMap(standingPerRound[lasted - 1]).get(TEAM_SIDE) ?? 0) === 0;
     const arrived = waves.reduce((sum, wave) => sum + wave.arrived, 0);
@@ -1087,12 +1086,18 @@ function holdOutGroup(stats: IRealmArenaGameResultStats): GameResultStatGroup | 
         username: "Hold Out",
         lines: [
             overrun ? `Overrun in round ${lasted} of ${rounds}`
+                : produced ? (shrine && shrine.hp <= 0 ? `The Shrine fell in round ${lasted} of ${rounds}`
+                    : nests && nests.standing === 0 ? `Broke the Brood in round ${lasted} of ${rounds}`
+                    : `Held the Shrine for all ${rounds} rounds`)
                 : lasted >= rounds ? `Held out for all ${rounds} rounds`
                 : `Beat the last wave in round ${lasted} of ${rounds}`,
-            `Faced ${pluralize(waves.length, "wave")}: ${arrived} of the enemy took the field, and the team downed ${downed}`,
+            ...(produced && stars ? starLines(stars, shrine) : []),
+            produced ? `${arrived} of the Brood took the field, and the team downed ${downed}${nests ? `; destroyed ${nests.total - nests.standing} of ${nests.total} nests` : ""}`
+                : `Faced ${pluralize(waves.length, "wave")}: ${arrived} of the enemy took the field, and the team downed ${downed}`,
             // Every choice is public in the log (§39.4); absent for a battle whose rally wasn't one.
             ...(tally ? [tally] : []),
-            ...waves.map((wave, index) => `${waveLabel(wave, index)}, round ${wave.round + 1}: ${wave.arrived} arrived, ${downedIn(wave)} downed`),
+            ...waves.map((wave, index) => produced ? `${waveLabel(wave, index, true)}, from round ${wave.round + 1}: ${wave.arrived} arrived, ${downedIn(wave)} downed`
+                : `${waveLabel(wave, index)}, round ${wave.round + 1}: ${wave.arrived} arrived, ${downedIn(wave)} downed`),
         ],
     };
 }
@@ -1109,41 +1114,9 @@ function starLines(stars: readonly HoldOutStar[], shrine: IRealmArenaGameResultS
         ...HOLD_OUT_STARS.map(star => {
             const { name, reason } = HOLD_OUT_STAR_INFO[star];
             const hp = star === "unscathed" && shrine ? ` (${shrine.hp}/${shrine.maxHp} HP)` : "";
-            return `${earned.has(star) ? "★" : "☆"} ${name}: ${reason}${hp}`;
+            return `${starMark(stars, star)} ${name}: ${reason}${hp}`;
         }),
     ];
-}
-
-/**
- * The Hold Out group of a battle whose nests produce the enemy
- * (realm-arena-hold-out.md §5, §6): how it ended, its stars, how many of the
- * Brood took the field and fell and how many nests were destroyed, the rally
- * choices, then each stage of the horde. A result with stars but no record has
- * the stars alone.
- */
-function producedGroup(stats: IRealmArenaGameResultStats): GameResultStatGroup | undefined {
-    const { waves, standingPerRound, battleRounds: rounds, shrine, nests, stars } = stats;
-    const stageLines: string[] = [];
-    if (waves?.length && standingPerRound?.length && rounds) {
-        const lasted = standingPerRound.length;
-        const overrun = (mongoMap(standingPerRound[lasted - 1]).get(TEAM_SIDE) ?? 0) === 0;
-        const arrived = waves.reduce((sum, wave) => sum + wave.arrived, 0);
-        const downed = waves.reduce((sum, wave) => sum + downedIn(wave), 0);
-        const tally = rallyTally(waves.flatMap(wave => wave.rallies ?? []));
-        stageLines.push(
-            overrun ? `Overrun in round ${lasted} of ${rounds}`
-                : shrine && shrine.hp <= 0 ? `The Shrine fell in round ${lasted} of ${rounds}`
-                : nests && nests.standing === 0 ? `Broke the Brood in round ${lasted} of ${rounds}`
-                : `Held the Shrine for all ${rounds} rounds`,
-            ...(stars ? starLines(stars, shrine) : []),
-            `${arrived} of the Brood took the field, and the team downed ${downed}${nests ? `; destroyed ${nests.total - nests.standing} of ${nests.total} nests` : ""}`,
-            ...(tally ? [tally] : []),
-            ...waves.map((wave, index) => `${waveLabel(wave, index, true)}, from round ${wave.round + 1}: ${wave.arrived} arrived, ${downedIn(wave)} downed`),
-        );
-    } else if (stars) {
-        stageLines.push(...starLines(stars, shrine));
-    }
-    return stageLines.length > 0 ? { username: "Hold Out", lines: stageLines } : undefined;
 }
 
 /** How many of each side stood, round by round, with every wave marked on the enemy's line as it landed (§30.10). */
