@@ -2405,6 +2405,9 @@ export const HOLD_OUT_STAR_INFO: Readonly<Record<HoldOutStar, { name: string; re
     unscathed: { name: "Unscathed", reason: "The Shrine ended above half its HP" },
 };
 
+/** A won Hold Out's stars as one line, in `HOLD_OUT_STARS` order: ★ for each earned, ☆ for each missed. */
+export const starLine = (stars: readonly HoldOutStar[]): string => HOLD_OUT_STARS.map(star => stars.includes(star) ? "★" : "☆").join("");
+
 /**
  * The stars a won Hold Out earns (§6), read off the battlefield as it ended:
  * Held, for the win itself; Broke the Brood, for every nest down — which ends
