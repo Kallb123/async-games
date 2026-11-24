@@ -283,7 +283,7 @@ describe("the record of a Hold Out whose nests produce the enemy (realm-arena-ho
     it("starts a stage where the horde's theme changes, and keeps the Shrine and the nests as they ended", () => {
         const record = played();
         expect(record.produced).toBe(true);
-        expect(record.waves.map(({ round, name, arrived }) => ({ round, name, arrived }))).toEqual([
+        expect(record.waves!.map(({ round, name, arrived }) => ({ round, name, arrived }))).toEqual([
             { round: 0, name: "The Rush", arrived: 2 },
             { round: 4, name: "The Bile", arrived: 3 },
         ]);
@@ -320,7 +320,7 @@ describe("the record of a Hold Out whose nests produce the enemy (realm-arena-ho
         expect(linesOf(stats({ stars: ["held", "broke", "unscathed"] }))).toEqual([
             "Broke the Brood in round 2 of 15",
             "★★★ 3 of 3 stars",
-            "★ Held: The team won: the Shrine stood to the end",
+            "★ Held: The Shrine stood to the end, and the team won",
             "★ Broke the Brood: Every nest fell before the round cap",
             "★ Unscathed: The Shrine ended above half its HP (31/50 HP)",
             "28 of the Brood took the field, and the team downed 21; destroyed 3 of 3 nests",
@@ -339,7 +339,7 @@ describe("the record of a Hold Out whose nests produce the enemy (realm-arena-ho
     it("shows the stars of a result whose record is missing", () => {
         expect(linesOf({ mastery: [], stars: ["held"] })).toEqual([
             "★☆☆ 1 of 3 stars",
-            "★ Held: The team won: the Shrine stood to the end",
+            "★ Held: The Shrine stood to the end, and the team won",
             "☆ Broke the Brood: Every nest fell before the round cap",
             "☆ Unscathed: The Shrine ended above half its HP",
         ]);

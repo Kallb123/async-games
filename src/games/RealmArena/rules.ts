@@ -2400,7 +2400,7 @@ export type HoldOutStar = (typeof HOLD_OUT_STARS)[number];
 
 /** Each star's name, and what earns it, as the board, the log and the result tell it. */
 export const HOLD_OUT_STAR_INFO: Readonly<Record<HoldOutStar, { name: string; reason: string }>> = {
-    held: { name: "Held", reason: "The team won: the Shrine stood to the end" },
+    held: { name: "Held", reason: "The Shrine stood to the end, and the team won" },
     broke: { name: "Broke the Brood", reason: "Every nest fell before the round cap" },
     unscathed: { name: "Unscathed", reason: "The Shrine ended above half its HP" },
 };
