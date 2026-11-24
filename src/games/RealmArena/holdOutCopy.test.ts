@@ -37,10 +37,10 @@ describe("Hold Out copy", () => {
     it("describes the setup's difficulty by the spawn, the nests and the Shrine", () => {
         const rules = ruleValuesOf(V13);
         const nest = rulesetFor(13).CHARACTERS.nest.hp;
-        expect(holdOutDifficultyDescription("normal", V13)).toBe(`Each nest spawns ${rules.SPAWN_THREAT} threat a round, has ${nest} HP, and the Shrine has ${rules.SHRINE_HP} HP, plus ${rules.SHRINE_HP_PER_PLAYER} for each of you.`);
-        expect(holdOutDifficultyDescription("easy", V13)).toContain(`spawns ${rules.SPAWN_THREAT! - 1} threat`);
-        expect(holdOutDifficultyDescription("easy", V13)).toContain(`has ${nest - 3} HP`);
-        expect(holdOutDifficultyDescription("hard", V13)).toContain(`the Shrine has ${rules.SHRINE_HP! - 10} HP`);
+        expect(holdOutDifficultyDescription("normal", V13)).toBe(`Nests of ${nest} HP; the Shrine has ${rules.SHRINE_HP} HP, plus ${rules.SHRINE_HP_PER_PLAYER} for each of you.`);
+        expect(holdOutDifficultyDescription("easy", V13)).toBe(`The nests hatch less each round and have ${nest - 3} HP; the Shrine has ${rules.SHRINE_HP! + 10} HP, plus ${rules.SHRINE_HP_PER_PLAYER} for each of you.`);
+        expect(holdOutDifficultyDescription("hard", V13)).toBe(`The nests hatch more each round and have ${nest + 3} HP; the Shrine has ${rules.SHRINE_HP! - 10} HP, plus ${rules.SHRINE_HP_PER_PLAYER} for each of you.`);
+        for (const difficulty of ["easy", "normal", "hard"] as const) expect(holdOutDifficultyDescription(difficulty, V13)).not.toMatch(/threat/);
         expect(holdOutDifficultyDescription("hard", V13)).not.toMatch(/undefined|NaN/);
     });
 

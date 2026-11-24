@@ -81,10 +81,12 @@ export const brokenBroodHoldOut = (context?: RulesContext): boolean => ruleValue
  * HP and the Shrine's, from the rules' own steps.
  */
 export function holdOutDifficultyDescription(difficulty: Difficulty, context?: RulesContext): string {
-    const { SPAWN_THREAT = 0, SHRINE_HP = 0, SHRINE_HP_PER_PLAYER = 0, HOLD_OUT_DIFFICULTY } = ruleValuesOf(context);
+    const { SHRINE_HP = 0, SHRINE_HP_PER_PLAYER = 0, HOLD_OUT_DIFFICULTY } = ruleValuesOf(context);
     const step = HOLD_OUT_DIFFICULTY?.[difficulty] ?? { spawnThreat: 0, nestHp: 0, shrineHp: 0 };
     const nestHp = rulesetOf(context).CHARACTERS.nest.hp + step.nestHp;
-    return `Each nest spawns ${SPAWN_THREAT + step.spawnThreat} threat a round, has ${nestHp} HP, and the Shrine has ${SHRINE_HP + step.shrineHp} HP, plus ${SHRINE_HP_PER_PLAYER} for each of you.`;
+    // "Threat" is the rules' word, never the player's: the spawn is told as more or less than Normal's.
+    const hatch = step.spawnThreat > 0 ? "The nests hatch more each round and have" : step.spawnThreat < 0 ? "The nests hatch less each round and have" : "Nests of";
+    return `${hatch} ${nestHp} HP; the Shrine has ${SHRINE_HP + step.shrineHp} HP, plus ${SHRINE_HP_PER_PLAYER} for each of you.`;
 }
 
 /**
