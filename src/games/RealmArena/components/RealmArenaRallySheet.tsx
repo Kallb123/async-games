@@ -5,7 +5,7 @@ import PendingTag from '@/components/ui/PendingTag';
 import { rulesetOf } from '@/games/RealmArena/rulesets';
 import { fighterName } from '@/games/RealmArena/ui';
 import { CHARACTER_MARK } from '@/games/RealmArena/roster';
-import { RALLY_LOOK, rallyHp, rallyOptionsOf, rallyTotal, reinforcedHp, resupplyItems, type RallyAction, type RallyChoice } from '@/games/RealmArena/rally';
+import { RALLY_LOOK, rallyHp, rallyOptionsOf, rallyReason, rallyTotal, reinforcedHp, resupplyItems, type RallyAction, type RallyChoice } from '@/games/RealmArena/rally';
 import { shrineOf, type BattleState } from '@/games/RealmArena/rules';
 import { andList, capitalise } from '@/utils/ui/text';
 
@@ -89,7 +89,7 @@ export default function RealmArenaRallySheet({ battle, seats, player, pendingTar
 
     return (
         <>
-            <p className="ag-hint ag-hint--tight">A fresh wave has landed. Choose how your squad rallies before you act.</p>
+            <p className="ag-hint ag-hint--tight">{rallyReason(battle)} Choose how your squad rallies before you act.</p>
             <div className="ag-build-list">
                 {options.map(option => {
                     const look = RALLY_LOOK[option.choice];
