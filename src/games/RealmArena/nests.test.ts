@@ -3,7 +3,6 @@ import { buildTimeline } from "@/utils/games/replay";
 import { isNeighbour, type Battlefield, type Square } from "@/utils/games/battlefield/terrain";
 import { EFFECT_IDS, FACTION_IDS, type CharacterId } from "./characters";
 import { nextAction } from "./ai";
-import { achievements } from "./achievements";
 import { battlefieldById, REALM_ARENA_MAPS } from "./maps";
 import { gameStateToModel } from "./RealmArenaModels";
 import { recordBattle } from "./recordBattle";
@@ -321,20 +320,6 @@ describe("a nest is nobody standing (§39.7)", () => {
         fighters(game).forEach(fighter => { if (!isWarband(fighter.owner)) fighter.hp = 0; });
         expect(new RealmArenaGameType().CheckGameOver(game)).toBe(true);
         expect(game).toMatchObject({ endReason: "teamloss" });
-    });
-
-    it("leaves Broken Tide to the Swarm's characters: won with every one downed and the nests standing", async () => {
-        const { game } = await mustered();
-        const brokenTide = achievements.find(achievement => achievement.id === "realmarena.broken-tide")!;
-        const check = (brokenTide.criteria as unknown as { check: (view: unknown, finished: { outcome: string }) => boolean }).check;
-        downWarbandCharacters(game);
-        const view = gameStateToModel(game.specificGameState, "a", null, true);
-        expect(view.fighters.filter(fighter => fighter.character === "nest" && fighter.hp > 0)).toHaveLength(4);
-        expect(check(view, { outcome: "win" })).toBe(true);
-        // One character standing says otherwise.
-        const standing = fighters(game).find(fighter => isWarband(fighter.owner) && fighter.character !== "nest")!;
-        standing.hp = 3;
-        expect(check(gameStateToModel(game.specificGameState, "a", null, true), { outcome: "win" })).toBe(false);
     });
 
     it("isn't counted by the refill or the cap, nor by the next wave's count", async () => {

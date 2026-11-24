@@ -4,10 +4,13 @@
 //
 // Every match achievement is judged at the end. During a battle fought in fog
 // the table view contains no fighters; once it is over, fog lifts and the same
-// response contains the battlefield that these checks read.
+// response contains the battlefield that these checks read. Hold Out's stars,
+// and the achievements built on them (Three Stars, Broken Tide, Scorched
+// Earth), are realm-arena-hold-out.md §6: they read `stars`, sent only on the
+// finished response.
 import type { FinishedSeat, GameAchievement } from "@/utils/games/achievements";
 import type { IRealmArenaSpecificGameStateResponse } from "./apiModels";
-import { isStanding, isStructure, isWarband } from "./rules";
+import { HOLD_OUT_STARS, isStanding, isWarband } from "./rules";
 
 function wholeTeamStanding(view: IRealmArenaSpecificGameStateResponse): boolean {
     const team = view.fighters.filter(fighter => !isWarband(fighter.owner));
@@ -24,16 +27,17 @@ function isSolo(view: IRealmArenaSpecificGameStateResponse): boolean {
     return new Set(view.fighters.filter(fighter => !isWarband(fighter.owner)).map(fighter => fighter.owner)).size === 1;
 }
 
-/**
- * Whether the warbands fielded anyone and nobody of theirs is standing: the last wave beaten before the rounds ran out (§30.3).
- * A nest standing is no one (§39.7): the Swarm's characters are what Broken Tide asks to be downed.
- */
-function enemyWipedOut(view: IRealmArenaSpecificGameStateResponse): boolean {
-    const enemy = view.fighters.filter(fighter => isWarband(fighter.owner) && !isStructure(fighter, view));
-    return enemy.length > 0 && !enemy.some(isStanding);
+/** Whether the team broke the Brood: every nest fell before the round cap (realm-arena-hold-out.md §6). */
+function brokeTheBrood(view: IRealmArenaSpecificGameStateResponse): boolean {
+    return view.stars?.includes("broke") === true;
 }
 
-/** Whether a Brood Queen (§39.5) of the Swarm is down: fallen fighters stay in the finished response, and a Queen never grows back. */
+/** Whether the team earned every star a battle of Hold Out offers. */
+function earnedEveryStar(view: IRealmArenaSpecificGameStateResponse): boolean {
+    return HOLD_OUT_STARS.every(star => view.stars?.includes(star));
+}
+
+/** Whether a Brood Queen (§39.5) is down: fallen fighters stay in the finished response (the Brood scattering at the end removes only the standing), and a Queen never grows back. */
 function broodQueenDown(view: IRealmArenaSpecificGameStateResponse): boolean {
     return view.fighters.some(fighter => isWarband(fighter.owner) && fighter.character === "broodQueen" && !isStanding(fighter));
 }
@@ -115,11 +119,11 @@ export const achievements: GameAchievement<IRealmArenaSpecificGameStateResponse>
         id: "realmarena.broken-tide",
         title: "Broken Tide",
         icon: "🌊",
-        description: "Win a battle of Hold Out by downing every character of the last wave before the last round is over.",
+        description: "Win a battle of Hold Out by breaking the Brood, bringing down every nest, by the end of round 10.",
         criteria: {
             kind: "match",
             at: "end",
-            check: (view, { outcome }) => wonHoldOut(view, outcome) && enemyWipedOut(view),
+            check: (view, { outcome }) => wonHoldOut(view, outcome) && brokeTheBrood(view) && view.round <= 10,
         },
     },
     {
@@ -148,7 +152,7 @@ export const achievements: GameAchievement<IRealmArenaSpecificGameStateResponse>
         id: "realmarena.regicide",
         title: "Regicide",
         icon: "🗡️",
-        description: "Win a battle of Hold Out in which a Brood Queen of the Swarm was downed.",
+        description: "Win a battle of Hold Out in which a Brood Queen was downed.",
         criteria: {
             kind: "match",
             at: "end",
@@ -159,11 +163,33 @@ export const achievements: GameAchievement<IRealmArenaSpecificGameStateResponse>
         id: "realmarena.scorched-earth",
         title: "Scorched Earth",
         icon: "🔥",
-        description: "Win a battle of Hold Out against the Swarm after destroying every nest at once, before a wave could grow them back.",
+        description: "Win a battle of Hold Out by breaking the Brood with every character on your team still standing.",
         criteria: {
             kind: "match",
             at: "end",
-            check: (view, { outcome }) => wonHoldOut(view, outcome) && view.nestsCleared === true,
+            check: (view, { outcome }) => wonHoldOut(view, outcome) && brokeTheBrood(view) && wholeTeamStanding(view),
+        },
+    },
+    {
+        id: "realmarena.three-stars",
+        title: "Three Stars",
+        icon: "🌟",
+        description: "Earn all three stars in a battle of Hold Out: Held, Broke the Brood and Unscathed.",
+        criteria: {
+            kind: "match",
+            at: "end",
+            check: (view, { outcome }) => wonHoldOut(view, outcome) && earnedEveryStar(view),
+        },
+    },
+    {
+        id: "realmarena.three-stars-hard",
+        title: "Three Stars on Hard",
+        icon: "💫",
+        description: "Earn all three stars in a battle of Hold Out on Hard.",
+        criteria: {
+            kind: "match",
+            at: "end",
+            check: (view, { outcome }) => wonHoldOut(view, outcome) && view.difficulty === "hard" && earnedEveryStar(view),
         },
     },
 ];

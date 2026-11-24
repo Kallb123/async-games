@@ -90,13 +90,16 @@ describe("Realm Arena achievements", () => {
         for (const map of ["sunkenVillageThree", "sunkenVillageFour"] as const) expect(check("realmarena.hold-the-keep", view({ mission: "holdOut", map }), "win")).toBe(false);
     });
 
-    it("awards Broken Tide only for a Hold Out won with the whole enemy down", () => {
-        const wiped = [fighter("a"), fighter("b"), fighter("ai:0", 0), fighter("ai:1", 0)];
-        expect(check("realmarena.broken-tide", view({ mission: "holdOut", fighters: wiped }), "win")).toBe(true);
-        expect(check("realmarena.broken-tide", view({ mission: "holdOut", fighters: wiped }), "loss")).toBe(false);
-        expect(check("realmarena.broken-tide", view({ mission: "holdOut" }), "win")).toBe(false);
-        expect(check("realmarena.broken-tide", view({ mission: "holdOut", fighters: [fighter("a")] }), "win")).toBe(false);
-        expect(check("realmarena.broken-tide", view({ fighters: wiped }), "win")).toBe(false);
+    it("awards Broken Tide only for a Hold Out won by breaking the Brood by round 10", () => {
+        const broke: Partial<IRealmArenaSpecificGameStateResponse> = { mission: "holdOut", stars: ["held", "broke"] };
+        expect(check("realmarena.broken-tide", view({ ...broke, round: 10 }), "win")).toBe(true);
+        expect(check("realmarena.broken-tide", view({ ...broke, round: 4 }), "win")).toBe(true);
+        expect(check("realmarena.broken-tide", view({ ...broke, round: 10 }), "loss")).toBe(false);
+        // Too late, or won at the cap without breaking it, or no stars at all.
+        expect(check("realmarena.broken-tide", view({ ...broke, round: 11 }), "win")).toBe(false);
+        expect(check("realmarena.broken-tide", view({ mission: "holdOut", round: 15, stars: ["held", "unscathed"] }), "win")).toBe(false);
+        expect(check("realmarena.broken-tide", view({ mission: "holdOut", round: 5 }), "win")).toBe(false);
+        expect(check("realmarena.broken-tide", view({ ...broke, round: 5, mission: undefined }), "win")).toBe(false);
     });
 
     it("awards Unbroken only for a Hold Out won with the whole team standing", () => {
@@ -119,11 +122,33 @@ describe("Realm Arena achievements", () => {
         expect(check("realmarena.regicide", view({ mission: "holdOut", fighters: [{ ...fighter("a", 0), character: "broodQueen" }] }), "win")).toBe(false);
     });
 
-    it("awards Scorched Earth only for a Hold Out won after every nest was down at once", () => {
-        const cleared = view({ mission: "holdOut", nestsCleared: true });
-        expect(check("realmarena.scorched-earth", cleared, "win")).toBe(true);
-        expect(check("realmarena.scorched-earth", cleared, "loss")).toBe(false);
+    it("awards Scorched Earth only for a Hold Out won by breaking the Brood with the whole team standing", () => {
+        const shrine: Fighter = { ...fighter("shrine"), character: "shrine" };
+        const broke: Partial<IRealmArenaSpecificGameStateResponse> = { mission: "holdOut", stars: ["held", "broke"] };
+        expect(check("realmarena.scorched-earth", view({ ...broke }), "win")).toBe(true);
+        // The Shrine is the team's, and stands in any win.
+        expect(check("realmarena.scorched-earth", view({ ...broke, fighters: [fighter("a"), fighter("b"), shrine, fighter("ai:0", 0)] }), "win")).toBe(true);
+        expect(check("realmarena.scorched-earth", view({ ...broke }), "loss")).toBe(false);
+        expect(check("realmarena.scorched-earth", view({ ...broke, fighters: [fighter("a"), fighter("b", 0), fighter("ai:0")] }), "win")).toBe(false);
+        // Won at the cap, or with no stars.
+        expect(check("realmarena.scorched-earth", view({ mission: "holdOut", stars: ["held"] }), "win")).toBe(false);
         expect(check("realmarena.scorched-earth", view({ mission: "holdOut" }), "win")).toBe(false);
-        expect(check("realmarena.scorched-earth", view({ nestsCleared: true }), "win")).toBe(false);
+        expect(check("realmarena.scorched-earth", view({ ...broke, mission: undefined }), "win")).toBe(false);
+    });
+
+    it("awards Three Stars only for a Hold Out won with every star, and the Hard one only on Hard", () => {
+        const all: Partial<IRealmArenaSpecificGameStateResponse> = { mission: "holdOut", stars: ["held", "broke", "unscathed"] };
+        expect(check("realmarena.three-stars", view({ ...all }), "win")).toBe(true);
+        expect(check("realmarena.three-stars", view({ ...all, difficulty: "hard" }), "win")).toBe(true);
+        expect(check("realmarena.three-stars", view({ ...all }), "loss")).toBe(false);
+        expect(check("realmarena.three-stars", view({ mission: "holdOut", stars: ["held", "broke"] }), "win")).toBe(false);
+        expect(check("realmarena.three-stars", view({ mission: "holdOut" }), "win")).toBe(false);
+        expect(check("realmarena.three-stars", view({ ...all, mission: undefined }), "win")).toBe(false);
+
+        expect(check("realmarena.three-stars-hard", view({ ...all, difficulty: "hard" }), "win")).toBe(true);
+        expect(check("realmarena.three-stars-hard", view({ ...all, difficulty: "hard" }), "loss")).toBe(false);
+        expect(check("realmarena.three-stars-hard", view({ ...all }), "win")).toBe(false);
+        expect(check("realmarena.three-stars-hard", view({ ...all, difficulty: "easy" }), "win")).toBe(false);
+        expect(check("realmarena.three-stars-hard", view({ mission: "holdOut", stars: ["held", "broke"], difficulty: "hard" }), "win")).toBe(false);
     });
 });
