@@ -9,7 +9,7 @@ import type { NextWave, IRealmArenaStepOutcome, IRealmArenaStepPart, RealmArenaP
 import { andList, capitalise, pluralize, possessive } from "@/utils/ui/text";
 import type { Reach } from "@/utils/games/battlefield/pathfinding";
 import { coordsOf, distance, FACING_COUNT, facingTowards, riseOf, squareAt, TERRAIN, type Battlefield, type Facing, type Square, type Terrain, type TerrainLetter } from "@/utils/games/battlefield/terrain";
-import { EFFECT_IDS, EFFECTS, ITEM_IDS, ITEMS, type AbilityId, type CharacterId, type EffectId, type FactionId, type Item, type ItemId } from "./characters";
+import { EFFECT_IDS, EFFECTS, ITEM_IDS, ITEMS, type AbilityId, type CharacterId, type EffectId, type FactionId, type Item, type ItemId, type Difficulty } from "./characters";
 import { ABILITY_MARK, CHARACTER_IDS } from "./roster";
 import { battlefieldOf } from "./maps";
 import { artCharacterOf, EFFECT_ART, ITEM_ART, type BurstKind, type Missile, type Sprite, type ThrownItem } from "./art";
@@ -65,6 +65,26 @@ export function waveLineOf(nextWave: NextWave | undefined, round: number): strin
 export function forcedHoldOutEnemy(context?: RulesContext): { id: FactionId; name: string } | undefined {
     const id = ruleValuesOf(context).HOLD_OUT_ENEMY;
     return id === undefined ? undefined : { id, name: rulesetOf(context).FACTIONS[id].enemyName };
+}
+
+/**
+ * Whether Hold Out, under these rules, is the one where the nests produce the
+ * enemy and the team breaks the Brood or holds the Shrine (version 13): what
+ * the guide, the setup screen and the tutorial switch their Hold Out copy on.
+ * Without a context it is the current ruleset, so the copy goes live with it.
+ */
+export const brokenBroodHoldOut = (context?: RulesContext): boolean => ruleValuesOf(context).SPAWN_THREAT !== undefined;
+
+/**
+ * What a difficulty does to a Hold Out where nests produce the enemy, in the
+ * words the setup screen gives it: the threat each nest spawns a turn, a nest's
+ * HP and the Shrine's, from the rules' own steps.
+ */
+export function holdOutDifficultyDescription(difficulty: Difficulty, context?: RulesContext): string {
+    const { SPAWN_THREAT = 0, SHRINE_HP = 0, SHRINE_HP_PER_PLAYER = 0, HOLD_OUT_DIFFICULTY } = ruleValuesOf(context);
+    const step = HOLD_OUT_DIFFICULTY?.[difficulty] ?? { spawnThreat: 0, nestHp: 0, shrineHp: 0 };
+    const nestHp = rulesetOf(context).CHARACTERS.nest.hp + step.nestHp;
+    return `Each nest spawns ${SPAWN_THREAT + step.spawnThreat} threat a round, has ${nestHp} HP, and the Shrine has ${SHRINE_HP + step.shrineHp} HP, plus ${SHRINE_HP_PER_PLAYER} for each of you.`;
 }
 
 /**
