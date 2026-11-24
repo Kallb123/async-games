@@ -98,11 +98,18 @@ const FACTIONS = {
 // round: 3 threat a standing nest each warband turn, 1 more every four rounds,
 // after a starting horde of 10. 15 rounds for every team; a rally earned as
 // rounds 5, 9 and 13 begin; 60 points for each round left when the Brood breaks;
-// a Shrine of 20 HP and 10 more a player. All *Proposed*.
+// a Shrine of 20 HP and 10 more a player. Easy and Hard each move the spawn by
+// 1 threat, a nest's HP by 3 and the Shrine's by 10, the harder way (§6). All
+// *Proposed*.
 const RULES = {
     ...catalogueV12.RULES, HORDE_CAP: 16, HORDE_REAL_CAP: 4,
     SPAWN_THREAT: 3, SPAWN_STEP_ROUNDS: 4, STARTING_HORDE: 10, HOLD_OUT_ROUNDS: 15, RALLY_ROUNDS: [5, 9, 13], ROUND_BONUS: 60,
     SHRINE_HP: 20, SHRINE_HP_PER_PLAYER: 10, HOLD_OUT_ENEMY: "brood" as const, HOLD_OUT_SITES: HOLD_OUT_SITES_V13,
+    HOLD_OUT_DIFFICULTY: {
+        easy: { spawnThreat: -1, nestHp: -3, shrineHp: 10 },
+        normal: { spawnThreat: 0, nestHp: 0, shrineHp: 0 },
+        hard: { spawnThreat: 1, nestHp: 3, shrineHp: -10 },
+    },
 };
 
 export const catalogueV13 = {

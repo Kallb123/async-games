@@ -282,6 +282,11 @@ describe("Realm Arena ruleset compatibility", () => {
             ...before.RULES, HORDE_CAP: 16, HORDE_REAL_CAP: 4,
             SPAWN_THREAT: 3, SPAWN_STEP_ROUNDS: 4, STARTING_HORDE: 10, HOLD_OUT_ROUNDS: 15, RALLY_ROUNDS: [5, 9, 13], ROUND_BONUS: 60,
             SHRINE_HP: 20, SHRINE_HP_PER_PLAYER: 10, HOLD_OUT_ENEMY: "brood",
+            HOLD_OUT_DIFFICULTY: {
+                easy: { spawnThreat: -1, nestHp: -3, shrineHp: 10 },
+                normal: { spawnThreat: 0, nestHp: 0, shrineHp: 0 },
+                hard: { spawnThreat: 1, nestHp: 3, shrineHp: -10 },
+            },
         });
         expect(Object.keys(HOLD_OUT_SITES!).sort()).toEqual(["ruinedFort", "sackedFortFour", "sackedFortThree", "sackedFortTwo", "sunkenVillageFour", "sunkenVillageThree", "threeGateFort", "twinGateFort"]);
     });
@@ -289,7 +294,7 @@ describe("Realm Arena ruleset compatibility", () => {
     // realm-arena-hold-out.md §5.4: a faster win must outscore a slower one with more knock-outs, so a
     // round's bonus is above the most a round of fighting can score — the knock-out points of everything
     // every nest the battle started with can produce in a round, at its latest and largest SPAWN_THREAT,
-    // with the largest round of elites on the schedule — for every team size.
+    // with the largest round of elites on the schedule — for every team size, on Hard, whose nests produce the most (§6).
     it("holds the round bonus above the most a round of fighting against the Brood can score, for every team size", () => {
         const V13 = { rulesVersion: 13 };
         const { CHARACTERS, FACTIONS } = rulesetFor(13);
@@ -299,7 +304,7 @@ describe("Realm Arena ruleset compatibility", () => {
         for (const warbands of [1, 2, 3, 4]) {
             const nests = Math.max(...Object.values(HOLD_OUT_SITES!).filter(sites => sites.nests.length === warbands).map(sites => sites.nests.flat().length));
             const elites = Math.max(...brood.eliteSchedule!.map(({ round, elite }) => eliteArrivals(brood, round, Array(warbands).fill(2)).length * knockoutPoints(elite, V13)));
-            const bound = nests * spawnThreatOf(HOLD_OUT_ROUNDS!, V13) * perThreat + elites;
+            const bound = nests * spawnThreatOf(HOLD_OUT_ROUNDS!, { ...V13, coop: { difficulty: "hard" } }) * perThreat + elites;
             expect(ROUND_BONUS!, `${warbands} warbands`).toBeGreaterThan(bound);
         }
     });

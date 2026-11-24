@@ -17,7 +17,7 @@ import { userToken } from "@/utils/games/history";
 import { BATTLE_SIZE_NAMES, CHARACTERS, COOP_PLAYERS, coopTeamMax, DIFFICULTY_NAMES, FACTION_IDS, factionById, FACTIONS, fitsCoop, isFactionId, playableFactionsOf, RANDOM_ENEMY, REALM_ONLY, UNKNOWN_ENEMY, type BattleSize, type Character, type CharacterId, type Difficulty, type FactionId } from "./characters";
 import { addTally, NO_TALLY, xpOf, type MasterySnapshot, type Tally } from "./mastery";
 import { battlefieldById, COOP_MAPS, DEPLOYMENT_NAMES, mapFor, type CoopMap, type RealmArenaMapId } from "./maps";
-import { isMinion, nestsProduce, type Action, allied, ENEMY_SIDE, fighterById, fogGhost, isStructure, isWarband, pickOf, squadSight, storedFighter, TEAM_SIDE, viewOf, warbandsFor, maxHpOf, actionPointsOf, type BattleEvent, type Fighter, type FogGhost, type MusterPick, type ToldEvent } from "./rules";
+import { isMinion, isStanding, nestsProduce, type HoldOutStar, type Action, allied, ENEMY_SIDE, fighterById, fogGhost, isStructure, isWarband, pickOf, squadSight, storedFighter, TEAM_SIDE, viewOf, warbandsFor, maxHpOf, actionPointsOf, type BattleEvent, type Fighter, type FogGhost, type MusterPick, type ToldEvent } from "./rules";
 import { computerHoldsTurn } from "@/utils/games/computerTurns";
 import type { IRealmArenaGameDataResponse, IRealmArenaSpecificGameStateResponse, IRealmArenaStepOutcome, IRealmArenaStepPart, RealmArenaPartState } from "./apiModels";
 import type { Square } from "@/utils/games/battlefield/terrain";
@@ -194,6 +194,12 @@ export interface IRealmArenaSpecificGameState {
     ralliesBanked?: number;
     /** The round the team last took a rally in, as it began (§5.3): it never takes two in rounds running. Public. Absent until one is taken. */
     lastRally?: number;
+    /**
+     * The stars a won Hold Out earned (realm-arena-hold-out.md §6), set as the
+     * battle ends (`holdOutStars`) where nests produce the enemy. Sent only once
+     * it's over. Absent on a loss, and in every other battle.
+     */
+    stars?: HoldOutStar[];
     /** Battle rounds played to the end: 0 until the first round's last turn ends. The round being played is one more. */
     roundsPlayed: number;
     /**
@@ -547,6 +553,8 @@ var RealmArenaGameDataSchema = new Schema<IRealmArenaGameDataDocument>(
             threat: Schema.Types.Mixed,
             ralliesBanked: Number,
             lastRally: Number,
+            // Written once, as a won Hold Out ends (realm-arena-hold-out.md §6).
+            stars: { type: [String], default: undefined },
             fighters: Schema.Types.Mixed,
             sightings: Schema.Types.Mixed,
             blasted: [Number],
@@ -654,6 +662,10 @@ export function gameStateToModel(
         ...(nextWave ? { nextWave } : {}),
         ...(nestSquares ? { nestSquares } : {}),
         ...(rally ? { rally } : {}),
+        // How many nests still stand, where nests produce the enemy (realm-arena-hold-out.md §6): public, as
+        // `enemiesDefeated` is, though a nest can fall out of the team's sight (§5.6).
+        ...(gs.phase === "battle" && nestsProduce(gs.coop?.mission, gs) ? { nestsLeft: gs.fighters.filter(fighter => isWarband(fighter.owner) && isStructure(fighter, gs) && isStanding(fighter)).length } : {}),
+        ...(complete && gs.stars ? { stars: [...gs.stars] } : {}),
         // Whether nests stand is unseen in fog until the battle is over, so this waits for it too.
         ...(complete && gs.nestsCleared ? { nestsCleared: true as const } : {}),
         ...(gs.coop?.mission === "holdOut" && gs.phase !== "muster" ? { enemiesDefeated: gs.fighters.filter(fighter => isWarband(fighter.owner) && fighter.hp <= 0 && !isStructure(fighter, gs)).length } : {}),

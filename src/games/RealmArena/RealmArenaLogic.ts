@@ -31,7 +31,7 @@ import {
     ENEMY_TURN_SEAT,
     fighterById,
     fogGhost,
-    eliteArrivals, hatchSquares, hordeSpawn, nestsProduce, SHRINE_OWNER, shrineOf, spawnThemeOf, spawnThreatOf,
+    eliteArrivals, hatchSquares, holdOutDifficultyOf, holdOutStars, HOLD_OUT_STAR_INFO, HOLD_OUT_STARS, hordeSpawn, nestsProduce, SHRINE_OWNER, shrineOf, spawnThemeOf, spawnThreatOf,
     isBattleOver,
     isCombatant,
     isMinion,
@@ -1036,6 +1036,7 @@ function endInCoop(data: IRealmArenaGameData, battle: BattleState, coop: IRealmA
         ? holdOutEnding(gs)!
         : holdTheCentreEnding(data, battle, coop);
     if (roundsLeft !== undefined) breakTheBrood(data, roundsLeft);
+    if (won && nestsProduce(coop.mission, gs)) awardStars(data);
     const onDifficulty = coop.difficulty ? `, on ${DIFFICULTY_NAMES[coop.difficulty]}` : "";
     endAsTeam(data, won ? "teamwin" : "teamloss", `The team ${won ? "wins" : "loses"} the battle`, `${detail}${onDifficulty}`);
 }
@@ -1113,6 +1114,17 @@ function breakTheBrood(data: IRealmArenaGameData, roundsLeft: number): void {
     const fled = scattered > 0 ? `, and the ${pluralize(scattered, "character")} of it still standing ${scattered === 1 ? "scatters" : "scatter"}` : "";
     data.gameState.history.unshift({ text: `The last nest falls: the Brood breaks${fled}` });
     if (bonus > 0) data.gameState.history.unshift({ text: `The team scores ${pluralize(bonus, "point")} for breaking it with ${pluralize(roundsLeft, "round")} to spare` });
+}
+
+/**
+ * A won Hold Out's stars (realm-arena-hold-out.md §6), kept on the state as the
+ * battle ends, after the Brood has broken, and told to everyone: the battle is
+ * over, so the fog has lifted on what earned them.
+ */
+function awardStars(data: IRealmArenaGameData): void {
+    const gs = data.specificGameState;
+    gs.stars = holdOutStars(gs.fighters, gs);
+    data.gameState.history.unshift({ text: `The team earns ${gs.stars.length} of ${HOLD_OUT_STARS.length} stars: ${gs.stars.map(star => HOLD_OUT_STAR_INFO[star].name).join(", ")}` });
 }
 
 /**
@@ -1244,7 +1256,7 @@ function shrineFighter(gs: IRealmArenaSpecificGameState, fighters: readonly Figh
     const square = nestsProduce(gs.coop?.mission, gs) ? holdOutSitesOf(gs)?.shrine : undefined;
     if (square === undefined) return [];
     const { SHRINE_HP = 0, SHRINE_HP_PER_PLAYER = 0 } = ruleValuesOf(gs);
-    const hp = SHRINE_HP + SHRINE_HP_PER_PLAYER * gs.seats.length;
+    const hp = SHRINE_HP + SHRINE_HP_PER_PLAYER * gs.seats.length + holdOutDifficultyOf(gs).shrineHp;
     return [{ ...newFighter(nextFighterId(fighters), SHRINE_OWNER, "shrine", square, null, undefined, undefined, false, gs), hp, maxHp: hp }];
 }
 
@@ -1263,7 +1275,13 @@ function nestFighters(gs: IRealmArenaSpecificGameState, fighters: readonly Fight
     const nest = sites && factionById(gs.coop?.enemy, gs).nest;
     if (!sites || !nest) return [];
     let nextId = nextFighterId(fighters);
-    return warbandsFor(gs.seats).flatMap((owner, k) => (sites[k] ?? []).map(square => newFighter(nextId++, owner, nest, square, null, undefined, undefined, false, gs)));
+    // Where nests produce the enemy, the difficulty moves their HP (realm-arena-hold-out.md §6).
+    const step = nestsProduce(gs.coop?.mission, gs) ? holdOutDifficultyOf(gs).nestHp : 0;
+    const hp = rulesetOf(gs).CHARACTERS[nest].hp + step;
+    return warbandsFor(gs.seats).flatMap((owner, k) => (sites[k] ?? []).map(square => ({
+        ...newFighter(nextId++, owner, nest, square, null, undefined, undefined, false, gs),
+        ...(step !== 0 ? { hp, maxHp: hp } : {}),
+    })));
 }
 
 /**
