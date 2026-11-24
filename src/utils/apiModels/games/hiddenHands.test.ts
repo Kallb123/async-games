@@ -1372,6 +1372,9 @@ describe("Realm Arena's Hold Out against nests that produce the Brood in fog of 
         nests[0].hp = 0;
         expect(new RealmArenaGameType().CheckGameOver(game)).toBe(true);
         expect(game.complete).toBe(true);
+        // `stars` is set on the state now, but a view that is not the finished one still carries none: the `complete` gate.
+        expect(gs.stars).toBeDefined();
+        for (const viewer of ["a", "b", null]) expect(realmArenaStateToModel(gs, viewer, null, false), String(viewer)).not.toHaveProperty("stars");
         for (const viewer of ["a", "b", null]) {
             const done = realmArenaStateToModel(gs, viewer, null, true);
             expect(done.stars, String(viewer)).toContain("held");

@@ -1,6 +1,7 @@
 import type { GameTutorial } from "@/utils/ui/gameTutorials";
 import { ruleValuesOf } from "./rulesets";
-import { ACTION_POINTS, CENTRE_POINTS, CENTRE_SCORES_FROM_ROUND, REACTION_COST } from "./rules";
+import { andList } from "@/utils/ui/text";
+import { ACTION_POINTS, CENTRE_POINTS, CENTRE_SCORES_FROM_ROUND, HOLD_OUT_STAR_INFO, HOLD_OUT_STARS, REACTION_COST } from "./rules";
 
 // The guided tour of a first Realm Arena match — shown once per account in
 // place of the guide's auto-show (see docs/game-tutorials.md). It covers what
@@ -23,6 +24,10 @@ import { ACTION_POINTS, CENTRE_POINTS, CENTRE_SCORES_FROM_ROUND, REACTION_COST }
 export type RealmArenaSignal = "mustering" | "sealed" | "battle" | "myTurn" | "selected" | "centre" | "breakTheBrood";
 
 // The round cap of a Hold Out whose nests produce the enemy; the step only shows in one.
+// Only a version 13 battle raises `breakTheBrood`, so a later ruleset with another cap must revisit this.
+// The stars a win can earn, by the rules' own names (the guide says what each is for).
+const STAR_NAMES = andList(HOLD_OUT_STARS.map(star => HOLD_OUT_STAR_INFO[star].name));
+
 const HOLD_OUT_ROUNDS = ruleValuesOf({ rulesVersion: 13 }).HOLD_OUT_ROUNDS;
 
 export const tutorial: GameTutorial<RealmArenaSignal> = {
@@ -77,7 +82,7 @@ export const tutorial: GameTutorial<RealmArenaSignal> = {
         {
             anchor: "ra-stats",
             title: "Break the Brood",
-            body: `The round, the nests you have left to destroy, the Shrine's HP and your team's health. The nests hatch the Brood every round: destroy every one and you win at once, and the sooner the more points. Or keep the Shrine standing to round ${HOLD_OUT_ROUNDS}. It earns stars: Held for the win, Broke the Brood for every nest down, Unscathed for a Shrine above half its HP.`,
+            body: `The round, the nests you have left to destroy, the Shrine's HP and your team's health. The nests hatch the Brood every round: destroy every one and you win at once, and the sooner the more points. Or keep the Shrine standing to round ${HOLD_OUT_ROUNDS}. It earns stars: ${STAR_NAMES}.`,
             when: "breakTheBrood",
         },
         {

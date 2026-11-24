@@ -2,7 +2,8 @@
 // per-game presentation helpers live in games/<Game>/ui.ts). Readings of the
 // state the response already ships, never a rule: those are rules.ts's.
 
-import { ruleValuesOf, rulesetOf, type RulesContext } from "./rulesets";
+import { CURRENT_RULESET_VERSION, ruleValuesOf, rulesetOf, type RulesContext } from "./rulesets";
+import { hatchClause } from "./guide";
 import type { Rect } from "@/utils/ui/mapLabels";
 import { isoCentre, ISO_HALF_HEIGHT, ISO_HALF_WIDTH, type IsoView, type Point } from "@/utils/ui/isometric";
 import type { NextWave, IRealmArenaStepOutcome, IRealmArenaStepPart, RealmArenaPartState } from "./apiModels";
@@ -13,7 +14,7 @@ import { EFFECT_IDS, EFFECTS, ITEM_IDS, ITEMS, type AbilityId, type CharacterId,
 import { ABILITY_MARK, CHARACTER_IDS } from "./roster";
 import { battlefieldOf } from "./maps";
 import { artCharacterOf, EFFECT_ART, ITEM_ART, type BurstKind, type Missile, type Sprite, type ThrownItem } from "./art";
-import { areaDamage, actionPointsOf, CENTRE, SCORED_FOR, squadSight, hasEffect, isMinion, isStanding, isWarband, maxHpOf, moveAp, pickOf, reachOf, shoots, SHRINE_OWNER, type BattleState, type Fighter, type MusterPick, type OddsBreakdown, type OddsFactor, type ShotResult, type ToldEvent } from "./rules";
+import { areaDamage, actionPointsOf, holdOutDifficultyOf, CENTRE, SCORED_FOR, squadSight, hasEffect, isMinion, isStanding, isWarband, maxHpOf, moveAp, pickOf, reachOf, shoots, SHRINE_OWNER, type BattleState, type Fighter, type MusterPick, type OddsBreakdown, type OddsFactor, type ShotResult, type ToldEvent } from "./rules";
 
 const LETTER_OF = new Map<Terrain, TerrainLetter>(
     (Object.entries(TERRAIN) as [TerrainLetter, Terrain][]).map(([letter, terrain]) => [terrain, letter]),
@@ -68,25 +69,25 @@ export function forcedHoldOutEnemy(context?: RulesContext): { id: FactionId; nam
 }
 
 /**
- * Whether Hold Out, under these rules, is the one where the nests produce the
- * enemy and the team breaks the Brood or holds the Shrine (version 13): what
- * the guide, the setup screen and the tutorial switch their Hold Out copy on.
- * Without a context it is the current ruleset, so the copy goes live with it.
+ * What the setup screen says Hold Out is where the nests produce the enemy (rules version 13): the
+ * two ways to win, told as the guide tells them. Without a context, the current ruleset's.
  */
-export const brokenBroodHoldOut = (context?: RulesContext): boolean => ruleValuesOf(context).SPAWN_THREAT !== undefined;
+export function holdOutMissionDescription(context?: RulesContext): string {
+    return `Break the Brood by destroying every nest, or hold the Shrine to round ${ruleValuesOf(context).HOLD_OUT_ROUNDS}.`;
+}
 
 /**
  * What a difficulty does to a Hold Out where nests produce the enemy, in the
- * words the setup screen gives it: the threat each nest spawns a turn, a nest's
- * HP and the Shrine's, from the rules' own steps.
+ * words the setup screen gives it: how much the nests hatch, a nest's HP and
+ * the Shrine's, from the rules' own steps. The guide's clause for the hatching is shared.
  */
 export function holdOutDifficultyDescription(difficulty: Difficulty, context?: RulesContext): string {
-    const { SHRINE_HP = 0, SHRINE_HP_PER_PLAYER = 0, HOLD_OUT_DIFFICULTY } = ruleValuesOf(context);
-    const step = HOLD_OUT_DIFFICULTY?.[difficulty] ?? { spawnThreat: 0, nestHp: 0, shrineHp: 0 };
+    const { SHRINE_HP = 0, SHRINE_HP_PER_PLAYER = 0 } = ruleValuesOf(context);
+    // `holdOutDifficultyOf` reads the rules `context` names, and a context without a version is the oldest ruleset's, so say which.
+    const step = holdOutDifficultyOf({ rulesVersion: context?.rulesVersion ?? CURRENT_RULESET_VERSION, coop: { difficulty } });
     const nestHp = rulesetOf(context).CHARACTERS.nest.hp + step.nestHp;
-    // "Threat" is the rules' word, never the player's: the spawn is told as more or less than Normal's.
-    const hatch = step.spawnThreat > 0 ? "The nests hatch more each round and have" : step.spawnThreat < 0 ? "The nests hatch less each round and have" : "Nests of";
-    return `${hatch} ${nestHp} HP; the Shrine has ${SHRINE_HP + step.shrineHp} HP, plus ${SHRINE_HP_PER_PLAYER} for each of you.`;
+    const hatch = hatchClause(step.spawnThreat);
+    return `${hatch ? `${capitalise(hatch)} and have` : "Nests of"} ${nestHp} HP; the Shrine has ${SHRINE_HP + step.shrineHp} HP, plus ${SHRINE_HP_PER_PLAYER} for each of you.`;
 }
 
 /**
