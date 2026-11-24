@@ -2366,9 +2366,19 @@ export function wavePurchase(faction: Faction, budget: number, round: number, co
 
 // ─── Nests that produce the enemy (realm-arena-hold-out.md §5.1) ───────────
 
-/** Whether a Hold Out battle's nests produce its enemy every round, rather than waves landing (realm-arena-hold-out.md §5.1): from rules version 13. */
-export const nestsProduce = (mission: string | undefined, context: RulesContext): boolean =>
+/**
+ * Whether a Hold Out battle's nests produce its enemy every round, rather than
+ * waves landing (realm-arena-hold-out.md §5.1): from rules version 13. With no
+ * `context`, whether the current ruleset's do: what the guide, the setup screen,
+ * the tutorial and the achievements switch on, so version 13's copy waits for
+ * its release (§6.1).
+ */
+export const nestsProduce = (mission: string | undefined, context?: RulesContext): boolean =>
     mission === "holdOut" && ruleValuesOf(context).SPAWN_THREAT !== undefined;
+
+/** The warbands' nests (§39.7) on the battlefield, standing or not: every warband's structures. */
+export const warbandNests = (fighters: readonly Fighter[], context?: RulesContext): Fighter[] =>
+    fighters.filter(fighter => isWarband(fighter.owner) && isStructure(fighter, context));
 
 /** A battle's rules and, in co-op, its difficulty (absent is Normal): what the difficulty's steps are read from. */
 export type DifficultyContext = RulesContext & { coop?: { difficulty?: Difficulty } };
@@ -2406,7 +2416,10 @@ export const HOLD_OUT_STAR_INFO: Readonly<Record<HoldOutStar, { name: string; re
 };
 
 /** A won Hold Out's stars as one line, in `HOLD_OUT_STARS` order: ★ for each earned, ☆ for each missed. */
-export const starLine = (stars: readonly HoldOutStar[]): string => HOLD_OUT_STARS.map(star => stars.includes(star) ? "★" : "☆").join("");
+export const starLine = (stars: readonly HoldOutStar[]): string => HOLD_OUT_STARS.map(star => starMark(stars, star)).join("");
+
+/** One star's mark: ★ if `stars` earned it, ☆ if not. */
+export const starMark = (stars: readonly HoldOutStar[], star: HoldOutStar): string => stars.includes(star) ? "★" : "☆";
 
 /**
  * The stars a won Hold Out earns (§6), read off the battlefield as it ended:
@@ -2415,7 +2428,7 @@ export const starLine = (stars: readonly HoldOutStar[]): string => HOLD_OUT_STAR
  * Unscathed, for the Shrine above half its HP. Only asked of a win.
  */
 export function holdOutStars(fighters: readonly Fighter[], context?: RulesContext): HoldOutStar[] {
-    const nests = fighters.filter(fighter => isWarband(fighter.owner) && isStructure(fighter, context));
+    const nests = warbandNests(fighters, context);
     const shrine = shrineOf({ fighters: [...fighters] });
     return HOLD_OUT_STARS.filter(star => star === "held"
         || (star === "broke" && nests.length > 0 && !nests.some(isStanding))
