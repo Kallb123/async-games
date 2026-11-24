@@ -3,7 +3,6 @@
 // state the response already ships, never a rule: those are rules.ts's.
 
 import { CURRENT_RULESET_VERSION, ruleValuesOf, rulesetOf, type RulesContext } from "./rulesets";
-import { hatchClause } from "./guide";
 import type { Rect } from "@/utils/ui/mapLabels";
 import { isoCentre, ISO_HALF_HEIGHT, ISO_HALF_WIDTH, type IsoView, type Point } from "@/utils/ui/isometric";
 import type { NextWave, IRealmArenaStepOutcome, IRealmArenaStepPart, RealmArenaPartState } from "./apiModels";
@@ -14,7 +13,7 @@ import { EFFECT_IDS, EFFECTS, ITEM_IDS, ITEMS, type AbilityId, type CharacterId,
 import { ABILITY_MARK, CHARACTER_IDS } from "./roster";
 import { battlefieldOf } from "./maps";
 import { artCharacterOf, EFFECT_ART, ITEM_ART, type BurstKind, type Missile, type Sprite, type ThrownItem } from "./art";
-import { areaDamage, actionPointsOf, holdOutDifficultyOf, CENTRE, SCORED_FOR, squadSight, hasEffect, isMinion, isStanding, isWarband, maxHpOf, moveAp, pickOf, reachOf, shoots, SHRINE_OWNER, type BattleState, type Fighter, type MusterPick, type OddsBreakdown, type OddsFactor, type ShotResult, type ToldEvent } from "./rules";
+import { areaDamage, actionPointsOf, hatchClause, holdOutDifficultyOf, CENTRE, SCORED_FOR, squadSight, hasEffect, isMinion, isStanding, isWarband, maxHpOf, moveAp, pickOf, reachOf, shoots, SHRINE_OWNER, type BattleState, type Fighter, type MusterPick, type OddsBreakdown, type OddsFactor, type ShotResult, type ToldEvent } from "./rules";
 
 const LETTER_OF = new Map<Terrain, TerrainLetter>(
     (Object.entries(TERRAIN) as [TerrainLetter, Terrain][]).map(([letter, terrain]) => [terrain, letter]),

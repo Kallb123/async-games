@@ -3,7 +3,7 @@ import { ABILITIES, CHARACTERS, COOP_PLAYERS, EFFECTS, FACTIONS, ITEMS, THROW_RA
 import { RANK_XP } from "./mastery";
 import { ruleValuesOf, rulesetOf, type RulesContext } from "./rulesets";
 import type { HoldOutDifficulty } from "./ruleValues";
-import { HOLD_OUT_STAR_INFO, nestsProduce, ACTION_POINTS, ARMOUR, ASSIST_DIVISOR, ATTACK_AP, CENTRE_POINTS, CENTRE_SCORES_FROM_ROUND, COVER_PENALTY, FLANK_BONUS, GRAZE_BAND, HIGH_GROUND_BONUS, HUNKER_AP, KNOCKOUT_DIVISOR, FAR_SHOT_DISTANCE, MELEE_ACCURACY, OVERWATCH_PENALTY, REACTION_COST, SIGHT_RANGE, TEAM_HP_FACTOR } from "./rules";
+import { hatchClause, HOLD_OUT_STAR_INFO, nestsProduce, ACTION_POINTS, ARMOUR, ASSIST_DIVISOR, ATTACK_AP, CENTRE_POINTS, CENTRE_SCORES_FROM_ROUND, COVER_PENALTY, FLANK_BONUS, GRAZE_BAND, HIGH_GROUND_BONUS, HUNKER_AP, KNOCKOUT_DIVISOR, FAR_SHOT_DISTANCE, MELEE_ACCURACY, OVERWATCH_PENALTY, REACTION_COST, SIGHT_RANGE, TEAM_HP_FACTOR } from "./rules";
 
 // The how-to-play primer shown from the game-options menu, and the reference
 // text behind the guided tour (tutorial.ts), which takes the guide's place on
@@ -44,15 +44,6 @@ export function brokenBroodText(context?: RulesContext): string {
     const hard = HOLD_OUT_DIFFICULTY?.hard;
     const stout = Math.round((rules.TEAM_HP_FACTOR - 1) * 100);
     return `In Hold Out you fight the Brood alone, and defend a Shrine. Each warband has two nests, ${characters.nest.hp} HP each, and every round they hatch more of the Brood — the more nests standing, the more — with a little more each ${SPAWN_STEP_ROUNDS} rounds. Break the Brood by destroying every nest, and you win on the spot; otherwise hold the Shrine to round ${HOLD_OUT_ROUNDS}, whatever the size of your team. You lose if the Shrine falls or everyone is down. The Shrine has ${SHRINE_HP} HP and ${SHRINE_HP_PER_PLAYER} more for each of you, and anything hurts it, your own fireballs and flasks too. A nest destroyed never regrows, anything that hurts a character hurts it, and it never moves or fights. The Brood's minions — Skitterlings, Spitters and Bloaters — have 1 HP and fall to any damage, but a Bloater downed by anything but its own burst bursts where it falls. The Brood has a theme, each ${SPAWN_STEP_ROUNDS} rounds: the Rush, the Bile, the Brutes, then the Queen. In round ${first} come Bile Lobbers, one for each warband with a nest standing; in round ${second}, a ${characters.carapaceBrute.name} for every two; in round ${third}, the ${characters.broodQueen.name}, who hatches Skitterlings beside her — down her first. Your characters have ${stout}% more HP than usual in Hold Out. A rally is earned as rounds ${first}, ${second} and ${third} begin, and whenever a warband's last nest falls: as your next round begins you choose one, never two rounds running, and none is lost. Rally gives every standing character of yours half its HP back, Reinforce stands up one downed character at half its HP, Resupply hands back each used item, and Mend gives the Shrine half its HP back; nothing else heals it. Break the Brood early and the team scores ${ROUND_BONUS} points for each round left, shared. A win earns stars: ${HOLD_OUT_STAR_INFO.held.name} (${lowerFirst(HOLD_OUT_STAR_INFO.held.reason)}), ${HOLD_OUT_STAR_INFO.broke.name} (${lowerFirst(HOLD_OUT_STAR_INFO.broke.reason)}), and ${HOLD_OUT_STAR_INFO.unscathed.name} (${lowerFirst(HOLD_OUT_STAR_INFO.unscathed.reason)}). The difficulty the host chose moves the nests and the Shrine: on Easy ${difficultyWords(easy)}; on Hard ${difficultyWords(hard)}. ${holdOutGround("the Brood closes in", "the Brood")}`;
-}
-
-/**
- * What a difficulty step does to the nests' hatching, as the clause both the guide and the setup
- * screen say it with ("the nests hatch more each round"); undefined for a step that leaves it be.
- * The rules' word for it is threat, never the player's.
- */
-export function hatchClause(spawnThreat: number): string | undefined {
-    return spawnThreat === 0 ? undefined : `the nests hatch ${spawnThreat > 0 ? "more" : "less"} each round`;
 }
 
 /** How a difficulty step reads in a sentence, in the player's words: what the nests hatch, their HP and the Shrine's, each as a change. */

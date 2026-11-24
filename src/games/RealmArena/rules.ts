@@ -2395,6 +2395,15 @@ export function holdOutDifficultyOf(context: DifficultyContext): Readonly<HoldOu
 }
 
 /**
+ * What a difficulty step does to the nests' hatching, as the clause both the guide and the setup
+ * screen say it with ("the nests hatch more each round"); undefined for a step that leaves it be.
+ * The rules' word for it is threat, never the player's.
+ */
+export function hatchClause(spawnThreat: number): string | undefined {
+    return spawnThreat === 0 ? undefined : `the nests hatch ${spawnThreat > 0 ? "more" : "less"} each round`;
+}
+
+/**
  * The threat each standing nest adds to its warband in `round` (§5.1):
  * `SPAWN_THREAT`, 1 more every `SPAWN_STEP_ROUNDS` rounds, and the
  * difficulty's step (§6).
