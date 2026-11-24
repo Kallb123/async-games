@@ -17,7 +17,7 @@ import { userToken } from "@/utils/games/history";
 import { BATTLE_SIZE_NAMES, CHARACTERS, COOP_PLAYERS, coopTeamMax, DIFFICULTY_NAMES, FACTION_IDS, factionById, FACTIONS, fitsCoop, isFactionId, playableFactionsOf, RANDOM_ENEMY, REALM_ONLY, UNKNOWN_ENEMY, type BattleSize, type Character, type CharacterId, type Difficulty, type FactionId } from "./characters";
 import { addTally, NO_TALLY, xpOf, type MasterySnapshot, type Tally } from "./mastery";
 import { battlefieldById, COOP_MAPS, DEPLOYMENT_NAMES, mapFor, type CoopMap, type RealmArenaMapId } from "./maps";
-import { isMinion, nestsProduce, type Action, allied, ENEMY_SIDE, fighterById, fogGhost, isStructure, isWarband, pickOf, squadSight, storedFighter, TEAM_SIDE, viewOf, warbandsFor, maxHpOf, actionPointsOf, type BattleEvent, type Fighter, type FogGhost, type MusterPick, type ToldEvent } from "./rules";
+import { HOLD_OUT_STAR_INFO, HOLD_OUT_STARS, starLine, starMark, warbandNests, isMinion, isStanding, nestsProduce, type HoldOutStar, type Action, allied, ENEMY_SIDE, fighterById, fogGhost, isStructure, isWarband, pickOf, squadSight, storedFighter, TEAM_SIDE, viewOf, warbandsFor, maxHpOf, actionPointsOf, type BattleEvent, type Fighter, type FogGhost, type MusterPick, type ToldEvent } from "./rules";
 import { computerHoldsTurn } from "@/utils/games/computerTurns";
 import type { IRealmArenaGameDataResponse, IRealmArenaSpecificGameStateResponse, IRealmArenaStepOutcome, IRealmArenaStepPart, RealmArenaPartState } from "./apiModels";
 import type { Square } from "@/utils/games/battlefield/terrain";
@@ -194,6 +194,12 @@ export interface IRealmArenaSpecificGameState {
     ralliesBanked?: number;
     /** The round the team last took a rally in, as it began (§5.3): it never takes two in rounds running. Public. Absent until one is taken. */
     lastRally?: number;
+    /**
+     * The stars a won Hold Out earned (realm-arena-hold-out.md §6), set as the
+     * battle ends (`holdOutStars`) where nests produce the enemy. Sent only once
+     * it's over. Absent on a loss, and in every other battle.
+     */
+    stars?: HoldOutStar[];
     /** Battle rounds played to the end: 0 until the first round's last turn ends. The round being played is one more. */
     roundsPlayed: number;
     /**
@@ -547,6 +553,8 @@ var RealmArenaGameDataSchema = new Schema<IRealmArenaGameDataDocument>(
             threat: Schema.Types.Mixed,
             ralliesBanked: Number,
             lastRally: Number,
+            // Written once, as a won Hold Out ends (realm-arena-hold-out.md §6).
+            stars: { type: [String], default: undefined },
             fighters: Schema.Types.Mixed,
             sightings: Schema.Types.Mixed,
             blasted: [Number],
@@ -654,6 +662,10 @@ export function gameStateToModel(
         ...(nextWave ? { nextWave } : {}),
         ...(nestSquares ? { nestSquares } : {}),
         ...(rally ? { rally } : {}),
+        // How many nests still stand, where nests produce the enemy (realm-arena-hold-out.md §6): public, as
+        // `enemiesDefeated` is, though a nest can fall out of the team's sight (§6.1 records what that gives away in fog).
+        ...(gs.phase === "battle" && nestsProduce(gs.coop?.mission, gs) ? { nestsLeft: warbandNests(gs.fighters, gs).filter(isStanding).length } : {}),
+        ...(complete && gs.stars ? { stars: [...gs.stars] } : {}),
         // Whether nests stand is unseen in fog until the battle is over, so this waits for it too.
         ...(complete && gs.nestsCleared ? { nestsCleared: true as const } : {}),
         ...(gs.coop?.mission === "holdOut" && gs.phase !== "muster" ? { enemiesDefeated: gs.fighters.filter(fighter => isWarband(fighter.owner) && fighter.hp <= 0 && !isStructure(fighter, gs)).length } : {}),
@@ -906,6 +918,11 @@ export interface IRealmArenaMasteryRow extends Tally {
  */
 export interface IRealmArenaGameResultStats extends Partial<BattleRecord> {
     mastery: IRealmArenaMasteryRow[];
+    /**
+     * The stars a won Hold Out earned (realm-arena-hold-out.md §6), read off the
+     * game rather than the replay, so a result whose record is missing keeps them.
+     */
+    stars?: HoldOutStar[];
 }
 
 export const realmArenaGameResultStatsSchemaDef = {
@@ -923,6 +940,11 @@ export const realmArenaGameResultStatsSchemaDef = {
     waves: { type: [{ _id: false, round: Number, arrived: Number, name: String, downed: { type: Schema.Types.Map, of: Number }, rallies: { type: [{ _id: false, seat: String, choice: String, character: String }], default: undefined } }], default: undefined },
     standingPerRound: { type: [{ type: Schema.Types.Map, of: Number }], default: undefined },
     battleRounds: Number,
+    // A Hold Out whose nests produce the enemy (realm-arena-hold-out.md §5): absent from any other battle, and from a result recorded before them.
+    produced: Boolean,
+    shrine: { type: new Schema({ hp: Number, maxHp: Number }, { _id: false }), default: undefined },
+    nests: { type: new Schema({ standing: Number, total: Number }, { _id: false }), default: undefined },
+    stars: { type: [String], default: undefined },
 };
 
 /**
@@ -958,12 +980,14 @@ export function computeRealmArenaResultStats(gameData: IRealmArenaGameData, reco
         if (kind.length === 0) return [];
         return [{ userId, character, ...kind.reduce((sum, fighter) => addTally(sum, fighter.tally ?? NO_TALLY), NO_TALLY) }];
     }));
-    if (!record || record.fighting.length === 0) return { mastery };
+    // The stars don't depend on the replay (realm-arena-hold-out.md §6): kept with or without a record.
+    const stars = gs.stars ? { stars: [...gs.stars] } : {};
+    if (!record || record.fighting.length === 0) return { mastery, ...stars };
     if (!recordEndsWhereBattleDid(gs, record)) {
         console.warn(`Realm Arena game ${gameData.gameId}: the replay didn't end where the battle did, so its result has no battle record`);
-        return { mastery };
+        return { mastery, ...stars };
     }
-    return { mastery, ...record };
+    return { mastery, ...record, ...stars };
 }
 
 /** A player's characters' records summed, and the one that dealt the most damage. */
@@ -1032,8 +1056,13 @@ export function formatRealmArenaResultStats(stats: IRealmArenaGameResultStats, u
 /** Who downed how many of a wave. Read by name: a stored wave is a Mongoose subdocument. */
 const downedOf = ({ downed }: WaveRecord): Map<string, number> => mongoMap(downed ?? new Map<string, number>());
 
-/** A wave as the result names it, in its lines and its charts alike: its number from 1, and its theme (§39.6) where it has one. */
-const waveLabel = (wave: WaveRecord, index: number): string => `Wave ${index + 1}${wave.name ? ` · ${wave.name}` : ""}`;
+/**
+ * A wave as the result names it, in its lines and its charts alike: its number
+ * from 1, and its theme (§39.6) where it has one. A stage of a horde that
+ * nests produce (realm-arena-hold-out.md §5.1) is its theme's name alone.
+ */
+const waveLabel = (wave: WaveRecord, index: number, produced?: boolean): string =>
+    produced ? wave.name ?? `Stage ${index + 1}` : `Wave ${index + 1}${wave.name ? ` · ${wave.name}` : ""}`;
 
 /** How many of the enemy a wave's players downed, all of them together. */
 const downedIn = (wave: WaveRecord): number => [...downedOf(wave).values()].reduce((sum, count) => sum + count, 0);
@@ -1042,11 +1071,12 @@ const downedIn = (wave: WaveRecord): number => [...downedOf(wave).values()].redu
  * A battle of Hold Out's own story (§30.10), above the players': how it ended
  * and in which round, how many of the enemy its waves brought and how many the
  * team downed, then each wave's. None for any other battle, nor for a result
- * recorded before waves were.
+ * recorded before waves were. One whose nests produce the enemy tells it its
+ * own way, in the same group.
  */
 function holdOutGroup(stats: IRealmArenaGameResultStats): GameResultStatGroup | undefined {
-    const { waves, standingPerRound, battleRounds: rounds } = stats;
-    if (!waves?.length || !standingPerRound?.length || !rounds) return undefined;
+    const { waves, standingPerRound, battleRounds: rounds, produced, shrine, nests, stars } = stats;
+    if (!waves?.length || !standingPerRound?.length || !rounds) return stars && (produced || (!waves?.length && stars.length)) ? { username: "Hold Out", lines: starLines(stars, shrine) } : undefined;
     const lasted = standingPerRound.length;
     const overrun = (mongoMap(standingPerRound[lasted - 1]).get(TEAM_SIDE) ?? 0) === 0;
     const arrived = waves.reduce((sum, wave) => sum + wave.arrived, 0);
@@ -1056,32 +1086,56 @@ function holdOutGroup(stats: IRealmArenaGameResultStats): GameResultStatGroup | 
         username: "Hold Out",
         lines: [
             overrun ? `Overrun in round ${lasted} of ${rounds}`
+                : produced ? (shrine && shrine.hp <= 0 ? `The Shrine fell in round ${lasted} of ${rounds}`
+                    : nests && nests.standing === 0 ? `Broke the Brood in round ${lasted} of ${rounds}`
+                    : `Held the Shrine for all ${rounds} rounds`)
                 : lasted >= rounds ? `Held out for all ${rounds} rounds`
                 : `Beat the last wave in round ${lasted} of ${rounds}`,
-            `Faced ${pluralize(waves.length, "wave")}: ${arrived} of the enemy took the field, and the team downed ${downed}`,
+            ...(produced && stars ? starLines(stars, shrine) : []),
+            produced ? `${arrived} of the Brood took the field, and the team downed ${downed}${nests ? `; destroyed ${nests.total - nests.standing} of ${nests.total} nests` : ""}`
+                : `Faced ${pluralize(waves.length, "wave")}: ${arrived} of the enemy took the field, and the team downed ${downed}`,
             // Every choice is public in the log (§39.4); absent for a battle whose rally wasn't one.
             ...(tally ? [tally] : []),
-            ...waves.map((wave, index) => `${waveLabel(wave, index)}, round ${wave.round + 1}: ${wave.arrived} arrived, ${downedIn(wave)} downed`),
+            ...waves.map((wave, index) => produced ? `${waveLabel(wave, index, true)}, from round ${wave.round + 1}: ${wave.arrived} arrived, ${downedIn(wave)} downed`
+                : `${waveLabel(wave, index)}, round ${wave.round + 1}: ${wave.arrived} arrived, ${downedIn(wave)} downed`),
         ],
     };
 }
 
+/**
+ * The stars a won Hold Out earned, as lines (realm-arena-hold-out.md §6): the
+ * count in stars, then each star in its order, ★ earned and ☆ missed, with its
+ * reason. Unscathed adds the Shrine's HP where the record knows it.
+ */
+function starLines(stars: readonly HoldOutStar[], shrine: IRealmArenaGameResultStats["shrine"]): string[] {
+    const earned = new Set(stars);
+    return [
+        `${starLine(stars)} ${earned.size} of ${HOLD_OUT_STARS.length} stars`,
+        ...HOLD_OUT_STARS.map(star => {
+            const { name, reason } = HOLD_OUT_STAR_INFO[star];
+            const hp = star === "unscathed" && shrine ? ` (${shrine.hp}/${shrine.maxHp} HP)` : "";
+            return `${starMark(stars, star)} ${name}: ${reason}${hp}`;
+        }),
+    ];
+}
+
 /** How many of each side stood, round by round, with every wave marked on the enemy's line as it landed (§30.10). */
 function formatStandingChart(stats: IRealmArenaGameResultStats) {
+    const produced = stats.produced;
     const events: StoredGameResultEvent[] = (stats.waves ?? []).slice(1).map((wave, index) =>
-        ({ turnIndex: wave.round, icon: "wave", title: `${waveLabel(wave, index + 1)}: ${wave.arrived} arrived`, seriesKey: ENEMY_SIDE }));
+        ({ turnIndex: wave.round, icon: "wave", title: `${waveLabel(wave, index + 1, produced)}${produced ? " begins" : ""}: ${wave.arrived} arrived`, seriesKey: ENEMY_SIDE }));
     return formatPerTurnChart(stats.standingPerRound, "Characters standing per round", "Characters", 1, SIDE_SERIES, events);
 }
 
-/** How many of the enemy the team downed in each wave, stacked by who downed them (§30.10). */
+/** How many of the enemy the team downed in each wave (or stage of the horde), stacked by who downed them (§30.10). */
 function formatWaveChart(stats: IRealmArenaGameResultStats): GameResultBarChart | undefined {
     if (!stats.waves?.length) return undefined;
     return {
         kind: "bar",
-        title: "Enemies downed by wave",
+        title: stats.produced ? "Enemies downed by stage" : "Enemies downed by wave",
         yLabel: "Downed",
         bars: stats.waves.map((wave, index) => ({
-            label: waveLabel(wave, index),
+            label: waveLabel(wave, index, stats.produced),
             value: downedIn(wave),
             segments: Object.fromEntries(downedOf(wave)),
         })),

@@ -581,7 +581,7 @@ nests' are today.
 - **Left for PR 4:** the result. The battle record still counts arrivals and
   rallies on version 12's wave schedule (`battleRecord.ts`), and the result's
   wave chart reads it. The stars, the guide's and the tutorial's copy, and the
-  achievements are PR 4's too.
+  achievements are PR 4's too. Built (§6.1).
 
 ---
 
@@ -611,6 +611,92 @@ nests' are today.
     round 13, so earning it now means letting her come.
   - A `rulebook` pass is due against `docs/achievements.md`.
 
+### 6.1 What PR 4 settled
+
+- **Stars** are `HOLD_OUT_STARS` (`rules.ts`): `held`, `broke` and
+  `unscathed`, each named and explained by `HOLD_OUT_STAR_INFO`, which the
+  board, the log, the result and the guide all read. `holdOutStars` reads them
+  off the battlefield as a win ends: Held for the win; Broke the Brood for
+  every nest down, which ends the battle the moment it happens, so only ever
+  before the cap; Unscathed for the Shrine above half its HP (exactly half
+  isn't). `awardStars` keeps them on the state (`stars`) as a won Hold Out
+  ends, after the Brood breaks, and logs "The team earns 2 of 3 stars: …". A
+  loss has none, and a version-12 battle never does.
+- **On the wire.** `stars` only on the finished response. `nestsLeft`, how many
+  nests still stand over every warband, to every viewer throughout the battle,
+  fog or not, for the scoreboard. It is a fourth channel beside §5.6's three,
+  accepted as `enemiesDefeated` is (a `croupier` pass). What it gives a fogged
+  team that they didn't have: a nest falling out of their sight that isn't its
+  warband's last (a burn or poison tick as its warband's turn begins, the
+  Brood's own burst or bile, a blast of the team's reaching past its sight),
+  told on the next fetch after the command that felled it rather than guessed
+  from fighter ids; and so, subtracting the falls they saw from the public
+  nest squares, often which nest it was, and the Brood's spawn rate. It gives
+  no nest's HP, square or warband, and nothing of the horde: the banked threat
+  stays the server's. Closing it would mean counting only the falls the team
+  has seen, which needs a memory of sightings per team. The Shrine's HP needed
+  nothing new: every view holds it.
+- **The difficulty's steps** are `HOLD_OUT_DIFFICULTY` in the ruleset, read
+  through `holdOutDifficultyOf`: Easy −1 threat a nest a turn, nests 3 HP
+  weaker and the Shrine 10 HP stronger; Hard the opposite; Normal nothing
+  (*Proposed*). A nest's HP is set on the fighter as `maxHp`, as the Shrine's
+  is, so a version-12 nest is untouched. Version 13's Hold Out has no use for
+  the warbands' points budget, so the setup screen describes the steps
+  instead. `rulesets.test.ts` holds the round bonus above a round's fighting
+  on Hard, whose nests produce the most.
+- **The scoreboard** for a version-13 Hold Out is the round, the nests left
+  ("3/4"), the Shrine's HP and the team's health, in place of the enemies
+  defeated. A won battle shows its stars under the finish banner
+  (`RealmArenaStars`), earned and missed, each with what earns it.
+- **The result.** The battle record (`battleRecord.ts`) no longer counts a
+  version-13 battle on version 12's wave schedule: each of `waves` is a stage
+  of the horde (`produced`), starting as the theme changes, so its arrivals
+  and rallies are the stage's. It also keeps the Shrine's HP and the nests
+  standing at the end (`shrine`, `nests`). The result's Hold Out group leads
+  with how it ended (overrun, the Shrine fell, broke the Brood, or held to the
+  cap), then the stars with their reasons, then what took the field, what was
+  downed and how many nests fell, the rallies, and each stage ("The Rush, from
+  round 1: 23 arrived, 19 downed"). The stars are copied from the state, not
+  the replay, so a result whose replay failed still has them. The charts name
+  stages by their theme ("Enemies downed by stage", "The Bile begins").
+- **Achievements**, ids kept: *Three Stars* (`realmarena.three-stars`) and
+  *Three Stars on Hard* (`realmarena.three-stars-hard`), read off `stars` and
+  `difficulty`. *Broken Tide* is breaking the Brood by the end of round 10
+  (`BROKEN_TIDE_BY_ROUND`, fixed rather than read off `HOLD_OUT_ROUNDS`, so
+  PR 5's balance should revisit it; `round` on the finished response is the
+  round the battle ended in), and *Scorched Earth* breaking it with every
+  character of the team standing. Like the copy, the catalogue switches on the
+  current ruleset (`achievementsFor`): until version 13 is released it holds
+  version 12's *Broken Tide* and *Scorched Earth* and no *Three Stars*, so no
+  profile shows an achievement nobody can earn, and `nestsCleared` stays on
+  the response for version 12's *Scorched Earth*. PR 5 deletes the version-12
+  branch, `nestsCleared` with it. *Regicide*'s description drops "of the
+  Swarm", since the Queen is the Brood's from version 13; its meaning is
+  unchanged.
+- **Before PR 5 releases** — the moment *Broken Tide* and *Scorched Earth*
+  change in place — confirm in the database that nobody has earned either
+  (`AchievementUnlock` rows for `realmarena.broken-tide` and
+  `realmarena.scorched-earth`). *Scorched Earth* shipped with version 12, and
+  *Broken Tide* long before, so this is a real check, not a formality: an id
+  someone holds needs a new id rather than new criteria (`docs/achievements.md`
+  §11). No admin page shows it.
+- **PR 5's What's new line** names the stars, *Three Stars* and *Three Stars
+  on Hard*, and what *Broken Tide* and *Scorched Earth* ask now.
+- **The result's schema** declares `produced`, `shrine`, `nests` and `stars`,
+  so a result recorded before them reads them back absent.
+- **Copy that waits for the release.** The guide's co-op section
+  (`coopText`, `brokenBroodText`), the setup screen's Hold Out, battlefield and
+  difficulty lines, and the tutorial's new *Break the Brood* step all switch on
+  whether the **current** ruleset's nests produce the enemy
+  (`nestsProduce("holdOut")`), so today's players still read version 12's. Each is
+  built from the rule values it's given, and `holdOutCopy.test.ts` renders it
+  at version 13. PR 5 deletes the version-12 branches. The tutorial's step
+  stands on the stat row (`breakTheBrood`) and reads version 13's round cap,
+  since only a version-13 battle raises it. *The centre* is now shown only in a
+  battle that has one (`centre`), which is live at once: version 12's Hold Out
+  no longer points at a centre it doesn't score. Nothing else of this PR is
+  seen before PR 5.
+
 ---
 
 ## 7. Balance and measuring
@@ -639,7 +725,7 @@ nests' are today.
 | 1 | The enemy's turn in the background (§3) — **built** (§3.6) | Command 13 |
 | 2 | The Brood: minions, threat, the swarm step, playback (§4) — **built** (§4.7) | Rules 13, unreleased |
 | 3 | Nests that produce, the Shrine, Mend, the rally's two triggers, the new ending and its bonus, Hold Out against the Brood only (§5) — **built** (§5.6) | Rules 13, unreleased |
-| 4 | Stars, the result, achievements, the guide and setup copy (§6) | Rules 13, unreleased |
+| 4 | Stars, the result, achievements, the guide and setup copy (§6) — **built** (§6.1) | Rules 13, unreleased |
 | 5 | The harness's raid policy, balance, release, What's new (§7) | Rules 13 released |
 
 PR 1 stands alone and ships first: it gives version 12's warbands their time back
@@ -951,3 +1037,4 @@ A `rulebook` pass checks this against `docs/achievements.md`.
 | 0.5 | PR 1 built (§3.6): the warbands' turns are `RealmArenaWarbandTurn`s from command version 13, played by the server once the End turn is saved, with the turn-timer cron as the backstop. |
 | 0.6 | PR 2 built (§4.7): the Brood in rules version 13, unreleased, with its minions, threat and horde caps, the swarm step and its playback. Until nests produce it, it is bought in threat on version 12's waves. |
 | 0.7 | PR 3 built (§5.6): nests that produce the Brood every round, the Shrine and Mend, the rally earned on a schedule and by breaking a warband, the new ending and its bonus (60 a round, not 50), and Hold Out against the Brood alone, all in rules version 13, unreleased. |
+| 0.8 | PR 4 built (§6.1): stars kept as a won Hold Out ends and sent once it's over, the difficulty's steps for the spawn, the nests and the Shrine, the nests left and the Shrine's HP on the scoreboard, the result by the horde's stages, *Three Stars* and *Three Stars on Hard*, *Broken Tide* and *Scorched Earth* for breaking the Brood, and the guide's, setup's and tutorial's copy, live once version 13 is current. |

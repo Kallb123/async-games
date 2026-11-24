@@ -35,9 +35,10 @@ import { coordsOf, distance, facingTowards, FULL_HEIGHT, isNeighbour, riseOf, sq
 import { COMPUTER_SEAT_PREFIX, COMPUTER_TURN_SEAT, isComputerSeat } from "@/utils/games/computerTurns";
 import {
     afflictionsOf, factionOf, isCharacterId, isItemId, isOptionId, isPoolEntry, kitOf, LINE_COOP_MAX, loadoutOf, loadoutPoolOf, squadPoints,
-    type Ability, type AbilityId, type Affliction, type CharacterId, type Effect, type EffectId, type Faction, type FactionId, type Item, type ItemId, type OptionId, type PlayerCount, type Weapon, type WaveTheme,
+    type Ability, type AbilityId, type Affliction, type CharacterId, type Difficulty, type Effect, type EffectId, type Faction, type FactionId, type Item, type ItemId, type OptionId, type PlayerCount, type Weapon, type WaveTheme,
 } from "./characters";
 import { currentRuleset, ruleValuesOf, rulesetOf, type RulesContext } from "./rulesets";
+import type { HoldOutDifficulty } from "./ruleValues";
 import { addTally, NO_TALLY, type Ranks, type Tally } from "./mastery";
 
 // ─── Numbers (§13) ──────────────────────────────────────────────────────────
@@ -2365,14 +2366,82 @@ export function wavePurchase(faction: Faction, budget: number, round: number, co
 
 // ─── Nests that produce the enemy (realm-arena-hold-out.md §5.1) ───────────
 
-/** Whether a Hold Out battle's nests produce its enemy every round, rather than waves landing (realm-arena-hold-out.md §5.1): from rules version 13. */
-export const nestsProduce = (mission: string | undefined, context: RulesContext): boolean =>
+/**
+ * Whether a Hold Out battle's nests produce its enemy every round, rather than
+ * waves landing (realm-arena-hold-out.md §5.1): from rules version 13. With no
+ * `context`, whether the current ruleset's do: what the guide, the setup screen,
+ * the tutorial and the achievements switch on, so version 13's copy waits for
+ * its release (§6.1).
+ */
+export const nestsProduce = (mission: string | undefined, context?: RulesContext): boolean =>
     mission === "holdOut" && ruleValuesOf(context).SPAWN_THREAT !== undefined;
 
-/** The threat each standing nest adds to its warband in `round` (§5.1): `SPAWN_THREAT`, and 1 more every `SPAWN_STEP_ROUNDS` rounds. */
-export function spawnThreatOf(round: number, context: RulesContext): number {
+/** The warbands' nests (§39.7) on the battlefield, standing or not: every warband's structures. */
+export const warbandNests = (fighters: readonly Fighter[], context?: RulesContext): Fighter[] =>
+    fighters.filter(fighter => isWarband(fighter.owner) && isStructure(fighter, context));
+
+/** A battle's rules and, in co-op, its difficulty (absent is Normal): what the difficulty's steps are read from. */
+export type DifficultyContext = RulesContext & { coop?: { difficulty?: Difficulty } };
+
+const NO_DIFFICULTY_STEP: Readonly<HoldOutDifficulty> = { spawnThreat: 0, nestHp: 0, shrineHp: 0 };
+
+/**
+ * How the battle's difficulty moves a Hold Out whose nests produce the enemy
+ * (realm-arena-hold-out.md §6): the steps its rules give Easy, Normal or Hard,
+ * and none under rules without them.
+ */
+export function holdOutDifficultyOf(context: DifficultyContext): Readonly<HoldOutDifficulty> {
+    return ruleValuesOf(context).HOLD_OUT_DIFFICULTY?.[context.coop?.difficulty ?? "normal"] ?? NO_DIFFICULTY_STEP;
+}
+
+/**
+ * What a difficulty step does to the nests' hatching, as the clause both the guide and the setup
+ * screen say it with ("the nests hatch more each round"); undefined for a step that leaves it be.
+ * The rules' word for it is threat, never the player's.
+ */
+export function hatchClause(spawnThreat: number): string | undefined {
+    return spawnThreat === 0 ? undefined : `the nests hatch ${spawnThreat > 0 ? "more" : "less"} each round`;
+}
+
+/**
+ * The threat each standing nest adds to its warband in `round` (§5.1):
+ * `SPAWN_THREAT`, 1 more every `SPAWN_STEP_ROUNDS` rounds, and the
+ * difficulty's step (§6).
+ */
+export function spawnThreatOf(round: number, context: DifficultyContext): number {
     const { SPAWN_THREAT = 0, SPAWN_STEP_ROUNDS = Infinity } = ruleValuesOf(context);
-    return SPAWN_THREAT + Math.floor((round - 1) / SPAWN_STEP_ROUNDS);
+    return SPAWN_THREAT + Math.floor((round - 1) / SPAWN_STEP_ROUNDS) + holdOutDifficultyOf(context).spawnThreat;
+}
+
+/** The stars a win of Hold Out against nests that produce the enemy can earn (realm-arena-hold-out.md §6), in the order they're shown. */
+export const HOLD_OUT_STARS = ["held", "broke", "unscathed"] as const;
+export type HoldOutStar = (typeof HOLD_OUT_STARS)[number];
+
+/** Each star's name, and what earns it, as the board, the log and the result tell it. */
+export const HOLD_OUT_STAR_INFO: Readonly<Record<HoldOutStar, { name: string; reason: string }>> = {
+    held: { name: "Held", reason: "The Shrine stood to the end, and the team won" },
+    broke: { name: "Broke the Brood", reason: "Every nest fell before the round cap" },
+    unscathed: { name: "Unscathed", reason: "The Shrine ended above half its HP" },
+};
+
+/** A won Hold Out's stars as one line, in `HOLD_OUT_STARS` order: ★ for each earned, ☆ for each missed. */
+export const starLine = (stars: readonly HoldOutStar[]): string => HOLD_OUT_STARS.map(star => starMark(stars, star)).join("");
+
+/** One star's mark: ★ if `stars` earned it, ☆ if not. */
+export const starMark = (stars: readonly HoldOutStar[], star: HoldOutStar): string => stars.includes(star) ? "★" : "☆";
+
+/**
+ * The stars a won Hold Out earns (§6), read off the battlefield as it ended:
+ * Held, for the win itself; Broke the Brood, for every nest down — which ends
+ * the battle the moment it happens, so only ever before the cap; and
+ * Unscathed, for the Shrine above half its HP. Only asked of a win.
+ */
+export function holdOutStars(fighters: readonly Fighter[], context?: RulesContext): HoldOutStar[] {
+    const nests = warbandNests(fighters, context);
+    const shrine = shrineOf({ fighters: [...fighters] });
+    return HOLD_OUT_STARS.filter(star => star === "held"
+        || (star === "broke" && nests.length > 0 && !nests.some(isStanding))
+        || (star === "unscathed" && shrine !== undefined && shrine.hp * 2 > maxHpOf(shrine, context)));
 }
 
 /** The horde's theme in `round` (§5.1): its first from round 1, the next every `SPAWN_STEP_ROUNDS`, the last from then on. */

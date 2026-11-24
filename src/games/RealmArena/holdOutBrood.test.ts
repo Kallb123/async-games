@@ -6,7 +6,7 @@ import type { CharacterId } from "./characters";
 import { battlefieldById } from "./maps";
 import { gameStateToModel, type RealmArenaSettings } from "./RealmArenaModels";
 import { nextRallyOf, nextWaveOf, RealmArenaAct, waveOf } from "./RealmArenaLogic";
-import { act, ACTION_POINTS, afflicted, areaAround, check, fixedRolls, hordeSpawn, isCombatant, isMinion, isStanding, isStructure, isWarband, knockoutPoints, newFighter, shrineOf, spawnThemeOf, spawnThreatOf, viewOf, warbandOwner, type Action, type BattleState, type Fighter } from "./rules";
+import { act, ACTION_POINTS, afflicted, areaAround, check, fixedRolls, holdOutStars, hordeSpawn, isCombatant, isMinion, isStanding, isStructure, isWarband, knockoutPoints, newFighter, shrineOf, spawnThemeOf, spawnThreatOf, viewOf, warbandOwner, type Action, type BattleState, type Fighter } from "./rules";
 import { rallyOptionsOf } from "./rally";
 import { ruleValuesOf, rulesetFor } from "./rulesets";
 import { swarmAction, swarmMemo } from "./swarm";
@@ -604,6 +604,99 @@ describe("the ending (§5.4)", () => {
         const hp = shrineIn(game).hp;
         await playRound(game);
         expect(shrineIn(game).hp).toBeLessThan(hp);
+    });
+});
+
+describe("stars (§6)", () => {
+    /** Breaks the Brood in `round`: every nest but one down, and the last struck down by the team. */
+    async function breakIn(round: number, settings: RealmArenaSettings = {}) {
+        const game = await atRound(round, TEAM, settings);
+        game.specificGameState.rallyOwed = undefined;
+        const [last, ...rest] = nestsOf(game);
+        rest.forEach(nest => { nest.hp = 0; });
+        last.hp = 1;
+        expect((await strike(game, stoodBeside(game, last), last)).outcome.validMove).toBe(true);
+        expect(game.complete).toBe(true);
+        return game;
+    }
+
+    it("gives all three for breaking the Brood with the Shrine above half its HP, told in the log", async () => {
+        const game = await breakIn(7);
+        expect(game.specificGameState.stars).toEqual(["held", "broke", "unscathed"]);
+        expect(text(game).join("\n")).toMatch(/The team earns 3 of 3 stars: Held, Broke the Brood, Unscathed/);
+    });
+
+    it("gives Held alone for holding to the cap with the Shrine at half its HP", async () => {
+        const game = await atRound(15);
+        game.specificGameState.rallyOwed = undefined;
+        downHorde(game);
+        const shrine = shrineIn(game);
+        shrine.hp = shrine.maxHp! / 2;
+        for (const player of TEAM) await play(game, endTurnBy(player));
+        expect(game.endDetail).toMatch(/held the Shrine for all 15 rounds/);
+        expect(game.specificGameState.stars).toEqual(["held"]);
+    });
+
+    it("gives none for a loss", async () => {
+        const game = await atRound(6);
+        game.specificGameState.rallyOwed = undefined;
+        shrineIn(game).hp = 0;
+        await play(game, endTurnBy("a"));
+        expect(game.endReason).toBe("teamloss");
+        expect(game.specificGameState.stars).toBeUndefined();
+    });
+
+    it("sends the stars only once the battle is over, to every viewer alike", async () => {
+        const live = await mustered();
+        for (const viewer of [...TEAM, null]) expect(gameStateToModel(live.specificGameState, viewer, null)).not.toHaveProperty("stars");
+        const game = await breakIn(7);
+        for (const viewer of [...TEAM, null]) expect(gameStateToModel(game.specificGameState, viewer, null, true).stars).toEqual(["held", "broke", "unscathed"]);
+    });
+
+    it("reads Broke the Brood only off every nest down, and Unscathed only off a Shrine above half", async () => {
+        const game = await mustered();
+        const fighters = fightersOf(game).map(one => ({ ...one }));
+        expect(holdOutStars(fighters, V13)).toEqual(["held", "unscathed"]);
+        fighters.forEach(one => { if (one.character === "nest") one.hp = 0; });
+        const shrine = fighters.find(one => one.character === "shrine")!;
+        shrine.hp = Math.floor(shrine.maxHp! / 2);
+        expect(holdOutStars(fighters, V13)).toEqual(["held", "broke"]);
+    });
+});
+
+describe("the difficulty moves the spawn, the nests and the Shrine (§6)", () => {
+    const on = (difficulty: "easy" | "hard"): RealmArenaSettings => ({ coop: { enemy: "realm", mission: "holdOut", difficulty } });
+
+    it.each([
+        ["easy", 12, 30 + 10, 2],
+        ["hard", 18, 30 - 10, 4],
+    ] as const)("on %s: %i-HP nests, a %i-HP Shrine for one, and %i threat a nest in round 1", async (difficulty, nestHp, shrineHp, threat) => {
+        const game = await mustered(["a"], on(difficulty));
+        for (const nest of nestsOf(game)) expect(nest).toMatchObject({ hp: nestHp, maxHp: nestHp });
+        expect(shrineIn(game)).toMatchObject({ hp: shrineHp, maxHp: shrineHp });
+        expect(spawnThreatOf(1, game.specificGameState)).toBe(threat);
+        expect(gameStateToModel(game.specificGameState, "a", null).fighters.filter(one => one.character === "nest").every(nest => nest.maxHp === nestHp)).toBe(true);
+    });
+
+    it("leaves Normal as the rules have it, and a version-12 Hold Out's nests untouched on Hard", async () => {
+        const normal = await mustered(["a"]);
+        for (const nest of nestsOf(normal)) expect(nest).not.toHaveProperty("maxHp");
+        expect(spawnThreatOf(1, normal.specificGameState)).toBe(RULES.SPAWN_THREAT);
+        const v12 = makeGame(["a"], {}, { rulesVersion: 12, coop: { enemy: "swarm", mission: "holdOut", difficulty: "hard" } });
+        await musterAll(v12);
+        const nests = fightersOf(v12).filter(one => one.character === "nest");
+        expect(nests.length).toBeGreaterThan(0);
+        for (const nest of nests) expect(nest).toMatchObject({ hp: rulesetFor(12).CHARACTERS.nest.hp });
+        for (const nest of nests) expect(nest).not.toHaveProperty("maxHp");
+    });
+
+    it("sends how many nests still stand, to every viewer alike, and only where nests produce the enemy", async () => {
+        const game = await mustered(TEAM, { coop: { enemy: "realm", mission: "holdOut" }, fog: true });
+        nestsOf(game)[0].hp = 0;
+        for (const viewer of [...TEAM, null]) expect(gameStateToModel(game.specificGameState, viewer, null).nestsLeft).toBe(2 * TEAM.length - 1);
+        const v12 = makeGame(TEAM, {}, { rulesVersion: 12, coop: { enemy: "swarm", mission: "holdOut" } });
+        await musterAll(v12);
+        expect(gameStateToModel(v12.specificGameState, "a", null)).not.toHaveProperty("nestsLeft");
     });
 });
 

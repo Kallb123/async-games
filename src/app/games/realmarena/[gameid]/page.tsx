@@ -22,7 +22,7 @@ import RealmArenaRallySheet, { rallyTarget } from "@/games/RealmArena/components
 import type { RallyAction } from "@/games/RealmArena/rally";
 import { reachAfter, useTurnDraft } from "@/games/RealmArena/useTurnDraft";
 import { battlefieldOf } from "@/games/RealmArena/maps";
-import { canAct, allied, armouredTeam, battleFrom, centreHolders, ENEMY_SIDE, isStanding, isStructure, isWarband, SHRINE_OWNER, sideScore, squadHp, stoutTeam, TEAM_SIDE, warbandsFor, type Action, type BattleEvent, type Fighter } from "@/games/RealmArena/rules";
+import { canAct, allied, armouredTeam, battleFrom, centreHolders, ENEMY_SIDE, isStanding, isStructure, isWarband, maxHpOf, SHRINE_OWNER, shrineOf, sideScore, squadHp, stoutTeam, TEAM_SIDE, warbandsFor, type Action, type BattleEvent, type Fighter } from "@/games/RealmArena/rules";
 import { actionFollow, battleCues, centreInSight, endOf, coopColourOf, ENEMY_COLOUR, fighterName, foundBy, friendlySquares, isFollowedPart, isUnplaced, partFollow, partLabel, reviewParts, STEP_BEAT_MS, STEP_MIN_MS, TEAM_COLOUR, TEAM_NAME, unseenSquares, rallyLineOf, waveLineOf, withPartState } from "@/games/RealmArena/ui";
 import type { IRealmArenaOutcome } from "@/games/RealmArena/RealmArenaLogic";
 import type { ICommandResponse } from "@/app/api/game/command/route";
@@ -33,6 +33,7 @@ import { GameOption } from "@/components/ui/GameOptionsMenu";
 import GameScoreboard, { ScoreEntry } from "@/components/ui/GameScoreboard";
 import GameFinishBanner from "@/components/ui/GameFinishBanner";
 import RealmArenaTeamHealth from "@/games/RealmArena/components/RealmArenaTeamHealth";
+import RealmArenaStars from "@/games/RealmArena/components/RealmArenaStars";
 import Stat from "@/components/ui/Stat";
 import { useAuthGuard } from "@/utils/hooks/useAuthGuard";
 import { useEndGame } from "@/utils/hooks/useEndGame";
@@ -569,8 +570,11 @@ export default function GameRealmArena({ params }: { params: Promise<{ gameid: u
         battle: !!gs && !mustering,
         myTurn: battleTurn,
         selected: !!actor,
+        centre: !!gs && gs.mission !== 'holdOut',
+        breakTheBrood: gs?.nestsLeft !== undefined,
     }, { active: nav.isLive && !complete });
 
+    const shrine = shrineOf(shownBattle);
     const holders = centreHolders(battle);
     // In fog of war, nobody seen there isn't nobody there (§27).
     const centre = holders.length === 0 ? (centreInSight(battle, myUserId) ? 'Empty' : 'Unseen') : holders.length > 1 ? 'Contested' : capitalise(playerName(holders[0]));
@@ -631,7 +635,11 @@ export default function GameRealmArena({ params }: { params: Promise<{ gameid: u
                 <div className="ag-stat-row" data-tour="ra-stats">
                     <Stat value={mustering ? 'Muster' : `${gs.round}/${gs.battleRounds}`} label={mustering ? 'Phase' : 'Round'} />
                     {gs.mission === 'holdOut' && !mustering ? <>
-                        <Stat value={gs.enemiesDefeated ?? 0} label="Enemies defeated" />
+                        {/* Where nests produce the enemy, the nests left and the Shrine's HP (realm-arena-hold-out.md §6). */}
+                        {gs.nestsLeft !== undefined ? <>
+                            <Stat value={`${gs.nestsLeft}/${gs.nestSquares?.length ?? gs.nestsLeft}`} label="Nests left" />
+                            {shrine && <Stat value={`${shrine.hp}/${maxHpOf(shrine, shownBattle)}`} label="Shrine HP" />}
+                        </> : <Stat value={gs.enemiesDefeated ?? 0} label="Enemies defeated" />}
                         <RealmArenaTeamHealth battle={shownBattle} />
                     </> : <>
                         <Stat value={centre} label="Centre" />
@@ -656,6 +664,8 @@ export default function GameRealmArena({ params }: { params: Promise<{ gameid: u
                     extraParams={solo ? rematchFlag(RA_SOLO_PARAM, true) : undefined}
                 />
             )}
+
+            {complete && gs?.stars && <RealmArenaStars stars={gs.stars} />}
 
             {gs && (
                 <>

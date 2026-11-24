@@ -2,18 +2,18 @@
 // per-game presentation helpers live in games/<Game>/ui.ts). Readings of the
 // state the response already ships, never a rule: those are rules.ts's.
 
-import { ruleValuesOf, rulesetOf, type RulesContext } from "./rulesets";
+import { CURRENT_RULESET_VERSION, ruleValuesOf, rulesetOf, type RulesContext } from "./rulesets";
 import type { Rect } from "@/utils/ui/mapLabels";
 import { isoCentre, ISO_HALF_HEIGHT, ISO_HALF_WIDTH, type IsoView, type Point } from "@/utils/ui/isometric";
 import type { NextWave, IRealmArenaStepOutcome, IRealmArenaStepPart, RealmArenaPartState } from "./apiModels";
 import { andList, capitalise, pluralize, possessive } from "@/utils/ui/text";
 import type { Reach } from "@/utils/games/battlefield/pathfinding";
 import { coordsOf, distance, FACING_COUNT, facingTowards, riseOf, squareAt, TERRAIN, type Battlefield, type Facing, type Square, type Terrain, type TerrainLetter } from "@/utils/games/battlefield/terrain";
-import { EFFECT_IDS, EFFECTS, ITEM_IDS, ITEMS, type AbilityId, type CharacterId, type EffectId, type FactionId, type Item, type ItemId } from "./characters";
+import { EFFECT_IDS, EFFECTS, ITEM_IDS, ITEMS, type AbilityId, type CharacterId, type EffectId, type FactionId, type Item, type ItemId, type Difficulty } from "./characters";
 import { ABILITY_MARK, CHARACTER_IDS } from "./roster";
 import { battlefieldOf } from "./maps";
 import { artCharacterOf, EFFECT_ART, ITEM_ART, type BurstKind, type Missile, type Sprite, type ThrownItem } from "./art";
-import { areaDamage, actionPointsOf, CENTRE, SCORED_FOR, squadSight, hasEffect, isMinion, isStanding, isWarband, maxHpOf, moveAp, pickOf, reachOf, shoots, SHRINE_OWNER, type BattleState, type Fighter, type MusterPick, type OddsBreakdown, type OddsFactor, type ShotResult, type ToldEvent } from "./rules";
+import { areaDamage, actionPointsOf, hatchClause, holdOutDifficultyOf, CENTRE, SCORED_FOR, squadSight, hasEffect, isMinion, isStanding, isWarband, maxHpOf, moveAp, pickOf, reachOf, shoots, SHRINE_OWNER, type BattleState, type Fighter, type MusterPick, type OddsBreakdown, type OddsFactor, type ShotResult, type ToldEvent } from "./rules";
 
 const LETTER_OF = new Map<Terrain, TerrainLetter>(
     (Object.entries(TERRAIN) as [TerrainLetter, Terrain][]).map(([letter, terrain]) => [terrain, letter]),
@@ -65,6 +65,28 @@ export function waveLineOf(nextWave: NextWave | undefined, round: number): strin
 export function forcedHoldOutEnemy(context?: RulesContext): { id: FactionId; name: string } | undefined {
     const id = ruleValuesOf(context).HOLD_OUT_ENEMY;
     return id === undefined ? undefined : { id, name: rulesetOf(context).FACTIONS[id].enemyName };
+}
+
+/**
+ * What the setup screen says Hold Out is where the nests produce the enemy (rules version 13): the
+ * two ways to win, told as the guide tells them. Without a context, the current ruleset's.
+ */
+export function holdOutMissionDescription(context?: RulesContext): string {
+    return `Break the Brood by destroying every nest, or hold the Shrine to round ${ruleValuesOf(context).HOLD_OUT_ROUNDS}.`;
+}
+
+/**
+ * What a difficulty does to a Hold Out where nests produce the enemy, in the
+ * words the setup screen gives it: how much the nests hatch, a nest's HP and
+ * the Shrine's, from the rules' own steps. The guide's clause for the hatching is shared.
+ */
+export function holdOutDifficultyDescription(difficulty: Difficulty, context?: RulesContext): string {
+    const { SHRINE_HP = 0, SHRINE_HP_PER_PLAYER = 0 } = ruleValuesOf(context);
+    // `holdOutDifficultyOf` reads the rules `context` names, and a context without a version is the oldest ruleset's, so say which.
+    const step = holdOutDifficultyOf({ rulesVersion: context?.rulesVersion ?? CURRENT_RULESET_VERSION, coop: { difficulty } });
+    const nestHp = rulesetOf(context).CHARACTERS.nest.hp + step.nestHp;
+    const hatch = hatchClause(step.spawnThreat);
+    return `${hatch ? `${capitalise(hatch)} and have` : "Nests of"} ${nestHp} HP; the Shrine has ${SHRINE_HP + step.shrineHp} HP, plus ${SHRINE_HP_PER_PLAYER} for each of you.`;
 }
 
 /**

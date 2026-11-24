@@ -1354,6 +1354,36 @@ describe("Realm Arena's Hold Out against nests that produce the Brood in fog of 
         expect((await wire(game, null)).rally).toEqual({ banked: 1, next: 5 });
     });
 
+    it("sends the nests left to every viewer alike, the null one included, and the stars to none until the battle is won by breaking the Brood", async () => {
+        const game = await spawned();
+        const gs = game.specificGameState;
+        const nests = gs.fighters.filter(one => one.character === "nest");
+        expect(nests.length).toBeGreaterThan(1);
+        for (const viewer of ["a", "b", null]) {
+            const mid = await wire(game, viewer);
+            expect(mid.nestsLeft, String(viewer)).toBe(nests.length);
+            expect(mid, String(viewer)).not.toHaveProperty("stars");
+        }
+        nests.slice(1).forEach(nest => { nest.hp = 0; });
+        for (const viewer of ["a", "b", null]) expect((await wire(game, viewer)).nestsLeft, String(viewer)).toBe(1);
+        expect(realmArenaStateToModel(gs, null, null)).not.toHaveProperty("stars");
+
+        // The last nest falls: the Brood breaks and the battle is won, the fog lifts, and the stars are told to everyone.
+        nests[0].hp = 0;
+        expect(new RealmArenaGameType().CheckGameOver(game)).toBe(true);
+        expect(game.complete).toBe(true);
+        // `stars` is set on the state now, but a view that is not the finished one still carries none: the `complete` gate.
+        expect(gs.stars).toBeDefined();
+        for (const viewer of ["a", "b", null]) expect(realmArenaStateToModel(gs, viewer, null, false), String(viewer)).not.toHaveProperty("stars");
+        for (const viewer of ["a", "b", null]) {
+            const done = realmArenaStateToModel(gs, viewer, null, true);
+            expect(done.stars, String(viewer)).toContain("held");
+            expect(done.stars, String(viewer)).toContain("broke");
+            expect(done.stars, String(viewer)).toEqual(realmArenaStateToModel(gs, null, null, true).stars);
+            expect(done.nestsLeft, String(viewer)).toBe(0);
+        }
+    });
+
     it("sends the Shrine to every viewer but a null one sees nothing else of the board, nests and spawned Brood included", async () => {
         const game = await spawned();
         const gs = game.specificGameState;

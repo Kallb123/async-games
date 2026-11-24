@@ -1,5 +1,5 @@
 import type { Cover } from "@/utils/games/battlefield/terrain";
-import type { FactionId, PlayerCount } from "./characters";
+import type { Difficulty, FactionId, PlayerCount } from "./characters";
 
 /** A cell of a map, by its column and row. */
 export interface Cell { col: number; row: number }
@@ -8,6 +8,19 @@ export interface Cell { col: number; row: number }
 export interface HoldOutSites {
     nests: readonly (readonly Cell[])[];
     shrine: Cell;
+}
+
+/**
+ * How a co-op battle's difficulty moves a Hold Out whose nests produce the
+ * enemy (realm-arena-hold-out.md §6), each added to the rule it names: the
+ * threat each standing nest adds a turn (`SPAWN_THREAT`), each nest's HP, and
+ * the Shrine's (`SHRINE_HP`). Small steps, so the win can stay generous on
+ * every difficulty while the stars carry the challenge.
+ */
+export interface HoldOutDifficulty {
+    spawnThreat: number;
+    nestHp: number;
+    shrineHp: number;
 }
 
 /** Mechanics interpreted by the shared engine, selected with the match's catalogue. */
@@ -113,5 +126,7 @@ export interface RealmArenaRuleValues {
      * version 13, where the map's own nests stand.
      */
     HOLD_OUT_SITES?: Readonly<Record<string, HoldOutSites>>;
+    /** How each difficulty moves the spawn, the nests and the Shrine (§6). Absent before version 13, where the difficulty moves the warbands' budget. */
+    HOLD_OUT_DIFFICULTY?: Readonly<Record<Difficulty, HoldOutDifficulty>>;
     BATTLE_ROUNDS: Readonly<Record<PlayerCount, number>>;
 }
