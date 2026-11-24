@@ -1,9 +1,10 @@
 import { describe, expect, it } from "vitest";
 import { REALM } from "../characters";
 import { inRange, readyMadeMuster } from "../rules";
-import { ruleValuesOf, rulesetFor } from "../rulesets";
+import { registeredRulesets, rulesetFor, type RealmArenaRuleset } from "../rulesets";
+import type { CharacterId } from "../characters";
 import { reachFrom } from "@/utils/games/battlefield/pathfinding";
-import { coordsOf, distance, type Square } from "@/utils/games/battlefield/terrain";
+import { coordsOf, distance, squareAt, type Battlefield, type Square } from "@/utils/games/battlefield/terrain";
 import { DEPLOYMENT_NAMES, REALM_ARENA_MAPS } from ".";
 import { fittingHoldOutMap } from "./holdOut";
 import { edgeStrips, MIDDLE_CENTRE } from "./middleOut";
@@ -143,11 +144,8 @@ describe("fittingHoldOutMap", () => {
     });
 });
 
-// The Swarm's nests (§39.7) are the map's: two to a warband, in or beside its
-// zone, at the map's edge, wherever the team of the size the map is built for
-// can reach them and not see them on the first turn, and never where a wave
-// stands. Each map that Hold Out is fought on lists them.
-describe.each([
+// Hold Out's own maps, with the size of team each is built for.
+const HOLD_OUT_FIELDS: readonly { id: string; FIELD: Battlefield; team: number }[] = [
     { id: "ruinedFort", FIELD: RUINED_FORT, team: 1 },
     { id: "twinGateFort", FIELD: TWIN_GATE_FORT, team: 2 },
     { id: "threeGateFort", FIELD: THREE_GATE_FORT, team: 3 },
@@ -156,12 +154,54 @@ describe.each([
     { id: "sackedFortFour", FIELD: SACKED_FORT_FOUR, team: 4 },
     { id: "sunkenVillageThree", FIELD: SUNKEN_VILLAGE_THREE, team: 3 },
     { id: "sunkenVillageFour", FIELD: SUNKEN_VILLAGE_FOUR, team: 4 },
-] as const)("$id's nests, for a team of $team", ({ FIELD, team }) => {
-    const nests = FIELD.nests ?? [];
+];
+
+/** The furthest any of these characters sees in a catalogue: theirs, or the plain range. */
+const sightOf = (ruleset: RealmArenaRuleset, ids: readonly CharacterId[]) =>
+    Math.max(ruleset.RULES.SIGHT_RANGE, ...ids.map(id => ruleset.CHARACTERS[id].sight ?? 0));
+
+/** Every catalogue that lists its own Hold Out sites (realm-arena-hold-out.md §5.1), and the characters its team fields. */
+const SITE_CATALOGUES = registeredRulesets.flatMap(ruleset => ruleset.RULES.HOLD_OUT_SITES
+    ? [{ label: `catalogue ${registeredRulesets.indexOf(ruleset)}'s`, ruleset, sites: ruleset.RULES.HOLD_OUT_SITES }] : []);
+const teamSightIn = (ruleset: RealmArenaRuleset) =>
+    sightOf(ruleset, Object.values(ruleset.FACTIONS).filter(faction => !faction.computerOnly).flatMap(faction => faction.characters));
+
+describe("every catalogue's Hold Out sites", () => {
+    it("are listed for every map Hold Out can be fought on, and for that team's warbands", () => {
+        expect(SITE_CATALOGUES.length).toBeGreaterThan(0);
+        for (const { ruleset, sites } of SITE_CATALOGUES) {
+            expect(Object.keys(sites).sort()).toEqual(HOLD_OUT_FIELDS.map(({ id }) => id).sort());
+            for (const { id, team } of HOLD_OUT_FIELDS) expect(ruleset.RULES.HOLD_OUT_SITES![id].nests, id).toHaveLength(team);
+        }
+    });
+
+    // They start as copies: the first catalogue to move a nest changes this test, which is the point.
+    it("start with the nests the maps themselves have", () => {
+        for (const { FIELD, id } of HOLD_OUT_FIELDS) {
+            for (const { sites } of SITE_CATALOGUES) {
+                expect(sites[id].nests.map(cells => cells.map(({ col, row }) => squareAt(FIELD, col, row))), id).toEqual(FIELD.nests);
+            }
+        }
+    });
+});
+
+// The Swarm's nests (§39.7) are the map's, and a catalogue's from version 13
+// (hold-out §5.1): two to a warband, in or beside its zone, at the map's edge,
+// wherever the team of the size the map is built for can reach them and not
+// see them on the first turn, and never where a wave stands. Each map that
+// Hold Out is fought on lists them, and so does each catalogue.
+const NEST_SOURCES = HOLD_OUT_FIELDS.flatMap(({ id, FIELD, team }) => [
+    { id, FIELD, team, source: "own", nests: FIELD.nests ?? [], sight: sightOf(rulesetFor(12), Object.values(rulesetFor(12).FACTIONS.realm.characters)) },
+    ...SITE_CATALOGUES.map(({ label, ruleset, sites }) => ({
+        id, FIELD, team, source: label,
+        nests: sites[id].nests.map(cells => cells.map(({ col, row }) => squareAt(FIELD, col, row)!)),
+        sight: teamSightIn(ruleset),
+    })),
+]);
+
+describe.each(NEST_SOURCES)("$id's $source nests, for a team of $team", ({ FIELD, team, nests, sight }) => {
     const teamZones = FIELD.deployments.slice(0, team);
     const middleOut = FIELD.width === 54;
-    // The furthest any character of the team sees: the Realm's, or the plain range.
-    const sight = Math.max(ruleValuesOf({ rulesVersion: 12 }).SIGHT_RANGE, ...Object.values(rulesetFor(12).FACTIONS.realm.characters).map(id => rulesetFor(12).CHARACTERS[id].sight ?? 0));
     const quarter = (square: Square) => quarterTurn(FIELD, square);
 
     it("has two for each warband, on ground someone can stand on, none shared", () => {
@@ -217,5 +257,53 @@ describe.each([
                 expect(sorted(squares.map(quarter)), `warband ${k}`).toEqual(sorted(nests[turnedTo]));
             }
         }
+    });
+});
+
+// The team's Shrine (hold-out §5.2): one square that never moves, on the team's
+// side, put down after the muster. Each catalogue lists it for every map.
+describe.each(SITE_CATALOGUES.flatMap(catalogue => HOLD_OUT_FIELDS.map(field => ({ ...catalogue, ...field }))))("$id's $label Shrine, for a team of $team", ({ ruleset, sites, id, FIELD, team }) => {
+    const shrine = squareAt(FIELD, sites[id].shrine.col, sites[id].shrine.row)!;
+    const teamZones = FIELD.deployments.slice(0, team), warbandZones = FIELD.deployments.slice(team);
+    const nests = sites[id].nests.flat().map(({ col, row }) => squareAt(FIELD, col, row)!);
+    const taken = new Set([...FIELD.deployments.flat(), ...nests]);
+    const middleOut = FIELD.width === 54;
+    const brood = ruleset.FACTIONS.brood;
+    const sight = sightOf(ruleset, [...brood.characters, ...(brood.elites ?? [])]);
+    const seen = (square: Square) => warbandZones.some(zone => zone.some(eye => inRange(FIELD, eye, square, sight)));
+    // The Sacked Fort's keep is open ground, in sight of the edge from every square that is in it: its Shrine can't be hidden and be in the keep.
+    const openKeep = id.startsWith("sackedFort");
+    const centre = (FIELD.width - 1) / 2;
+
+    it("stands on ground someone can stand on, on no square of a muster and no nest", () => {
+        expect(FIELD.tiles[shrine].terrain.standable).toBe(true);
+        expect(taken.has(shrine)).toBe(false);
+    });
+
+    it("can be walked to from every zone, the team's and the warbands'", () => {
+        for (const zone of FIELD.deployments) expect(Number.isFinite(reachFrom(FIELD, zone[0]).costs[shrine])).toBe(true);
+    });
+
+    it.runIf(!openKeep)("is out of sight of every warband's zone on the first turn", () => {
+        expect(seen(shrine)).toBe(false);
+    });
+
+    it.runIf(openKeep)("is in sight of the warbands, as the open keep leaves it", () => {
+        expect(seen(shrine)).toBe(true);
+    });
+
+    it.runIf(middleOut)("is the most central square that is free and, where it can be, out of sight, right beside the team's zones", () => {
+        const { col, row } = sites[id].shrine, from = Math.hypot(col - centre, row - centre);
+        expect(Math.min(...teamZones.map(zone => Math.min(...zone.map(square => distance(FIELD, square, shrine)))))).toBeLessThanOrEqual(1);
+        const closer = FIELD.tiles.flatMap((tile, square) => {
+            const at = coordsOf(FIELD, square);
+            return tile.terrain.standable && !taken.has(square) && Math.hypot(at.col - centre, at.row - centre) < from && (openKeep || !seen(square)) ? [at] : [];
+        });
+        expect(closer).toEqual([]);
+    });
+
+    it.runIf(!middleOut)("stands just in front of the team's zones, centred across them", () => {
+        expect(Math.min(...teamZones.map(zone => Math.min(...zone.map(square => distance(FIELD, square, shrine)))))).toBeLessThanOrEqual(1.5);
+        expect(Math.abs(sites[id].shrine.col - centre)).toBeLessThanOrEqual(0.5);
     });
 });

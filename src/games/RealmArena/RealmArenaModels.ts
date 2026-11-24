@@ -8,16 +8,16 @@ import { mongoMap } from "@/utils/games/mongoMaps";
 import { capitalise, pluralize } from "@/utils/ui/text";
 import { userIdListToNamesAndMap } from "@/utils/users/clerk";
 import { RealmArenaGameType, type IGameCommand } from "@/utils/apiModels/GameLogic";
-import { battleOf, battleRoundsOf, budgetOf, enemyEvents, enemyHidden, enemyTurnsOf, nestSquaresOf, nextWaveOf, toldTo, toldTurns, unnamed, warbandBudgetOf, type EnemyStep, type IRealmArenaOutcome, type RealmArenaBoard, type Told } from "./RealmArenaLogic";
+import { battleOf, battleRoundsOf, budgetOf, enemyEvents, enemyHidden, enemyTurnsOf, nestSquaresOf, nextRallyOf, nextWaveOf, toldTo, toldTurns, unnamed, warbandBudgetOf, type EnemyStep, type IRealmArenaOutcome, type RealmArenaBoard, type Told } from "./RealmArenaLogic";
 import { rollOffTurnOrder } from "@/utils/games/rollOff";
-import { CURRENT_RULESET_VERSION, registeredRulesets, type RulesContext } from "./rulesets";
+import { CURRENT_RULESET_VERSION, registeredRulesets, ruleValuesOf, type RulesContext } from "./rulesets";
 import { ART_CHARACTER_IDS, DRAWN_AS_IDS } from "./art";
 import { randomInt } from "@/utils/games/random";
 import { userToken } from "@/utils/games/history";
 import { BATTLE_SIZE_NAMES, CHARACTERS, COOP_PLAYERS, coopTeamMax, DIFFICULTY_NAMES, FACTION_IDS, factionById, FACTIONS, fitsCoop, isFactionId, playableFactionsOf, RANDOM_ENEMY, REALM_ONLY, UNKNOWN_ENEMY, type BattleSize, type Character, type CharacterId, type Difficulty, type FactionId } from "./characters";
 import { addTally, NO_TALLY, xpOf, type MasterySnapshot, type Tally } from "./mastery";
 import { battlefieldById, COOP_MAPS, DEPLOYMENT_NAMES, mapFor, type CoopMap, type RealmArenaMapId } from "./maps";
-import { isMinion, type Action, allied, ENEMY_SIDE, fighterById, fogGhost, isStructure, isWarband, pickOf, squadSight, storedFighter, TEAM_SIDE, viewOf, warbandsFor, maxHpOf, actionPointsOf, type BattleEvent, type Fighter, type FogGhost, type MusterPick, type ToldEvent } from "./rules";
+import { isMinion, nestsProduce, type Action, allied, ENEMY_SIDE, fighterById, fogGhost, isStructure, isWarband, pickOf, squadSight, storedFighter, TEAM_SIDE, viewOf, warbandsFor, maxHpOf, actionPointsOf, type BattleEvent, type Fighter, type FogGhost, type MusterPick, type ToldEvent } from "./rules";
 import { computerHoldsTurn } from "@/utils/games/computerTurns";
 import type { IRealmArenaGameDataResponse, IRealmArenaSpecificGameStateResponse, IRealmArenaStepOutcome, IRealmArenaStepPart, RealmArenaPartState } from "./apiModels";
 import type { Square } from "@/utils/games/battlefield/terrain";
@@ -179,6 +179,21 @@ export interface IRealmArenaSpecificGameState {
      * once the battle is over (`nestsCleared` on the response). Absent otherwise.
      */
     nestsCleared?: true;
+    /**
+     * Each horde warband's banked threat, by warband owner, where nests produce
+     * the enemy (realm-arena-hold-out.md §5.1): what its nests added that it
+     * couldn't spend yet. Replaced, never mutated, as `scores` is. The server's
+     * alone: never sent (§4.6). Absent in every battle before rules version 13.
+     */
+    threat?: Record<string, number>;
+    /**
+     * Rallies the team has earned and not yet taken (realm-arena-hold-out.md
+     * §5.3): on the schedule, and each time a warband is broken. Public:
+     * everyone saw what earned them. Absent while none has been earned.
+     */
+    ralliesBanked?: number;
+    /** The round the team last took a rally in, as it began (§5.3): it never takes two in rounds running. Public. Absent until one is taken. */
+    lastRally?: number;
     /** Battle rounds played to the end: 0 until the first round's last turn ends. The round being played is one more. */
     roundsPlayed: number;
     /**
@@ -348,9 +363,10 @@ RealmArenaInvitationSchema.methods.CreateGame = async function(invite: IRealmAre
     if (invited && !coop) {
         history.push({ text: `Setup: this co-op battle is for up to ${coopTeamMax(invited)} players, so this is a free-for-all` });
     }
-    if (enemy) {
+    const fought = specificGameState.coop;
+    if (fought) {
         // A random enemy isn't named: the team musters not knowing whom it will face (§29.3).
-        const foe = coop?.enemy === RANDOM_ENEMY ? "an enemy drawn at random" : factionById(enemy).enemyName;
+        const foe = fought.random ? "an enemy drawn at random" : factionById(fought.enemy, specificGameState).enemyName;
         const where = specificGameState.coop?.map ? "a warband for each of them closing in from the edges" : "a warband deployed opposite each of them";
         history.push({ text: `Setup: the players fight together against ${foe}, ${where}` });
     }
@@ -446,7 +462,7 @@ export function buildInitialRealmArenaState(turnOrder: string[], mastery: Master
         ...(factions ? { factions } : {}),
         ...(settings.rulesVersion !== undefined ? { rulesVersion: settings.rulesVersion } : {}),
         // Blocks are for a team of two or more: for one player they're the alternating order.
-        ...(settings.coop ? { coop: coopState({ ...settings.coop, teamBlocks: settings.coop.teamBlocks && turnOrder.length >= 2 ? true : undefined }) } : {}),
+        ...(settings.coop ? { coop: coopState({ ...holdOutEnemy(settings.coop, settings.rulesVersion), teamBlocks: settings.coop.teamBlocks && turnOrder.length >= 2 ? true : undefined }) } : {}),
         phase: "muster",
         roundsPlayed: 0,
         fighters: [],
@@ -457,6 +473,18 @@ export function buildInitialRealmArenaState(turnOrder: string[], mastery: Master
         undoStack: [],
         undoAnchorId: null,
     };
+}
+
+/**
+ * Whom a co-op battle fights: the host's choice — or, for Hold Out under rules
+ * with a `HOLD_OUT_ENEMY` (realm-arena-hold-out.md §5), that faction whatever
+ * was chosen, never a random one.
+ */
+function holdOutEnemy(coop: CoopSettings, rulesVersion: number | undefined): CoopSettings {
+    const forced = coop.mission === "holdOut" ? ruleValuesOf({ rulesVersion }).HOLD_OUT_ENEMY : undefined;
+    if (forced === undefined) return coop;
+    const { random: _random, ...chosen } = coop;
+    return { ...chosen, enemy: forced };
 }
 
 /** A co-op battle's state as it starts: only the settings that were chosen, so one without them looks as every battle before it did. */
@@ -515,6 +543,10 @@ var RealmArenaGameDataSchema = new Schema<IRealmArenaGameDataDocument>(
             nestsDestroyed: Schema.Types.Mixed,
             nestsSeenDestroyed: Number,
             nestsCleared: Boolean,
+            // Mixed, so `markDirty` saves it whole; replaced, never mutated, as `scores` is (`spawn`).
+            threat: Schema.Types.Mixed,
+            ralliesBanked: Number,
+            lastRally: Number,
             fighters: Schema.Types.Mixed,
             sightings: Schema.Types.Mixed,
             blasted: [Number],
@@ -602,6 +634,8 @@ export function gameStateToModel(
     const own = gs.phase === "muster" ? musters.find(muster => muster.owner === viewerId) : undefined;
     const view = viewOf(battleOf(gs, complete), viewerId);
     const nextWave = complete ? undefined : nextWaveOf(gs);
+    const nextRally = complete ? undefined : nextRallyOf(gs);
+    const rally = !complete && gs.phase === "battle" && nestsProduce(gs.coop?.mission, gs) ? { banked: gs.ralliesBanked ?? 0, ...(nextRally !== undefined ? { next: nextRally } : {}) } : undefined;
     // A nest names the Swarm: its squares wait for the enemy to be known, as `enemy` does.
     const nestSquares = !enemyHidden(gs.coop) || complete ? nestSquaresOf(gs) : undefined;
     return {
@@ -619,6 +653,7 @@ export function gameStateToModel(
         ...(gs.coop?.mission ? { mission: gs.coop.mission } : {}),
         ...(nextWave ? { nextWave } : {}),
         ...(nestSquares ? { nestSquares } : {}),
+        ...(rally ? { rally } : {}),
         // Whether nests stand is unseen in fog until the battle is over, so this waits for it too.
         ...(complete && gs.nestsCleared ? { nestsCleared: true as const } : {}),
         ...(gs.coop?.mission === "holdOut" && gs.phase !== "muster" ? { enemiesDefeated: gs.fighters.filter(fighter => isWarband(fighter.owner) && fighter.hp <= 0 && !isStructure(fighter, gs)).length } : {}),

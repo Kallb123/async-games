@@ -15,35 +15,49 @@ import { structureQuad } from "./three/marks3d";
 const field = buildBattlefield({ name: "Open", rows: ["..........", "..........", "..........", ".........."], deployments: [], objectives: {} });
 const CONTEXT = { rulesVersion: 12 };
 
-const NEST_ART = STRUCTURE_ART.nest!;
+// The nest (§39.7) and the team's shrine (rules version 13) are drawn the same way: one sprite a pose, on a sheet each.
+describe.each(["nest", "shrine"] as const)("the %s's art", structure => {
+    const art = STRUCTURE_ART[structure]!;
 
-describe("the nest's art", () => {
     it("is a sprite a pose, a character's cell each, on a sheet of its own the board defines", () => {
-        expect(Object.keys(NEST_ART)).toEqual(["standing", "fallen"]);
-        expect(NEST_ART.standing).not.toEqual(NEST_ART.fallen);
-        for (const sprite of Object.values(NEST_ART)) {
+        expect(Object.keys(art)).toEqual(["standing", "fallen"]);
+        expect(art.standing).not.toEqual(art.fallen);
+        for (const sprite of Object.values(art)) {
+            expect(sprite.sheet).toBe(structure);
             expect(SPRITES.has(sprite)).toBe(true);
-            expect(sprite.x + sprite.width).toBeLessThanOrEqual(ART_SHEETS.nest.width);
-            expect(sprite.y + sprite.height).toBeLessThanOrEqual(ART_SHEETS.nest.height);
+            expect(sprite.x + sprite.width).toBeLessThanOrEqual(ART_SHEETS[structure].width);
+            expect(sprite.y + sprite.height).toBeLessThanOrEqual(ART_SHEETS[structure].height);
         }
     });
 
     it("is what a structure is drawn with, and no figure's row is", () => {
-        expect("nest" in CHARACTER_ART).toBe(false);
-        expect(structureArt("nest", "standing")).toBe(NEST_ART.standing);
-        expect(structureArt("nest", "fallen")).toBe(NEST_ART.fallen);
+        expect(structure in CHARACTER_ART).toBe(false);
+        expect(structureArt(structure, "standing")).toBe(art.standing);
+        expect(structureArt(structure, "fallen")).toBe(art.fallen);
         expect(structureArt("knight", "standing")).toBeUndefined();
         // Whichever way a board is turned, and with no owner's colour laid over it.
-        for (const cell of [0, 3, 7]) expect(figureSprites("nest", "standing", cell)).toEqual({ body: NEST_ART.standing, team: null });
+        for (const cell of [0, 3, 7]) expect(figureSprites(structure, "standing", cell)).toEqual({ body: art.standing, team: null });
         expect(figureSprites("knight", "standing", 3)).toEqual({ body: CHARACTER_ART.knight.standing.body[3], team: CHARACTER_ART.knight.standing.team[3] });
     });
 
     it("stands on a square's middle on the 3D board as it does on the isometric one: as wide as a square, its foot on the square's front corner", () => {
-        const { x, y, width, height } = structureQuad(NEST_ART.standing);
+        const { x, y, width, height } = structureQuad(art.standing);
         expect(width).toBe(20);
         expect(x).toBe(0);
         // The quad hangs from the square's middle, which is half a diamond below the isometric group's origin.
         expect(y + height / 2).toBe(10 - 5);
+    });
+});
+
+describe("a shrine on the isometric board", () => {
+    it("draws standing and destroyed from its own art, with no figure's row", () => {
+        const draw = (hp: number) => renderToStaticMarkup(React.createElement(RealmArenaBoard, {
+            field, fighters: [{ ...newFighter(0, warbandOwner(0), "shrine", at(field, 4, 1), null, undefined, undefined, false, { rulesVersion: 13 }), hp, maxHp: 10 }],
+            owners: ["a", "b", warbandOwner(0)], rulesVersion: 13, viewerId: "a",
+            colourFor: () => "red", nameFor: () => "The team", selected: undefined, onSelect: () => {},
+        }));
+        expect(draw(10)).toContain("/art/realmarena/shrine.png");
+        expect(draw(0)).toContain("ag-ra-figure--down");
     });
 });
 

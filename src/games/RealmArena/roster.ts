@@ -37,6 +37,7 @@ const MARKS = {
     carapaceBrute: "🪨",
     bileLobber: "🤮",
     nest: "🪺",
+    shrine: "⛩️",
 } satisfies Partial<Record<CharacterId, string>>;
 
 export const CHARACTER_MARK: Readonly<Record<CharacterId, string>> = {

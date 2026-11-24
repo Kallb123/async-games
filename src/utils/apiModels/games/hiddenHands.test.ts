@@ -1321,3 +1321,50 @@ describe("Realm Arena's Hatch in fog of war (§39.5)", () => {
         for (const viewer of ["a", "b", null]) expect(JSON.stringify(realmArenaStateToModel(gs, viewer, null)), String(viewer)).not.toContain("hatchedBy");
     });
 });
+
+describe("Realm Arena's Hold Out against nests that produce the Brood in fog of war (realm-arena-hold-out.md §5)", () => {
+    // Rules 13: the warbands' banked threat and the rally's bookkeeping are the server's; the Shrine is everyone's.
+    // One warband's turn is played with nothing recorded, so its nests spawn and nothing moves: the Brood stays out of both squads' sight.
+    async function spawned(): Promise<RealmArenaTestGame> {
+        const game = makeRealmArenaGame(["a", "b"], {}, { fog: true, rulesVersion: 13, coop: { enemy: "realm", mission: "holdOut" } });
+        await realmArenaMusterAll(game);
+        await playRealmArenaOne(game, realmArenaEndTurn("a"));
+        await playRealmArenaOne(game, realmArenaWarbandTurn(game.currentTurn, []));
+        return game;
+    }
+    const wire = async (game: RealmArenaTestGame, viewer: string | null) => {
+        const { markModified: _, ...data } = game;
+        const { CreateDataResponse } = (await import("@/games/RealmArena/RealmArenaModels")).RealmArenaGameDataModel.schema.methods;
+        return (await CreateDataResponse.call(structuredClone(data), viewer)).specificGameState as IRealmArenaSpecificGameStateResponse;
+    };
+
+    it("never sends the banked threat or the rally's source fields to any viewer, a null one included", async () => {
+        const game = await spawned();
+        const gs = game.specificGameState;
+        expect(gs.threat).toBeDefined();
+        gs.ralliesBanked = 1;
+        gs.lastRally = 5;
+        gs.roundsPlayed = 3;
+        for (const viewer of ["a", "b", null]) {
+            const sent = JSON.stringify(await wire(game, viewer));
+            expect(sent, String(viewer)).not.toMatch(/"threat"|"ralliesBanked"|"lastRally"/);
+        }
+        // What every viewer is told of the rally is how many wait and when the next comes.
+        expect((await wire(game, "a")).rally).toEqual({ banked: 1, next: 5 });
+        expect((await wire(game, null)).rally).toEqual({ banked: 1, next: 5 });
+    });
+
+    it("sends the Shrine to every viewer but a null one sees nothing else of the board, nests and spawned Brood included", async () => {
+        const game = await spawned();
+        const gs = game.specificGameState;
+        const shrine = gs.fighters.find(one => one.character === "shrine")!;
+        const none = await wire(game, null);
+        expect(none.fighters.map(one => one.id)).toEqual([shrine.id]);
+        for (const viewer of ["a", "b"]) {
+            const fighters = (await wire(game, viewer)).fighters;
+            expect(fighters.some(one => one.id === shrine.id), viewer).toBe(true);
+            // Far from both squads, no nest or Brood fighter is in anyone's sight.
+            expect(fighters.filter(one => one.owner.startsWith("ai:")), viewer).toEqual([]);
+        }
+    });
+});

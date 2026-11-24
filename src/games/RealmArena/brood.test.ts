@@ -3,7 +3,7 @@ import { at, fieldOf } from "@/utils/games/battlefield/testFixtures";
 import { FACTION_IDS, factionById, factionOf, isFactionId, type CharacterId } from "./characters";
 import { warbandBudgetOf, waveOf } from "./RealmArenaLogic";
 import { rulesetFor, ruleValuesOf } from "./rulesets";
-import { act, armourOf, check, damageTo, fixedRolls, hordePurchase, isCombatant, isMinion, newFighter, nextFighterId, startTurn, type BattleState, type Fighter } from "./rules";
+import { act, armourOf, check, damageTo, fixedRolls, hordeSpawn, isCombatant, spawnThemeOf, isMinion, newFighter, nextFighterId, startTurn, type BattleState, type Fighter } from "./rules";
 import { battleOf, makeGame, musterAll, warbandsOf } from "./testFixtures";
 
 vi.mock("./masteryRecord", () => ({ masterySnapshotOf: vi.fn(async () => ({})) }));
@@ -27,6 +27,8 @@ const get = (state: Pick<BattleState, "fighters">, id: number) => state.fighters
 const hits = () => fixedRolls(Array(10).fill(1));
 const threatOf = (bought: readonly CharacterId[]) => bought.reduce((sum, id) => sum + CHARACTERS[id].threat!, 0);
 const MINIONS = ["broodSkitterling", "broodSpitter", "broodBloater"] as const;
+/** What a warband with nobody standing buys with `threat` on `round`'s theme. */
+const buy = (threat: number, round: number) => hordeSpawn(spawnThemeOf(BROOD, round, V13)!, threat, { minions: 0, others: 0 }, V13);
 
 describe("the Brood's faction (§4.1)", () => {
     it("is fielded by the computer alone: in no list a player picks from, and found through the battle's catalogue", () => {
@@ -96,60 +98,58 @@ describe("minions (§4.3)", () => {
 });
 
 describe("what a horde buys (§4.2, §4.4)", () => {
-    it("buys the elite first, then the list round and round, in threat", () => {
+    it("buys the list round and round, in threat, and stops at the first it can't afford, banking the rest (§5.1)", () => {
         // The Rush at 14: two rounds of Skitterling, Skitterling, Ravager.
-        expect(hordePurchase(BROOD, 14, 1, V13)).toEqual(["broodSkitterling", "broodSkitterling", "broodRavager", "broodSkitterling", "broodSkitterling", "broodRavager"]);
-        // The Bile at 19: the Lobber's 10, then Spitter, Bloater, Spitter (6), then a Spitter (2); 1 left buys nothing.
-        expect(hordePurchase(BROOD, 19, 7, V13)).toEqual(["bileLobber", "broodSpitter", "broodBloater", "broodSpitter", "broodSpitter"]);
-        expect(hordePurchase(rulesetFor(13).FACTIONS.realm, 50, 4, V13)).toEqual([]);
+        expect(buy(14, 1)).toEqual({ bought: ["broodSkitterling", "broodSkitterling", "broodRavager", "broodSkitterling", "broodSkitterling", "broodRavager"], left: 0 });
+        // At 10: Skitterling, Skitterling, Ravager, then two Skitterlings; the Ravager after them is too dear, and 1 is banked.
+        expect(buy(10, 1)).toEqual({ bought: ["broodSkitterling", "broodSkitterling", "broodRavager", "broodSkitterling", "broodSkitterling"], left: 1 });
+        // The Bile at 7: Spitter, Bloater, Spitter (6); 1 left buys nothing. Its elite comes on the schedule (§5.1), not in its list.
+        expect(buy(7, 5)).toEqual({ bought: ["broodSpitter", "broodBloater", "broodSpitter"], left: 1 });
+        // Saving up: the Rush at 4 buys two Skitterlings and banks 2 toward the Ravager.
+        expect(buy(4, 1)).toEqual({ bought: ["broodSkitterling", "broodSkitterling"], left: 2 });
     });
 
     it("never spends more than its threat, nor buys past the caps, and is the same every time", () => {
         const { HORDE_CAP, HORDE_REAL_CAP } = ruleValuesOf(V13);
         expect([HORDE_CAP, HORDE_REAL_CAP]).toEqual([16, 4]);
-        for (const round of [1, 4, 7, 10, 13]) {
+        for (const round of [1, 5, 9, 13]) {
             for (const threat of [0, 5, 14, 30, 60, 200]) {
-                const bought = hordePurchase(BROOD, threat, round, V13);
+                const { bought } = buy(threat, round);
                 const label = `round ${round}, ${threat} threat`;
                 expect(threatOf(bought), label).toBeLessThanOrEqual(threat);
                 const minions = bought.filter(id => CHARACTERS[id].minion).length;
                 expect(minions, label).toBeLessThanOrEqual(HORDE_CAP!);
                 expect(bought.length - minions, label).toBeLessThanOrEqual(HORDE_REAL_CAP!);
-                expect(hordePurchase(BROOD, threat, round, V13), label).toEqual(bought);
+                expect(buy(threat, round).bought, label).toEqual(bought);
             }
         }
         // At 200 the Queen's theme stands at both caps.
-        const full = hordePurchase(BROOD, 200, 13, V13);
+        const { bought: full, left } = buy(200, 13);
+        // Threat the caps leave nothing to spend on is lost.
+        expect(left).toBe(0);
         expect(full.filter(id => CHARACTERS[id].minion)).toHaveLength(HORDE_CAP!);
         expect(full.filter(id => !CHARACTERS[id].minion)).toHaveLength(HORDE_REAL_CAP!);
     });
 
-    it("lands a wave that never takes a warband past the caps, survivors and hatchlings counted", async () => {
+    it("lands no wave in a Hold Out against it: its nests produce it (§5.1)", async () => {
         const game = makeGame(["a", "b", "c"], {}, { ...V13, coop: { mission: "holdOut", enemy: "brood" } });
         await musterAll(game);
         const gs = game.specificGameState;
-        const [owner] = warbandsOf(game);
-        // Fill the warband with survivors: 14 minions and 3 others standing.
-        const zone = battleOf(game).field.tiles.map((_, square) => square).filter(square => !gs.fighters.some(one => one.square === square) && battleOf(game).field.tiles[square].terrain.standable);
-        for (let k = 0; gs.fighters.filter(one => one.owner === owner && isCombatant(one, gs) && isMinion(one, gs)).length < 14; k++) gs.fighters.push(newFighter(nextFighterId(gs.fighters), owner, "broodSkitterling", zone[k], null, undefined, undefined, false, V13));
         gs.roundsPlayed = 3;
-        const wave = waveOf(gs, owner, true);
-        const after = [...gs.fighters.filter(one => one.owner === owner && isCombatant(one, gs)), ...wave];
-        expect(after.filter(one => isMinion(one, gs)).length).toBeLessThanOrEqual(16);
-        expect(after.filter(one => !isMinion(one, gs)).length).toBeLessThanOrEqual(4);
+        for (const owner of warbandsOf(game)) expect(waveOf(gs, owner, true), owner).toEqual([]);
     });
 
-    it("musters each warband of a Hold Out against the Brood from its points, a threat for every five, and lands its waves within the caps", async () => {
+    it("musters each warband of a Hold Out against the Brood as a starting horde of STARTING_HORDE threat on its first theme (§5.1)", async () => {
         const game = makeGame(["a", "b", "c"], {}, { ...V13, coop: { mission: "holdOut", enemy: "brood" } });
         await musterAll(game);
         const gs = game.specificGameState;
-        const threat = Math.floor(warbandBudgetOf(gs) / ruleValuesOf(V13).POINTS_PER_THREAT!);
+        expect(ruleValuesOf(V13).STARTING_HORDE).toBe(10);
         for (const owner of warbandsOf(game)) {
             const own = gs.fighters.filter(one => one.owner === owner && isCombatant(one, gs)).map(one => one.character);
-            expect(own, owner).toEqual(hordePurchase(BROOD, threat, 1, V13));
+            expect(own, owner).toEqual(buy(10, 1).bought);
         }
-        // Nests stand as the Swarm's did in version 12.
-        expect(gs.fighters.filter(one => one.character === "nest").length).toBeGreaterThan(0);
+        // Two nests a warband stand from the start, on the ruleset's sites.
+        expect(gs.fighters.filter(one => one.character === "nest").length).toBe(6);
         expect(battleOf(game).fighters.every(one => one.owner.startsWith("ai") ? CHARACTERS[one.character].threat !== undefined || one.character === "nest" : true)).toBe(true);
     });
 });

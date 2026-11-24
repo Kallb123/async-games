@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import { distance } from "@/utils/games/battlefield/terrain";
 import { pathTo } from "@/utils/games/battlefield/pathfinding";
-import { reachOf, warbandOwner, type Action } from "./rules";
+import { isStructure, reachOf, warbandOwner, type Action } from "./rules";
 import { stepOutcomeToModel } from "./RealmArenaModels";
 import type { IRealmArenaOutcome } from "./RealmArenaLogic";
 import { addFighter, battleOf, endTurnBy, makeGame, musterAll, playOne, warbandTurnBy, type RealmArenaTestGame } from "./testFixtures";
@@ -19,7 +19,8 @@ async function broodBattle(fog = false) {
     const gs = game.specificGameState;
     const victim = gs.fighters.find(one => one.owner === "a")!;
     const far = gs.fighters.find(one => one.owner === "b")!;
-    gs.fighters = gs.fighters.map(one => one.id === victim.id || one.id === far.id ? one : { ...one, hp: 0 });
+    // The nests and the Shrine stand (§5): with every nest down the Brood breaks, and with the Shrine the battle is lost.
+    gs.fighters = gs.fighters.map(one => one.id === victim.id || one.id === far.id || isStructure(one, game.specificGameState) ? one : { ...one, hp: 0 });
     const { field } = battleOf(game);
     const taken = new Set(gs.fighters.map(one => one.square));
     const free = (square: number) => field.tiles[square].terrain.standable && !taken.has(square);

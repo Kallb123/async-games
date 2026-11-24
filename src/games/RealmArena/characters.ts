@@ -28,7 +28,9 @@ export type CharacterId =
     // The Swarm's nest (§39.7): a structure, not a character anyone fields.
     | "nest"
     // The Brood's (realm-arena-hold-out.md §4): the computer's own Swarm, in rules version 13.
-    | "broodSkitterling" | "broodSpitter" | "broodBloater" | "broodRavager" | "broodBroodmother";
+    | "broodSkitterling" | "broodSpitter" | "broodBloater" | "broodRavager" | "broodBroodmother"
+    // The team's Shrine (realm-arena-hold-out.md §5.2): a structure Hold Out's team defends, in rules version 13.
+    | "shrine";
 
 export type AbilityId =
     | "cleave" | "shieldWall" | "aimedShot" | "sneak" | "fireball" | "heal" | "raise"
@@ -252,6 +254,12 @@ export interface Character {
      * sheets. Absent, its own.
      */
     drawnAs?: CharacterId;
+    /**
+     * What each HP of it is worth to the planner, in points, in place of a
+     * share of its `points` (the Shrine, realm-arena-hold-out.md §5.2), whose
+     * HP is set by the battle rather than the catalogue. Absent, a share.
+     */
+    hpWorth?: number;
 }
 
 
@@ -540,6 +548,18 @@ export interface WaveTheme {
     buys: readonly CharacterId[];
 }
 
+/**
+ * An elite a horde's nests produce on a schedule (realm-arena-hold-out.md §5.1),
+ * as `round` begins: `count` of them, or one for every `perWarbands` warbands
+ * with a nest standing, rounded up — each from a warband with a nest standing,
+ * those with the most nests first, ties to the lowest seat.
+ */
+export interface EliteArrival {
+    round: number;
+    elite: CharacterId;
+    count: number | { perWarbands: number };
+}
+
 export interface Faction {
     name: string;
     /** The characters it musters from, in the order the muster lists them; each in no other faction's roster. */
@@ -584,13 +604,18 @@ export interface Faction {
     computerOnly?: true;
     /**
      * Its warbands are bought rather than mustered (the Brood,
-     * realm-arena-hold-out.md §4.2, §4.4): each muster and wave is spent in its
-     * characters' `threat` on its themes (`hordePurchase`), never past
+     * realm-arena-hold-out.md §4.2, §4.4, §5.1): its starting horde and what its nests produce are spent in its
+     * characters' `threat` on its themes (`hordeSpawn`), never past
      * `HORDE_CAP` minions and `HORDE_REAL_CAP` others a warband, survivors
      * counted. Absent, its warbands muster `readyMade`, which a horde leaves
      * empty: nobody musters it.
      */
     horde?: true;
+    /**
+     * The elites its nests produce, by round (realm-arena-hold-out.md §5.1), where
+     * the nests produce the enemy (`SPAWN_THREAT`). Absent, none arrive that way.
+     */
+    eliteSchedule?: readonly EliteArrival[];
 }
 
 export type FactionId = "realm" | "swarm" | "miners" | "brood";

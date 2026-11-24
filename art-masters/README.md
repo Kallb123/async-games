@@ -39,11 +39,12 @@ it writes.
 ## Realm Arena's effect and item marks, scorched ground and the village
 
 `realmarena/effects.svg`, `realmarena/items.svg`, `realmarena/scorched.svg`,
-`realmarena/fx.svg` (the battle visuals) and `realmarena/village.svg` (the
-Sunken Village's hedge, cottage wall and lanes) are drawn as code rather than
-exported, so their masters are the SVGs themselves: the served
-`public/art/realmarena/effects.png`, `items.png`, `scorched.png`, `fx.png` and
-`village.png` are rendered from them, never saved by hand. After changing any
+`realmarena/fx.svg` (the battle visuals), `realmarena/village.svg` (the
+Sunken Village's hedge, cottage wall and lanes), and `realmarena/nest.svg` and
+`realmarena/shrine.svg` (the structures, standing then destroyed) are drawn as
+code rather than exported, so their masters are the SVGs themselves: the served
+`public/art/realmarena/effects.png`, `items.png`, `scorched.png`, `fx.png`,
+`village.png`, `nest.png` and `shrine.png` are rendered from them, never saved by hand. After changing any
 of them, run `npm run ra-marks` (it renders every SVG in `realmarena/`) and
 commit the PNGs it writes. The sheets are a few KB, so `optimise-art` leaves
 them alone.

@@ -114,6 +114,12 @@ export const ART_SHEETS = {
      * by `npm run ra-marks`.
      */
     nest: { href: "/art/realmarena/nest.png", width: 256, height: CHARACTER_CELL_HEIGHT },
+    /**
+     * The team's shrine (rules version 13): standing, then destroyed, a
+     * character's cell each. Rendered from `art-masters/realmarena/shrine.svg`
+     * by `npm run ra-marks`.
+     */
+    shrine: { href: "/art/realmarena/shrine.png", width: 256, height: CHARACTER_CELL_HEIGHT },
     /** The owner's colour on the characters, grey and shaded, cell for cell with `characters`: tinted per seat. */
     charactersTeam: { href: "/art/realmarena/characters-team.png", ...CHARACTER_SHEET },
 } as const;
@@ -361,11 +367,14 @@ export const CHARACTER_ART = Object.fromEntries(ART_CHARACTER_IDS.map((character
  * no team layer, since the owner's colour is its HP bar's and ring's. The one
  * answer to which characters are drawn as one, so a new one is a line here.
  */
+const structureCells = (sheet: keyof typeof ART_SHEETS): Readonly<Record<CharacterPose, Sprite>> => ({
+    standing: { sheet, x: 0, y: 0, width: CHARACTER_CELL.width, height: CHARACTER_CELL.height, tile: CHARACTER_CELL.tile },
+    fallen: { sheet, x: CHARACTER_CELL.width, y: 0, width: CHARACTER_CELL.width, height: CHARACTER_CELL.height, tile: CHARACTER_CELL.tile },
+});
+
 export const STRUCTURE_ART: Partial<Record<CharacterId, Readonly<Record<CharacterPose, Sprite>>>> = {
-    nest: {
-        standing: { sheet: "nest", x: 0, y: 0, width: CHARACTER_CELL.width, height: CHARACTER_CELL.height, tile: CHARACTER_CELL.tile },
-        fallen: { sheet: "nest", x: CHARACTER_CELL.width, y: 0, width: CHARACTER_CELL.width, height: CHARACTER_CELL.height, tile: CHARACTER_CELL.tile },
-    },
+    nest: structureCells("nest"),
+    shrine: structureCells("shrine"),
 };
 
 /** The sprite for `pose` where `character` is a structure drawn as one (`STRUCTURE_ART`), and nothing for a character drawn as a figure. */
