@@ -35,9 +35,10 @@ import { coordsOf, distance, facingTowards, FULL_HEIGHT, isNeighbour, riseOf, sq
 import { COMPUTER_SEAT_PREFIX, COMPUTER_TURN_SEAT, isComputerSeat } from "@/utils/games/computerTurns";
 import {
     afflictionsOf, factionOf, isCharacterId, isItemId, isOptionId, isPoolEntry, kitOf, LINE_COOP_MAX, loadoutOf, loadoutPoolOf, squadPoints,
-    type Ability, type AbilityId, type Affliction, type CharacterId, type Effect, type EffectId, type Faction, type FactionId, type Item, type ItemId, type OptionId, type PlayerCount, type Weapon, type WaveTheme,
+    type Ability, type AbilityId, type Affliction, type CharacterId, type Difficulty, type Effect, type EffectId, type Faction, type FactionId, type Item, type ItemId, type OptionId, type PlayerCount, type Weapon, type WaveTheme,
 } from "./characters";
 import { currentRuleset, ruleValuesOf, rulesetOf, type RulesContext } from "./rulesets";
+import type { HoldOutDifficulty } from "./ruleValues";
 import { addTally, NO_TALLY, type Ranks, type Tally } from "./mastery";
 
 // ─── Numbers (§13) ──────────────────────────────────────────────────────────
@@ -289,6 +290,16 @@ export const TEAM_SIDE = "team";
 export const ENEMY_SIDE = "enemy";
 
 /**
+ * The owner of Hold Out's Shrine (realm-arena-hold-out.md §5.2): the team's
+ * side, but no player's, so no seat's turn, rally, drop-out or squad ever
+ * reaches it. Like a warband's, no Clerk id can be it.
+ */
+export const SHRINE_OWNER = "shrine";
+
+/** The battle's Shrine (realm-arena-hold-out.md §5.2), standing or not: undefined where there is none. */
+export const shrineOf = (state: Pick<BattleState, "fighters">): Fighter | undefined => state.fighters.find(fighter => fighter.owner === SHRINE_OWNER);
+
+/**
  * The seat that holds the turn while any warband's is due
  * (docs/games/realm-arena-hold-out.md §3): one for them all, never a warband's
  * own (`warbandOwner`), since `currentTurn` is on the wire and which warband's
@@ -304,7 +315,8 @@ export const ENEMY_TURN_SEAT = COMPUTER_TURN_SEAT;
  * for each of them (§29.1).
  */
 export function battleFrom(field: Battlefield, { fighters, fog, clouds, seats = [], coop, rulesVersion, armoured }: BattleSource): BattleState {
-    const sides = coop ? Object.fromEntries([...seats.map(player => [player, TEAM_SIDE]), ...warbandsFor(seats).map(warband => [warband, ENEMY_SIDE])]) : undefined;
+    // The Shrine (realm-arena-hold-out.md §5.2) is the team's, last, after the seats and the warbands whose order reads their zones.
+    const sides = coop ? Object.fromEntries([...seats.map(player => [player, TEAM_SIDE]), ...warbandsFor(seats).map(warband => [warband, ENEMY_SIDE]), [SHRINE_OWNER, TEAM_SIDE]]) : undefined;
     return {
         field, fighters, ...(rulesVersion !== undefined ? { rulesVersion } : {}), ...(fog ? { fog: true } : {}), ...(clouds && clouds.length > 0 ? { clouds } : {}), ...(sides ? { sides } : {}),
         ...(coop && armoured ? { armoured: true as const } : {}),
@@ -442,6 +454,14 @@ export const isStanding = (fighter: Fighter): boolean => fighter.hp > 0;
 export const isStructure = (fighter: Pick<Fighter, "character">, context?: RulesContext): boolean => rulesetOf(context).CHARACTERS[fighter.character]?.structure === true;
 
 /**
+ * Whether a fighter is a minion — one of the Brood's horde (realm-arena-hold-out.md
+ * §4.3) — rather than a character: downed by anything that does it damage, worn
+ * no armour, healed by nothing, and moved by the swarm step, not the planner.
+ * As `isStructure`, always pass the battle's context.
+ */
+export const isMinion = (fighter: Pick<Fighter, "character">, context?: RulesContext): boolean => rulesetOf(context).CHARACTERS[fighter.character]?.minion === true;
+
+/**
  * Whether a fighter is someone standing: on its feet and not a structure (§39.7).
  * `isStanding` still says whether it stands — a nest in the way blocks a square,
  * can be hit and burned — but a nest isn't someone left to fight, so whatever
@@ -534,6 +554,8 @@ const bodyArmour = (state: RulesContext, fighter: Pick<Fighter, "character">): n
 
 /** What a character wears: its own kind's, the team's armour against the warbands, and what its effects add against any blow (`Effect.armour`). */
 export function armourOf(state: Pick<BattleState, "armoured" | "rulesVersion">, fighter: Pick<Fighter, "owner" | "character"> & Partial<Pick<Fighter, "effects">>): number {
+    // A minion wears none, whatever its effects say (realm-arena-hold-out.md §4.3).
+    if (isMinion(fighter, state)) return 0;
     return bodyArmour(state, fighter) + teamArmour(state, fighter) + effectTotal(fighter, "armour", state);
 }
 
@@ -553,7 +575,7 @@ export type BlowSource = "weapon" | "ability" | "item";
 export function damageTo(state: Pick<BattleState, "armoured" | "rulesVersion">, by: Pick<Fighter, "owner" | "character" | "option"> & Partial<Pick<Fighter, "effects">>, target: Pick<Fighter, "owner" | "character"> & Partial<Pick<Fighter, "effects">>, blow = weaponOf(state, by).damage, via: BlowSource = "weapon"): number {
     if (blow <= 0) return blow;
     const dealt = blow + effectTotal(by, "damageBonus", state) + (via === "ability" ? effectTotal(by, "abilityDamageBonus", state) : 0);
-    const armour = (isWarband(by.owner) ? teamArmour(state, target) : 0) + bodyArmour(state, target) + effectTotal(target, "armour", state);
+    const armour = isMinion(target, state) ? 0 : (isWarband(by.owner) ? teamArmour(state, target) : 0) + bodyArmour(state, target) + effectTotal(target, "armour", state);
     return armour > 0 ? Math.max(1, dealt - armour) : dealt;
 }
 
@@ -1138,7 +1160,8 @@ export function viewOf(state: BattleState, player: string | null): BattleState {
     if (!state.fog) return state;
     const seen = squadSight(state, player);
     const ours = (fighter: Fighter) => allied(state, fighter.owner, player);
-    const known = (fighter: Fighter) => ours(fighter) || seen(fighter.square);
+    // The Shrine's square is the ruleset's and it never moves (realm-arena-hold-out.md §5.2): every side knows it.
+    const known = (fighter: Fighter) => ours(fighter) || seen(fighter.square) || fighter.owner === SHRINE_OWNER;
     const inSight = (cloud: Square) => areaAround(state.field, cloud).some(seen);
     const hidden = state.fighters.filter(fighter => !known(fighter));
     const clouds = [...landedSmoke(hidden), ...state.clouds ?? []].filter(inSight);
@@ -1521,6 +1544,8 @@ function aimRefusal(state: BattleState, actor: Fighter, at: unknown, range: numb
  */
 function healRefusal(state: BattleState, healer: Fighter, target: Fighter | undefined, draught: boolean, range = 0): string | undefined {
     if (!target || !allied(state, target.owner, healer.owner) || !isStanding(target)) return "Pick an ally to heal";
+    // Nothing heals a minion: it's downed by anything, or untouched (realm-arena-hold-out.md §4.3).
+    if (isMinion(target, state)) return "A minion can't be healed";
     const far = draught ? undefined : aimRefusal(state, healer, target.square, range);
     if (far) return far;
     if (draught && target.id !== healer.id && !nextTo(state.field, healer.square, target.square)) return "Too far away to heal";
@@ -1695,7 +1720,8 @@ function resolver(state: BattleState, roll: Roll) {
     const wound = (by: Pick<Fighter, "id" | "owner">, target: Fighter, damage: number) => {
         const enemy = !allied(battle, by.owner, target.owner);
         if (enemy && damage > 0 && !target.woundedBy?.includes(by.owner)) target.woundedBy = [...target.woundedBy ?? [], by.owner];
-        target.hp = Math.max(0, target.hp - damage);
+        // A minion is downed by anything that does it damage (realm-arena-hold-out.md §4.3).
+        target.hp = damage > 0 && isMinion(target, state) ? 0 : Math.max(0, target.hp - damage);
         if (isStanding(target)) return;
         const assists = enemy ? (target.woundedBy ?? []).filter(owner => !allied(battle, owner, by.owner)) : [];
         Object.assign(target, { ap: 0, banked: 0, effects: {} });
@@ -1705,9 +1731,10 @@ function resolver(state: BattleState, roll: Roll) {
         // Its smoke goes with it, as a downed Knight's shield wall does (§21.2).
         delete target.smoke;
         events.push({ kind: "downed", fighter: target.id, by: by.id });
-        // Downing your own side's character — a fireball's, say — scores nobody anything.
-        if (enemy) events.push({ kind: "scored", player: by.owner, points: knockoutPoints(target.character, state), reason: "knockout" });
-        for (const player of assists) events.push({ kind: "scored", player, points: assistPoints(target.character, state), reason: "assist" });
+        // Downing your own side's character — a fireball's, say — scores nobody anything; nor does one worth nothing (the Shrine, realm-arena-hold-out.md §5.2).
+        const worth = knockoutPoints(target.character, state);
+        if (enemy && worth > 0) events.push({ kind: "scored", player: by.owner, points: worth, reason: "knockout" });
+        if (worth > 0) for (const player of assists) events.push({ kind: "scored", player, points: assistPoints(target.character, state), reason: "assist" });
         if (burstsWhenDowned(target, state)) fallen.push({ id: target.id, by });
     };
 
@@ -2278,6 +2305,8 @@ export interface BattleKind {
  */
 export function battleRounds(playerCount: number, { mission, rulesVersion }: BattleKind = {}): number {
     const rules = ruleValuesOf({ rulesVersion });
+    // Where nests produce the enemy, Hold Out lasts the same for every team, Solo included (realm-arena-hold-out.md §5.4).
+    if (mission === "holdOut" && rules.HOLD_OUT_ROUNDS !== undefined) return rules.HOLD_OUT_ROUNDS;
     if (playerCount === 2 && mission === "holdOut") return rules.HOLD_OUT_PAIR_ROUNDS;
     const seats = playerCount === 1 ? 2 : mission === "holdOut" ? Math.min(playerCount, LINE_COOP_MAX) : playerCount;
     const rounds = rules.BATTLE_ROUNDS[seats as PlayerCount];
@@ -2333,6 +2362,139 @@ export function wavePurchase(faction: Faction, budget: number, round: number, co
     if (theme.elite) buy(theme.elite);
     while (theme.buys.map(buy).some(Boolean)) { /* round again while anything was bought */ }
     return bought;
+}
+
+// ─── Nests that produce the enemy (realm-arena-hold-out.md §5.1) ───────────
+
+/**
+ * Whether a Hold Out battle's nests produce its enemy every round, rather than
+ * waves landing (realm-arena-hold-out.md §5.1): from rules version 13. With no
+ * `context`, whether the current ruleset's do: what the guide, the setup screen,
+ * the tutorial and the achievements switch on, so version 13's copy waits for
+ * its release (§6.1).
+ */
+export const nestsProduce = (mission: string | undefined, context?: RulesContext): boolean =>
+    mission === "holdOut" && ruleValuesOf(context).SPAWN_THREAT !== undefined;
+
+/** The warbands' nests (§39.7) on the battlefield, standing or not: every warband's structures. */
+export const warbandNests = (fighters: readonly Fighter[], context?: RulesContext): Fighter[] =>
+    fighters.filter(fighter => isWarband(fighter.owner) && isStructure(fighter, context));
+
+/** A battle's rules and, in co-op, its difficulty (absent is Normal): what the difficulty's steps are read from. */
+export type DifficultyContext = RulesContext & { coop?: { difficulty?: Difficulty } };
+
+const NO_DIFFICULTY_STEP: Readonly<HoldOutDifficulty> = { spawnThreat: 0, nestHp: 0, shrineHp: 0 };
+
+/**
+ * How the battle's difficulty moves a Hold Out whose nests produce the enemy
+ * (realm-arena-hold-out.md §6): the steps its rules give Easy, Normal or Hard,
+ * and none under rules without them.
+ */
+export function holdOutDifficultyOf(context: DifficultyContext): Readonly<HoldOutDifficulty> {
+    return ruleValuesOf(context).HOLD_OUT_DIFFICULTY?.[context.coop?.difficulty ?? "normal"] ?? NO_DIFFICULTY_STEP;
+}
+
+/**
+ * What a difficulty step does to the nests' hatching, as the clause both the guide and the setup
+ * screen say it with ("the nests hatch more each round"); undefined for a step that leaves it be.
+ * The rules' word for it is threat, never the player's.
+ */
+export function hatchClause(spawnThreat: number): string | undefined {
+    return spawnThreat === 0 ? undefined : `the nests hatch ${spawnThreat > 0 ? "more" : "less"} each round`;
+}
+
+/**
+ * The threat each standing nest adds to its warband in `round` (§5.1):
+ * `SPAWN_THREAT`, 1 more every `SPAWN_STEP_ROUNDS` rounds, and the
+ * difficulty's step (§6).
+ */
+export function spawnThreatOf(round: number, context: DifficultyContext): number {
+    const { SPAWN_THREAT = 0, SPAWN_STEP_ROUNDS = Infinity } = ruleValuesOf(context);
+    return SPAWN_THREAT + Math.floor((round - 1) / SPAWN_STEP_ROUNDS) + holdOutDifficultyOf(context).spawnThreat;
+}
+
+/** The stars a win of Hold Out against nests that produce the enemy can earn (realm-arena-hold-out.md §6), in the order they're shown. */
+export const HOLD_OUT_STARS = ["held", "broke", "unscathed"] as const;
+export type HoldOutStar = (typeof HOLD_OUT_STARS)[number];
+
+/** Each star's name, and what earns it, as the board, the log and the result tell it. */
+export const HOLD_OUT_STAR_INFO: Readonly<Record<HoldOutStar, { name: string; reason: string }>> = {
+    held: { name: "Held", reason: "The Shrine stood to the end, and the team won" },
+    broke: { name: "Broke the Brood", reason: "Every nest fell before the round cap" },
+    unscathed: { name: "Unscathed", reason: "The Shrine ended above half its HP" },
+};
+
+/** A won Hold Out's stars as one line, in `HOLD_OUT_STARS` order: ★ for each earned, ☆ for each missed. */
+export const starLine = (stars: readonly HoldOutStar[]): string => HOLD_OUT_STARS.map(star => starMark(stars, star)).join("");
+
+/** One star's mark: ★ if `stars` earned it, ☆ if not. */
+export const starMark = (stars: readonly HoldOutStar[], star: HoldOutStar): string => stars.includes(star) ? "★" : "☆";
+
+/**
+ * The stars a won Hold Out earns (§6), read off the battlefield as it ended:
+ * Held, for the win itself; Broke the Brood, for every nest down — which ends
+ * the battle the moment it happens, so only ever before the cap; and
+ * Unscathed, for the Shrine above half its HP. Only asked of a win.
+ */
+export function holdOutStars(fighters: readonly Fighter[], context?: RulesContext): HoldOutStar[] {
+    const nests = warbandNests(fighters, context);
+    const shrine = shrineOf({ fighters: [...fighters] });
+    return HOLD_OUT_STARS.filter(star => star === "held"
+        || (star === "broke" && nests.length > 0 && !nests.some(isStanding))
+        || (star === "unscathed" && shrine !== undefined && shrine.hp * 2 > maxHpOf(shrine, context)));
+}
+
+/** The horde's theme in `round` (§5.1): its first from round 1, the next every `SPAWN_STEP_ROUNDS`, the last from then on. */
+export function spawnThemeOf(faction: Faction, round: number, context: RulesContext): WaveTheme | undefined {
+    const { waves } = faction;
+    const step = ruleValuesOf(context).SPAWN_STEP_ROUNDS ?? Infinity;
+    return waves?.length ? waves[Math.min(waves.length - 1, Math.floor((round - 1) / step))] : undefined;
+}
+
+/**
+ * What a horde warband (`Faction.horde`) buys with `threat` on `theme` (§4.2,
+ * §5.1) — its starting horde, and what its nests produce each turn: its buy
+ * list in order, round and round, stopping at the first it can't afford — saving
+ * up for it — and passing over any its caps (`HORDE_CAP`, `HORDE_REAL_CAP`, with
+ * `standing` already counted) leave no room for. What's `left` is banked, never
+ * more than the dearest on the list costs: threat the caps leave nothing to spend
+ * on is lost. No draw, so the same every time.
+ */
+export function hordeSpawn(theme: WaveTheme, threat: number, standing: { minions: number; others: number }, context: RulesContext): { bought: CharacterId[]; left: number } {
+    const { CHARACTERS } = rulesetOf(context);
+    const { HORDE_CAP = Infinity, HORDE_REAL_CAP = Infinity } = ruleValuesOf(context);
+    let { minions, others } = standing;
+    const room = (character: CharacterId) => CHARACTERS[character].minion ? minions < HORDE_CAP : others < HORDE_REAL_CAP;
+    const bought: CharacterId[] = [];
+    let left = threat;
+    for (let next = 0; theme.buys.some(room); next = (next + 1) % theme.buys.length) {
+        const character = theme.buys[next];
+        if (!room(character)) continue;
+        const cost = CHARACTERS[character].threat ?? Infinity;
+        if (cost > left) break;
+        bought.push(character);
+        left -= cost;
+        if (CHARACTERS[character].minion) minions++;
+        else others++;
+    }
+    const dearest = Math.max(0, ...theme.buys.map(character => CHARACTERS[character].threat ?? 0));
+    return { bought, left: theme.buys.some(room) ? Math.min(left, dearest) : 0 };
+}
+
+/**
+ * The elites a horde's schedule brings as `round` begins (§5.1), as the
+ * warband each comes to: given how many nests each warband has standing, in the
+ * warbands' order. Only a warband with a nest standing fields one; those with
+ * the most nests standing first, ties to the lowest seat. Empty where nothing is
+ * due.
+ */
+export function eliteArrivals(faction: Faction, round: number, nestsStanding: readonly number[]): { warband: number; elite: CharacterId }[] {
+    const eligible = nestsStanding.flatMap((nests, warband) => nests > 0 ? [warband] : [])
+        .sort((a, b) => nestsStanding[b] - nestsStanding[a] || a - b);
+    return (faction.eliteSchedule ?? []).filter(arrival => arrival.round === round).flatMap(({ elite, count }) => {
+        const how = typeof count === "number" ? count : Math.ceil(eligible.length / count.perWarbands);
+        return eligible.slice(0, how).map(warband => ({ warband, elite }));
+    });
 }
 
 /** The round the next Hold Out wave arrives in after `round`, or undefined once the last has landed (§30.3). */

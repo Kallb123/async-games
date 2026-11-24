@@ -207,7 +207,7 @@ export function characterStats(id: CharacterId, context?: RulesContext): UnitSta
         name: character.name,
         summary: character.role,
         tiles: [
-            { label: "HP", value: `${character.hp}` },
+            character.minion ? { label: "Minion", value: "Any damage downs it" } : { label: "HP", value: `${character.hp}` },
             { label: "Move/AP", value: `${character.movement}` },
             { label: "Sight", value: `${sightOf({ character: id }, context)}` },
             { label: "Points", value: `${character.points}` },

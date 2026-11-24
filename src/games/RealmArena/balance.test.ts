@@ -399,8 +399,8 @@ describe("the team's HP in Hold Out", () => {
         const fallen = { ...knight, hp: 0, ap: 0 };
         expect(run(balanced(field, [state.fighters[0], fallen]), "a", { kind: "raise", fighter: 1, target: 2 }).byId(2).hp).toBe(9);
         // The board's bars fill to the bigger number.
-        expect(hpFraction(knight)).toBeCloseTo(10 / 18);
-        expect(hpFraction({ ...knight, hp: 18 })).toBe(1);
+        expect(hpFraction(knight, {})).toBeCloseTo(10 / 18);
+        expect(hpFraction({ ...knight, hp: 18 }, {})).toBe(1);
     });
 
     it("is for the team only, in Hold Out only, and only under the rules that give it", async () => {

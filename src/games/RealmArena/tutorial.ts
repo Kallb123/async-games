@@ -1,5 +1,7 @@
 import type { GameTutorial } from "@/utils/ui/gameTutorials";
-import { ACTION_POINTS, CENTRE_POINTS, CENTRE_SCORES_FROM_ROUND, REACTION_COST } from "./rules";
+import { ruleValuesOf } from "./rulesets";
+import { andList } from "@/utils/ui/text";
+import { ACTION_POINTS, CENTRE_POINTS, CENTRE_SCORES_FROM_ROUND, HOLD_OUT_STAR_INFO, HOLD_OUT_STARS, REACTION_COST } from "./rules";
 
 // The guided tour of a first Realm Arena match — shown once per account in
 // place of the guide's auto-show (see docs/game-tutorials.md). It covers what
@@ -16,7 +18,17 @@ import { ACTION_POINTS, CENTRE_POINTS, CENTRE_SCORES_FROM_ROUND, REACTION_COST }
 //   battle turn, which is what shades its reach and lists its targets. The
 //   "pick a character" step waits on it, and the hit-chance step that follows
 //   points at the list of targets it brings up.
-export type RealmArenaSignal = "mustering" | "sealed" | "battle" | "myTurn" | "selected";
+// - `centre` — the battle has a centre to hold: it is not a Hold Out.
+// - `breakTheBrood` — the battle is a Hold Out whose nests produce the enemy:
+//   destroy every nest, or hold the Shrine to the last round.
+export type RealmArenaSignal = "mustering" | "sealed" | "battle" | "myTurn" | "selected" | "centre" | "breakTheBrood";
+
+// The round cap of a Hold Out whose nests produce the enemy; the step only shows in one.
+// Only a version 13 battle raises `breakTheBrood`, so a later ruleset with another cap must revisit this.
+// The stars a win can earn, by the rules' own names (the guide says what each is for).
+const STAR_NAMES = andList(HOLD_OUT_STARS.map(star => HOLD_OUT_STAR_INFO[star].name));
+
+const HOLD_OUT_ROUNDS = ruleValuesOf({ rulesVersion: 13 }).HOLD_OUT_ROUNDS;
 
 export const tutorial: GameTutorial<RealmArenaSignal> = {
     steps: [
@@ -65,6 +77,13 @@ export const tutorial: GameTutorial<RealmArenaSignal> = {
             anchor: "ra-stats",
             title: "The centre",
             body: `The marked square in the middle of the map. End your turn with someone of yours in it and no enemy, and you score ${CENTRE_POINTS} — from round ${CENTRE_SCORES_FROM_ROUND}.`,
+            when: "centre",
+        },
+        {
+            anchor: "ra-stats",
+            title: "Break the Brood",
+            body: `The round, the nests you have left to destroy, the Shrine's HP and your team's health. The nests hatch the Brood every round: destroy every one and you win at once, and the sooner the more points. Or keep the Shrine standing to round ${HOLD_OUT_ROUNDS}. It earns stars: ${STAR_NAMES}.`,
+            when: "breakTheBrood",
         },
         {
             anchor: "ra-turn-end",

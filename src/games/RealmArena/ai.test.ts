@@ -470,12 +470,12 @@ describe("temperaments (§39.8)", () => {
                 for (const character of [...characters, ...elites]) expect(TEMPERAMENTS[character], `${faction} ${character}`).toBeUndefined();
             }
         }
-        // Whoever has one is in the Swarm.
+        // Whoever has one is in the Swarm, or in the Brood it stands for in Hold Out from version 13.
         const latest = registeredRulesets.at(-1)!;
         const rows = (Object.keys(latest.CHARACTERS) as CharacterId[]).filter(character => TEMPERAMENTS[character]);
-        const swarm = latest.FACTIONS.swarm;
+        const { swarm, brood } = latest.FACTIONS;
         expect(rows.length).toBeGreaterThan(0);
-        for (const character of rows) expect([...swarm.characters, ...swarm.elites ?? []]).toContain(character);
+        for (const character of rows) expect([...swarm.characters, ...swarm.elites ?? [], ...brood.characters, ...brood.elites ?? []]).toContain(character);
     });
 
     it("takes the square that flanks with a pack over one next to a lone enemy (a Skitterling)", () => {

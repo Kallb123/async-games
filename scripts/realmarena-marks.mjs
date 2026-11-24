@@ -7,7 +7,10 @@
 // `TERRAIN_ART`), `fx.svg`, what flies, bursts and slashes as an action
 // plays out (§26, cut by `MISSILE_ART`, `SLASH_ART` and `BURST_ART`), and
 // `village.svg`, the Sunken Village's hedge, cottage wall and lanes (§35,
-// drawn by `TERRAIN_ART` and `BLOCK_SKIN`), in src/games/RealmArena/art.ts.
+// drawn by `TERRAIN_ART` and `BLOCK_SKIN`), and `nest.svg` and `shrine.svg`,
+// the structures standing and then destroyed (realm-arena.md §39.7,
+// realm-arena-hold-out.md §5.2, cut by `STRUCTURE_ART`), in
+// src/games/RealmArena/art.ts.
 //
 // Run with `npm run ra-marks` after changing a master, and commit what it
 // writes. The sheets are small enough that `npm run optimise-art` leaves them be.

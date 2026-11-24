@@ -12,7 +12,7 @@ import {
     type IRealmArenaSpecificGameState,
 } from "./RealmArenaModels";
 import { CHARACTER_IDS } from "./roster";
-import { battleRounds, isStanding, knockoutPoints, newFighter, type BattleEvent, type Fighter } from "./rules";
+import { battleRounds, isStanding, knockoutPoints, newFighter, SHRINE_OWNER, warbandOwner, ENEMY_SIDE, TEAM_SIDE, type BattleEvent, type Fighter } from "./rules";
 import { makeGame, musterAll, PLAYERS, playScriptedBattle, playScriptedTurn, type RealmArenaTestGame } from "./testFixtures";
 
 // docs/games/realm-arena.md §28: the battle's record, read off the events of
@@ -256,5 +256,108 @@ describe("a result without the record (§28)", () => {
         expect(stored.fighting).toBeUndefined();
         expect(stored.centrePoints).toBeUndefined();
         expect(formatRealmArenaCharts(stored)).toEqual([]);
+    });
+});
+
+describe("the record of a Hold Out whose nests produce the enemy (realm-arena-hold-out.md §5)", () => {
+    const V13 = { rulesVersion: 13 };
+    const brood = warbandOwner(0);
+    function battle(fighters: Fighter[], fields: Partial<IRealmArenaSpecificGameState> = {}): IRealmArenaSpecificGameState {
+        return { ...buildInitialRealmArenaState(PLAYERS, {}), phase: "battle", fighters, ...V13, coop: { enemy: "brood", nextWarband: 0, mission: "holdOut" }, ...fields };
+    }
+    const act = (id: string) => ({ command: { className: "RealmArenaAct", id } as never, outcome: { validMove: true, turnOver: false, events: [] as BattleEvent[] } });
+    const knight = newFighter(0, "a", "knight", 0);
+    const nest = newFighter(1, brood, "nest", 1, null, undefined, undefined, false, V13);
+    const shrine = { ...newFighter(2, SHRINE_OWNER, "shrine", 2, null, undefined, undefined, false, V13), hp: 31, maxHp: 50 };
+    const rusher = (id: number) => newFighter(id, brood, "broodSkitterling", 10 + id, null, undefined, undefined, false, V13);
+
+    function played() {
+        const recorder = battleRecorder(PLAYERS, undefined, 15, V13);
+        recorder.observe(act("0"), battle([knight, nest, shrine, rusher(3), rusher(4)]));
+        // Round 5 is the first of The Bile: its stage begins there, and what comes in it is its own.
+        recorder.observe(act("1"), battle([knight, nest, shrine, rusher(3), rusher(4), rusher(5), rusher(6), rusher(7)], { roundsPlayed: 4 }));
+        recorder.observe(act("2"), battle([knight, { ...nest, hp: 0 }, shrine, rusher(3)], { roundsPlayed: 5 }));
+        return recorder.result();
+    }
+
+    it("starts a stage where the horde's theme changes, and keeps the Shrine and the nests as they ended", () => {
+        const record = played();
+        expect(record.produced).toBe(true);
+        expect(record.waves!.map(({ round, name, arrived }) => ({ round, name, arrived }))).toEqual([
+            { round: 0, name: "The Rush", arrived: 2 },
+            { round: 4, name: "The Bile", arrived: 3 },
+        ]);
+        expect(record.shrine).toEqual({ hp: 31, maxHp: 50 });
+        expect(record.nests).toEqual({ standing: 0, total: 1 });
+        expect(record.battleRounds).toBe(15);
+    });
+
+    it("has none of it in a battle on version 12's waves", () => {
+        const recorder = battleRecorder(PLAYERS, undefined, 15);
+        recorder.observe(act("0"), { ...battle([knight, rusher(3)]), rulesVersion: 12, coop: { enemy: "swarm", nextWarband: 0, mission: "holdOut" } });
+        const record = recorder.result();
+        expect(record.waves).toHaveLength(1);
+        for (const key of ["produced", "shrine", "nests"] as const) expect(record).not.toHaveProperty(key);
+    });
+
+    const standing = [new Map([[TEAM_SIDE, 1], [ENEMY_SIDE, 5]]), new Map([[TEAM_SIDE, 1], [ENEMY_SIDE, 0]])];
+    const stats = (fields: Partial<IRealmArenaGameResultStats> = {}): IRealmArenaGameResultStats => ({
+        mastery: [],
+        produced: true,
+        battleRounds: 15,
+        standingPerRound: standing,
+        waves: [
+            { round: 0, name: "The Rush", arrived: 23, downed: new Map([["a", 19]]) },
+            { round: 4, name: "The Bile", arrived: 5, downed: new Map([["a", 2]]) },
+        ],
+        nests: { standing: 0, total: 3 },
+        shrine: { hp: 31, maxHp: 50 },
+        ...fields,
+    });
+    const linesOf = (s: IRealmArenaGameResultStats) => formatRealmArenaResultStats(s, NAMES).find(group => group.username === "Hold Out")?.lines;
+
+    it("tells how it ended, the stars, who took the field, and each stage", () => {
+        expect(linesOf(stats({ stars: ["held", "broke", "unscathed"] }))).toEqual([
+            "Broke the Brood in round 2 of 15",
+            "★★★ 3 of 3 stars",
+            "★ Held: The Shrine stood to the end, and the team won",
+            "★ Broke the Brood: Every nest fell before the round cap",
+            "★ Unscathed: The Shrine ended above half its HP (31/50 HP)",
+            "28 of the Brood took the field, and the team downed 21; destroyed 3 of 3 nests",
+            "The Rush, from round 1: 23 arrived, 19 downed",
+            "The Bile, from round 5: 5 arrived, 2 downed",
+        ]);
+    });
+
+    it("ends it as the Shrine, the team or the round cap did", () => {
+        const first = (s: IRealmArenaGameResultStats) => linesOf(s)![0];
+        expect(first(stats({ shrine: { hp: 0, maxHp: 50 } }))).toBe("The Shrine fell in round 2 of 15");
+        expect(first(stats({ standingPerRound: [new Map([[TEAM_SIDE, 0], [ENEMY_SIDE, 4]])] }))).toBe("Overrun in round 1 of 15");
+        expect(first(stats({ nests: { standing: 1, total: 3 } }))).toBe("Held the Shrine for all 15 rounds");
+    });
+
+    it("shows the stars of a result whose record is missing", () => {
+        expect(linesOf({ mastery: [], stars: ["held"] })).toEqual([
+            "★☆☆ 1 of 3 stars",
+            "★ Held: The Shrine stood to the end, and the team won",
+            "☆ Broke the Brood: Every nest fell before the round cap",
+            "☆ Unscathed: The Shrine ended above half its HP",
+        ]);
+        expect(linesOf({ mastery: [] })).toBeUndefined();
+    });
+
+    it("labels the charts by the stage's name alone", () => {
+        const charts = formatRealmArenaCharts(stats());
+        const bars = charts.find(chart => chart.kind === "bar");
+        expect(bars).toMatchObject({ title: "Enemies downed by stage", bars: [{ label: "The Rush" }, { label: "The Bile" }] });
+        const line = charts.find(chart => chart.title === "Characters standing per round") as { events?: { title: string }[] };
+        expect(line.events?.map(event => event.title)).toEqual(["The Bile begins: 5 arrived"]);
+    });
+
+    it("keeps the stars, and reads a result recorded before them as having none", () => {
+        const stored = new RealmArenaGameResultModel({ gameId: "g", gameType: "RealmArena", stats: stats({ stars: ["held"] }) }).toObject().stats;
+        expect(stored).toMatchObject({ produced: true, shrine: { hp: 31, maxHp: 50 }, nests: { standing: 0, total: 3 }, stars: ["held"] });
+        const old = new RealmArenaGameResultModel({ gameId: "g", gameType: "RealmArena", stats: { mastery: [] } }).toObject().stats;
+        for (const key of ["produced", "shrine", "nests", "stars"]) expect(old[key]).toBeUndefined();
     });
 });

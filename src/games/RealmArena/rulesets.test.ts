@@ -5,11 +5,12 @@ import { nextAction } from "./ai";
 import { distance } from "@/utils/games/battlefield/terrain";
 import { buildTimeline } from "@/utils/games/replay";
 import { masteryRoster, weaponLine } from "./roster";
+import type { CharacterId } from "./characters";
 import { eventLines } from "./ui";
 import { realmArenaRecapAdapter } from "./recap";
 import type { ITurnSnapshot } from "@/utils/games/replay";
-import { abilitiesOf, actionPointsOf, afflicted, armourOf, bankedAp, damageTo, endTurn, startTurn, temporaryCover, weaponOf, act, battleFrom, check, fixedRolls, movementOf, newFighter, viewOf, type BattleState } from "./rules";
-import { currentRuleset, rulesetFor, type RealmArenaRuleset, type RulesContext } from "./rulesets";
+import { abilitiesOf, actionPointsOf, eliteArrivals, knockoutPoints, spawnThreatOf, afflicted, armourOf, bankedAp, damageTo, endTurn, startTurn, temporaryCover, weaponOf, act, battleFrom, check, fixedRolls, movementOf, newFighter, viewOf, type BattleState } from "./rules";
+import { currentRuleset, rulesetFor, ruleValuesOf, type RealmArenaRuleset, type RulesContext } from "./rulesets";
 import { rangeKindOf } from "./tactics";
 import { hpPreview } from "./useTurnDraft";
 import { characterStats } from "./stats";
@@ -76,14 +77,14 @@ const stateFor = (rulesVersion: number): BattleState => battleFrom(FIELD, {
 describe("Realm Arena ruleset compatibility", () => {
     it("keeps registered catalogues deeply frozen and refuses unknown versions", async () => {
         const real = await vi.importActual<typeof import("./rulesets")>("./rulesets");
-        for (const version of [undefined, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]) {
+        for (const version of [undefined, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13]) {
             const rules = real.rulesetFor(version);
             expect(Object.isFrozen(rules)).toBe(true);
             expect(Object.isFrozen(rules.CHARACTERS.knight.abilities)).toBe(true);
             expect(Object.isFrozen(rules.FACTIONS.realm.readyMade[100])).toBe(true);
         }
         expect(() => { real.rulesetFor(7).CHARACTERS.knight.weapon.damage = 99; }).toThrow();
-        for (const version of [-1, 1.5, NaN, 13]) expect(() => real.rulesetFor(version)).toThrow(/Unsupported/);
+        for (const version of [-1, 1.5, NaN, 14]) expect(() => real.rulesetFor(version)).toThrow(/Unsupported/);
         expect(real.rulesetFor(undefined).CHARACTERS.mage.weapon).toMatchObject({ accuracy: 70, range: 10 });
         expect(real.rulesetFor(undefined).ABILITIES.raise.oncePerBattle).toBe(true);
         expect(real.rulesetFor(7).ABILITIES.heal.oncePerTurn).toBe(true);
@@ -230,6 +231,81 @@ describe("Realm Arena ruleset compatibility", () => {
         for (const version of [7, 8, 9, 10, 11]) {
             expect(Object.hasOwn(real.rulesetFor(version).CHARACTERS, "nest")).toBe(false);
             expect(real.rulesetFor(version).FACTIONS.swarm.nest).toBeUndefined();
+        }
+    });
+
+    it("adds the Brood in v13, the computer's own Swarm, and changes nothing else of v12 but what it takes from the Swarm (realm-arena-hold-out.md §4)", async () => {
+        const real = await vi.importActual<typeof import("./rulesets")>("./rulesets");
+        const before = real.rulesetFor(12), after = real.rulesetFor(13);
+        const brood = after.FACTIONS.brood;
+        expect(brood).toMatchObject({ name: "The Brood", enemyName: "the Brood", computerOnly: true, horde: true, nest: "nest",
+            characters: ["broodSkitterling", "broodSpitter", "broodBloater", "broodRavager", "broodBroodmother"], elites: ["broodQueen", "carapaceBrute", "bileLobber"] });
+        for (const version of [7, 8, 9, 10, 11, 12]) expect(Object.hasOwn(real.rulesetFor(version).FACTIONS, "brood")).toBe(false);
+        // §4.3's table: kind, move, weapon, threat and points.
+        const { CHARACTERS: C } = after;
+        expect(C.broodSkitterling).toMatchObject({ minion: true, hp: 1, movement: 8, threat: 1, points: 2, drawnAs: "skitterling", weapon: { kind: "melee", damage: 2 } });
+        expect(C.broodSpitter).toMatchObject({ minion: true, hp: 1, movement: 5, threat: 2, points: 3, drawnAs: "spitter", weapon: { kind: "ranged", accuracy: 70, range: 12, damage: 2, effect: "corroded" } });
+        expect(C.broodBloater).toMatchObject({ minion: true, hp: 1, movement: 4, threat: 2, points: 3, drawnAs: "bloater", burstsWhenDowned: true, abilities: ["burst"], weapon: { kind: "melee", damage: 1 } });
+        expect(C.broodRavager).toMatchObject({ hp: 9, movement: 5, threat: 5, points: 10, drawnAs: "ravager", abilities: ["rend"], weapon: { kind: "melee", damage: 4 } });
+        expect(C.broodBroodmother).toMatchObject({ hp: 8, movement: 5, threat: 5, points: 10, drawnAs: "broodmother", abilities: ["regrowth"], weapon: { kind: "melee", damage: 3 } });
+        for (const id of ["broodRavager", "broodBroodmother"] as const) expect(C[id].minion).toBeUndefined();
+        // The elites as in v12, priced in threat.
+        expect(C.bileLobber).toEqual({ ...before.CHARACTERS.bileLobber, threat: 10 });
+        expect(C.carapaceBrute).toEqual({ ...before.CHARACTERS.carapaceBrute, threat: 12 });
+        expect(C.broodQueen).toEqual({ ...before.CHARACTERS.broodQueen, threat: 15 });
+        expect(after.ABILITIES.hatch).toEqual({ ...before.ABILITIES.hatch, hatches: "broodSkitterling", description: after.ABILITIES.hatch!.description });
+        // The Brood's themes are v12's, with its characters in the Swarm's places, and its elites on a schedule of their own (§5.1).
+        const asSwarm = (id: string) => (C[id as CharacterId].drawnAs ?? id);
+        expect(brood.waves!.map(theme => ({ ...theme, buys: theme.buys.map(asSwarm) }))).toEqual(before.FACTIONS.swarm.waves!.map(({ elite: _elite, ...theme }) => theme));
+        expect(brood.eliteSchedule).toEqual([
+            { round: 5, elite: "bileLobber", count: { perWarbands: 1 } },
+            { round: 9, elite: "carapaceBrute", count: { perWarbands: 2 } },
+            { round: 13, elite: "broodQueen", count: 1 },
+        ]);
+        // The nest is the Brood's now, 15 HP and destroyed for good; the Shrine is the team's (§5.1, §5.2).
+        expect(C.nest).toEqual({ ...before.CHARACTERS.nest, hp: 15, role: C.nest.role });
+        expect(C.shrine).toMatchObject({ structure: true, movement: 0, points: 0, hpWorth: 3 });
+        // The Swarm keeps its roster and squads, and gives up to the Brood what only the computer fielded.
+        const { elites: _e, waves: _w, nest: _n, ...swarm } = before.FACTIONS.swarm;
+        expect(after.FACTIONS.swarm).toEqual(swarm);
+        expect(after.FACTIONS.realm).toBe(before.FACTIONS.realm);
+        expect(after.FACTIONS.miners).toBe(before.FACTIONS.miners);
+        // Nothing else of v12's characters, abilities or rules changes.
+        const brood13 = new Set<string>([...brood.characters, ...brood.elites!, "nest", "shrine"]);
+        const others = (catalogue: typeof C) => Object.fromEntries(Object.entries(catalogue).filter(([id]) => !brood13.has(id)));
+        expect(others(C)).toEqual(others(before.CHARACTERS));
+        const { hatch: _h, ...abilities } = after.ABILITIES;
+        const { hatch: _h2, ...abilities12 } = before.ABILITIES;
+        expect(abilities).toEqual(abilities12);
+        const { HOLD_OUT_SITES, ...rules } = after.RULES;
+        expect(rules).toEqual({
+            ...before.RULES, HORDE_CAP: 16, HORDE_REAL_CAP: 4,
+            SPAWN_THREAT: 3, SPAWN_STEP_ROUNDS: 4, STARTING_HORDE: 10, HOLD_OUT_ROUNDS: 15, RALLY_ROUNDS: [5, 9, 13], ROUND_BONUS: 60,
+            SHRINE_HP: 20, SHRINE_HP_PER_PLAYER: 10, HOLD_OUT_ENEMY: "brood",
+            HOLD_OUT_DIFFICULTY: {
+                easy: { spawnThreat: -1, nestHp: -3, shrineHp: 10 },
+                normal: { spawnThreat: 0, nestHp: 0, shrineHp: 0 },
+                hard: { spawnThreat: 1, nestHp: 3, shrineHp: -10 },
+            },
+        });
+        expect(Object.keys(HOLD_OUT_SITES!).sort()).toEqual(["ruinedFort", "sackedFortFour", "sackedFortThree", "sackedFortTwo", "sunkenVillageFour", "sunkenVillageThree", "threeGateFort", "twinGateFort"]);
+    });
+
+    // realm-arena-hold-out.md §5.4: a faster win must outscore a slower one with more knock-outs, so a
+    // round's bonus is above the most a round of fighting can score — the knock-out points of everything
+    // every nest the battle started with can produce in a round, at its latest and largest SPAWN_THREAT,
+    // with the largest round of elites on the schedule — for every team size, on Hard, whose nests produce the most (§6).
+    it("holds the round bonus above the most a round of fighting against the Brood can score, for every team size", () => {
+        const V13 = { rulesVersion: 13 };
+        const { CHARACTERS, FACTIONS } = rulesetFor(13);
+        const { ROUND_BONUS, HOLD_OUT_ROUNDS, HOLD_OUT_SITES } = ruleValuesOf(V13);
+        const brood = FACTIONS.brood;
+        const perThreat = Math.max(...brood.waves!.flatMap(theme => theme.buys).map(id => knockoutPoints(id, V13) / CHARACTERS[id].threat!));
+        for (const warbands of [1, 2, 3, 4]) {
+            const nests = Math.max(...Object.values(HOLD_OUT_SITES!).filter(sites => sites.nests.length === warbands).map(sites => sites.nests.flat().length));
+            const elites = Math.max(...brood.eliteSchedule!.map(({ round, elite }) => eliteArrivals(brood, round, Array(warbands).fill(2)).length * knockoutPoints(elite, V13)));
+            const bound = nests * spawnThreatOf(HOLD_OUT_ROUNDS!, { ...V13, coop: { difficulty: "hard" } }) * perThreat + elites;
+            expect(ROUND_BONUS!, `${warbands} warbands`).toBeGreaterThan(bound);
         }
     });
 

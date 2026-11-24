@@ -17,9 +17,10 @@ import { useStartSoloGame } from "@/utils/hooks/useStartSoloGame";
 import { GAME_META, gameCommandVersion, partySizeRange } from "@/utils/ui/games";
 import { readRematchFlag, readRematchPlayers, readRematchTurnTimer } from "@/utils/ui/rematch";
 import type { RealmArenaCoopInvite, RealmArenaInvitationRequest } from "@/games/RealmArena/RealmArenaModels";
+import { forcedHoldOutEnemy, holdOutDifficultyDescription, holdOutMissionDescription } from "@/games/RealmArena/ui";
 import { fittingHoldOutMap } from "@/games/RealmArena/maps/holdOut";
 import { factionRosterLine } from "@/games/RealmArena/roster";
-import { warbandSteps } from "@/games/RealmArena/rules";
+import { nestsProduce, warbandSteps } from "@/games/RealmArena/rules";
 import { BATTLE_SIZE_NAMES, COOP_PLAYERS, DIFFICULTY_IDS, DIFFICULTY_NAMES, FACTION_IDS, FACTIONS, fitsCoop, musterBudget, RA_SOLO_PARAM, RANDOM_ENEMY, warbandBudget, type BattleSize, type Difficulty, type FactionId } from "@/games/RealmArena/characters";
 
 type Mode = 'freeForAll' | 'coop' | 'solo';
@@ -44,14 +45,20 @@ const ENEMY_CHOICES: OptionChoice<Enemy>[] = [
 ];
 
 // What a co-op team sets out to do (§30.3): the keep's points race, or surviving the waves.
+// Hold Out's own text follows the current ruleset: the Brood and its nests once
+// version 13 is current (realm-arena-hold-out.md §5), waves until then.
 const MISSION_CHOICES: OptionChoice<Mission>[] = [
   { id: 'holdCentre', label: 'Hold the Centre', description: 'For up to three. Score points by controlling the keep and knocking enemies out.' },
-  { id: 'holdOut', label: 'Hold Out', description: 'Survive enemy waves, each bigger than the last, until the last round. Against the Swarm they come themed, with nests to burn out.' },
+  { id: 'holdOut', label: 'Hold Out', description: nestsProduce('holdOut')
+    ? holdOutMissionDescription()
+    : 'Survive enemy waves, each bigger than the last, until the last round. Against the Swarm they come themed, with nests to burn out.' },
 ];
 
 // Where Hold Out is fought (§30.9, §35): a battlefield built for it, or the line battle Hold the Centre is fought on.
 const BATTLEFIELD_CHOICES: OptionChoice<Battlefield>[] = [
-  { id: 'sackedFort', label: 'Sacked Fort', description: 'For two to four. Start in the ruined keep in the middle, with the enemy closing in, and landing its waves, all round the edges.' },
+  { id: 'sackedFort', label: 'Sacked Fort', description: nestsProduce('holdOut')
+    ? 'For two to four. Start in the ruined keep in the middle, with the Brood closing in from all round the edges.'
+    : 'For two to four. Start in the ruined keep in the middle, with the enemy closing in, and landing its waves, all round the edges.' },
   { id: 'sunkenVillage', label: 'Sunken Village', description: 'For three or four. Start on the sunken green, with the enemy closing in through hedges and roofless cottages that hide it until it is close.' },
   { id: 'line', label: 'Gate Fort', description: 'For up to three. The Twin- or Three-Gate Fort, as in Hold the Centre: start along one edge, with the enemy opposite.' },
 ];
@@ -70,6 +77,10 @@ const SIZE_CHOICES: OptionChoice<BattleSize>[] = [
 // squad's points don't depend on the party's size (§30.5), so any count gives
 // the same figures.
 function difficultyChoices(mission: Mission, size: BattleSize): OptionChoice<Difficulty>[] {
+  // Where nests produce the enemy the difficulty moves the spawn, the nests and the Shrine, not the points.
+  if (nestsProduce(mission)) {
+    return DIFFICULTY_IDS.map(id => ({ id, label: DIFFICULTY_NAMES[id], description: holdOutDifficultyDescription(id) }));
+  }
   const yours = musterBudget(COOP_PLAYERS.max, true, size);
   const steps = warbandSteps(mission, gameCommandVersion(GAME_META.realmarena));
   return DIFFICULTY_IDS.map(id => {
@@ -126,6 +137,9 @@ function NewGameRealmArenaForm() {
   const needsOwnMap = !solo && !fitsCoop(partySize);
   const missionChoices = needsOwnMap ? MISSION_CHOICES.filter(choice => choice.id === 'holdOut') : MISSION_CHOICES;
   const pickedMission = needsOwnMap ? 'holdOut' : mission;
+  // Where the rules give Hold Out its one enemy the host picks none: the server
+  // sets it, so what is posted stands in only for a valid `coop.enemy`.
+  const forcedEnemy = pickedMission === 'holdOut' ? forcedHoldOutEnemy() : undefined;
   const battlefieldChoices = BATTLEFIELD_CHOICES.filter(choice => choice.id === 'line' ? !needsOwnMap : fittingHoldOutMap(choice.id, partySize) === choice.id);
   const pickedBattlefield = battlefield !== 'line'
     ? fittingHoldOutMap(battlefield, partySize) ?? 'line'
@@ -142,7 +156,7 @@ function NewGameRealmArenaForm() {
       factions: [...factions],
       ...(size !== 'normal' ? { size } : {}),
       ...(coop ? { coop: {
-        enemy,
+        enemy: forcedEnemy?.id ?? enemy,
         ...(pickedMission === 'holdOut' ? { mission: pickedMission, ...(map ? { map } : {}) } : {}),
         ...(difficulty !== 'normal' ? { difficulty } : {}),
         // A team of one has nothing to take turns in blocks of, so solo never sends it.
@@ -185,7 +199,8 @@ function NewGameRealmArenaForm() {
       />
       {/* Nothing to choose while there's one faction to fight (§29.3): the
           section appears the day a second is added. */}
-      {coop && FACTION_IDS.length > 1 && (
+      {coop && forcedEnemy && <p className="ag-hint">You fight {forcedEnemy.name}.</p>}
+      {coop && !forcedEnemy && FACTION_IDS.length > 1 && (
         <OptionChoiceSection label="Enemy" value={enemy} onChange={setEnemy} choices={ENEMY_CHOICES} />
       )}
       {coop && (

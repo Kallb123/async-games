@@ -1229,6 +1229,33 @@ describe("Realm Arena's rally choice in fog of war (§39.4)", () => {
     });
 });
 
+describe("Realm Arena's Brood in fog of war (realm-arena-hold-out.md §4.6)", () => {
+    // A Brood Queen of rules version 13 hatches a minion Skitterling: told only to whoever sees it, as a hatchling was.
+    const field = realmArenaFieldOf(...Array(4).fill(".".repeat(60)));
+    const make = (id: number, owner: string, character: "broodQueen" | "knight" | "mage" | "broodSkitterling", col: number) =>
+        ({ ...realmArenaNewFighter(id, owner, character, realmArenaSquareAt(field, col, 1), null, undefined, undefined, false, { rulesVersion: 13 }), ap: 4 });
+    const SENTINEL = 5353;
+    const battle = { field, fighters: [make(0, "a", "broodQueen", 3), make(1, "b", "knight", 10), make(SENTINEL - 1, "c", "mage", 58)], rulesVersion: 13, fog: true as const };
+    const { events, fighters } = realmArenaActRules(battle, "a", { kind: "hatch", fighter: 0 }, realmArenaFixedRolls([]));
+    const after = { ...battle, fighters };
+
+    it("hatches a minion only the viewers who see it are told of, and none of it reaches one who doesn't", () => {
+        expect(fighters.find(one => one.id === SENTINEL)).toMatchObject({ character: "broodSkitterling", hp: 1, hatchedBy: 0 });
+        for (const viewer of ["a", "b"]) expect(realmArenaToldTo(events, after, viewer), viewer).toEqual(events);
+        for (const viewer of ["c", null]) {
+            expect(realmArenaToldTo(events, after, viewer)).toEqual([]);
+            expect(JSON.stringify(realmArenaToldTo(events, after, viewer))).not.toContain(String(SENTINEL));
+        }
+    });
+
+    it("draws a minion out of sight on nobody's board", () => {
+        const gs = makeRealmArenaGame(["a", "b"], {}, { fog: true, rulesVersion: 13 }).specificGameState;
+        gs.phase = "battle";
+        gs.fighters = [make(0, "a", "knight", 3), make(SENTINEL, "ai:0", "broodSkitterling", 58)];
+        for (const viewer of ["a", null]) expect(JSON.stringify(realmArenaStateToModel(gs, viewer, null).fighters), String(viewer)).not.toContain(`"id":${SENTINEL}`);
+    });
+});
+
 describe("Realm Arena's Hatch in fog of war (§39.5)", () => {
     // a's Brood Queen hatches beside itself; b's Knight is 7 squares east and sees it, c's Mage is at the far edge and sees nothing of it.
     const field = realmArenaFieldOf(...Array(4).fill(".".repeat(60)));
@@ -1292,5 +1319,82 @@ describe("Realm Arena's Hatch in fog of war (§39.5)", () => {
         expect(sees("b")).toContain(SENTINEL);
         expect(sees(null)).not.toContain(SENTINEL);
         for (const viewer of ["a", "b", null]) expect(JSON.stringify(realmArenaStateToModel(gs, viewer, null)), String(viewer)).not.toContain("hatchedBy");
+    });
+});
+
+describe("Realm Arena's Hold Out against nests that produce the Brood in fog of war (realm-arena-hold-out.md §5)", () => {
+    // Rules 13: the warbands' banked threat and the rally's bookkeeping are the server's; the Shrine is everyone's.
+    // One warband's turn is played with nothing recorded, so its nests spawn and nothing moves: the Brood stays out of both squads' sight.
+    async function spawned(): Promise<RealmArenaTestGame> {
+        const game = makeRealmArenaGame(["a", "b"], {}, { fog: true, rulesVersion: 13, coop: { enemy: "realm", mission: "holdOut" } });
+        await realmArenaMusterAll(game);
+        await playRealmArenaOne(game, realmArenaEndTurn("a"));
+        await playRealmArenaOne(game, realmArenaWarbandTurn(game.currentTurn, []));
+        return game;
+    }
+    const wire = async (game: RealmArenaTestGame, viewer: string | null) => {
+        const { markModified: _, ...data } = game;
+        const { CreateDataResponse } = (await import("@/games/RealmArena/RealmArenaModels")).RealmArenaGameDataModel.schema.methods;
+        return (await CreateDataResponse.call(structuredClone(data), viewer)).specificGameState as IRealmArenaSpecificGameStateResponse;
+    };
+
+    it("never sends the banked threat or the rally's source fields to any viewer, a null one included", async () => {
+        const game = await spawned();
+        const gs = game.specificGameState;
+        expect(gs.threat).toBeDefined();
+        gs.ralliesBanked = 1;
+        gs.lastRally = 5;
+        gs.roundsPlayed = 3;
+        for (const viewer of ["a", "b", null]) {
+            const sent = JSON.stringify(await wire(game, viewer));
+            expect(sent, String(viewer)).not.toMatch(/"threat"|"ralliesBanked"|"lastRally"/);
+        }
+        // What every viewer is told of the rally is how many wait and when the next comes.
+        expect((await wire(game, "a")).rally).toEqual({ banked: 1, next: 5 });
+        expect((await wire(game, null)).rally).toEqual({ banked: 1, next: 5 });
+    });
+
+    it("sends the nests left to every viewer alike, the null one included, and the stars to none until the battle is won by breaking the Brood", async () => {
+        const game = await spawned();
+        const gs = game.specificGameState;
+        const nests = gs.fighters.filter(one => one.character === "nest");
+        expect(nests.length).toBeGreaterThan(1);
+        for (const viewer of ["a", "b", null]) {
+            const mid = await wire(game, viewer);
+            expect(mid.nestsLeft, String(viewer)).toBe(nests.length);
+            expect(mid, String(viewer)).not.toHaveProperty("stars");
+        }
+        nests.slice(1).forEach(nest => { nest.hp = 0; });
+        for (const viewer of ["a", "b", null]) expect((await wire(game, viewer)).nestsLeft, String(viewer)).toBe(1);
+        expect(realmArenaStateToModel(gs, null, null)).not.toHaveProperty("stars");
+
+        // The last nest falls: the Brood breaks and the battle is won, the fog lifts, and the stars are told to everyone.
+        nests[0].hp = 0;
+        expect(new RealmArenaGameType().CheckGameOver(game)).toBe(true);
+        expect(game.complete).toBe(true);
+        // `stars` is set on the state now, but a view that is not the finished one still carries none: the `complete` gate.
+        expect(gs.stars).toBeDefined();
+        for (const viewer of ["a", "b", null]) expect(realmArenaStateToModel(gs, viewer, null, false), String(viewer)).not.toHaveProperty("stars");
+        for (const viewer of ["a", "b", null]) {
+            const done = realmArenaStateToModel(gs, viewer, null, true);
+            expect(done.stars, String(viewer)).toContain("held");
+            expect(done.stars, String(viewer)).toContain("broke");
+            expect(done.stars, String(viewer)).toEqual(realmArenaStateToModel(gs, null, null, true).stars);
+            expect(done.nestsLeft, String(viewer)).toBe(0);
+        }
+    });
+
+    it("sends the Shrine to every viewer but a null one sees nothing else of the board, nests and spawned Brood included", async () => {
+        const game = await spawned();
+        const gs = game.specificGameState;
+        const shrine = gs.fighters.find(one => one.character === "shrine")!;
+        const none = await wire(game, null);
+        expect(none.fighters.map(one => one.id)).toEqual([shrine.id]);
+        for (const viewer of ["a", "b"]) {
+            const fighters = (await wire(game, viewer)).fighters;
+            expect(fighters.some(one => one.id === shrine.id), viewer).toBe(true);
+            // Far from both squads, no nest or Brood fighter is in anyone's sight.
+            expect(fighters.filter(one => one.owner.startsWith("ai:")), viewer).toEqual([]);
+        }
     });
 });

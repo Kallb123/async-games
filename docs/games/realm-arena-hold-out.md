@@ -314,6 +314,53 @@ the board, and their strikes follow one after another, quickly.
 - A warband's threat, banked or spent, is server-only.
 - A `croupier` pass is due.
 
+### 4.7 What PR 2 settled
+
+- **The catalogue.** `catalogues/v13.ts` is registered in `RULESETS` and is
+  not current: `CURRENT_RULESET_VERSION` stays 12 until PR 5. Tests build their
+  battles at 13 through `rulesVersion`.
+- **The Brood is the faction `brood`**, `computerOnly`: it is in no list a
+  player picks from (`FACTION_IDS`, `isFactionId`, Random's draw). A battle
+  finds it through its own catalogue (`factionById`, `factionOf`), never
+  today's. Its characters have ids of their own: `broodSkitterling`,
+  `broodSpitter`, `broodBloater`, `broodRavager` and `broodBroodmother`, named
+  as the Swarm's characters they're drawn as.
+- **The elites, the themes and the nests move to the Brood in version 13.**
+  The elites keep their ids, and a character is in one faction alone, so
+  version 13's Swarm is the playable faction alone: its roster and its squads,
+  with no elites, themes or nests. Hatch makes the Brood's minion Skitterlings.
+- **Character data** gains three fields, each absent before version 13:
+  `minion`, `threat` and `drawnAs`.
+  - `isMinion` (`rules.ts`) is read wherever a minion differs. Any damage takes
+    it to 0 HP, in `wound`, so a burning or poison tick downs it too. It wears
+    no armour (`armourOf`, `damageTo`). `healRefusal` refuses it: "A minion
+    can't be healed". The board draws no HP bar over it (`hasHpBar`).
+  - `drawnAs` keeps the Brood off the sheets. `ART_CHARACTER_IDS` leaves its
+    characters out, so the sheets are byte-identical. `artCharacterOf` answers
+    the art, the 3D model and a shot's missile through it.
+- **Threat, until nests produced the Brood.** The Brood is a `horde`: it is
+  bought, never mustered, so its `readyMade` is empty. In PR 2 `hordePurchase`
+  bought in each character's `threat`, as `wavePurchase` buys in points: the
+  elite first, then the theme's list round and round, never more than
+  `HORDE_CAP` (16) minions or `HORDE_REAL_CAP` (4) others, and `waveOf` held a
+  landing wave to the same caps. Until PR 3 made the nests produce it (§5.6),
+  the Brood mustered and landed its waves on version 12's schedule, each
+  spending the points the Swarm's would have had, a threat for every
+  `POINTS_PER_THREAT` (5). PR 3 removed that bridge, and `hordePurchase` with it:
+  `hordeSpawn` buys the starting horde and what the nests produce (§5.6).
+- **The swarm step** is `swarmAction` (`swarm.ts`). At the start of each
+  warband turn the minions step first, all of them, then strike, all of them.
+  Only then does the planner plan the real characters (`nextAction` passes over
+  minions). Both kinds of action are recorded in one list, so a replay never
+  asks either.
+- **Playback.** A review merges a warband's run of minion moves into one part,
+  and its run of minion strikes into another (`partsOf`). A run of walks by
+  different characters in one part sets off together, and a run of strikes
+  follows one after another at a quicker step (`timeline`).
+- **Still to measure** (§4.4): whether a phone can read the board with the full
+  horde, and `ra-bench` with one. Both belong with the balance in PR 5, before
+  `HORDE_CAP` is set.
+
 ---
 
 ## 5. The mission: break the Brood, keep the Shrine
@@ -352,7 +399,7 @@ the nests' squares and the next-wave line while the enemy was unseen.
   Ties go to the lowest seat. With one warband, as in Solo, every row is one.
   A warband with no nest standing contributes no elites, so destroying nests
   early is how the team keeps the Queen from ever arriving. The count is data
-  on the faction's schedule (`perWarband`, or a number per battle), so it is
+  on the faction's schedule (`eliteSchedule`: `perWarbands`, or a number per battle), so it is
   tuned like any other value.
 - **Destroyed for good.** No nest regrows. Every nest down permanently slows
   the enemy, so the momentum runs in the team's favour.
@@ -413,7 +460,8 @@ rounds running. At each one, every player chooses, as in `realm-arena.md`
 - **The scoreboard** says when a banked rally comes: "Rally next round" or
   "Rally in round 7".
 - **The state** keeps how many rallies are banked and the round of the last
-  one taken. Both are public: everyone saw what earned them.
+  one taken. Both are public: everyone saw what earned them, nearly always
+  (§5.6).
 
 ### 5.4 Winning and losing
 
@@ -428,8 +476,8 @@ rounds running. At each one, every player chooses, as in `realm-arena.md`
   **a faster win must outscore a slower one with more knock-outs.** So a round's
   bonus is set above the most a round of fighting can score: the knock-out points
   of everything every nest the battle started with can produce in a round, at its
-  latest, largest `SPAWN_THREAT`. That is *Proposed* 50 points a round to begin
-  with, and a test holds the bonus above that bound for every team size, so a
+  latest, largest `SPAWN_THREAT`. That is *Proposed* 60 points a round to begin
+  with (50 fell short for four, §5.6), and a test holds the bonus above that bound for every team size, so a
   retune of the spawning can't quietly undo it.
 - **Won at the round cap**, if the Shrine still stands: **15 rounds**, for every
   team size, Solo included. Holding the keep is still a win, just the smallest
@@ -445,6 +493,95 @@ mine head. They have no minions, and their ready-made squads' characters are
 produced at a threat equal to their points. The random enemy would then come back
 too, with the structures' squares withheld while the enemy is unseen, as the
 nests' are today.
+
+---
+
+### 5.6 What PR 3 settled
+
+- **Where nests produce the enemy** is `nestsProduce` (`rules.ts`): Hold Out,
+  under rules with `SPAWN_THREAT`. Every rule below asks it, so version 12's
+  Hold Out, waves and all, is untouched. No wave lands (`waveOf` is empty) and
+  there is no next-wave line (`nextWaveOf`).
+- **Hold Out is the Brood's** through the rule `HOLD_OUT_ENEMY`:
+  `buildInitialRealmArenaState` stores it whatever the host chose, and drops a
+  random draw (`holdOutEnemy`). The setup screen hides the enemy picker under
+  it. Hold the Centre keeps the host's choice.
+- **The sites are the ruleset's**: `RULES.HOLD_OUT_SITES`
+  (`catalogues/holdOutSitesV13.ts`), by map id, for all eight maps Hold Out is
+  fought on. The nests are literal copies of the maps' own. The Shrine stands on
+  no muster or nest square, so it never meets a mustered character: on the
+  middle-out maps the most central free square of the keep, on the line maps
+  the square just in front of the team's zones. On the Sacked Fort the keep is
+  open, so the Brood's longest sight (25) sees the Shrine from its zones; its
+  square is no secret, so that is allowed and pinned (`maps/holdOut.test.ts`).
+- **Spawning** (`spawn`, at the start of each warband turn, after its burning):
+  each standing nest adds `spawnThreatOf` the round to the warband's banked
+  threat (`threat`, server-only). It is spent on the round's theme
+  (`spawnThemeOf`: one every `SPAWN_STEP_ROUNDS`) by `hordeSpawn`: the buy list
+  in order, round and round, **stopping at the first it can't afford**, so a
+  Ravager is saved up for rather than passed over, and skipping what the caps
+  leave no room for. What's left is banked, never more than the list's dearest:
+  threat the caps leave nothing to spend on is lost. Each buy stands on the
+  square Hatch would pick by one nest after another (`standByNest`), at 0 AP. A
+  buy with no room isn't made, and its threat stays banked. A warband with only
+  nests standing still takes its turn (`warbandFights`), so its nests produce.
+- **The elites** are the faction's `eliteSchedule`, as rounds 5, 9 and 13
+  begin (`eliteArrivals`). The themes no longer carry an elite. Scheduled elites
+  are not held to `HORDE_REAL_CAP`: a warband of four Ravagers would otherwise
+  keep the Queen away for good. One with no free square by any of its warband's
+  nests doesn't come, and isn't owed later. No line tells their arrival, since who fields
+  one says whose nests still stand. The theme's change is told to everyone ("The
+  Bile begins").
+- **What fog still gives away** (a `croupier` pass, §4.6). Three channels
+  remain, each accepted for now rather than closed:
+  - **Fighter ids.** Every spawn and elite takes the next id (`nextFighterId`),
+    and ids are on the wire, so the gap between two spawns the team sees counts
+    what was made out of its sight. That can tell a watching team whether an
+    unseen nest stands, rebuild a warband's banked threat, and show an elite's
+    arrival. Waves and hatchlings have always left the same gaps
+    (`realm-arena.md` §27.2, §39.5). Closing it means ids that don't count,
+    which is a change to every command that mints a fighter, so it is left for a
+    plan of its own.
+  - **A rally for a broken warband** announces its last nest's fall, even one
+    nobody of the team saw: a burn tick at the warband's turn start, or the
+    Brood's own burst or bile. The rally is taken publicly the next round, so
+    the fall can't be hidden without hiding the rule. §5.3's "everyone saw what
+    earned them" is true of the schedule and of most breaks, not all.
+  - **`enemiesDefeated`**, sent mid-battle, counts Brood deaths nobody saw, as
+    it always has. Minions fall to anything, the Brood's own blasts included,
+    so it ticks more often now.
+- **The Shrine** is a structure owned by `SHRINE_OWNER` ("shrine"), which
+  `battleFrom` puts on the team's side after the seats and the warbands. It is
+  no seat, so no turn, rally, drop-out or squad reaches it. Its burning or
+  poison ticks as each round begins. Every side's view holds it (`viewOf`),
+  since its square is the ruleset's. Downing it scores nothing (a knock-out
+  worth 0 points writes no `scored` event). Its HP is `SHRINE_HP` plus
+  `SHRINE_HP_PER_PLAYER` a player, on the fighter as `maxHp`. To the planner it
+  is worth `hpWorth` (3) points an HP. Minions and the planner's characters make
+  it their goal when they see no team character, and minions strike it when no
+  team character is in reach.
+- **Rallies** are `ralliesBanked` and `lastRally` on the battle. One is earned
+  as each of `RALLY_ROUNDS` begins, and as each warband's last nest falls
+  (`noteBroken`, written after the line that felled it). One is taken as a round
+  begins if any is banked and none was taken as the last round began
+  (`beginRound`), so the team owes its choices as in version 12. The response
+  carries `rally: { banked, next }`, with `next` the round the next is taken in
+  (`nextRallyOf`), for "Rally next round" or "Rally in round 7". **Mend** is the
+  rally's fourth choice, offered only where there is a Shrine, and available
+  while it stands hurt: half its HP back, as a Rally gives a character.
+- **The ending** (`broodEnding`): the team's loss when nobody of it stands (as
+  before) or the Shrine falls; its win when every nest is down, or once
+  `HOLD_OUT_ROUNDS` (15) are played. Breaking the Brood (`breakTheBrood`, once,
+  as the battle ends) removes whatever of it still stands, and gives each player
+  still in the battle an even share of `ROUND_BONUS` (60) for each round left.
+  60, not the 50 proposed: with four warbands, the round-5 Lobbers (one a
+  warband, 8 points each) and eight nests at round 15's threat make a round
+  worth up to 51.2 points. `rulesets.test.ts` holds the bonus above that bound
+  for every team size.
+- **Left for PR 4:** the result. The battle record still counts arrivals and
+  rallies on version 12's wave schedule (`battleRecord.ts`), and the result's
+  wave chart reads it. The stars, the guide's and the tutorial's copy, and the
+  achievements are PR 4's too. Built (§6.1).
 
 ---
 
@@ -474,6 +611,92 @@ nests' are today.
     round 13, so earning it now means letting her come.
   - A `rulebook` pass is due against `docs/achievements.md`.
 
+### 6.1 What PR 4 settled
+
+- **Stars** are `HOLD_OUT_STARS` (`rules.ts`): `held`, `broke` and
+  `unscathed`, each named and explained by `HOLD_OUT_STAR_INFO`, which the
+  board, the log, the result and the guide all read. `holdOutStars` reads them
+  off the battlefield as a win ends: Held for the win; Broke the Brood for
+  every nest down, which ends the battle the moment it happens, so only ever
+  before the cap; Unscathed for the Shrine above half its HP (exactly half
+  isn't). `awardStars` keeps them on the state (`stars`) as a won Hold Out
+  ends, after the Brood breaks, and logs "The team earns 2 of 3 stars: …". A
+  loss has none, and a version-12 battle never does.
+- **On the wire.** `stars` only on the finished response. `nestsLeft`, how many
+  nests still stand over every warband, to every viewer throughout the battle,
+  fog or not, for the scoreboard. It is a fourth channel beside §5.6's three,
+  accepted as `enemiesDefeated` is (a `croupier` pass). What it gives a fogged
+  team that they didn't have: a nest falling out of their sight that isn't its
+  warband's last (a burn or poison tick as its warband's turn begins, the
+  Brood's own burst or bile, a blast of the team's reaching past its sight),
+  told on the next fetch after the command that felled it rather than guessed
+  from fighter ids; and so, subtracting the falls they saw from the public
+  nest squares, often which nest it was, and the Brood's spawn rate. It gives
+  no nest's HP, square or warband, and nothing of the horde: the banked threat
+  stays the server's. Closing it would mean counting only the falls the team
+  has seen, which needs a memory of sightings per team. The Shrine's HP needed
+  nothing new: every view holds it.
+- **The difficulty's steps** are `HOLD_OUT_DIFFICULTY` in the ruleset, read
+  through `holdOutDifficultyOf`: Easy −1 threat a nest a turn, nests 3 HP
+  weaker and the Shrine 10 HP stronger; Hard the opposite; Normal nothing
+  (*Proposed*). A nest's HP is set on the fighter as `maxHp`, as the Shrine's
+  is, so a version-12 nest is untouched. Version 13's Hold Out has no use for
+  the warbands' points budget, so the setup screen describes the steps
+  instead. `rulesets.test.ts` holds the round bonus above a round's fighting
+  on Hard, whose nests produce the most.
+- **The scoreboard** for a version-13 Hold Out is the round, the nests left
+  ("3/4"), the Shrine's HP and the team's health, in place of the enemies
+  defeated. A won battle shows its stars under the finish banner
+  (`RealmArenaStars`), earned and missed, each with what earns it.
+- **The result.** The battle record (`battleRecord.ts`) no longer counts a
+  version-13 battle on version 12's wave schedule: each of `waves` is a stage
+  of the horde (`produced`), starting as the theme changes, so its arrivals
+  and rallies are the stage's. It also keeps the Shrine's HP and the nests
+  standing at the end (`shrine`, `nests`). The result's Hold Out group leads
+  with how it ended (overrun, the Shrine fell, broke the Brood, or held to the
+  cap), then the stars with their reasons, then what took the field, what was
+  downed and how many nests fell, the rallies, and each stage ("The Rush, from
+  round 1: 23 arrived, 19 downed"). The stars are copied from the state, not
+  the replay, so a result whose replay failed still has them. The charts name
+  stages by their theme ("Enemies downed by stage", "The Bile begins").
+- **Achievements**, ids kept: *Three Stars* (`realmarena.three-stars`) and
+  *Three Stars on Hard* (`realmarena.three-stars-hard`), read off `stars` and
+  `difficulty`. *Broken Tide* is breaking the Brood by the end of round 10
+  (`BROKEN_TIDE_BY_ROUND`, fixed rather than read off `HOLD_OUT_ROUNDS`, so
+  PR 5's balance should revisit it; `round` on the finished response is the
+  round the battle ended in), and *Scorched Earth* breaking it with every
+  character of the team standing. Like the copy, the catalogue switches on the
+  current ruleset (`achievementsFor`): until version 13 is released it holds
+  version 12's *Broken Tide* and *Scorched Earth* and no *Three Stars*, so no
+  profile shows an achievement nobody can earn, and `nestsCleared` stays on
+  the response for version 12's *Scorched Earth*. PR 5 deletes the version-12
+  branch, `nestsCleared` with it. *Regicide*'s description drops "of the
+  Swarm", since the Queen is the Brood's from version 13; its meaning is
+  unchanged.
+- **Before PR 5 releases** — the moment *Broken Tide* and *Scorched Earth*
+  change in place — confirm in the database that nobody has earned either
+  (`AchievementUnlock` rows for `realmarena.broken-tide` and
+  `realmarena.scorched-earth`). *Scorched Earth* shipped with version 12, and
+  *Broken Tide* long before, so this is a real check, not a formality: an id
+  someone holds needs a new id rather than new criteria (`docs/achievements.md`
+  §11). No admin page shows it.
+- **PR 5's What's new line** names the stars, *Three Stars* and *Three Stars
+  on Hard*, and what *Broken Tide* and *Scorched Earth* ask now.
+- **The result's schema** declares `produced`, `shrine`, `nests` and `stars`,
+  so a result recorded before them reads them back absent.
+- **Copy that waits for the release.** The guide's co-op section
+  (`coopText`, `brokenBroodText`), the setup screen's Hold Out, battlefield and
+  difficulty lines, and the tutorial's new *Break the Brood* step all switch on
+  whether the **current** ruleset's nests produce the enemy
+  (`nestsProduce("holdOut")`), so today's players still read version 12's. Each is
+  built from the rule values it's given, and `holdOutCopy.test.ts` renders it
+  at version 13. PR 5 deletes the version-12 branches. The tutorial's step
+  stands on the stat row (`breakTheBrood`) and reads version 13's round cap,
+  since only a version-13 battle raises it. *The centre* is now shown only in a
+  battle that has one (`centre`), which is live at once: version 12's Hold Out
+  no longer points at a centre it doesn't score. Nothing else of this PR is
+  seen before PR 5.
+
 ---
 
 ## 7. Balance and measuring
@@ -499,10 +722,10 @@ nests' are today.
 
 | PR | What | Versions |
 |---|---|---|
-| 1 | The enemy's turn in the background (§3) | Command 13 |
-| 2 | The Brood: minions, threat, the swarm step, playback (§4) | Rules 13, unreleased |
-| 3 | Nests that produce, the Shrine, Mend, the rally's two triggers, the new ending and its bonus, Hold Out against the Brood only (§5) | Rules 13, unreleased |
-| 4 | Stars, the result, achievements, the guide and setup copy (§6) | Rules 13, unreleased |
+| 1 | The enemy's turn in the background (§3) — **built** (§3.6) | Command 13 |
+| 2 | The Brood: minions, threat, the swarm step, playback (§4) — **built** (§4.7) | Rules 13, unreleased |
+| 3 | Nests that produce, the Shrine, Mend, the rally's two triggers, the new ending and its bonus, Hold Out against the Brood only (§5) — **built** (§5.6) | Rules 13, unreleased |
+| 4 | Stars, the result, achievements, the guide and setup copy (§6) — **built** (§6.1) | Rules 13, unreleased |
 | 5 | The harness's raid policy, balance, release, What's new (§7) | Rules 13 released |
 
 PR 1 stands alone and ships first: it gives version 12's warbands their time back
@@ -812,3 +1035,6 @@ A `rulebook` pass checks this against `docs/achievements.md`.
 | 0.3 | The rally is earned on a schedule and when a warband is broken, and taken only as a round begins, never in two rounds running, with none lost (§5.3). The open questions are spelt out (§8.1). |
 | 0.4 | More answers on review (§8.1): a bonus for each round left large enough that a faster win outscores a slower one, held by a test; elites counted by the elite (a Lobber a warband, a Brute every two, one Queen); nest and Shrine squares in the ruleset; friendly fire hurts the Shrine; Solo keeps both jobs; and achievements change in place. |
 | 0.5 | PR 1 built (§3.6): the warbands' turns are `RealmArenaWarbandTurn`s from command version 13, played by the server once the End turn is saved, with the turn-timer cron as the backstop. |
+| 0.6 | PR 2 built (§4.7): the Brood in rules version 13, unreleased, with its minions, threat and horde caps, the swarm step and its playback. Until nests produce it, it is bought in threat on version 12's waves. |
+| 0.7 | PR 3 built (§5.6): nests that produce the Brood every round, the Shrine and Mend, the rally earned on a schedule and by breaking a warband, the new ending and its bonus (60 a round, not 50), and Hold Out against the Brood alone, all in rules version 13, unreleased. |
+| 0.8 | PR 4 built (§6.1): stars kept as a won Hold Out ends and sent once it's over, the difficulty's steps for the spawn, the nests and the Shrine, the nests left and the Shrine's HP on the scoreboard, the result by the horde's stages, *Three Stars* and *Three Stars on Hard*, *Broken Tide* and *Scorched Earth* for breaking the Brood, and the guide's, setup's and tutorial's copy, live once version 13 is current. |

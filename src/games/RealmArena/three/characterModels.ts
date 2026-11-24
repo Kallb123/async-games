@@ -17,7 +17,7 @@
 
 import { BoxGeometry, BufferGeometry, CapsuleGeometry, Color, CylinderGeometry, Euler, Float32BufferAttribute, Matrix4, SphereGeometry, Vector3 } from "three";
 import { mergeGeometries } from "three/addons/utils/BufferGeometryUtils.js";
-import { CHARACTER_MODELS_HREF } from "@/games/RealmArena/art";
+import { artCharacterOf, CHARACTER_MODELS_HREF } from "@/games/RealmArena/art";
 import type { CharacterId } from "@/games/RealmArena/characters";
 
 type Vec3 = readonly [number, number, number];
@@ -128,8 +128,13 @@ function dressed(part: Part, materials: Readonly<Record<string, Material>>): Buf
 
 const built = new WeakMap<CharacterModels, Map<CharacterId, BufferGeometry>>();
 
-/** A character's model, merged into one geometry in its own frame: built once from `models`, and shared by every board. */
-export function characterGeometry(models: CharacterModels, character: CharacterId): BufferGeometry {
+/**
+ * A character's model, merged into one geometry in its own frame: built once
+ * from `models`, and shared by every board. A character drawn as another
+ * (`artCharacterOf`) is that one's model, cached under that one's id.
+ */
+export function characterGeometry(models: CharacterModels, drawn: CharacterId): BufferGeometry {
+    const character = artCharacterOf(drawn);
     let byCharacter = built.get(models);
     if (!byCharacter) built.set(models, byCharacter = new Map());
     let geometry = byCharacter.get(character);

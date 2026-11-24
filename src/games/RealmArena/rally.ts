@@ -1,5 +1,5 @@
 import { rulesetOf, type RulesContext } from "@/games/RealmArena/rulesets";
-import { freeSquares, freshTurn, isStanding, maxHpOf, viewOf, type BattleState, type Fighter } from "@/games/RealmArena/rules";
+import { freeSquares, freshTurn, isStanding, maxHpOf, SHRINE_OWNER, shrineOf, viewOf, type BattleState, type Fighter } from "@/games/RealmArena/rules";
 import type { ItemId } from "@/games/RealmArena/characters";
 import { pluralize } from "@/utils/ui/text";
 import type { Square } from "@/utils/games/battlefield/terrain";
@@ -14,17 +14,18 @@ import type { Square } from "@/utils/games/battlefield/terrain";
 // turn sheet alike. It is deliberately not an `Action`: no planner, `act` or
 // `check` ever sees it, and a warband never owes one.
 
-/** What a player owing a rally may choose. */
-export type RallyChoice = "rally" | "reinforce" | "resupply";
+/** What a player owing a rally may choose. Mend only where the team has a Shrine (realm-arena-hold-out.md §5.3). */
+export type RallyChoice = "rally" | "reinforce" | "resupply" | "mend";
 
 /** Every choice, in the order the turn sheet lists them. */
-export const RALLY_CHOICES: readonly RallyChoice[] = ["rally", "reinforce", "resupply"];
+export const RALLY_CHOICES: readonly RallyChoice[] = ["rally", "reinforce", "resupply", "mend"];
 
 /** What each choice looks like wherever it is shown: its glyph and its name. */
 export const RALLY_LOOK: Readonly<Record<RallyChoice, { icon: string; name: string }>> = {
     rally: { icon: "✚", name: "Rally" },
     reinforce: { icon: "🛡️", name: "Reinforce" },
     resupply: { icon: "🎒", name: "Resupply" },
+    mend: { icon: "⛩️", name: "Mend" },
 };
 
 /**
@@ -59,7 +60,7 @@ export interface RallyOption {
     downed?: Fighter[];
 }
 
-/** What a rally gives one character back (§30.11): half its HP, rounded down, never past full. The new HP. */
+/** What a rally gives one character back (§30.11), or a Mend the Shrine (realm-arena-hold-out.md §5.3): half its HP, rounded down, never past full. The new HP. */
 export function rallyHp(fighter: Fighter, context: RulesContext): number {
     const full = maxHpOf(fighter, context);
     return Math.min(full, fighter.hp + Math.floor(full / 2));
@@ -92,10 +93,11 @@ const usedUp = (fighter: Fighter, seat: string): boolean =>
 const resuppliable = (state: Pick<BattleState, "fighters">, seat: string): Fighter[] => state.fighters.filter(fighter => usedUp(fighter, seat));
 
 /**
- * Each of the three choices for `seat`, in `RALLY_CHOICES` order, with whether
+ * Each of the choices for `seat`, in `RALLY_CHOICES` order, with whether
  * it would do anything. Rally is always there; Reinforce needs someone down and
  * a free square in the seat's deployment zone; Resupply needs someone standing
- * who has used up the item they mustered with. `seats` is the players in seat
+ * who has used up the item they mustered with; Mend, offered only where the team
+ * has a Shrine (realm-arena-hold-out.md §5.3), needs it standing and hurt. `seats` is the players in seat
  * order, which the deployment zone is read by. What is available is judged from
  * the seat's own sight (`viewOf`), so a hidden enemy standing in the zone doesn't
  * make the answer differ between the sheet, which holds only the fogged view,
@@ -107,7 +109,8 @@ export function rallyOptionsOf(battle: BattleState, seats: readonly string[], se
     const downed = downedOf(state, seat);
     const square = reinforceSquare(state, seats, seat);
     const used = resuppliable(state, seat);
-    return RALLY_CHOICES.map((choice): RallyOption => {
+    const shrine = shrineOf(state);
+    return RALLY_CHOICES.filter(choice => choice !== "mend" || shrine !== undefined).map((choice): RallyOption => {
         switch (choice) {
             case "rally": return { choice, available: true };
             case "reinforce":
@@ -116,6 +119,8 @@ export function rallyOptionsOf(battle: BattleState, seats: readonly string[], se
                 return { choice, available: true, downed };
             case "resupply":
                 return used.length === 0 ? { choice, available: false, reason: "No one standing has used up their item" } : { choice, available: true };
+            case "mend":
+                return shrine && isStanding(shrine) && shrine.hp < maxHpOf(shrine, state) ? { choice, available: true } : { choice, available: false, reason: "The Shrine isn't hurt" };
         }
     });
 }
@@ -184,6 +189,8 @@ export function rallied(state: BattleState, seats: readonly string[], seat: stri
         }
         case "resupply":
             return state.fighters.map(fighter => usedUp(fighter, seat) ? { ...fighter, item: fighter.musteredItem! } : fighter);
+        case "mend":
+            return state.fighters.map(fighter => fighter.owner === SHRINE_OWNER && isStanding(fighter) ? { ...fighter, hp: rallyHp(fighter, state) } : fighter);
     }
 }
 
@@ -201,12 +208,13 @@ export const resupplyItems = (state: Pick<BattleState, "fighters">, seat: string
  * there were none, as in a battle before the choice.
  */
 export function rallyTally(rallies: Iterable<Pick<{ choice: RallyChoice }, "choice">>): string | undefined {
-    const counts: Record<RallyChoice, number> = { rally: 0, reinforce: 0, resupply: 0 };
+    const counts: Record<RallyChoice, number> = { rally: 0, reinforce: 0, resupply: 0, mend: 0 };
     for (const { choice } of rallies) counts[choice]++;
     const parts = [
         counts.rally > 0 && pluralize(counts.rally, "rally", "rallies"),
         counts.reinforce > 0 && pluralize(counts.reinforce, "reinforcement"),
         counts.resupply > 0 && pluralize(counts.resupply, "resupply", "resupplies"),
+        counts.mend > 0 && pluralize(counts.mend, "mend"),
     ].filter((part): part is string => part !== false);
     return parts.length > 0 ? `Rallies: ${parts.join(", ")}` : undefined;
 }

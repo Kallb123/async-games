@@ -35,7 +35,7 @@ import { costsFrom, DEFAULT_CLIMB, reachFrom, pathTo, type Reach } from "@/utils
 import { battlefieldWith, coordsOf, type Battlefield, type Square } from "@/utils/games/battlefield/terrain";
 import { type AbilityId, type CharacterId } from "./characters";
 import {
-    abilitiesOf, alliesWithin, activeEffects, act, canAct, allied, areaAround, blastedIn, burstArea, CENTRE, centrePoints, check, type Check, fighterById, isCombatant, isStanding, isStructure, landedSmoke,
+    abilitiesOf, alliesWithin, activeEffects, act, canAct, allied, areaAround, blastedIn, burstArea, CENTRE, centrePoints, check, type Check, fighterById, isCombatant, isMinion, isStanding, isStructure, landedSmoke, shrineOf,
     damageTo, dodgeReach, givesCover, inMeleeReach, leapTargets, maxHpOf, moveApAt, movementOf, reachOf, ROLL_SIDES, shotOdds, squadSight, strikeChance, watchedSquares, weaponOf,
     type Action, type BattleEvent, type BattleState, type Fighter, type FogGhost, type ShotOdds,
 } from "./rules";
@@ -84,7 +84,7 @@ interface Temperament {
  * Realm's and the Miners' characters have none (a test holds it): the Swarm
  * alone plays out of character, and so can be tuned without touching them.
  */
-export const TEMPERAMENTS: Readonly<Partial<Record<CharacterId, Temperament>>> = {
+const SWARM_TEMPERAMENTS = {
     // Throws itself at the team, and is happiest where its pack closes round one enemy.
     skitterling: { exposure: 0.25, threat: 1, extra: "pack" },
     ravager: { exposure: 0.5, threat: 1 },
@@ -97,6 +97,13 @@ export const TEMPERAMENTS: Readonly<Partial<Record<CharacterId, Temperament>>> =
     // Leads from the back, and lets the brood do the fighting.
     broodmother: { exposure: 2, threat: 0.5 },
     broodQueen: { exposure: 2, threat: 0.5 },
+} satisfies Partial<Record<CharacterId, Temperament>>;
+
+export const TEMPERAMENTS: Readonly<Partial<Record<CharacterId, Temperament>>> = {
+    ...SWARM_TEMPERAMENTS,
+    // The Brood's real characters play as the Swarm's they're drawn as (realm-arena-hold-out.md §4.3); its minions take the swarm step and have no row.
+    broodRavager: SWARM_TEMPERAMENTS.ravager,
+    broodBroodmother: SWARM_TEMPERAMENTS.broodmother,
 };
 
 /**
@@ -211,7 +218,8 @@ export function nextAction(view: BattleState, owner: string, round: number, hunt
     const plan = planFor(view, owner, Number.isFinite(round) ? Math.max(1, round) : 1, memo, hunt);
     let best: Action | undefined;
     let bestScore = score(plan, plan.state, []) + LEAST_GAIN;
-    const ready = plan.state.fighters.filter(fighter => fighter.owner === owner && canAct(fighter, plan.state)).sort((a, b) => a.id - b.id);
+    // A minion takes the swarm step instead (`swarmAction`, §4.5): it is on the field, and is planned around, but never planned for.
+    const ready = plan.state.fighters.filter(fighter => fighter.owner === owner && canAct(fighter, plan.state) && !isMinion(fighter, plan.state)).sort((a, b) => a.id - b.id);
     for (const fighter of ready) {
         for (const action of optionsFor(plan, fighter)) {
             const value = judge(plan, action);
@@ -238,8 +246,11 @@ function planFor(view: BattleState, owner: string, round: number, memo: TurnMemo
     // (`standingTerms`).
     // A nest (§39.7) is nobody to hunt: the team's planner may hit one it reaches, and never walks to one.
     const seenEnemies = state.fighters.filter(fighter => isCombatant(fighter, state) && !allied(state, fighter.owner, owner));
+    // Then the team's Shrine, where there is one (realm-arena-hold-out.md §5.2), which every side's view holds.
+    const shrine = shrineOf(state);
     const hunted = hunt === undefined ? []
         : seenEnemies.length > 0 ? seenEnemies.map(fighter => fighter.square)
+        : shrine && isStanding(shrine) ? [shrine.square]
         : hunt.length > 0 ? hunt.map(ghost => ghost.square)
         : view.fog ? searched(state, owner) : [];
     const objective = hunted.length > 0 ? hunted : field.objectives[CENTRE] ?? [];
@@ -268,7 +279,7 @@ function planFor(view: BattleState, owner: string, round: number, memo: TurnMemo
  * of those in sight, every square it can't see. So it sweeps on from the keep
  * rather than standing in it waiting for a team that isn't there.
  */
-function searched(state: BattleState, owner: string): Square[] {
+export function searched(state: BattleState, owner: string): Square[] {
     const { field } = state;
     const seen = squadSight(state, owner);
     // The sides are in seat order, the team's first, as the deployment zones are (`battleFrom`).
@@ -734,8 +745,8 @@ function expectedDamage({ chance, grazeChance, damage, grazeDamage }: ShotOdds, 
     return (chance * Math.min(damage, hp) + grazeChance * Math.min(grazeDamage, hp)) / ROLL_SIDES;
 }
 
-/** What `hp` of a character is worth, in points: its cost, a share for each HP. */
+/** What `hp` of a character is worth, in points: its cost, a share for each HP — or, for the Shrine, its `hpWorth` an HP (realm-arena-hold-out.md §5.2). */
 function worthOf(fighter: Fighter, hp: number, context: BattleState): number {
-    const { CHARACTERS } = rulesetOf(context);
-    return CHARACTERS[fighter.character].points * hp / maxHpOf(fighter, context);
+    const { points, hpWorth } = rulesetOf(context).CHARACTERS[fighter.character];
+    return hpWorth !== undefined ? hpWorth * hp : points * hp / maxHpOf(fighter, context);
 }

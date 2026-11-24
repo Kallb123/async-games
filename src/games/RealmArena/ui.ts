@@ -2,18 +2,18 @@
 // per-game presentation helpers live in games/<Game>/ui.ts). Readings of the
 // state the response already ships, never a rule: those are rules.ts's.
 
-import { ruleValuesOf, rulesetOf, type RulesContext } from "./rulesets";
+import { CURRENT_RULESET_VERSION, ruleValuesOf, rulesetOf, type RulesContext } from "./rulesets";
 import type { Rect } from "@/utils/ui/mapLabels";
 import { isoCentre, ISO_HALF_HEIGHT, ISO_HALF_WIDTH, type IsoView, type Point } from "@/utils/ui/isometric";
 import type { NextWave, IRealmArenaStepOutcome, IRealmArenaStepPart, RealmArenaPartState } from "./apiModels";
 import { andList, capitalise, pluralize, possessive } from "@/utils/ui/text";
 import type { Reach } from "@/utils/games/battlefield/pathfinding";
 import { coordsOf, distance, FACING_COUNT, facingTowards, riseOf, squareAt, TERRAIN, type Battlefield, type Facing, type Square, type Terrain, type TerrainLetter } from "@/utils/games/battlefield/terrain";
-import { EFFECT_IDS, EFFECTS, ITEM_IDS, ITEMS, type AbilityId, type CharacterId, type EffectId, type Item, type ItemId } from "./characters";
+import { EFFECT_IDS, EFFECTS, ITEM_IDS, ITEMS, type AbilityId, type CharacterId, type EffectId, type FactionId, type Item, type ItemId, type Difficulty } from "./characters";
 import { ABILITY_MARK, CHARACTER_IDS } from "./roster";
 import { battlefieldOf } from "./maps";
-import { EFFECT_ART, ITEM_ART, type BurstKind, type Missile, type Sprite, type ThrownItem } from "./art";
-import { areaDamage, actionPointsOf, CENTRE, SCORED_FOR, squadSight, hasEffect, isStanding, isWarband, maxHpOf, moveAp, pickOf, reachOf, shoots, type BattleState, type Fighter, type MusterPick, type OddsBreakdown, type OddsFactor, type ShotResult, type ToldEvent } from "./rules";
+import { artCharacterOf, EFFECT_ART, ITEM_ART, type BurstKind, type Missile, type Sprite, type ThrownItem } from "./art";
+import { areaDamage, actionPointsOf, hatchClause, holdOutDifficultyOf, CENTRE, SCORED_FOR, squadSight, hasEffect, isMinion, isStanding, isWarband, maxHpOf, moveAp, pickOf, reachOf, shoots, SHRINE_OWNER, type BattleState, type Fighter, type MusterPick, type OddsBreakdown, type OddsFactor, type ShotResult, type ToldEvent } from "./rules";
 
 const LETTER_OF = new Map<Terrain, TerrainLetter>(
     (Object.entries(TERRAIN) as [TerrainLetter, Terrain][]).map(([letter, terrain]) => [terrain, letter]),
@@ -35,6 +35,8 @@ export const ENEMY_COLOUR = "var(--ra-enemy)";
 /** The colour an owner's characters wear in co-op, to `viewerId`: their own, a teammate's or the enemy's. */
 export function coopColourOf(viewerId: string, owner: string): string {
     if (isWarband(owner)) return ENEMY_COLOUR;
+    // The Shrine is the team's own, not any one player's: the team's colour.
+    if (owner === SHRINE_OWNER) return TEAM_COLOUR;
     return owner === viewerId ? TEAM_COLOUR : ALLY_COLOUR;
 }
 
@@ -53,6 +55,48 @@ export function waveLineOf(nextWave: NextWave | undefined, round: number): strin
     if (nextWave.name) return `Round ${nextWave.round}: ${nextWave.name}${count && `, ${count}`}${nests}`;
     const when = nextWave.round === round + 1 ? 'wave next round' : `next wave ${nextWave.round}`;
     return `${count ? `${when} · ${count}` : when}${nests}`;
+}
+
+/**
+ * The enemy Hold Out is fought against where the rules give the host no choice
+ * of one (`HOLD_OUT_ENEMY`, from version 13): its faction and the name the
+ * setup screen says it by. Undefined where the host chooses.
+ */
+export function forcedHoldOutEnemy(context?: RulesContext): { id: FactionId; name: string } | undefined {
+    const id = ruleValuesOf(context).HOLD_OUT_ENEMY;
+    return id === undefined ? undefined : { id, name: rulesetOf(context).FACTIONS[id].enemyName };
+}
+
+/**
+ * What the setup screen says Hold Out is where the nests produce the enemy (rules version 13): the
+ * two ways to win, told as the guide tells them. Without a context, the current ruleset's.
+ */
+export function holdOutMissionDescription(context?: RulesContext): string {
+    return `Break the Brood by destroying every nest, or hold the Shrine to round ${ruleValuesOf(context).HOLD_OUT_ROUNDS}.`;
+}
+
+/**
+ * What a difficulty does to a Hold Out where nests produce the enemy, in the
+ * words the setup screen gives it: how much the nests hatch, a nest's HP and
+ * the Shrine's, from the rules' own steps. The guide's clause for the hatching is shared.
+ */
+export function holdOutDifficultyDescription(difficulty: Difficulty, context?: RulesContext): string {
+    const { SHRINE_HP = 0, SHRINE_HP_PER_PLAYER = 0 } = ruleValuesOf(context);
+    // `holdOutDifficultyOf` reads the rules `context` names, and a context without a version is the oldest ruleset's, so say which.
+    const step = holdOutDifficultyOf({ rulesVersion: context?.rulesVersion ?? CURRENT_RULESET_VERSION, coop: { difficulty } });
+    const nestHp = rulesetOf(context).CHARACTERS.nest.hp + step.nestHp;
+    const hatch = hatchClause(step.spawnThreat);
+    return `${hatch ? `${capitalise(hatch)} and have` : "Nests of"} ${nestHp} HP; the Shrine has ${SHRINE_HP + step.shrineHp} HP, plus ${SHRINE_HP_PER_PLAYER} for each of you.`;
+}
+
+/**
+ * What the enemy's line says where the rally comes on a timer rather than with
+ * a wave (rules version 13): when the next one is due, in battle round `round`.
+ * Nothing once no rally is left to come.
+ */
+export function rallyLineOf(rally: { banked: number; next?: number }, round: number): string | undefined {
+    if (rally.next === undefined) return undefined;
+    return rally.next === round + 1 ? 'Rally next round' : `Rally in round ${rally.next}`;
 }
 
 /** The letter a square's terrain is drawn with on the map: what the board styles it by. */
@@ -577,8 +621,8 @@ export function fighterStatus(fighter: Fighter): string[] {
 export { canAct } from "./rules";
 
 /** A character's AP as pips, one of `ACTION_POINTS` each, lit while unspent: the board and the units strip draw the same row. */
-export function apPips(fighter: Fighter): boolean[] {
-    return Array.from({ length: Math.max(fighter.maxAp ?? actionPointsOf(fighter), fighter.ap) }, (_, i) => i < fighter.ap);
+export function apPips(fighter: Fighter, context: RulesContext): boolean[] {
+    return Array.from({ length: Math.max(fighter.maxAp ?? actionPointsOf(fighter, context), fighter.ap) }, (_, i) => i < fighter.ap);
 }
 
 /**
@@ -593,8 +637,8 @@ export function facingOf(field: Pick<Battlefield, "width" | "height">, { square,
 }
 
 /** How full a character's HP bar is, 0–1 — or would be, were it to lose `lost` HP (gain, if negative), never below empty or past full. */
-export function hpFraction(fighter: Fighter, lost = 0): number {
-    return Math.min(1, Math.max(0, fighter.hp - lost) / maxHpOf(fighter));
+export function hpFraction(fighter: Fighter, context: RulesContext, lost = 0): number {
+    return Math.min(1, Math.max(0, fighter.hp - lost) / maxHpOf(fighter, context));
 }
 
 /** One line of the "why" behind a chance to hit: what moved it, and by how much. */
@@ -1422,9 +1466,27 @@ function timeline(field: Battlefield, events: readonly ToldEvent[], before: read
      * When the next thing lands, `lead` after it sets off: no sooner than the
      * last one landed, and far enough after it to be seen on its own.
      */
-    const beat = (lead = 0) => {
-        landed = landed === null ? lead : landed + Math.max(pace.cueStepMs, lead);
+    const beat = (lead = 0, step = pace.cueStepMs) => {
+        landed = landed === null ? lead : landed + Math.max(step, lead);
         return landed;
+    };
+    /**
+     * A warband's minions move together and strike one after another, quickly
+     * (§4.5): a plain move straight after a plain move by someone else starts
+     * with it (`swarm`, the walk before it began), and a minion's strike
+     * straight after another minion's lands at the least step the pace ever
+     * squeezes to. Decided from the events alone, so an action by one character
+     * — a move and its reactions, a Slash and Dash — plays as it always did.
+     */
+    let swarm: { before: number | null; end: number | null } | null = null;
+    let lastStriker: number | undefined;
+    /** The step to the next strike by `striker`: the quick one when another minion struck just before. */
+    const strikeStep = (striker: number) => {
+        const fighter = as.get(striker);
+        const minion = fighter !== undefined && isMinion(fighter, options);
+        const quick = !still && minion && lastStriker !== undefined && lastStriker !== striker;
+        lastStriker = minion ? striker : undefined;
+        return quick ? Math.min(pace.cueStepMs, MIN_CUE_STEP_MS) : pace.cueStepMs;
     };
     const text = (fighter: number, when: number, value: string, tone: HitTone, extra: Pick<TextCue, "label" | "mark" | "hpChange" | "from"> = {}) => {
         const square = at.get(fighter);
@@ -1487,7 +1549,14 @@ function timeline(field: Battlefield, events: readonly ToldEvent[], before: read
         switch (event.kind) {
             case "moved": {
                 const motion = event.via && MOTION_OF[event.via];
+                const previous = events[index - 1];
+                const joins = swarm !== null && previous?.kind === "moved" && previous.fighter !== event.fighter && !previous.via && !event.via;
+                // Together with the walk before: it starts where that one did, and what follows waits for the longest.
+                if (joins) landed = swarm!.before;
+                else swarm = { before: landed, end: null };
                 walk(event.fighter, event.path, motion);
+                if (joins) landed = landed === null ? swarm!.end : swarm!.end === null ? landed : Math.max(landed, swarm!.end);
+                swarm!.end = landed;
                 const arrived = walked.get(event.fighter) ?? landed ?? 0;
                 // A Leap comes down in a cloud of dust, and everyone beside it is hit as it does (`struck`, `via`).
                 if (motion === "leap" && event.path.length > 1) {
@@ -1506,10 +1575,10 @@ function timeline(field: Battlefield, events: readonly ToldEvent[], before: read
             case "shot": {
                 // The Mage's bolt, the Spitter's acid; anyone else who shoots has a bow.
                 const shooter = as.get(event.fighter)?.character;
-                const missile = (event.via && SHOT_VIA_MISSILE[event.via]) ?? (shooter && SHOT_MISSILE[shooter]) ?? "arrow";
+                const missile = (event.via && SHOT_VIA_MISSILE[event.via]) ?? (shooter && SHOT_MISSILE[artCharacterOf(shooter)]) ?? "arrow";
                 const to = at.get(event.target);
                 const flight = flightOf(event.fighter, to, missile);
-                const land = beat(flight);
+                const land = beat(flight, strikeStep(event.fighter));
                 shotAt = to;
                 // Thunder cracks where it strikes.
                 if (event.via === "thunder" && event.result !== "miss") burst("thunder", to, land);
@@ -1541,7 +1610,7 @@ function timeline(field: Battlefield, events: readonly ToldEvent[], before: read
                     text(event.target, start, minus(event.damage), "hit", { hpChange: -event.damage, from: at.get(event.fighter) });
                     break;
                 }
-                const land = beat(SLASH_MS);
+                const land = beat(SLASH_MS, strikeStep(event.fighter));
                 const square = at.get(event.target);
                 if (event.reaction) say(event.fighter, land - SLASH_MS, GUARD_WORD);
                 const from = at.get(event.fighter);
@@ -1607,7 +1676,7 @@ function timeline(field: Battlefield, events: readonly ToldEvent[], before: read
                     from = at.get(event.fighter);
                     if (from !== undefined) cues.push({ kind: "slash", square: event.at, striker: event.fighter, from, start: land - SLASH_MS, length: 2 * SLASH_MS });
                 } else {
-                    land = beat();
+                    land = beat(0, strikeStep(event.fighter));
                     from = at.get(event.fighter);
                     burst("acid", from, land, 1);
                 }
@@ -1886,12 +1955,12 @@ export interface Told {
  * aren't. With `still` the bar jumps at its cue, no chip drains and nothing is
  * knocked or lunged.
  */
-export function toldOf(cues: readonly BattleCue[], before: Fighter | undefined, fighter: Fighter, still: boolean): Told | null {
+export function toldOf(cues: readonly BattleCue[], before: Fighter | undefined, fighter: Fighter, still: boolean, context: RulesContext): Told | null {
     if (!before || !isStanding(fighter)) return null;
     const texts = cues.filter((cue): cue is TextCue => cue.kind === "text" && cue.fighter === fighter.id);
     const shoves = shovesOf(cues, fighter.id, still);
     if (texts.length === 0 && shoves.length === 0) return null;
-    const max = maxHpOf(fighter);
+    const max = maxHpOf(fighter, context);
     const blows = texts.filter(cue => cue.hpChange !== undefined).sort((a, b) => a.start - b.start);
     let level = before.hp;
     const steps = blows.map((cue, index): HpStep => {

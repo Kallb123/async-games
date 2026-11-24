@@ -19,7 +19,7 @@ import type { IReplayStep } from "@/utils/games/replay";
 import { factionById, type CharacterId } from "./characters";
 import type { IRealmArenaSpecificGameState } from "./RealmArenaModels";
 import { isRallyAction, type RallyChoice } from "./rally";
-import { areaDamage, allied, battleRounds, BLAST_EVENT_KINDS, ENEMY_SIDE, isCombatant, isStructure, isWarband, knockoutPoints, sideOf, squadHp, TEAM_SIDE, waveArrives, waveThemeOf, type BattleEvent, type BattleState, type Fighter } from "./rules";
+import { areaDamage, allied, battleRounds, BLAST_EVENT_KINDS, ENEMY_SIDE, isCombatant, isStanding, isStructure, isWarband, knockoutPoints, maxHpOf, nestsProduce, shrineOf, sideOf, spawnThemeOf, squadHp, TEAM_SIDE, waveArrives, waveThemeOf, warbandNests, type BattleEvent, type BattleState, type Fighter } from "./rules";
 
 /** What one player's characters of one kind did in a battle, pooled as their mastery is (§23.1). */
 export interface FightingRecord {
@@ -123,6 +123,16 @@ export interface HoldOutRecord {
     waves: WaveRecord[];
     standingPerRound: Map<string, number>[];
     battleRounds: number;
+    /**
+     * Only in a battle whose nests produce the enemy every round
+     * (realm-arena-hold-out.md §5.1): each of `waves` is a stage of the horde —
+     * a theme, from the round it began — rather than a wave that landed.
+     */
+    produced?: true;
+    /** The Shrine as the battle ended (§5.2), in that battle too. */
+    shrine?: { hp: number; maxHp: number };
+    /** The Brood's nests: how many stood at the end, of how many it had (§5.1), in that battle too. */
+    nests?: { standing: number; total: number };
 }
 
 const keyOf = (userId: string, character: CharacterId) => `${userId}\u0000${character}`;
@@ -168,6 +178,10 @@ export function battleRecorder(seats: readonly string[], sides?: BattleState["si
     let holdOut = false;
     const waves: WaveRecord[] = [];
     const standingPerRound: Map<string, number>[] = [];
+    /** The Shrine and the nests as the last step left them, in a battle whose nests produce the enemy (realm-arena-hold-out.md §5). */
+    let produced = false;
+    let shrine: HoldOutRecord["shrine"];
+    let nests: HoldOutRecord["nests"];
 
     const recordOf = (id: number | undefined): FightingRecord | undefined => {
         const fighter = id === undefined ? undefined : known.get(id);
@@ -308,13 +322,16 @@ export function battleRecorder(seats: readonly string[], sides?: BattleState["si
             // brought whoever of the enemy wasn't on the battlefield before.
             holdOut = gs.coop?.mission === "holdOut";
             if (holdOut) {
-                if (waves.length === 0) waves.push({ round: 0, arrived: 0, downed: new Map() });
-                for (let begun = round + 1; begun <= Math.min(gs.roundsPlayed, lastRound); begun++) {
-                    if (!waveArrives(begun + 1, lastRound + 1)) continue;
-                    // A faction with themes (§39.6) names its waves.
-                    const name = waveThemeOf(factionById(gs.coop?.enemy, gs), begun + 1)?.name;
-                    waves.push({ round: begun, arrived: 0, downed: new Map(), ...(name ? { name } : {}) });
-                }
+                produced = nestsProduce(gs.coop?.mission, gs);
+                // A new record starts as round `begun + 1` begins: with nests, each round the
+                // horde's theme differs from the round before's (realm-arena-hold-out.md §5.1);
+                // without, each round a wave is due (§39.6 names it by its theme).
+                const faction = factionById(gs.coop?.enemy, gs);
+                const nameOf = (index: number) => (produced ? spawnThemeOf(faction, index + 1, gs) : waveThemeOf(faction, index + 1))?.name;
+                const starts = (begun: number) => produced ? nameOf(begun) !== nameOf(begun - 1) : waveArrives(begun + 1, lastRound + 1);
+                const start = (begun: number) => { const name = nameOf(begun); waves.push({ round: begun, arrived: 0, downed: new Map(), ...(name ? { name } : {}) }); };
+                if (waves.length === 0) { const name = produced ? nameOf(0) : undefined; waves.push({ round: 0, arrived: 0, downed: new Map(), ...(name ? { name } : {}) }); }
+                for (let begun = round + 1; begun <= Math.min(gs.roundsPlayed, lastRound); begun++) if (starts(begun)) start(begun);
                 // A hatchling (§39.5) stands up in the middle of a turn: nobody brought it as a wave.
                 waves.at(-1)!.arrived += fighters.filter(fighter => isWarband(fighter.owner) && !known.has(fighter.id) && fighter.hatchedBy === undefined && !isStructure(fighter, context)).length;
             }
@@ -350,6 +367,12 @@ export function battleRecorder(seats: readonly string[], sides?: BattleState["si
                 const standing = (enemy: boolean) => fighters.filter(fighter => isCombatant(fighter, context) && isWarband(fighter.owner) === enemy).length;
                 standingPerRound[index] = new Map([[TEAM_SIDE, standing(false)], [ENEMY_SIDE, standing(true)]]);
             }
+            if (produced) {
+                const keep = shrineOf({ fighters });
+                shrine = keep ? { hp: keep.hp, maxHp: maxHpOf(keep, context ?? gs) } : undefined;
+                const brood = warbandNests(fighters, context);
+                nests = { standing: brood.filter(isStanding).length, total: brood.length };
+            }
             round = gs.roundsPlayed;
         },
 
@@ -368,6 +391,7 @@ export function battleRecorder(seats: readonly string[], sides?: BattleState["si
                     waves: waves.map(wave => ({ ...wave, downed: new Map(wave.downed), ...(wave.rallies ? { rallies: wave.rallies.map(rally => ({ ...rally })) } : {}) })),
                     standingPerRound: [...standingPerRound],
                     battleRounds: lastRound + 1,
+                    ...(produced ? { produced: true as const, ...(shrine ? { shrine: { ...shrine } } : {}), ...(nests ? { nests: { ...nests } } : {}) } : {}),
                 } : {}),
             };
         },

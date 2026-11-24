@@ -5,8 +5,8 @@ import PendingTag from '@/components/ui/PendingTag';
 import { rulesetOf } from '@/games/RealmArena/rulesets';
 import { fighterName } from '@/games/RealmArena/ui';
 import { CHARACTER_MARK } from '@/games/RealmArena/roster';
-import { RALLY_LOOK, rallyOptionsOf, rallyTotal, reinforcedHp, resupplyItems, type RallyAction, type RallyChoice } from '@/games/RealmArena/rally';
-import type { BattleState } from '@/games/RealmArena/rules';
+import { RALLY_LOOK, rallyHp, rallyOptionsOf, rallyTotal, reinforcedHp, resupplyItems, type RallyAction, type RallyChoice } from '@/games/RealmArena/rally';
+import { shrineOf, type BattleState } from '@/games/RealmArena/rules';
 import { andList, capitalise } from '@/utils/ui/text';
 
 /** The `target` a rally choice wears while it's in flight: its own row, and for a Reinforce the downed character it names. */
@@ -26,13 +26,15 @@ interface RealmArenaRallySheetProps {
 const RETURNS = "Who rejoins the fight? They return on a free square of your deployment zone with a full turn of AP to spend at once.";
 
 /** The trailing verb of each choice's row. */
-const TAG: Readonly<Record<RallyChoice, string>> = { rally: 'Rally', reinforce: 'Choose', resupply: 'Resupply' };
+const TAG: Readonly<Record<RallyChoice, string>> = { rally: 'Rally', reinforce: 'Choose', resupply: 'Resupply', mend: 'Mend' };
 
 /**
- * A fresh wave has landed and the viewer owes the team a rally choice
- * (docs/games/realm-arena.md §39.4): the sheet shows it alone, ahead of every
- * action, as three rows. Reinforce opens a second list to pick whom it brings
- * back, with a way back to the three.
+ * The viewer owes the team a rally choice (docs/games/realm-arena.md §39.4): a
+ * wave has landed, or — where nests produce the enemy — a rally earned on the
+ * schedule or by breaking a warband is taken (realm-arena-hold-out.md §5.3). The
+ * sheet shows it alone, ahead of every action, as a row each (Mend only where
+ * the team has a Shrine). Reinforce opens a second list to pick whom it brings
+ * back, with a way back to the choices.
  */
 export default function RealmArenaRallySheet({ battle, seats, player, pendingTarget, onChoose }: RealmArenaRallySheetProps) {
     const [picking, setPicking] = useState(false);
@@ -77,6 +79,10 @@ export default function RealmArenaRallySheet({ battle, seats, player, pendingTar
             case 'resupply': {
                 const names = resupplyItems(battle, player).map(item => ITEMS[item].name);
                 return names.length > 0 ? `Gets back: ${andList(names)}` : 'Each standing character gets back the item it mustered with';
+            }
+            case 'mend': {
+                const shrine = shrineOf(battle);
+                return shrine ? `The Shrine regains ${rallyHp(shrine, battle) - shrine.hp} HP` : 'The Shrine is gone';
             }
         }
     };

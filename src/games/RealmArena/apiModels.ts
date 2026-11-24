@@ -1,6 +1,6 @@
 import type { IGameDataResponse } from "@/utils/apiModels/GameDataApi";
 import type { RealmArenaMapId } from "./maps";
-import type { Fighter, FogGhost, MusterPick, ToldEvent } from "./rules";
+import type { Fighter, FogGhost, HoldOutStar, MusterPick, ToldEvent } from "./rules";
 import type { MasterySnapshot } from "./mastery";
 import type { Square } from "@/utils/games/battlefield/terrain";
 import type { RealmArenaPhase, StoredBattleSize, StoredDifficulty } from "./RealmArenaModels";
@@ -77,6 +77,27 @@ export interface IRealmArenaSpecificGameStateResponse {
      * unseen — a nest names the Swarm.
      */
     nestSquares?: Square[];
+    /**
+     * The team's rallies where nests produce the enemy (realm-arena-hold-out.md
+     * §5.3): how many are banked, and the round the next is taken in, if one is
+     * to come before the cap (`nextRallyOf`). Both public. Absent in every other
+     * battle, and once it is over.
+     */
+    rally?: { banked: number; next?: number };
+    /**
+     * How many nests still stand, every warband's, where nests produce the
+     * enemy (realm-arena-hold-out.md §6), for the scoreboard: public, as
+     * `enemiesDefeated` is, though one can fall out of the team's sight:
+     * §6.1 says what that gives away in fog. Absent in every other battle,
+     * and during the muster.
+     */
+    nestsLeft?: number;
+    /**
+     * The stars a won Hold Out earned (realm-arena-hold-out.md §6), in
+     * `HOLD_OUT_STARS` order. Only once the battle is over, and absent on a loss
+     * and in every other battle.
+     */
+    stars?: HoldOutStar[];
     /**
      * Only once the battle is over: every nest (§39.7) was down at once at some
      * point with a wave still to land. Absent otherwise, and never sent mid-battle

@@ -16,7 +16,7 @@ import { nextRankXp, rankOf, type PlayerMastery } from "./mastery";
  * (docs/games/realm-arena.md §17.3): one glyph, drawn on a disc in its owner's
  * colour, so two of the six never read alike at a glance.
  */
-export const CHARACTER_MARK: Readonly<Record<CharacterId, string>> = {
+const MARKS = {
     manAtArms: "🗡️",
     knight: "🛡️",
     archer: "🏹",
@@ -37,6 +37,17 @@ export const CHARACTER_MARK: Readonly<Record<CharacterId, string>> = {
     carapaceBrute: "🪨",
     bileLobber: "🤮",
     nest: "🪺",
+    shrine: "⛩️",
+} satisfies Partial<Record<CharacterId, string>>;
+
+export const CHARACTER_MARK: Readonly<Record<CharacterId, string>> = {
+    ...MARKS,
+    // The Brood's wear the Swarm characters' marks they're drawn as (realm-arena-hold-out.md §4.3).
+    broodSkitterling: MARKS.skitterling,
+    broodSpitter: MARKS.spitter,
+    broodBloater: MARKS.bloater,
+    broodRavager: MARKS.ravager,
+    broodBroodmother: MARKS.broodmother,
 };
 
 /** Every character, in §13.6's table's order. */
