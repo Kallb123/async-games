@@ -87,8 +87,9 @@ export interface IRealmArenaSpecificGameStateResponse {
     /**
      * How many nests still stand, every warband's, where nests produce the
      * enemy (realm-arena-hold-out.md §6), for the scoreboard: public, as
-     * `enemiesDefeated` is, though one can fall out of the team's sight
-     * (§5.6). Absent in every other battle, and during the muster.
+     * `enemiesDefeated` is, though one can fall out of the team's sight:
+     * §6.1 says what that gives away in fog. Absent in every other battle,
+     * and during the muster.
      */
     nestsLeft?: number;
     /**

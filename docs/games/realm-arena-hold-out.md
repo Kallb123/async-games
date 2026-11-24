@@ -624,10 +624,18 @@ nests' are today.
   loss has none, and a version-12 battle never does.
 - **On the wire.** `stars` only on the finished response. `nestsLeft`, how many
   nests still stand over every warband, to every viewer throughout the battle,
-  fog or not, for the scoreboard. It is one more of §5.6's accepted channels:
-  a nest that falls out of the team's sight (a burn tick, the Brood's own
-  burst or bile) drops the count, as such deaths have always moved
-  `enemiesDefeated`. The Shrine's HP needed nothing new: every view holds it.
+  fog or not, for the scoreboard. It is a fourth channel beside §5.6's three,
+  accepted as `enemiesDefeated` is (a `croupier` pass). What it gives a fogged
+  team that they didn't have: a nest falling out of their sight that isn't its
+  warband's last (a burn or poison tick as its warband's turn begins, the
+  Brood's own burst or bile, a blast of the team's reaching past its sight),
+  told on the next fetch after the command that felled it rather than guessed
+  from fighter ids; and so, subtracting the falls they saw from the public
+  nest squares, often which nest it was, and the Brood's spawn rate. It gives
+  no nest's HP, square or warband, and nothing of the horde: the banked threat
+  stays the server's. Closing it would mean counting only the falls the team
+  has seen, which needs a memory of sightings per team. The Shrine's HP needed
+  nothing new: every view holds it.
 - **The difficulty's steps** are `HOLD_OUT_DIFFICULTY` in the ruleset, read
   through `holdOutDifficultyOf`: Easy −1 threat a nest a turn, nests 3 HP
   weaker and the Shrine 10 HP stronger; Hard the opposite; Normal nothing
@@ -653,23 +661,41 @@ nests' are today.
   stages by their theme ("Enemies downed by stage", "The Bile begins").
 - **Achievements**, ids kept: *Three Stars* (`realmarena.three-stars`) and
   *Three Stars on Hard* (`realmarena.three-stars-hard`), read off `stars` and
-  `difficulty`. *Broken Tide* is now breaking the Brood by the end of round 10
-  (`round` on the finished response is the round it ended in), and *Scorched
-  Earth* breaking it with every character of the team standing; the old
-  criteria and the helper behind them are gone. Before release, confirm in the
-  database that nobody has earned *Broken Tide*, as §6 asks: no admin page
-  shows it. *Regicide*'s description drops "of the Swarm", since the Queen is
-  the Brood's from version 13. `nestsCleared` stays on the state and the
-  response, for version-12 battles, with nothing reading it.
+  `difficulty`. *Broken Tide* is breaking the Brood by the end of round 10
+  (`BROKEN_TIDE_BY_ROUND`, fixed rather than read off `HOLD_OUT_ROUNDS`, so
+  PR 5's balance should revisit it; `round` on the finished response is the
+  round the battle ended in), and *Scorched Earth* breaking it with every
+  character of the team standing. Like the copy, the catalogue switches on the
+  current ruleset (`achievementsFor`): until version 13 is released it holds
+  version 12's *Broken Tide* and *Scorched Earth* and no *Three Stars*, so no
+  profile shows an achievement nobody can earn, and `nestsCleared` stays on
+  the response for version 12's *Scorched Earth*. PR 5 deletes the version-12
+  branch, `nestsCleared` with it. *Regicide*'s description drops "of the
+  Swarm", since the Queen is the Brood's from version 13; its meaning is
+  unchanged.
+- **Before PR 5 releases** — the moment *Broken Tide* and *Scorched Earth*
+  change in place — confirm in the database that nobody has earned either
+  (`AchievementUnlock` rows for `realmarena.broken-tide` and
+  `realmarena.scorched-earth`). *Scorched Earth* shipped with version 12, and
+  *Broken Tide* long before, so this is a real check, not a formality: an id
+  someone holds needs a new id rather than new criteria (`docs/achievements.md`
+  §11). No admin page shows it.
+- **PR 5's What's new line** names the stars, *Three Stars* and *Three Stars
+  on Hard*, and what *Broken Tide* and *Scorched Earth* ask now.
+- **The result's schema** declares `produced`, `shrine`, `nests` and `stars`,
+  so a result recorded before them reads them back absent.
 - **Copy that waits for the release.** The guide's co-op section
   (`coopText`, `brokenBroodText`), the setup screen's Hold Out, battlefield and
   difficulty lines, and the tutorial's new *Break the Brood* step all switch on
   whether the **current** ruleset's nests produce the enemy
-  (`brokenBroodHoldOut`), so today's players still read version 12's. Each is
+  (`nestsProduce("holdOut")`), so today's players still read version 12's. Each is
   built from the rule values it's given, and `holdOutCopy.test.ts` renders it
   at version 13. PR 5 deletes the version-12 branches. The tutorial's step
-  stands on the stat row (`breakTheBrood`), and *The centre* is now shown only
-  in a battle that has one (`centre`).
+  stands on the stat row (`breakTheBrood`) and reads version 13's round cap,
+  since only a version-13 battle raises it. *The centre* is now shown only in a
+  battle that has one (`centre`), which is live at once: version 12's Hold Out
+  no longer points at a centre it doesn't score. Nothing else of this PR is
+  seen before PR 5.
 
 ---
 

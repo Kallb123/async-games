@@ -3426,6 +3426,14 @@ first, written to `docs/achievements.md` §11's checklist: an
 | `realmarena.unbroken` | Unbroken | Win a battle of Hold Out with every one of the team's characters standing at the end | match, `end` |
 | `realmarena.regicide` | Regicide | Win a battle of Hold Out in which a Brood Queen of the Swarm was downed (§39.5) | match, `end` |
 | `realmarena.scorched-earth` | Scorched Earth | Win a battle of Hold Out against the Swarm after destroying every nest at once, before a wave could grow them back (§39.7) | match, `end` |
+| `realmarena.three-stars` | Three Stars | Earn all three stars in a battle of Hold Out ([`realm-arena-hold-out.md`](./realm-arena-hold-out.md) §6) | match, `end` |
+| `realmarena.three-stars-hard` | Three Stars on Hard | Earn all three stars in a battle of Hold Out on Hard (hold-out §6) | match, `end` |
+
+From rules version 13's release, *Broken Tide* is breaking the Brood by the end
+of round 10 and *Scorched Earth* breaking it with every character of the team
+standing, and the two *Three Stars* rows join the catalogue
+([`realm-arena-hold-out.md`](./realm-arena-hold-out.md) §6, §6.1). Until then
+the catalogue reads as above, on the current ruleset as the guide does.
 
 The titles may change; the ids never do (§11). PR 5 adds *Against the Odds*
 (§30.5). The four Hold Out rungs after Last Stand came later, so the mission
