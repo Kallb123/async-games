@@ -21,7 +21,7 @@
 // battle is a few seconds of the planner's arithmetic and nothing else. A
 // battle's dice come from its seed, so the same seeds under two versions of
 // the rules differ only where the rules do — and where a warband's turn ran
-// into its two-second deadline, which a busy machine makes likelier.
+// into its deadline (`WARBAND_DEADLINE_MS`), which a busy machine makes likelier.
 //
 // A change to the planner itself changes how both sides play. `--team-planner`
 // names a git ref whose planner (`src/games/RealmArena/ai.ts` there) plays the

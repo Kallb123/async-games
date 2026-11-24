@@ -726,7 +726,7 @@ nests' are today.
 | 2 | The Brood: minions, threat, the swarm step, playback (§4) — **built** (§4.7) | Rules 13, unreleased |
 | 3 | Nests that produce, the Shrine, Mend, the rally's two triggers, the new ending and its bonus, Hold Out against the Brood only (§5) — **built** (§5.6) | Rules 13, unreleased |
 | 4 | Stars, the result, achievements, the guide and setup copy (§6) — **built** (§6.1) | Rules 13, unreleased |
-| 5 | The harness's raid policy, balance, release, What's new (§7) | Rules 13 released |
+| 5 | The harness's raid policy and star report, a full-horde bench, balance, the database check, deleting version 12's branches, release, What's new (§7, §8.2) | Rules 13 released |
 
 PR 1 stands alone and ships first: it gives version 12's warbands their time back
 today. PRs 2–5 follow `realm-arena.md` §39.1's pattern. The catalogue
@@ -767,7 +767,65 @@ still edit it, and tests and the harness fight at version 13 through
    the Brood has been played.
 2. **The background runner's budget:** whether `after()` gives the warbands
    enough time, or they need their own route (§3.2). Measured once PR 1 runs in
-   production.
+   production, which it now does (§8.2).
+
+### 8.2 PR 5's list
+
+PRs 1–4 were checked against §3–§6 before PR 5 began. All of it was built,
+except that the rally sheet still opened every rally with "A fresh wave has
+landed". It now names the rally the team earned wherever there is a Shrine
+(`rallyReason`, `rally.ts`). What PR 5 has to do, beyond what §7 says:
+
+- **The harness (`npm run ra-balance`).**
+  - *The raid policy* (§7) comes first. A trial run at version 13 (Solo and
+    two players, two battles each) ended every battle at the round cap, so
+    tuning without it would tune a mission nobody can win early.
+  - *Stars in the report.* §7's targets are star rates, and the report has no
+    column for them. It needs each battle's stars (Held, Broke the Brood,
+    Unscathed), how often the Brood was broken and by which round, and the
+    Shrine's HP at the end. The endings line also needs to tell the Shrine
+    falling apart from the team being overrun.
+  - *`--enemies` is meaningless for Hold Out at version 13*: `HOLD_OUT_ENEMY`
+    makes every Hold Out the Brood's, so the default run fights the same
+    battle once per faction under three labels ("vs Swarm" and so on). Under
+    rules with `HOLD_OUT_ENEMY`, the harness should fight Hold Out once,
+    labelled the Brood, and keep `--enemies` for Hold the Centre.
+  - *What `--set` can't reach.* It already takes every numeric rule
+    (`RULES.SPAWN_THREAT` for the slope check of §7, `STARTING_HORDE`,
+    `SHRINE_HP`, `ROUND_BONUS` and the rest) and any character's HP
+    (`CHARACTERS.nest.hp`). It can't change a character's `threat` or
+    `points`, or `HOLD_OUT_DIFFICULTY`'s steps, which the Brood's prices and
+    Easy and Hard are tuned by. Widen it to those, or tune them by editing the
+    catalogue between runs.
+- **Rendering with a full horde** (§4.4, §4.7). Every `ra-bench` fixture is a
+  version 12 Hold Out (`bench/realmarena/fixture.ts` builds against the
+  Renegades). Add a version 13 fixture with every warband at `HORDE_CAP`,
+  measure it on the isometric and 3D boards, and check a phone can still read
+  the board before `HORDE_CAP` is set.
+- **Balance**, to §7's targets, then revisit `BROKEN_TIDE_BY_ROUND` (§6.1)
+  against the round a good team breaks the Brood in. Record the runs in
+  [`realm-arena-balance.md`](./realm-arena-balance.md), in a version 13 section
+  of their own.
+- **The database check** (§6.1). Before *Broken Tide* and *Scorched Earth*
+  change, look for `AchievementUnlock` rows for `realmarena.broken-tide` and
+  `realmarena.scorched-earth`. If anyone holds either, that achievement needs a
+  new id rather than new criteria. It needs production access: no admin page
+  shows it.
+- **Delete version 12's branches**: the guide's (`guide.ts`), the
+  achievements' (`achievementsFor`), the setup screen's and the tutorial's
+  copy that switch on the current ruleset's `nestsProduce("holdOut")`.
+  `nestsCleared` comes off the **response** only. The state field stays: a
+  version 12 battle still in progress at the release reads it until it ends
+  (`RealmArenaLogic.ts`, its nests regrowing).
+- **Release**: `CURRENT_RULESET_VERSION` to 13 (`rulesets.ts`). No command
+  version bump should be needed (`docs/command-versions.md`): an old tab's
+  setup screen still offers an enemy for Hold Out, which the server already
+  ignores under `HOLD_OUT_ENEMY`, and no command means anything different.
+  Check that against the diff before releasing.
+- **What's new**: one line for the lot (§6.1 says what it names).
+- **Open question 2** (§8.1) can be answered now that PR 1 is live: search the
+  production logs for "stopped short of time" (`playComputerTurns.ts`), the
+  warning a runner logs when `after()` ran out before the warbands finished.
 
 ---
 
@@ -1038,3 +1096,4 @@ A `rulebook` pass checks this against `docs/achievements.md`.
 | 0.6 | PR 2 built (§4.7): the Brood in rules version 13, unreleased, with its minions, threat and horde caps, the swarm step and its playback. Until nests produce it, it is bought in threat on version 12's waves. |
 | 0.7 | PR 3 built (§5.6): nests that produce the Brood every round, the Shrine and Mend, the rally earned on a schedule and by breaking a warband, the new ending and its bonus (60 a round, not 50), and Hold Out against the Brood alone, all in rules version 13, unreleased. |
 | 0.8 | PR 4 built (§6.1): stars kept as a won Hold Out ends and sent once it's over, the difficulty's steps for the spawn, the nests and the Shrine, the nests left and the Shrine's HP on the scoreboard, the result by the horde's stages, *Three Stars* and *Three Stars on Hard*, *Broken Tide* and *Scorched Earth* for breaking the Brood, and the guide's, setup's and tutorial's copy, live once version 13 is current. |
+| 0.9 | PRs 1–4 checked against the plan before PR 5: the rally sheet no longer says a wave landed where there is a Shrine. PR 5's list spelt out (§8.2): the harness's star report and its one Brood scenario, a full-horde bench fixture, the database check, what of version 12 to delete and what to keep, and the runner's budget read from the logs. |

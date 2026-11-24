@@ -93,6 +93,16 @@ const usedUp = (fighter: Fighter, seat: string): boolean =>
 const resuppliable = (state: Pick<BattleState, "fighters">, seat: string): Fighter[] => state.fighters.filter(fighter => usedUp(fighter, seat));
 
 /**
+ * What brought the rally, as the turn sheet opens it (realm-arena-hold-out.md
+ * §5.3): a wave landing, or — where the team has a Shrine, so nests produce the
+ * enemy and no wave ever lands — a rally the team earned on the schedule or by
+ * breaking a warband.
+ */
+export function rallyReason(state: Pick<BattleState, "fighters">): string {
+    return shrineOf(state) ?"Your team has earned a rally." : "A fresh wave has landed.";
+}
+
+/**
  * Each of the choices for `seat`, in `RALLY_CHOICES` order, with whether
  * it would do anything. Rally is always there; Reinforce needs someone down and
  * a free square in the seat's deployment zone; Resupply needs someone standing

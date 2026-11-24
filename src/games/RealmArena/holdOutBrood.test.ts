@@ -7,7 +7,7 @@ import { battlefieldById } from "./maps";
 import { gameStateToModel, type RealmArenaSettings } from "./RealmArenaModels";
 import { nextRallyOf, nextWaveOf, RealmArenaAct, waveOf } from "./RealmArenaLogic";
 import { act, ACTION_POINTS, afflicted, areaAround, check, fixedRolls, holdOutStars, hordeSpawn, isCombatant, isMinion, isStanding, isStructure, isWarband, knockoutPoints, newFighter, shrineOf, spawnThemeOf, spawnThreatOf, viewOf, warbandOwner, type Action, type BattleState, type Fighter } from "./rules";
-import { rallyOptionsOf } from "./rally";
+import { rallyOptionsOf, rallyReason } from "./rally";
 import { ruleValuesOf, rulesetFor } from "./rulesets";
 import { swarmAction, swarmMemo } from "./swarm";
 import { actBy, cmd, endTurnBy, makeGame, musterAll, play, playOne, playScriptedBattle, recordedWarbandActions, responseFor, warbandTurnBy, type RealmArenaTestGame } from "./testFixtures";
@@ -808,5 +808,11 @@ describe("rally options (§5.3)", () => {
         expect(mend()).toEqual({ choice: "mend", available: true });
         const without = { ...battle, fighters: battle.fighters.filter(one => one.character !== "shrine") };
         expect(rallyOptionsOf(without, TEAM, "a").map(option => option.choice)).not.toContain("mend");
+    });
+
+    it("opens with the rally the team earned, never a wave landing, where there is a Shrine", async () => {
+        const fighters = fightersOf(await mustered());
+        expect(rallyReason({ fighters })).toBe("Your team has earned a rally.");
+        expect(rallyReason({ fighters: fighters.filter(one => one.character !== "shrine") })).toBe("A fresh wave has landed.");
     });
 });
