@@ -1,8 +1,11 @@
 import { describe, expect, it } from "vitest";
+import { battleOf, makeGame, musterAll } from "../../src/games/RealmArena/testFixtures";
 import { nextAction } from "../../src/games/RealmArena/ai";
+import type { HoldOutStar } from "../../src/games/RealmArena/rules";
+import { holdOutDifficultyOf, movementOf } from "../../src/games/RealmArena/rules";
 import { ruleValuesOf, rulesetFor } from "../../src/games/RealmArena/rulesets";
 import {
-    applyOverrides, formatReport, parseOverrides, percentile, scenarioKey, settingsOf, simulateBattle, summarise, summariseAll, wilson,
+    applyOverrides, formatReport, parseOverrides, percentile, raidersOf, scenarioKey, settingsOf, simulateBattle, summarise, summariseAll, wilson,
     type BalanceScenario, type BattleSample,
 } from "./realmArenaBalance";
 
@@ -36,6 +39,10 @@ describe("the balance harness's scenarios", () => {
         // The rally policy (§39.4) is the default and unsaid; Rally always is named.
         expect(scenarioKey({ ...SOLO, rules: 12, rally: "policy" })).toBe("1 player (Solo) vs Swarm · Hold Out (Ruined Fort) · rules v12");
         expect(scenarioKey({ ...SOLO, rules: 12, rally: "always" })).toBe("1 player (Solo) vs Swarm · Hold Out (Ruined Fort) · rules v12, rally always");
+        // The raid policy is the default where nests produce the enemy and unsaid; the planner alone and another number of raiders are named.
+        expect(scenarioKey({ ...SOLO, rules: 13, teamPolicy: "planner" })).toBe("1 player (Solo) vs Swarm · Hold Out (Ruined Fort) · rules v13, team policy planner");
+        expect(scenarioKey({ ...SOLO, rules: 13, teamPolicy: "raid", raiders: 2 })).toBe(scenarioKey({ ...SOLO, rules: 13 }));
+        expect(scenarioKey({ ...SOLO, rules: 13, raiders: 3 })).toBe("1 player (Solo) vs Swarm · Hold Out (Ruined Fort) · rules v13, 3 raiders");
         // The temperaments (§39.8) are on by default and unsaid; off is named.
         expect(scenarioKey({ ...SOLO, rules: 12, temperaments: "off" })).toBe("1 player (Solo) vs Swarm · Hold Out (Ruined Fort) · rules v12, temperaments off");
     });
@@ -133,6 +140,83 @@ describe("the balance harness's statistics", () => {
     });
 });
 
+describe("the balance harness's raid policy and stars (rules 13)", () => {
+    const BROOD: BalanceScenario = { ...SOLO, enemy: "brood", size: "small", rules: 13 };
+
+    it("raids with each player's fastest characters, ties by id, and never a nest-less version's", async () => {
+        const game = makeGame(["p1"], {}, { rulesVersion: 13, coop: { enemy: "brood", mission: "holdOut" } });
+        await musterAll(game);
+        const battle = battleOf(game);
+        const raiders = raidersOf(battle, "p1");
+        expect(raiders).toHaveLength(2);
+        const speeds = battle.fighters.filter(fighter => fighter.owner === "p1").map(fighter => movementOf(fighter, battle)).sort((a, b) => b - a);
+        expect(raiders.map(fighter => movementOf(fighter, battle))).toEqual(speeds.slice(0, 2));
+        expect(raidersOf(battle, "p1", 1)).toEqual(raiders.slice(0, 1));
+        expect(raidersOf(battle, "nobody")).toEqual([]);
+    }, 30_000);
+
+    it("fights a whole battle by either policy, keeping what a Hold Out came to, and the raiders reach the nests", async () => {
+        const raid = await simulateBattle(BROOD, 1);
+        const planner = await simulateBattle({ ...BROOD, teamPolicy: "planner" }, 1);
+        for (const battle of [raid, planner]) {
+            expect(battle.stars).toBeDefined();
+            expect(battle.shrineMax).toBeGreaterThan(0);
+            expect(battle.nestsLeft).toBeGreaterThanOrEqual(0);
+            expect(battle.broodBroken).toBe(battle.nestsLeft === 0);
+            expect(battle.brokeRound !== undefined).toBe(battle.won && battle.broodBroken);
+        }
+        // Nests are only ever downed by someone walking to them: the planner's team never does, so a raid that hurt none would be no raid.
+        expect(raid.nestsLeft).toBeLessThan(raid.won ? 1 : 100);
+        expect(raid.scenario).toBe(scenarioKey(BROOD));
+        expect(planner.scenario).toBe(scenarioKey({ ...BROOD, teamPolicy: "planner" }));
+    }, 60_000);
+
+    it("leaves a version-12 sample without stars", async () => {
+        const old = await simulateBattle({ ...SOLO, size: "small", rules: 12 }, 3);
+        expect(old.stars).toBeUndefined();
+        expect(old.shrineHp).toBeUndefined();
+    }, 60_000);
+
+    it("keeps the Shrine falling apart from the team being overrun", () => {
+        const stats = summarise([
+            sample({ detail: "the Shrine fell in round 7" }),
+            sample({ detail: "the Shrine fell in round 9" }),
+            sample({ detail: "overrun in round 5" }),
+            sample({ won: true, detail: "broke the Brood in round 8" }),
+            sample({ won: true, detail: "held the Shrine for all 15 rounds" }),
+        ]);
+        expect(stats.endings).toEqual([
+            { detail: "the Shrine fell", count: 2 }, { detail: "overrun", count: 1 }, { detail: "broke the Brood", count: 1 }, { detail: "held the Shrine for all 15 rounds", count: 1 },
+        ]);
+    });
+
+    it("adds the stars up, and leaves a report without them when no battle has any", () => {
+        const won = (stars: HoldOutStar[], extra: Partial<BattleSample> = {}) => sample({ won: true, detail: "held the Shrine for all 15 rounds", stars, broodBroken: false, shrineHp: 20, shrineMax: 30, nestsLeft: 2, ...extra });
+        const stats = summarise([
+            won(["held", "broke", "unscathed"], { detail: "broke the Brood in round 8", broodBroken: true, brokeRound: 8, shrineHp: 30, nestsLeft: 0 }),
+            won(["held", "unscathed"], { shrineHp: 25 }),
+            won(["held"], { shrineHp: 10 }),
+            sample({ detail: "the Shrine fell in round 9", stars: [], shrineHp: 0, shrineMax: 30, nestsLeft: 3, broodBroken: false }),
+        ]);
+        expect(stats.hold!.atLeast.map(r => r.rate)).toEqual([0.75, 0.5, 0.25]);
+        expect(stats.hold!.byStar.held.rate).toBe(0.75);
+        expect(stats.hold!.byStar.broke.rate).toBe(0.25);
+        expect(stats.hold!.byStar.unscathed.rate).toBe(0.5);
+        expect(stats.hold).toMatchObject({ brokeMean: 8, brokeMedian: 8, shrineHpMean: 16.25, shrineMax: 30, nestsLeftMean: 1.75 });
+        expect(stats.hold!.broken.rate).toBe(0.25);
+        const report = formatReport([stats]);
+        expect(report).toContain("Broke the Brood");
+        expect(report).toContain("| 75% (30%–95%) | 50% (15%–85%) | 25% (5%–70%) |");
+        // A version-12 run's report has no star table.
+        expect(summarise([sample({})]).hold).toBeUndefined();
+        expect(formatReport([summarise([sample({})])])).not.toContain("★");
+    });
+
+    it("reads the difficulty's steps from the version fought", () => {
+        expect(holdOutDifficultyOf({ rulesVersion: 13, coop: { difficulty: "hard" } })).toEqual({ spawnThreat: 1, nestHp: 3, shrineHp: -10 });
+    });
+});
+
 describe("the balance harness's overrides (--set)", () => {
     it("reads PATH=NUMBER pairs in path order and refuses anything else", () => {
         expect(parseOverrides("RULES.NEST_POINTS=10, CHARACTERS.broodQueen.hp=24,RULES.WAVE_GROWTH_POINTS=25", 12))
@@ -140,8 +224,32 @@ describe("the balance harness's overrides (--set)", () => {
         // A rule that is null in the version fought isn't a number there.
         expect(() => parseOverrides("RULES.BANK_CAP=3", 8)).toThrow(/numeric rule/);
         for (const bad of ["RULES.NOPE=1", "RULES.COVER_PENALTY=1", "RULES.ARMOUR=x", "RULES.ARMOUR=", "RULES.ARMOUR=Infinity", "RULES.ARMOUR",
-            "CHARACTERS.nobody.hp=3", "CHARACTERS.knight.points=3", "CHARACTERS.knight.hp=0", "ABILITIES.heal.hp=3", "RULES.ARMOUR=1,RULES.ARMOUR=2"]) {
+            "CHARACTERS.nobody.hp=3", "CHARACTERS.knight.threat=3", "CHARACTERS.knight.points=-3", "CHARACTERS.knight.threat=0", "CHARACTERS.knight.hp=0", "ABILITIES.heal.hp=3", "RULES.ARMOUR=1,RULES.ARMOUR=2"]) {
             expect(() => parseOverrides(bad, 12), bad).toThrow(/--set/);
+        }
+    });
+
+    it("reaches a character's threat and points and the difficulty's steps, in the version that has them", () => {
+        expect(parseOverrides("CHARACTERS.carapaceBrute.threat=9,CHARACTERS.carapaceBrute.points=0,RULES.HOLD_OUT_DIFFICULTY.hard.nestHp=-2.5", 13))
+            .toEqual({ "CHARACTERS.carapaceBrute.points": 0, "CHARACTERS.carapaceBrute.threat": 9, "RULES.HOLD_OUT_DIFFICULTY.hard.nestHp": -2.5 });
+        for (const bad of ["CHARACTERS.carapaceBrute.threat=0", "CHARACTERS.carapaceBrute.points=-1", "CHARACTERS.knight.threat=2", "CHARACTERS.nobody.threat=2",
+            "RULES.HOLD_OUT_DIFFICULTY.brutal.nestHp=1", "RULES.HOLD_OUT_DIFFICULTY.hard.nope=1", "RULES.HOLD_OUT_DIFFICULTY.hard=1", "RULES.HOLD_OUT_DIFFICULTY.hard.nestHp=x"]) {
+            expect(() => parseOverrides(bad, 13), bad).toThrow(/--set/);
+        }
+        // Version 12 has no HOLD_OUT_DIFFICULTY, and its characters no threat.
+        expect(() => parseOverrides("RULES.HOLD_OUT_DIFFICULTY.hard.nestHp=1", 12)).toThrow(/no HOLD_OUT_DIFFICULTY/);
+        expect(() => parseOverrides("CHARACTERS.broodQueen.threat=3", 12)).toThrow(/no threat/);
+        try {
+            applyOverrides({ rules: 13, set: { "CHARACTERS.carapaceBrute.threat": 9, "CHARACTERS.carapaceBrute.points": 4, "RULES.HOLD_OUT_DIFFICULTY.hard.nestHp": 7 } });
+            expect(rulesetFor(13).CHARACTERS.carapaceBrute).toMatchObject({ threat: 9, points: 4 });
+            expect(rulesetFor(13).CHARACTERS.carapaceBrute.hp).toBe(rulesetFor(12).CHARACTERS.carapaceBrute.hp);
+            expect(holdOutDifficultyOf({ rulesVersion: 13, coop: { difficulty: "hard" } })).toEqual({ spawnThreat: 1, nestHp: 7, shrineHp: -10 });
+            expect(holdOutDifficultyOf({ rulesVersion: 13, coop: { difficulty: "easy" } })).toEqual({ spawnThreat: -1, nestHp: -3, shrineHp: 10 });
+            applyOverrides({ rules: 13 });
+            expect(rulesetFor(13).CHARACTERS.carapaceBrute.threat).toBe(12);
+            expect(holdOutDifficultyOf({ rulesVersion: 13, coop: { difficulty: "hard" } }).nestHp).toBe(3);
+        } finally {
+            applyOverrides({});
         }
     });
 
