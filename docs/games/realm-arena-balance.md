@@ -668,7 +668,7 @@ It helps Solo and two players and does nothing for three or four, who lose
 later (round 8–9 rather than 7–8) but still lose. Watched, a team of three on
 the Sacked Fort loses three quarters of its characters by round 3: the raiders
 take the near nests, along the edge they start by, while the three starting
-hordes there (each four minions and a Ravager) bring them down before any cap
+hordes there (four to six minions and a Ravager each) bring them down before any cap
 is reached, and every warband's other nest is on the far edge. The cap changes
 what a nest is worth, not that opening.
 
