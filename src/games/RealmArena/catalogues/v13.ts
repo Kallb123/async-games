@@ -1,8 +1,6 @@
 // Rules version 13 (realm-arena-hold-out.md §4–§6): Hold Out rethought, against
-// the Brood. Registered but not yet `CURRENT_RULESET_VERSION` (§8): nobody can
-// create a battle under it until the last of its PRs, so it isn't shipped and
-// each PR may still edit it; tests and the harness fight at it through
-// `rulesVersion`. See ../rulesets.ts.
+// the Brood. Released (§8) as `CURRENT_RULESET_VERSION`: every battle created
+// now is under it, so it is shipped and never edited. See ../rulesets.ts.
 import type { Ability, AbilityId, Character, CharacterId, Faction, FactionId } from "../characters";
 import { catalogueV12 } from "./v12";
 import { HOLD_OUT_SITES_V13 } from "./holdOutSitesV13";

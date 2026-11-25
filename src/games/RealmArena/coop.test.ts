@@ -91,7 +91,7 @@ describe("co-op's setting (§29.8)", () => {
 
 describe("Hold Out (§30.3)", () => {
     it("refills a warband to its ready-made strength before any wave has landed, using fresh ids and free deployment squares", async () => {
-        const game = makeGame(["a", "b"], {}, { coop: { enemy: "realm", mission: "holdOut" } });
+        const game = makeGame(["a", "b"], {}, { rulesVersion: 12, coop: { enemy: "realm", mission: "holdOut" } });
         await musterAll(game);
         const owner = warbandOwner(0);
         const original = game.specificGameState.fighters.filter(fighter => fighter.owner === owner);
@@ -110,7 +110,7 @@ describe("Hold Out (§30.3)", () => {
     });
 
     it("continues after the enemy is wiped out, lands round four's wave, and wins by surviving the last round", async () => {
-        const game = makeGame(["a", "b"], {}, { coop: { enemy: "realm", mission: "holdOut" } });
+        const game = makeGame(["a", "b"], {}, { rulesVersion: 12, coop: { enemy: "realm", mission: "holdOut" } });
         await musterAll(game);
         game.specificGameState.fighters.forEach(fighter => { if (isWarband(fighter.owner)) fighter.hp = 0; });
         game.specificGameState.roundsPlayed = 2;
@@ -135,7 +135,7 @@ describe("Hold Out (§30.3)", () => {
     });
 
     it("lands no wave once the last round has been played", async () => {
-        const game = makeGame(["a", "b"], {}, { coop: { enemy: "realm", mission: "holdOut" } });
+        const game = makeGame(["a", "b"], {}, { rulesVersion: 12, coop: { enemy: "realm", mission: "holdOut" } });
         await musterAll(game);
         game.specificGameState.fighters.find(fighter => isWarband(fighter.owner))!.hp = 0;
         game.specificGameState.roundsPlayed = battleRoundsOf(game.specificGameState) - 1;
@@ -148,7 +148,7 @@ describe("Hold Out (§30.3)", () => {
     });
 
     it("is told with the enemy named once, even when no warband finds room", async () => {
-        const game = makeGame(["a", "b"], {}, { coop: { enemy: "realm", mission: "holdOut" } });
+        const game = makeGame(["a", "b"], {}, { rulesVersion: 12, coop: { enemy: "realm", mission: "holdOut" } });
         await musterAll(game);
         const gs = game.specificGameState;
         const field = battlefieldById(gs.map);
@@ -167,7 +167,7 @@ describe("Hold Out (§30.3)", () => {
     });
 
     it("goes on through an enemy wiped out before the last wave, and ends when the last is beaten", async () => {
-        const game = makeGame(["a", "b"], {}, { coop: { enemy: "realm", mission: "holdOut" } });
+        const game = makeGame(["a", "b"], {}, { rulesVersion: 12, coop: { enemy: "realm", mission: "holdOut" } });
         await musterAll(game);
         game.specificGameState.fighters.forEach(fighter => { if (isWarband(fighter.owner)) fighter.hp = 0; });
         game.specificGameState.roundsPlayed = 11;
@@ -178,7 +178,7 @@ describe("Hold Out (§30.3)", () => {
     });
 
     it("loses immediately when the whole team is down", async () => {
-        const game = makeGame(["a", "b"], {}, { coop: { enemy: "realm", mission: "holdOut" } });
+        const game = makeGame(["a", "b"], {}, { rulesVersion: 12, coop: { enemy: "realm", mission: "holdOut" } });
         await musterAll(game);
         game.specificGameState.fighters.forEach(fighter => { if (!isWarband(fighter.owner)) fighter.hp = 0; });
         expect(new RealmArenaGameType().CheckGameOver(game)).toBe(true);
@@ -333,7 +333,7 @@ describe("Hold Out's rally and the next wave told (§30.11)", () => {
     });
 
     it("counts a random enemy's wave without fog, where it's seen from the start", async () => {
-        const game = makeGame(["a", "b"], {}, { coop: { enemy: "realm", random: true, mission: "holdOut" } });
+        const game = makeGame(["a", "b"], {}, { rulesVersion: 12, coop: { enemy: "realm", random: true, mission: "holdOut" } });
         await musterAll(game);
         expect(nextWaveOf(game.specificGameState)).toEqual({ round: 4, arriving: 2 });
     });
@@ -446,7 +446,7 @@ describe("difficulty (§30.5)", () => {
 
     it("refills each warband to its difficulty's squad in Hold Out before any wave has landed", async () => {
         for (const difficulty of ["easy", "hard"] as const) {
-            const game = makeGame(["a", "b"], {}, { coop: { enemy: "realm", mission: "holdOut", difficulty } });
+            const game = makeGame(["a", "b"], {}, { rulesVersion: 12, coop: { enemy: "realm", mission: "holdOut", difficulty } });
             await musterAll(game);
             const owner = warbandOwner(0);
             expect(waveOf(game.specificGameState, owner, true)).toEqual([]);
@@ -492,7 +492,8 @@ describe("a co-op battle's creation (§29.2, §29.3)", () => {
             const invite = { turnTimer: 0, coop: { enemy: "realm", mission: "holdOut", map: "sackedFort" } };
             const game = await createGame.call(invite, invite, [...players]);
             expect(game.specificGameState.map).toBe(map);
-            expect(game.specificGameState.coop).toEqual({ enemy: "realm", nextWarband: 0, mission: "holdOut", map: "sackedFort" });
+            // The Brood is Hold Out's enemy whatever an older tab's setup screen sent (`HOLD_OUT_ENEMY`).
+            expect(game.specificGameState.coop).toEqual({ enemy: "brood", nextWarband: 0, mission: "holdOut", map: "sackedFort" });
             const setup = game.gameState.history.map(entry => entry.text).join("\n");
             expect(setup).toContain("Setup: Hold Out on the Sacked Fort");
             expect(setup).toContain("a warband for each of them closing in from the edges");
@@ -526,9 +527,10 @@ describe("a co-op battle's creation (§29.2, §29.3)", () => {
             const invite = { turnTimer: 0, coop: { enemy: "realm", mission: "holdOut", map } };
             const game = await createGame.call(invite, invite, [...FOUR_TEAM]);
             expect(game.specificGameState.map).toBe(id);
-            expect(game.specificGameState.coop).toEqual({ enemy: "realm", nextWarband: 0, mission: "holdOut", map });
+            expect(game.specificGameState.coop).toEqual({ enemy: "brood", nextWarband: 0, mission: "holdOut", map });
             const setup = game.gameState.history.map(entry => entry.text).join("\n");
-            expect(setup).toContain(`Setup: Hold Out on the ${name}, over 13 battle rounds`);
+            // Version 13's Hold Out is 15 rounds for any team.
+            expect(setup).toContain(`Setup: Hold Out on the ${name}, over 15 battle rounds`);
             expect(setup).toContain("a warband for each of them closing in from the edges");
             expect(setup).toContain(`deploys in the north-west of the ${ground}`);
             expect(setup).toContain(`deploys in the south-west of the ${ground}`);
@@ -970,7 +972,7 @@ describe("the computer in whole battles (§29.11)", () => {
         for (const map of COOP_MAPS) {
             for (const fog of [false, true]) {
                 seedRolls(seed++);
-                const { game } = await coopBattle(FOUR_TEAM, { fog, coop: { enemy: "realm", mission: "holdOut", map } });
+                const { game } = await coopBattle(FOUR_TEAM, { rulesVersion: 12, fog, coop: { enemy: "realm", mission: "holdOut", map } });
                 expect(game.specificGameState.map).toBe(`${map}Four`);
                 expect(game.complete).toBe(true);
                 expect(["teamwin", "teamloss"]).toContain(game.endReason);
@@ -989,7 +991,7 @@ describe("the computer in whole battles (§29.11)", () => {
 
     it("lasts 13 rounds in a team of four's Hold Out, with its four waves landing at 4, 7, 10 and 13 (§30.3)", async () => {
         for (const map of COOP_MAPS) {
-            const game = makeGame(FOUR_TEAM, {}, { coop: { enemy: "realm", mission: "holdOut", map } });
+            const game = makeGame(FOUR_TEAM, {}, { rulesVersion: 12, coop: { enemy: "realm", mission: "holdOut", map } });
             await musterAll(game);
             const rounds = battleRoundsOf(game.specificGameState);
             expect(Array.from({ length: rounds }, (_, k) => k + 1).filter(round => waveArrives(round, rounds))).toEqual([4, 7, 10, 13]);
@@ -1016,7 +1018,7 @@ describe("the computer in whole battles (§29.11)", () => {
 
     it("replays a battle of Hold Out, waves and all, to the same end without asking the planner", async () => {
         seedRolls(11);
-        const { game } = await coopBattle(["a", "b"], { fog: true, coop: { enemy: "realm", mission: "holdOut" } });
+        const { game } = await coopBattle(["a", "b"], { rulesVersion: 12, fog: true, coop: { enemy: "realm", mission: "holdOut" } });
         vi.restoreAllMocks();
         planner.broken = true;
         planner.calls = 0;

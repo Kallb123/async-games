@@ -409,7 +409,8 @@ describe("the team's HP in Hold Out", () => {
             await musterAll(game);
             return game.specificGameState.fighters;
         };
-        const holdOut = { coop: { enemy: "realm" as const, mission: "holdOut" as const } };
+        // Version 12's Hold Out: the team's HP is stout there, and the Brood's version 13 is judged by its own rules.
+        const holdOut = { rulesVersion: 12, coop: { enemy: "realm" as const, mission: "holdOut" as const } };
 
         const fighters = await stout(holdOut);
         for (const one of fighters) {
@@ -419,7 +420,7 @@ describe("the team's HP in Hold Out", () => {
         expect(fighters.some(one => !one.owner.startsWith("ai:"))).toBe(true);
 
         // Hold the Centre, a duel and a free-for-all are as they were, and so is Hold Out from before.
-        for (const settings of [{ coop: { enemy: "realm" as const } }, {}, { rulesVersion: LEGACY, ...holdOut }]) {
+        for (const settings of [{ coop: { enemy: "realm" as const } }, {}, { ...holdOut, rulesVersion: LEGACY }]) {
             for (const one of await stout(settings)) {
                 expect(one).not.toHaveProperty("maxHp");
                 expect(one.hp).toBe(CHARACTERS[one.character].hp);
@@ -465,7 +466,7 @@ describe("Hold Out's warbands, a step smaller", () => {
 
     it("applies to the first muster, to a wave's refill and to the count told of the next wave", async () => {
         for (const difficulty of ["easy", "normal", "hard"] as Difficulty[]) {
-            const game = makeGame(["a", "b"], {}, { coop: { enemy: "realm", mission: "holdOut", ...(difficulty === "normal" ? {} : { difficulty }) } });
+            const game = makeGame(["a", "b"], {}, { rulesVersion: 12, coop: { enemy: "realm", mission: "holdOut", ...(difficulty === "normal" ? {} : { difficulty }) } });
             const gs = game.specificGameState;
             const normal = warbandBudget(2, "normal", difficulty);
             const smaller = warbandBudget(2, "normal", difficulty, -1);
@@ -691,7 +692,7 @@ describe("the team's armour against the Realm in Hold Out", () => {
     });
 
     it("reaches a team that hasn't yet seen a random enemy only with the faction beside it", async () => {
-        const game = makeGame(["a", "b"], {}, { fog: true, coop: { enemy: "realm", random: true, mission: "holdOut" } });
+        const game = makeGame(["a", "b"], {}, { rulesVersion: 12, fog: true, coop: { enemy: "realm", random: true, mission: "holdOut" } });
         await musterAll(game);
         const gs = game.specificGameState;
         expect(gs.coop?.enemySeen).toBeUndefined();
@@ -722,14 +723,14 @@ describe("the team's armour against the Realm in Hold Out", () => {
     });
 
     it("is played in a whole Hold Out against the Realm, from the settings, and not against the Swarm", async () => {
-        const realm = makeGame(["a", "b"], {}, { coop: { enemy: "realm", mission: "holdOut" } });
-        const swarm = makeGame(["a", "b"], {}, { coop: { enemy: "swarm", mission: "holdOut" } });
+        const realm = makeGame(["a", "b"], {}, { rulesVersion: 12, coop: { enemy: "realm", mission: "holdOut" } });
+        const swarm = makeGame(["a", "b"], {}, { rulesVersion: 12, coop: { enemy: "swarm", mission: "holdOut" } });
         const centre = makeGame(["a", "b"], {}, { coop: { enemy: "realm" } });
         const old = makeGame(["a", "b"], {}, { rulesVersion: LEGACY, coop: { enemy: "realm", mission: "holdOut" } });
-        const miners = makeGame(["a", "b"], {}, { coop: { enemy: "miners", mission: "holdOut" } });
+        const miners = makeGame(["a", "b"], {}, { rulesVersion: 12, coop: { enemy: "miners", mission: "holdOut" } });
         expect([realm, miners, swarm, centre, old].map(game => battleOf(game).armoured === true)).toEqual([true, false, false, false, false]);
         // A random enemy plays armoured when it's the Realm, though the board is not told until it's seen.
-        const drawn = makeGame(["a", "b"], {}, { fog: true, coop: { enemy: "realm", random: true, mission: "holdOut" } });
+        const drawn = makeGame(["a", "b"], {}, { rulesVersion: 12, fog: true, coop: { enemy: "realm", random: true, mission: "holdOut" } });
         expect(battleOf(drawn).armoured).toBe(true);
         expect(gameStateToModel(drawn.specificGameState, "a", null)).not.toHaveProperty("enemy");
         expect(JSON.stringify(gameStateToModel(drawn.specificGameState, "a", null))).not.toMatch(/armour/i);
@@ -758,13 +759,14 @@ describe("Hold Out lasts 13 rounds for a team of two, three or four", () => {
 
     it("is what a game reads, whoever asks: its response, its ending, its waves", async () => {
         const length = (players: string[], settings: RealmArenaSettings) => battleRoundsOf(makeGame(players, {}, settings).specificGameState);
-        const holdOut = { coop: { enemy: "realm" as const, mission: "holdOut" as const } };
+        // Version 12's waves: its last lands at round 13.
+        const holdOut = { rulesVersion: 12, coop: { enemy: "realm" as const, mission: "holdOut" as const } };
         expect(length(["a", "b"], holdOut)).toBe(13);
         expect(length(["a", "b"], { ...holdOut, rulesVersion: LEGACY })).toBe(15);
         expect(length(["a"], holdOut)).toBe(15);
         expect(length(["a", "b", "c"], holdOut)).toBe(13);
-        expect(length(["a", "b", "c", "d"], { coop: { ...holdOut.coop, map: "sackedFort" } })).toBe(13);
-        expect(length(["a", "b", "c", "d"], { coop: { ...holdOut.coop, map: "sunkenVillage" } })).toBe(13);
+        expect(length(["a", "b", "c", "d"], { rulesVersion: 12, coop: { ...holdOut.coop, map: "sackedFort" } })).toBe(13);
+        expect(length(["a", "b", "c", "d"], { rulesVersion: 12, coop: { ...holdOut.coop, map: "sunkenVillage" } })).toBe(13);
         expect(length(["a", "b"], { coop: { enemy: "realm" } })).toBe(15);
         expect(length(["a", "b"], {})).toBe(15);
 
@@ -799,7 +801,7 @@ describe("Hold Out lasts 13 rounds for a team of two, three or four", () => {
     });
 
     it("lands the last wave at round 13 in a whole battle, with nothing after it", async () => {
-        const game = makeGame(["a", "b"], {}, { coop: { enemy: "realm", mission: "holdOut" } });
+        const game = makeGame(["a", "b"], {}, { rulesVersion: 12, coop: { enemy: "realm", mission: "holdOut" } });
         await musterAll(game);
         const gs = game.specificGameState;
         gs.fighters.forEach(one => { if (one.owner.startsWith("ai:")) one.hp = 0; });

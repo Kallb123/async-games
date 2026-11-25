@@ -547,6 +547,140 @@ ships with 25.
   over fifteen rounds is the noisiest cell (27–72% across the growths, not in
   order), and it sits at about 40% on Normal either way.
 
+## Rules version 13: break the Brood, keep the Shrine
+
+The Hold Out plan's PR 5 ([`realm-arena-hold-out.md`](./realm-arena-hold-out.md)
+§7, §8.2) tunes version 13's Hold Out, against the Brood, to §7's targets: on
+Normal, a win in 70–85% of battles, two stars in 35–55%, three in 10–25%. It
+didn't get that far. §7's first check, that one step of `SPAWN_THREAT` moves
+the win rate by under 15 points, fails, and the values stay as PRs 2–4
+proposed them.
+
+**Method.** `npm run ra-balance -- --rules 13`: Hold Out on Normal, Normal size,
+no fog, the Ruined Fort for Solo and the Sacked Fort for two to four players,
+seeds 1–24 a cell (so a cell's 95% interval is about ±20 points, as in
+*Method* above). Version 13 makes every Hold Out the Brood's (`HOLD_OUT_ENEMY`),
+so each cell is fought once, "vs Brood". The levers are `--set` overrides of
+one commit. Four workers, about 1–3 s a battle.
+
+**The team's policy first.** The planner never walks to a nest (§7), so the
+harness's team raids (`--team-policy raid`, the default): each player's
+fastest characters walk to the nearest standing nest and attack it, and the
+rest are the planner's, guarding the Shrine. Team win rate, the values as
+committed:
+
+| Team policy | Solo | 2 players | 3 players |
+|---|---:|---:|---:|
+| The planner alone (`--team-policy planner`) | 29% | 58% | 4% |
+| 2 raiders a player, as §7 proposed | 8% | 13% | 4% |
+| **3 raiders** | **58%** | **21%** | **0%** |
+| 4 raiders | 63% | 33% | 0% |
+
+Two raiders reach the nests by round 3 or 4 and fall with one nest left, and
+the guards behind them are overrun before it goes. Three is the default now
+(`RAIDERS`); four does a little better again but leaves Solo one guard. The
+planner alone wins only by holding to the cap ("held the Shrine for all 15
+rounds") and breaks the Brood in one battle of 72.
+
+**The levers.** Team win rate with three raiders:
+
+| Values | Solo | 2 players | 3 players | 4 players |
+|---|---:|---:|---:|---:|
+| **As committed**: `SPAWN_THREAT` 3, a nest 15 HP, `STARTING_HORDE` 10 | **58%** | **21%** | **0%** | **0%** |
+| `SPAWN_THREAT` 2 | 100% | 33% | 0% | |
+| `SPAWN_THREAT` 2, `STARTING_HORDE` 6 | 100% | 96% | 96% | |
+| A nest 12 HP | 96% | 67% | 12% | |
+| A nest 10 HP | 100% | 83% | 17% | 4% |
+| A nest 10 HP, `SPAWN_THREAT` 4 | 100% | 63% | 4% | |
+
+**What it says.**
+
+- **The slope check fails.** One step of `SPAWN_THREAT`, 3 to 2, moves Solo
+  from 58% to 100%; 3 to 4 at a nest of 10 HP moves two players from 83% to
+  63%. A nest 5 HP weaker moves two players by 62 points. §7 calls that a
+  mission still behaving all or nothing, to be fixed before it's tuned.
+- **The team's size pulls the other way.** Every row but one has Solo near
+  certain to win and a team of three or four near certain to lose. The one that
+  doesn't, threat 2 with a starting horde of 6, wins nearly everything. Each
+  player brings a warband, so a bigger team has more nests to reach across the
+  same Sacked Fort (though the Brood slows as they fall: each standing nest adds
+  its own threat, and a warband with none adds nothing). It is not the Shrine:
+  every loss in these runs is the team overrun, with the Shrine at 85% of its HP
+  or more, and a Shrine of 30 HP a player (`--set RULES.SHRINE_HP=0,RULES.SHRINE_HP_PER_PLAYER=30`)
+  leaves every win rate where it was, 58%, 21%, 0% and 0%. Nor is it the team's
+  size alone: the map moves the rate as much (*Why the team loses*, below).
+  Either way no single value of these levers fits Solo and a team of four at
+  once.
+- **The stars don't grade.** A raiding team that wins breaks the Brood early
+  with the Shrine nearly whole, so ★, ★★ and ★★★ come out within a few points of
+  each other in every row (a nest of 10 HP: two players 83%, 83% and 79%). The
+  planner alone shows the other end: its wins are Held, Unscathed in half of them
+  or more, and Broke the Brood once in 72 battles. Two and three stars only separate between
+  those two ways of playing.
+- **Read it with the harness's team in mind.** The raid is scripted, not
+  planned: raiders walk straight to the nearest nest whatever stands between,
+  and guards don't come to their aid. People will play better, and part of the
+  cliff may be the policy's. The planner getting an objective of its own (§7's
+  second step) would tell the two apart.
+
+**Why the team loses.** Two tools take the runs apart: `--layout` fights every
+team on one layout whatever its size, and `npm run ra-balance:watch` follows one
+battle a turn at a time, ending with where each of the team fell. As committed,
+three raiders, 24 battles a cell:
+
+| Battlefield | Solo | 2 players | 3 players | 4 players |
+|---|---:|---:|---:|---:|
+| Gate forts (Ruined, Twin-Gate, Three-Gate: every nest in one row along the far edge, 41 squares from the Shrine) | 58% | 0% | 0% | |
+| Sacked Fort for two (`--layout sackedFortTwo`) | 0% | 21% | | |
+| Sacked Fort (its layout for each size) | | 21% | 0% | 0% |
+
+- **It's a race at the nests, and it's close.** Raiders reach the nests in round
+  2 and must bring down a warband's two (30 HP) before its horde, at 10–16 by
+  round 3–4, brings them down. Solo on the Ruined Fort is won in round 3–4 or
+  lost with a nest on 1 HP. A race that tight flips on a few HP, which is the
+  all-or-nothing the slope check sees.
+- **More players is more races, all to be won.** The Brood breaks only when every
+  warband's nests are down, so a team of two must win two races, and once a
+  player's raiders fall their warband's horde is free to turn on the rest. On the gate forts that
+  takes two players from Solo's 58% to 0%.
+- **The Sacked Fort splits each warband's nests.** Its two stand on opposite
+  edges, 45–53 squares apart, with the Shrine between: once the first falls the
+  raiders cross the board, through the horde, to the second. Solo there wins
+  none.
+- **The Shrine isn't in it.** The Brood chases the team's characters, not the
+  Shrine, so the team is overrun with the Shrine nearly whole. That is also why
+  the stars don't grade: Held and Unscathed come free with any win.
+
+**A cap per nest.** Production is already per nest (each standing nest adds
+its own threat), but a warband's cap, 16 minions, isn't: one nest keeps a horde
+of 16 topped up. `HORDE_CAP_PER_NEST`, which no catalogue sets, caps a warband's
+minions by its nests standing instead, so a nest destroyed takes its share of
+the cap with it. 24 battles a cell, three raiders:
+
+| Cap a nest | Solo | 2 players, Sacked Fort | 3 players, Sacked Fort | 4 players, Sacked Fort | 2 players, Twin-Gate | 3 players, Three-Gate |
+|---|---:|---:|---:|---:|---:|---:|
+| None (16 a warband, as committed) | 58% | 21% | 0% | 0% | 0% | 0% |
+| 8 (16 while both stand) | 75% | 21% | 0% | 0% | 0% | 4% |
+| 6 | 75% | 46% | 0% | 0% | 8% | 4% |
+| 4 | 92% | 50% | 0% | 0% | 17% | 0% |
+
+It helps Solo and two players and does nothing for three or four, who lose
+later (round 8–9 rather than 7–8) but still lose. Watched, a team of three on
+the Sacked Fort loses three quarters of its characters by round 3: the raiders
+take the near nests, along the edge they start by, while the three starting
+hordes there (four to six minions and a Ravager each) bring them down before any cap
+is reached, and every warband's other nest is on the far edge. The cap changes
+what a nest is worth, not that opening.
+
+**What's next** is the plan's to decide (`realm-arena-hold-out.md` §8.3).
+The race and its "every warband" condition come before the numbers: a warband's
+nests closer together on the Sacked Fort, the Brood's warbands drawn to the
+Shrine as well as to the team, and the planner raiding for itself would each
+change what a lever measures. Then the Brood's numbers scaled by the team's size
+(its starting horde above all, the strongest lever for three players), and
+threat spent in a finer currency. `BROKEN_TIDE_BY_ROUND` (10) needs no change
+yet: where the team breaks the Brood it does so in round 4–8.
+
 ## How each lever was built
 
 For re-running: each was an environment switch in a scratch worktree.

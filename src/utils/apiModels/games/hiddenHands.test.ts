@@ -871,7 +871,7 @@ describe("Realm Arena's random co-op enemy", () => {
     });
 
     it("pins the viewerless response used to judge achievements", async () => {
-        const game = makeRealmArenaGame(["a", "b"], {}, { fog: true, size: "large", coop: { enemy: "realm", random: true, mission: "holdOut", difficulty: "hard" } });
+        const game = makeRealmArenaGame(["a", "b"], {}, { rulesVersion: 12, fog: true, size: "large", coop: { enemy: "realm", random: true, mission: "holdOut", difficulty: "hard" } });
         await realmArenaMusterAll(game);
 
         const hidden = realmArenaStateToModel(game.specificGameState, null, null);
@@ -901,6 +901,34 @@ describe("Realm Arena's random co-op enemy", () => {
         expect(complete.fighters).toHaveLength(game.specificGameState.fighters.length);
         expect(complete.ghosts).toEqual([]);
     });
+
+    it("pins the viewerless response used to judge achievements under rules 13, where nests produce the Brood", async () => {
+        const game = makeRealmArenaGame(["a", "b"], {}, { rulesVersion: 13, fog: true, size: "large", coop: { enemy: "realm", random: true, mission: "holdOut", difficulty: "hard" } });
+        await realmArenaMusterAll(game);
+
+        const hidden = realmArenaStateToModel(game.specificGameState, null, null);
+        expect(Object.keys(hidden).sort()).toEqual([
+            "battleRounds", "blasted", "budget", "canUndo", "clouds", "coop",
+            "difficulty", "enemiesDefeated", "enemy", "fighters", "fog", "ghosts", "map", "mastery", "mission", "mustered",
+            "myMuster", "nestSquares", "nestsLeft", "phase", "rally", "round", "rulesVersion", "scores", "size",
+        ]);
+        // Hold Out under rules 13 is always the Brood, so its enemy is no secret: a random draw is dropped at creation.
+        expect(hidden).toMatchObject({ difficulty: "hard", size: "large", enemiesDefeated: 0, enemy: "brood" });
+        // In fog the null viewer sees the Shrine, which is everyone's, and nothing else of the board.
+        expect(hidden.fighters.map(fighter => fighter.character)).toEqual(["shrine"]);
+        expect(hidden.ghosts).toEqual([]);
+        expect(hidden.myMuster).toBeNull();
+        expect(hidden.canUndo).toBe(false);
+        expect(hidden).not.toHaveProperty("stars");
+
+        // Match achievements run only after the battle ends: the fog lifts and the stars are told.
+        game.specificGameState.stars = ["held"];
+        const complete = realmArenaStateToModel(game.specificGameState, null, null, true);
+        // The rally goes with the battle, as version 12's next wave does: none is coming.
+        expect(Object.keys(complete).sort()).toEqual([...Object.keys(hidden).filter(key => key !== "rally"), "stars"].sort());
+        expect(complete.stars).toEqual(["held"]);
+        expect(complete.fighters).toHaveLength(game.specificGameState.fighters.length);
+    });
 });
 
 describe("Realm Arena's Regicide and Scorched Earth read the finished view alone (§39.9)", () => {
@@ -922,13 +950,13 @@ describe("Realm Arena's Regicide and Scorched Earth read the finished view alone
         return game;
     };
 
-    it("sets nestsCleared when the last nest falls with a wave to come, and sends it only once the battle is over", async () => {
+    it("sets nestsCleared in a version 12 battle's state when the last nest falls with a wave to come, and never sends it", async () => {
         const game = await burnNests("all", () => 0);
         const gs = game.specificGameState;
         expect(gs.nestsCleared).toBe(true);
         for (const viewer of VIEWERS) {
             expect(realmArenaStateToModel(gs, viewer, null), `${viewer}`).not.toHaveProperty("nestsCleared");
-            expect(realmArenaStateToModel(gs, viewer, null, true).nestsCleared).toBe(true);
+            expect(realmArenaStateToModel(gs, viewer, null, true), `${viewer} complete`).not.toHaveProperty("nestsCleared");
         }
     });
 

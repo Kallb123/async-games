@@ -22,7 +22,7 @@ on:
         description: Factions the team musters from (realm, swarm, miners)
         default: 'realm'
       enemies:
-        description: Enemy factions (realm, swarm, miners)
+        description: Enemy factions (realm, swarm, miners); Hold Out under rules 13 is always the Brood's
         default: 'realm,swarm,miners'
       missions:
         description: Missions (holdOut, holdTheCentre)
@@ -51,8 +51,14 @@ on:
       temperaments:
         description: Whether the Swarm's temperaments shape its planner's choices under rules that have them (blank or on, or off to fight without)
         default: ''
+      team_policy:
+        description: Where the nests produce the enemy (rules 13), how the team plays (blank or raid, or planner for the planner alone, which never walks to a nest)
+        default: ''
+      raiders:
+        description: Under the raid policy, how many of each player's characters raid the nests (blank for 3); the rest guard the Shrine
+        default: ''
       set:
-        description: 'Numbers to override in the rules version being fought, PATH=NUMBER comma-separated: RULES.<KEY> or CHARACTERS.<id>.hp (as RULES.WAVE_GROWTH_POINTS=25,CHARACTERS.broodQueen.hp=24)'
+        description: 'Numbers to override in the rules version being fought, PATH=NUMBER comma-separated: RULES.<KEY>, RULES.HOLD_OUT_DIFFICULTY.<difficulty>.<step> or CHARACTERS.<id>.<hp|threat|points> (as RULES.SPAWN_THREAT=3,CHARACTERS.nest.hp=20)'
         default: ''
       team_planner:
         description: Git ref whose planner plays the team, as main (blank for the branch's on both sides)
@@ -118,6 +124,8 @@ jobs:
           TEAM_PLANNER: ${{ inputs.team_planner }}
           RULES: ${{ inputs.rules }}
           RALLY: ${{ inputs.rally }}
+          TEAM_POLICY: ${{ inputs.team_policy }}
+          RAIDERS: ${{ inputs.raiders }}
           TEMPERAMENTS: ${{ inputs.temperaments }}
           SET: ${{ inputs.set }}
           SHARD: ${{ matrix.shard }}/${{ inputs.shards }}
@@ -127,7 +135,7 @@ jobs:
             --runs "$RUNS" --players "$PLAYERS" --teams "$TEAMS" --enemies "$ENEMIES" --missions "$MISSIONS" \
             --maps "$MAPS" --difficulties "$DIFFICULTIES" --sizes "$SIZES" --fog "$FOG" \
             --seed "$SEED" --shard "$SHARD" --out "samples-${{ matrix.shard }}.json" \
-            ${TEAM_PLANNER:+--team-planner "$TEAM_PLANNER"} ${RULES:+--rules "$RULES"} ${RALLY:+--rally "$RALLY"} ${TEMPERAMENTS:+--temperaments "$TEMPERAMENTS"} ${SET:+--set "$SET"}
+            ${TEAM_PLANNER:+--team-planner "$TEAM_PLANNER"} ${RULES:+--rules "$RULES"} ${RALLY:+--rally "$RALLY"} ${TEMPERAMENTS:+--temperaments "$TEMPERAMENTS"} ${TEAM_POLICY:+--team-policy "$TEAM_POLICY"} ${RAIDERS:+--raiders "$RAIDERS"} ${SET:+--set "$SET"}
 
       - uses: actions/upload-artifact@v7
         if: always()

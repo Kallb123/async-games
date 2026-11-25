@@ -60,12 +60,13 @@ describe("the Miners' characters (§33)", () => {
 describe("the factions (§29.3)", () => {
     it("muster every character, each for one faction alone", () => {
         const rosters = Object.values(FACTIONS).flatMap(faction => faction.characters);
-        // Besides the Scout (an option's, §23), the Swarm's elites (§39.5) and its nest (§39.7) stand in no roster.
-        const unmustered = new Set<CharacterId>(["scout", ...(FACTIONS.swarm.elites ?? []), ...(FACTIONS.swarm.nest ? [FACTIONS.swarm.nest] : [])]);
+        // Besides the Scout (an option's, §23), the elites (§39.5), the nests (§39.7) and the Shrine (§4) stand in no roster.
+        const unmustered = new Set<CharacterId>(["scout", "shrine", ...Object.values(FACTIONS).flatMap(faction => [...(faction.elites ?? []), ...(faction.nest ? [faction.nest] : [])])]);
         expect([...rosters].sort()).toEqual((Object.keys(CHARACTERS) as CharacterId[]).filter(id => !unmustered.has(id)).sort());
     });
 
-    describe.each(Object.values(FACTIONS))("$name's ready-made squads (§17.2, §30.5)", faction => {
+    // A horde's warbands are bought in threat, not mustered: the Brood's ready-made squads are empty.
+    describe.each(Object.values(FACTIONS).filter(faction => !faction.horde))("$name's ready-made squads (§17.2, §30.5)", faction => {
         it.each([...BUDGETS])("spend the whole %i-point budget, from its own roster", budget => {
             expect(squadPoints(faction.readyMade[budget])).toBe(budget);
             expect(faction.readyMade[budget].filter(character => !faction.characters.includes(character))).toEqual([]);

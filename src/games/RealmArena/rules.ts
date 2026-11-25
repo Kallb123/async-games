@@ -2369,9 +2369,8 @@ export function wavePurchase(faction: Faction, budget: number, round: number, co
 /**
  * Whether a Hold Out battle's nests produce its enemy every round, rather than
  * waves landing (realm-arena-hold-out.md §5.1): from rules version 13. With no
- * `context`, whether the current ruleset's do: what the guide, the setup screen,
- * the tutorial and the achievements switch on, so version 13's copy waits for
- * its release (§6.1).
+ * `context`, whether the current ruleset's do, which the setup screen asks of the
+ * mission it is about to create.
  */
 export const nestsProduce = (mission: string | undefined, context?: RulesContext): boolean =>
     mission === "holdOut" && ruleValuesOf(context).SPAWN_THREAT !== undefined;
@@ -2458,11 +2457,13 @@ export function spawnThemeOf(faction: Faction, round: number, context: RulesCont
  * up for it — and passing over any its caps (`HORDE_CAP`, `HORDE_REAL_CAP`, with
  * `standing` already counted) leave no room for. What's `left` is banked, never
  * more than the dearest on the list costs: threat the caps leave nothing to spend
- * on is lost. No draw, so the same every time.
+ * on is lost. No draw, so the same every time. Given the warband's `nests`
+ * standing, a ruleset with `HORDE_CAP_PER_NEST` caps its minions by them instead.
  */
-export function hordeSpawn(theme: WaveTheme, threat: number, standing: { minions: number; others: number }, context: RulesContext): { bought: CharacterId[]; left: number } {
+export function hordeSpawn(theme: WaveTheme, threat: number, standing: { minions: number; others: number }, context: RulesContext, nests?: number): { bought: CharacterId[]; left: number } {
     const { CHARACTERS } = rulesetOf(context);
-    const { HORDE_CAP = Infinity, HORDE_REAL_CAP = Infinity } = ruleValuesOf(context);
+    const { HORDE_CAP: capOfWarband = Infinity, HORDE_REAL_CAP = Infinity, HORDE_CAP_PER_NEST } = ruleValuesOf(context);
+    const HORDE_CAP = HORDE_CAP_PER_NEST !== undefined && nests !== undefined ? HORDE_CAP_PER_NEST * nests : capOfWarband;
     let { minions, others } = standing;
     const room = (character: CharacterId) => CHARACTERS[character].minion ? minions < HORDE_CAP : others < HORDE_REAL_CAP;
     const bought: CharacterId[] = [];

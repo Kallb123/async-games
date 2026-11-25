@@ -17,8 +17,10 @@
 //                      default) and three (the 3D experiment); --against draws its ref with the first
 //   --scenarios <a,b>  any of load, idle, wave, pan, turn, select, enemy-turn (default: all)
 //   --runs <n>         runs of each scenario per checkout (default 3); medians are reported
-//   --fixture <name>   holdout (default), holdout-fog, or holdout-8k / holdout-16k (the same
-//                      battle on a Sacked Fort grown to 8,464 / 16,384 tiles), from fixtures/
+//   --fixture <name>   holdout (default), holdout-fog, holdout-8k / holdout-16k (the same
+//                      battle on a Sacked Fort grown to 8,464 / 16,384 tiles), or holdout-brood
+//                      (rules 13: the Brood with every warband at HORDE_CAP, a round of its turns),
+//                      from fixtures/
 //   --cpu <n>          CPU slowdown (default 4, as perf:journeys uses)
 //   --parts <n>        play only the enemy turn's first <n> parts
 //   --label <name>     names the report (default: the time)

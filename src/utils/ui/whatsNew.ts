@@ -82,6 +82,11 @@ export const WHATS_NEW: WhatsNewGroup[] = [
         icon: "✨",
         items: [
             {
+                title: "Realm Arena: Hold Out is now break the Brood, keep the Shrine",
+                detail: "Hold Out is fought against the Brood: swarms of Skitterlings, Spitters and Bloaters that go down to any hit, with Ravagers, Broodmothers and elites among them, hatching from nests every round rather than landing in waves. Destroy every nest to win at once, and the sooner you do, the more you score. Lose if the Shrine in your keep falls, and win anyway if it stands to round 15. Rallies now come on a schedule and whenever you destroy a warband's last nest, and a new Mend choice repairs the Shrine. A win earns up to three stars: Held, Broke the Brood and Unscathed. New achievements Three Stars and Three Stars on Hard; Broken Tide now asks you to break the Brood by round 10, and Scorched Earth to break it with nobody on your team down. Battles already under way keep their original rules.",
+                game: "realmarena",
+            },
+            {
                 title: "Realm Arena: the enemy takes its turn while you get on with yours",
                 detail: "In a battle against the computer, End turn now comes back straight away, and the enemy's warbands move on their own — with more time to think about it — while the board says they're moving. You'll see what they did as soon as it's your turn, and your teammates are told when theirs comes round.",
                 game: "realmarena",
@@ -123,11 +128,6 @@ export const WHATS_NEW: WhatsNewGroup[] = [
             {
                 title: "Realm Arena: line of sight depends on the angle",
                 detail: "Height now decides what you can see over. From higher ground you see over a wall to anyone standing back from it, but not to someone pressed close behind it, and the edge of a rise or a tower's parapet hides the ground just below. The Sunken Village's hedges now stand a full height, so they can be burned away but not climbed through. Battles already under way keep their original rules.",
-                game: "realmarena",
-            },
-            {
-                title: "Realm Arena: a new Hold Out battlefield, the Sunken Village",
-                detail: "For a team of three: hold a village green sunk below hedges, lanes and roofless cottages that hide the enemy until it's close, so archers can't pick you off from across the map. Nobody sees through a hedge, but anyone can push through one, and a fireball burns it away.",
                 game: "realmarena",
             },
         ],

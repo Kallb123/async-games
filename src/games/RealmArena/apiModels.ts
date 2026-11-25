@@ -98,12 +98,6 @@ export interface IRealmArenaSpecificGameStateResponse {
      * and in every other battle.
      */
     stars?: HoldOutStar[];
-    /**
-     * Only once the battle is over: every nest (§39.7) was down at once at some
-     * point with a wave still to land. Absent otherwise, and never sent mid-battle
-     * since it says whether nests stand.
-     */
-    nestsCleared?: true;
     /** How strong the co-op warbands are (§30.5); absent is Normal. */
     difficulty?: StoredDifficulty;
     /** The warbands take their turns in a block after all the players', not one after each; absent is the alternating order. */

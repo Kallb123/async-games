@@ -16,13 +16,17 @@
 import { nextAction, temperamentSwitch, turnMemo } from "../../src/games/RealmArena/ai";
 import { DIFFICULTY_NAMES, BATTLE_SIZE_NAMES, FACTIONS, type BattleSize, type Difficulty, type FactionId } from "../../src/games/RealmArena/characters";
 import type { RealmArenaSettings } from "../../src/games/RealmArena/RealmArenaModels";
-import { battlefieldById, mapFor, type CoopMap } from "../../src/games/RealmArena/maps";
+import { battlefieldById, mapFor, type CoopMap, type RealmArenaMapId } from "../../src/games/RealmArena/maps";
 import { CURRENT_RULESET_VERSION, overrideRulesetForExperiment, rulesetFor, type RealmArenaRuleset } from "../../src/games/RealmArena/rulesets";
 import type { RealmArenaRuleValues } from "../../src/games/RealmArena/ruleValues";
 import { battleRoundsOf, owesRally } from "../../src/games/RealmArena/RealmArenaLogic";
 import { defaultRally, rallyOptionsOf, rallyTotal, reinforcedHp, type RallyAction } from "../../src/games/RealmArena/rally";
-import { ACTION_POINTS, isStanding, isWarband, viewOf, waveArrives, type BattleState } from "../../src/games/RealmArena/rules";
-import { actBy, battleOf, endTurnBy, makeGame, musterAll, play, seededRandomValues } from "../../src/games/RealmArena/testFixtures";
+import {
+    ACTION_POINTS, check, fighterById, HOLD_OUT_STAR_INFO, HOLD_OUT_STARS, isCombatant, isStanding, isWarband, maxHpOf, moveRules, movementOf, nestsProduce, reachOf, shrineOf, viewOf, warbandNests, waveArrives, weaponReaches,
+    type Action, type BattleState, type Fighter, type HoldOutStar,
+} from "../../src/games/RealmArena/rules";
+import { actBy, battleOf, endTurnBy, makeGame, musterAll, play, seededRandomValues, type RealmArenaTestGame } from "../../src/games/RealmArena/testFixtures";
+import { costsFrom, pathTo } from "../../src/utils/games/battlefield/pathfinding";
 import { percentile as sortedPercentile } from "../../src/utils/performance";
 
 export type Mission = "holdOut" | "holdTheCentre";
@@ -59,8 +63,31 @@ export interface BalanceScenario {
      */
     temperaments?: "off";
     /**
+     * How the team plays a Hold Out whose nests produce the enemy
+     * (`--team-policy`): `raid`, where the planner alone would never walk to a
+     * nest (`raidAction`), or `planner`, the planner for every character.
+     * Absent is `raid`, and leaves the scenario's name as it was; `planner` is
+     * named in it. Changes nothing where nests don't produce.
+     */
+    teamPolicy?: TeamPolicy;
+    /**
+     * How many of each player's characters raid under `raid` (`--raiders`).
+     * Absent is `RAIDERS`, and leaves the scenario's name as it was; any other
+     * number is named in it.
+     */
+    raiders?: number;
+    /**
+     * A battlefield to fight on in place of the one the host's pick gives a team
+     * of this size (`--layout`): a layout of Hold Out's built for another size of
+     * team, as Solo on the Sacked Fort for two (`sackedFortTwo`), to tell the map
+     * apart from the team's size. Its sites stand the warbands the team has, in
+     * order. Absent is the host's pick, and leaves the scenario's name as it was.
+     */
+    layout?: RealmArenaMapId;
+    /**
      * Numbers overriding the catalogue's own (`--set`), by path, in path order:
-     * `RULES.<KEY>` or `CHARACTERS.<id>.hp` (`parseOverrides`). Applied to the
+     * `RULES.<KEY>`, `RULES.HOLD_OUT_DIFFICULTY.<difficulty>.<step>` or
+     * `CHARACTERS.<id>.<hp|threat|points>` (`parseOverrides`). Applied to the
      * rules version being fought before each battle, in whichever process fights
      * it. Absent is the catalogue as registered, and leaves the scenario's name
      * as it was; the overrides are named in it, so samples fought under
@@ -70,27 +97,39 @@ export interface BalanceScenario {
 }
 
 /** The optional numeric rule values (`RealmArenaRuleValues`): absent from older catalogues, but a rule the engine reads whenever it's there. */
-const OPTIONAL_NUMERIC_RULES = ["WAVE_GROWTH_POINTS", "WAVE_CAP", "NEST_POINTS"] as const satisfies readonly (keyof RealmArenaRuleValues)[];
+const OPTIONAL_NUMERIC_RULES = ["WAVE_GROWTH_POINTS", "WAVE_CAP", "NEST_POINTS", "HORDE_CAP_PER_NEST"] as const satisfies readonly (keyof RealmArenaRuleValues)[];
 
-/** Refuses a `--set` path or value the version fought can't take: not a numeric rule, an unknown character, a non-positive HP, or any other path. */
+/** The numbers of a character `--set` may change: its HP, and the threat and points it costs. */
+const CHARACTER_NUMBERS = ["hp", "threat", "points"] as const;
+const DIFFICULTY_STEPS = ["spawnThreat", "nestHp", "shrineHp"] as const;
+
+/** Refuses a `--set` path or value the version fought can't take: not a numeric rule, an unknown character or one without that number, a value out of its range, or any other path. */
 function checkOverride(path: string, value: number, ruleset: RealmArenaRuleset, rulesVersion: number): void {
     const parts = path.split(".");
     if (parts[0] === "RULES" && parts.length === 2) {
         const key = parts[1] as keyof RealmArenaRuleValues;
         const known = Object.hasOwn(ruleset.RULES, key) ? typeof ruleset.RULES[key] === "number" : (OPTIONAL_NUMERIC_RULES as readonly string[]).includes(key);
         if (!known) throw new Error(`--set: "${path}" isn't a numeric rule of rules version ${rulesVersion}`);
-    } else if (parts[0] === "CHARACTERS" && parts.length === 3 && parts[2] === "hp") {
+    } else if (parts[0] === "RULES" && parts.length === 4 && parts[1] === "HOLD_OUT_DIFFICULTY") {
+        const steps = ruleset.RULES.HOLD_OUT_DIFFICULTY;
+        if (!steps) throw new Error(`--set: "${path}": rules version ${rulesVersion} has no HOLD_OUT_DIFFICULTY`);
+        if (!Object.hasOwn(steps, parts[2]) || !(DIFFICULTY_STEPS as readonly string[]).includes(parts[3])) throw new Error(`--set: "${path}" isn't RULES.HOLD_OUT_DIFFICULTY.<easy|normal|hard>.<${DIFFICULTY_STEPS.join("|")}>`);
+    } else if (parts[0] === "CHARACTERS" && parts.length === 3 && (CHARACTER_NUMBERS as readonly string[]).includes(parts[2])) {
         if (!Object.hasOwn(ruleset.CHARACTERS, parts[1])) throw new Error(`--set: "${path}": rules version ${rulesVersion} has no character "${parts[1]}"`);
-        if (value <= 0) throw new Error(`--set: "${path}" must be above 0`);
+        const field = parts[2] as (typeof CHARACTER_NUMBERS)[number];
+        const character = ruleset.CHARACTERS[parts[1] as keyof RealmArenaRuleset["CHARACTERS"]] as unknown as Partial<Record<typeof field, number>>;
+        if (character[field] === undefined) throw new Error(`--set: "${path}": "${parts[1]}" has no ${field} in rules version ${rulesVersion}`);
+        if (field === "points" ? value < 0 : value <= 0) throw new Error(`--set: "${path}" must be ${field === "points" ? "0 or more" : "above 0"}`);
     } else {
-        throw new Error(`--set: "${path}" isn't RULES.<KEY> or CHARACTERS.<id>.hp`);
+        throw new Error(`--set: "${path}" isn't RULES.<KEY>, RULES.HOLD_OUT_DIFFICULTY.<difficulty>.<step> or CHARACTERS.<id>.<${CHARACTER_NUMBERS.join("|")}>`);
     }
 }
 
 /**
  * What `--set` may change, and what it takes effect on: the numeric values of
- * `rulesVersion`'s `RULES` (and the optional ones above), and a character's
- * `hp`, which is also the HP a Reinforce returns it at (half, `reinforcedHp`).
+ * `rulesVersion`'s `RULES` (and the optional ones above), the steps of its
+ * `HOLD_OUT_DIFFICULTY`, and a character's `hp` — which is also the HP a
+ * Reinforce returns it at (half, `reinforcedHp`) — `threat` and `points`.
  * The engine reads every one of them through `ruleValuesOf(game)` /
  * `rulesetOf(game)` — a module constant like `TEAM_HP_FACTOR` is only what the
  * guide prints — so each takes effect in a battle. Anything else is refused:
@@ -132,9 +171,10 @@ export function applyOverrides(scenario: Pick<BalanceScenario, "rules" | "set">)
     const rules: Record<string, unknown> = { ...base.RULES };
     const characters: Record<string, unknown> = { ...base.CHARACTERS };
     for (const [path, value] of Object.entries(scenario.set)) {
-        const [group, id] = path.split(".");
-        if (group === "RULES") rules[id] = value;
-        else characters[id] = { ...base.CHARACTERS[id as keyof RealmArenaRuleset["CHARACTERS"]], hp: value };
+        const [group, id, field, step] = path.split(".");
+        if (group === "CHARACTERS") characters[id] = { ...(characters[id] as object), [field]: value };
+        else if (step !== undefined) rules.HOLD_OUT_DIFFICULTY = { ...(rules.HOLD_OUT_DIFFICULTY as object), [field]: { ...(rules.HOLD_OUT_DIFFICULTY as Record<string, object>)[field], [step]: value } };
+        else rules[id] = value;
     }
     overrideRulesetForExperiment(version, { ...base, RULES: rules as unknown as RealmArenaRuleValues, CHARACTERS: characters as unknown as RealmArenaRuleset["CHARACTERS"] });
     overriddenVersion = version;
@@ -164,6 +204,63 @@ export function rallyChoiceFor(battle: BattleState, seats: readonly string[], pl
     if (!reinforce?.available) return rally;
     const best = reinforce.downed!.reduce((a, b) => reinforcedHp(b, battle) > reinforcedHp(a, battle) ? b : a);
     return reinforcedHp(best, battle) > rallyTotal(battle, player) / 2 ? { kind: "rally", choice: "reinforce", fighter: best.id } : rally;
+}
+
+/** How the harness's team plays a Hold Out whose nests produce the enemy (`--team-policy`). */
+export type TeamPolicy = "raid" | "planner";
+
+/**
+ * How many of a player's characters raid unless a scenario says (`--raiders`):
+ * the fastest three. Two, as §7 first proposed, die with a nest left and leave
+ * too few guards behind (realm-arena-balance.md, rules version 13).
+ */
+export const RAIDERS = 3;
+
+/**
+ * The raid policy (realm-arena-hold-out.md §7). The planner heads for the keep
+ * and never walks to a nest, so left alone it could only ever hold to the
+ * round cap. Each player's `RAIDERS` fastest standing characters (`movementOf`,
+ * ties by id) raid instead, picked again at the start of every one of that
+ * player's turns, and the rest guard the Shrine as the planner plays them.
+ */
+export const raidersOf = (battle: BattleState, player: string, count = RAIDERS): Fighter[] =>
+    battle.fighters.filter(fighter => fighter.owner === player && isCombatant(fighter, battle))
+        .sort((a, b) => movementOf(b, battle) - movementOf(a, battle) || a.id - b.id)
+        .slice(0, count);
+
+/**
+ * What one raider does next, or undefined when it has nothing useful left (no
+ * nest standing, none it can walk to, or no square that gets it closer): attack
+ * a standing nest its weapon reaches (the weakest, any warband's), otherwise
+ * move along its reach to the square closest by walking to the nearest nest,
+ * preferring one the nest is in weapon range from. Every action is one `check`
+ * accepts, so the command pipeline takes it.
+ */
+export function raidAction(battle: BattleState, player: string, raider: Fighter): Action | undefined {
+    const nests = warbandNests(battle.fighters, battle).filter(isStanding);
+    if (nests.length === 0 || raider.ap < 1) return undefined;
+    const accepted = (action: Action) => !("refused" in check(battle, player, action));
+    for (const nest of [...nests].sort((a, b) => a.hp - b.hp || a.id - b.id)) {
+        const attack: Action = { kind: "attack", fighter: raider.id, target: nest.id };
+        if (weaponReaches(battle, raider, nest.square) && accepted(attack)) return attack;
+    }
+    // Walking costs to each nest from the nest itself, round bodies: the way the raider would go were nothing in it.
+    const { climb } = moveRules(battle, raider);
+    const walks = nests.map(nest => ({ nest, costs: costsFrom(battle.field, [nest.square], { climb }) }));
+    const { nest, costs } = walks.reduce((best, walk) => walk.costs[raider.square] < best.costs[raider.square] ? walk : best);
+    if (costs[raider.square] === Infinity) return undefined;
+    // Closer is in range of the nest first, then fewer steps from it.
+    const rank = (square: number) => (weaponReaches(battle, { ...raider, square }, nest.square) ? 0 : 1e6) + costs[square];
+    const reach = reachOf(battle, raider);
+    let best = raider.square, bestRank = rank(raider.square);
+    for (let square = 0; square < reach.costs.length; square++) {
+        if (square === raider.square || reach.costs[square] === Infinity || costs[square] >= bestRank) continue;
+        const r = rank(square);
+        if (r < bestRank) [best, bestRank] = [square, r];
+    }
+    const path = best === raider.square ? undefined : pathTo(reach, best);
+    const move: Action | undefined = path && { kind: "move", fighter: raider.id, path: path.squares };
+    return move && accepted(move) ? move : undefined;
 }
 
 /**
@@ -211,21 +308,39 @@ export interface BattleSample {
     enemyDowned: number;
     /** The rounds a wave landed as. */
     waves: number[];
+    /**
+     * Where nests produce the enemy (`nestsProduce`), how the Hold Out came out;
+     * absent otherwise, so a version-12 sample is what it always was.
+     */
+    stars?: HoldOutStar[];
+    /** Whether every nest fell (the Brood broke), and the round it did in. */
+    broodBroken?: boolean;
+    brokeRound?: number;
+    /** The Shrine's HP at the end, and its most. */
+    shrineHp?: number;
+    shrineMax?: number;
+    nestsLeft?: number;
     ms: number;
 }
+
+/** What `simulateBattle` shows a watcher after each player's turn: the game, whose turn it was, and the ids of the characters that raided in it. */
+export type BattleWatch = (game: RealmArenaTestGame, player: string, raiders: readonly number[]) => void;
 
 /** The name a scenario's samples are grouped under, and the report heads it with. */
 export function scenarioKey(s: BalanceScenario): string {
     const seats = s.players === 1 ? "1 player (Solo)" : `${s.players} players`;
     // A Realm team, as every scenario was before the team could choose, is left unsaid.
     const team = s.team === "realm" ? seats : `${seats} as ${factionName(s.team)}`;
-    const mission = s.mission === "holdOut" ? `Hold Out (${s.map === "gate" ? "gate fort" : battlefieldById(mapFor(s.players, true, s.map)).name})` : "Hold the Centre";
+    const field = s.layout ? `${battlefieldById(s.layout).name}, layout ${s.layout}` : s.map === "gate" ? "gate fort" : battlefieldById(mapFor(s.players, true, s.map)).name;
+    const mission = s.mission === "holdOut" ? `Hold Out (${field})` : "Hold the Centre";
     const extras = [
         s.difficulty !== "normal" ? DIFFICULTY_NAMES[s.difficulty] : undefined,
         s.size !== "normal" ? `${BATTLE_SIZE_NAMES[s.size]} battle` : undefined,
         s.fog ? "fog" : undefined,
         s.rules !== undefined ? `rules v${s.rules}` : undefined,
         s.rally === "always" ? "rally always" : undefined,
+        s.teamPolicy === "planner" ? "team policy planner" : undefined,
+        s.teamPolicy !== "planner" && s.raiders !== undefined && s.raiders !== RAIDERS ? `${s.raiders} raiders` : undefined,
         s.temperaments === "off" ? "temperaments off" : undefined,
         s.set && Object.keys(s.set).length > 0 ? `set ${Object.entries(s.set).map(([path, value]) => `${path}=${value}`).join(" ")}` : undefined,
     ].filter(Boolean);
@@ -268,9 +383,12 @@ const seatsFor = (players: number) => Array.from({ length: players }, (_, k) => 
  * `seed`: each player's turn is the planner's actions for the team until it
  * has none worth taking, as a warband's is, then End turn — which plays the
  * warband that follows it. The team plays `team`'s planner if given, and this
- * checkout's otherwise; the warbands always play this checkout's.
+ * checkout's otherwise; the warbands always play this checkout's. `watch`,
+ * if given, is shown the game after each player's turn (its End turn and the
+ * warband's that follows) and once more at the end, with that turn's raiders:
+ * how a script follows one battle (`ra-balance:watch`).
  */
-export async function simulateBattle(scenario: BalanceScenario, seed: number, team?: TeamPlanner): Promise<BattleSample> {
+export async function simulateBattle(scenario: BalanceScenario, seed: number, team?: TeamPlanner, watch?: BattleWatch): Promise<BattleSample> {
     // The switch is the planner module's, so each worker (or a run in this process) sets its own before it plays.
     temperamentSwitch.on = scenario.temperaments !== "off";
     applyOverrides(scenario);
@@ -279,11 +397,15 @@ export async function simulateBattle(scenario: BalanceScenario, seed: number, te
     seedRolls(seed);
     const players = seatsFor(scenario.players);
     const game = makeGame(players, {}, settingsOf(scenario));
+    // The state takes nothing from its map but the id until the muster, which stands the zones, nests and Shrine from it.
+    if (scenario.layout) game.specificGameState.map = scenario.layout;
     await musterAll(game);
     const rounds = battleRoundsOf(game.specificGameState);
     const byRound: RoundCount[] = [];
     const waves: number[] = [];
     const teamFielded = battleOf(game).fighters.filter(fighter => !isWarband(fighter.owner)).length;
+    // Where the nests produce the enemy the team raids them, unless asked to leave it to the planner.
+    const raiding = scenario.teamPolicy !== "planner" && nestsProduce(scenario.mission, game.specificGameState);
 
     for (let turn = 0; !game.complete; turn++) {
         if (turn > rounds * players.length * 2 + 10) throw new Error(`${scenarioKey(scenario)}, seed ${seed}: the battle outlasted its turn limit`);
@@ -296,14 +418,32 @@ export async function simulateBattle(scenario: BalanceScenario, seed: number, te
             if (!(await play(game, actBy(player, choice))).outcome.validMove) throw new Error(`${scenarioKey(scenario)}, seed ${seed}: ${player}'s rally choice was refused`);
         }
         const cap = ACTION_POINTS * battleOf(game).fighters.filter(fighter => fighter.owner === player && isStanding(fighter)).length;
-        for (let step = 0; step < cap && !game.complete; step++) {
-            const action = planner.nextAction(viewOf(battleOf(game), player), player, game.specificGameState.roundsPlayed + 1, undefined, memo);
+        // The raiders (`raidersOf`) of this turn, and those that have nothing left to raid with, which the planner plays from then on.
+        const raiders = raiding ? raidersOf(battleOf(game), player, scenario.raiders).map(fighter => fighter.id) : [];
+        const released = new Set<number>();
+        // A refused raid releases the raider without spending AP, so it may take a step more than the AP would.
+        for (let step = 0; step < cap + raiders.length && !game.complete; step++) {
+            const battle = battleOf(game);
+            const raider = raiders.map(id => fighterById(battle, id)).find(fighter => fighter && !released.has(fighter.id) && isStanding(fighter) && fighter.ap > 0);
+            const raid = raider && raidAction(battle, player, raider);
+            if (raider && !raid) { released.add(raider.id); continue; }
+            let action = raid;
+            if (!action) {
+                // The raiders still raiding can't act for the planner: it sees them with no AP.
+                const view = viewOf(battle, player);
+                const held = new Set(raiders.filter(id => !released.has(id)));
+                action = planner.nextAction(held.size === 0 ? view : { ...view, fighters: view.fighters.map(fighter => held.has(fighter.id) ? { ...fighter, ap: 0 } : fighter) }, player, game.specificGameState.roundsPlayed + 1, undefined, memo);
+            }
             if (!action) break;
-            if (!(await play(game, actBy(player, action))).outcome.validMove) break;
+            if (!(await play(game, actBy(player, action))).outcome.validMove) {
+                if (raid && raider) { released.add(raider.id); continue; }
+                break;
+            }
         }
-        if (game.complete) break;
+        if (game.complete) { watch?.(game, player, raiders); break; }
         const { outcome } = await play(game, endTurnBy(player));
         if (!outcome.validMove) throw new Error(`${scenarioKey(scenario)}, seed ${seed}: ${player}'s End turn was refused`);
+        watch?.(game, player, raiders);
         const roundAfter = game.specificGameState.roundsPlayed;
         if (roundAfter > roundBefore) {
             // Counted after the wave that lands as the next round begins, so a
@@ -318,13 +458,16 @@ export async function simulateBattle(scenario: BalanceScenario, seed: number, te
     const fighters = battleOf(game).fighters;
     const enemy = fighters.filter(fighter => isWarband(fighter.owner));
     const teamFighters = fighters.filter(fighter => !isWarband(fighter.owner));
+    const won = game.endReason === "teamwin";
+    const endedRound = Math.min(game.specificGameState.roundsPlayed + 1, rounds);
+    const hold = nestsProduce(scenario.mission, game.specificGameState) ? holdOutRecord(game.specificGameState.stars, fighters, game.specificGameState) : {};
     return {
         scenario: scenarioKey(scenario) + (team ? ` · team plays ${team.label}` : ""),
         ...(team ? { teamPlanner: team.label } : {}),
         seed,
-        won: game.endReason === "teamwin",
+        won,
         detail: game.endDetail ?? "",
-        endedRound: Math.min(game.specificGameState.roundsPlayed + 1, rounds),
+        endedRound,
         rounds,
         byRound,
         teamFielded,
@@ -332,11 +475,52 @@ export async function simulateBattle(scenario: BalanceScenario, seed: number, te
         teamDowned: teamFighters.filter(fighter => !isStanding(fighter)).length,
         enemyDowned: enemy.filter(fighter => !isStanding(fighter)).length,
         waves,
+        ...hold,
+        // Breaking the Brood ends the battle on the spot, so the round it broke is the round it ended.
+        ...("broodBroken" in hold && hold.broodBroken && won ? { brokeRound: endedRound } : {}),
         ms: Math.round(performance.now() - started),
     };
 }
 
+/** How a Hold Out against nests that produce the enemy came out, as `BattleSample` keeps it. */
+function holdOutRecord(stars: readonly HoldOutStar[] | undefined, fighters: readonly Fighter[], context: BattleState | Pick<BattleState, "rulesVersion">) {
+    const nests = warbandNests(fighters, context);
+    const shrine = shrineOf({ fighters: [...fighters] });
+    const nestsLeft = nests.filter(isStanding).length;
+    const broodBroken = nests.length > 0 && nestsLeft === 0;
+    return {
+        stars: [...stars ?? []],
+        broodBroken,
+        ...(shrine ? { shrineHp: Math.max(0, shrine.hp), shrineMax: maxHpOf(shrine, context) } : {}),
+        nestsLeft,
+    };
+}
+
 // ─── Statistics ─────────────────────────────────────────────────────────────
+
+/** A share of the battles, and its 95% Wilson interval. */
+export interface Rate {
+    rate: number;
+    low: number;
+    high: number;
+}
+
+/** What a Hold Out whose nests produce the enemy came to over a scenario's battles (§6, §7). */
+export interface HoldOutStats {
+    /** The share won with at least one, two and all three stars: the ★ ★★ ★★★ columns of §7's targets. */
+    atLeast: [Rate, Rate, Rate];
+    /** The share earning each star, by `HOLD_OUT_STARS`. */
+    byStar: Record<HoldOutStar, Rate>;
+    /** The share of battles whose Brood broke, and the round it broke in, on average and in the middle; undefined with none broken. */
+    broken: Rate;
+    brokeMean?: number;
+    brokeMedian?: number;
+    /** The Shrine's HP at the end, on average, and its most. */
+    shrineHpMean: number;
+    shrineMax: number;
+    /** Nests standing at the end, on average. */
+    nestsLeftMean: number;
+}
 
 export interface ScenarioStats {
     scenario: string;
@@ -369,6 +553,8 @@ export interface ScenarioStats {
     exchange: number;
     /** How often each ending's words came up, commonest first, with the round stripped from "overrun in round 6". */
     endings: { detail: string; count: number }[];
+    /** Only for battles where nests produce the enemy: a version-12 scenario has none, and its report reads as it did. */
+    hold?: HoldOutStats;
     msMean: number;
 }
 
@@ -390,6 +576,26 @@ export function wilson(wins: number, n: number): { low: number; high: number } {
     return { low: Math.max(0, (centre - spread) / denominator), high: Math.min(1, (centre + spread) / denominator) };
 }
 
+const rateOf = (count: number, n: number): Rate => ({ rate: count / n, ...wilson(count, n) });
+
+/** The Hold Out numbers of the samples that carry them; undefined when none does (a version-12 run). */
+function holdOutStats(samples: readonly BattleSample[]): HoldOutStats | undefined {
+    const held = samples.filter(sample => sample.stars !== undefined);
+    if (held.length === 0) return undefined;
+    const n = held.length;
+    const earned = (star: HoldOutStar) => held.filter(sample => sample.stars!.includes(star)).length;
+    const broke = held.filter(sample => sample.brokeRound !== undefined).map(sample => sample.brokeRound!);
+    return {
+        atLeast: [1, 2, 3].map(count => rateOf(held.filter(sample => sample.won && sample.stars!.length >= count).length, n)) as HoldOutStats["atLeast"],
+        byStar: Object.fromEntries(HOLD_OUT_STARS.map(star => [star, rateOf(earned(star), n)])) as Record<HoldOutStar, Rate>,
+        broken: rateOf(held.filter(sample => sample.broodBroken).length, n),
+        ...(broke.length > 0 ? { brokeMean: mean(broke), brokeMedian: percentile(broke, 0.5) } : {}),
+        shrineHpMean: mean(held.map(sample => sample.shrineHp ?? 0)),
+        shrineMax: Math.max(...held.map(sample => sample.shrineMax ?? 0)),
+        nestsLeftMean: mean(held.map(sample => sample.nestsLeft ?? 0)),
+    };
+}
+
 /** One scenario's samples, added up. */
 export function summarise(samples: readonly BattleSample[]): ScenarioStats {
     if (samples.length === 0) throw new Error("no battles to summarise");
@@ -403,10 +609,12 @@ export function summarise(samples: readonly BattleSample[]): ScenarioStats {
         return going.length === 0 ? undefined : mean(going);
     });
     const endings = new Map<string, number>();
+    // The round and the difficulty come off each ending, so "the Shrine fell" (lost at the Shrine) stays apart from "overrun" (the team wiped out).
     for (const { detail } of samples) {
         const kind = detail.replace(/ in round \d+/, "").replace(/, on \w+$/, "");
         endings.set(kind, (endings.get(kind) ?? 0) + 1);
     }
+    const hold = holdOutStats(samples);
     const teamDowned = mean(samples.map(sample => sample.teamDowned));
     const enemyDowned = mean(samples.map(sample => sample.enemyDowned));
     return {
@@ -433,6 +641,7 @@ export function summarise(samples: readonly BattleSample[]): ScenarioStats {
         enemyDowned,
         exchange: teamDowned === 0 ? Infinity : enemyDowned / teamDowned,
         endings: [...endings].map(([detail, count]) => ({ detail, count })).sort((a, b) => b.count - a.count),
+        ...(hold ? { hold } : {}),
         msMean: mean(samples.map(sample => sample.ms)),
     };
 }
@@ -463,6 +672,23 @@ export function formatReport(stats: readonly ScenarioStats[], heading = "Realm A
         "|---|---:|---|---|---:|---|---|---:|",
         ...stats.map(s => `| ${s.scenario} | ${s.battles} | ${pct(s.winRate)} (${pct(s.winLow)}–${pct(s.winHigh)}) | ${one(s.endedMean)} of ${s.rounds} · ${s.endedP10} / ${s.endedMedian} / ${s.endedP90} | ${s.overrunMean === undefined ? "—" : `round ${one(s.overrunMean)}`} | ${one(s.teamFielded)} / ${one(s.teamDowned)} | ${one(s.enemyFielded)} / ${one(s.enemyDowned)} | ${one(s.exchange)} |`),
     ];
+    // Only where nests produce the enemy: a version-12 report has no such table.
+    const holds = stats.filter(s => s.hold);
+    if (holds.length > 0) {
+        const named = HOLD_OUT_STARS.map(star => HOLD_OUT_STAR_INFO[star].name);
+        const range = ({ rate, low, high }: Rate) => `${pct(rate)} (${pct(low)}–${pct(high)})`;
+        lines.push(
+            "",
+            "Stars, where the nests produce the enemy: ★ is a win, ★★ a win with two stars at least, ★★★ all three.",
+            "",
+            `| Scenario | ★ | ★★ | ★★★ | ${named.join(" | ")} | Brood broken | Broke in round: mean / median | Shrine HP at the end | Nests left |`,
+            `|---|---|---|---|${named.map(() => "---:").join("|")}|---:|---|---|---:|`,
+            ...holds.map(s => {
+                const h = s.hold!;
+                return `| ${s.scenario} | ${h.atLeast.map(range).join(" | ")} | ${HOLD_OUT_STARS.map(star => pct(h.byStar[star].rate)).join(" | ")} | ${pct(h.broken.rate)} | ${h.brokeMean === undefined ? "—" : `${one(h.brokeMean)} / ${h.brokeMedian}`} | ${one(h.shrineHpMean)} of ${h.shrineMax} | ${one(h.nestsLeftMean)} |`;
+            }),
+        );
+    }
     for (const s of stats) {
         const rounds = Array.from({ length: s.rounds }, (_, r) => r);
         lines.push(

@@ -9,7 +9,7 @@ import { catalogueV13 } from "./catalogues/v13";
 import type { Ability, AbilityId, Character, CharacterId, CharacterOption, Effect, EffectId, Faction, FactionId, Item, ItemId, OptionId, Weapon } from "./characters";
 
 /** Independent of commandVersion: a protocol change need not change a match's rules. */
-export const CURRENT_RULESET_VERSION = 12;
+export const CURRENT_RULESET_VERSION = 13;
 
 // Keep each entry's required fields (e.g. Fireball's range) while allowing
 // later catalogues to change their values without copying the whole table.
@@ -52,9 +52,9 @@ const rulesetV8: RealmArenaRuleset = registered(catalogueV8);
 const rulesetV9: RealmArenaRuleset = registered(catalogueV9);
 const rulesetV10: RealmArenaRuleset = registered(catalogueV10);
 const rulesetV11: RealmArenaRuleset = registered(catalogueV11);
-// Version 12 is the current release (§39.9).
+// Version 12 is the previous release (§39.9): battles started on it play out by it.
 const rulesetV12: RealmArenaRuleset = registered(catalogueV12);
-// Version 13 is registered but not current until Hold Out's rethink is released (realm-arena-hold-out.md §8).
+// Version 13 is the current release: Hold Out's rethink (realm-arena-hold-out.md §8).
 const rulesetV13: RealmArenaRuleset = freeze(catalogueV13);
 
 // Games created before the balance release had no stamp, or one below 7.
