@@ -604,8 +604,10 @@ rounds") and breaks the Brood in one battle of 72.
   doesn't, threat 2 with a starting horde of 6, wins nearly everything. Each
   player brings a warband, and every one of its nests must fall to break the
   Brood, so a bigger team has more nests to reach across the same Sacked Fort,
-  while a single nest left standing keeps the whole Brood coming. That is a
-  likely reason, not a measured one. Either way no single value of these levers
+  while every warband's horde marches on the one Shrine, whose HP grows by a
+  third of the solo Shrine's a player. (The Brood does slow as nests fall: each
+  standing nest adds its own threat, and a warband with none adds nothing.)
+  That is a likely reason, not a measured one. Either way no single value of these levers
   fits Solo and a team of four at once.
 - **The stars don't grade.** A raiding team that wins breaks the Brood early
   with the Shrine nearly whole, so ★, ★★ and ★★★ come out within a few points of
