@@ -201,8 +201,12 @@ export function rallyChoiceFor(battle: BattleState, seats: readonly string[], pl
 /** How the harness's team plays a Hold Out whose nests produce the enemy (`--team-policy`). */
 export type TeamPolicy = "raid" | "planner";
 
-/** How many of a player's characters raid unless a scenario says (`--raiders`): the fastest two. */
-export const RAIDERS = 2;
+/**
+ * How many of a player's characters raid unless a scenario says (`--raiders`):
+ * the fastest three. Two, as §7 first proposed, die with a nest left and leave
+ * too few guards behind (realm-arena-balance.md, rules version 13).
+ */
+export const RAIDERS = 3;
 
 /**
  * The raid policy (realm-arena-hold-out.md §7). The planner heads for the keep

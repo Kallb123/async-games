@@ -5,7 +5,7 @@ import type { HoldOutStar } from "../../src/games/RealmArena/rules";
 import { holdOutDifficultyOf, movementOf } from "../../src/games/RealmArena/rules";
 import { ruleValuesOf, rulesetFor } from "../../src/games/RealmArena/rulesets";
 import {
-    applyOverrides, formatReport, parseOverrides, percentile, raidersOf, scenarioKey, settingsOf, simulateBattle, summarise, summariseAll, wilson,
+    applyOverrides, formatReport, parseOverrides, percentile, RAIDERS, raidersOf, scenarioKey, settingsOf, simulateBattle, summarise, summariseAll, wilson,
     type BalanceScenario, type BattleSample,
 } from "./realmArenaBalance";
 
@@ -41,8 +41,8 @@ describe("the balance harness's scenarios", () => {
         expect(scenarioKey({ ...SOLO, rules: 12, rally: "always" })).toBe("1 player (Solo) vs Swarm · Hold Out (Ruined Fort) · rules v12, rally always");
         // The raid policy is the default where nests produce the enemy and unsaid; the planner alone and another number of raiders are named.
         expect(scenarioKey({ ...SOLO, rules: 13, teamPolicy: "planner" })).toBe("1 player (Solo) vs Swarm · Hold Out (Ruined Fort) · rules v13, team policy planner");
-        expect(scenarioKey({ ...SOLO, rules: 13, teamPolicy: "raid", raiders: 2 })).toBe(scenarioKey({ ...SOLO, rules: 13 }));
-        expect(scenarioKey({ ...SOLO, rules: 13, raiders: 3 })).toBe("1 player (Solo) vs Swarm · Hold Out (Ruined Fort) · rules v13, 3 raiders");
+        expect(scenarioKey({ ...SOLO, rules: 13, teamPolicy: "raid", raiders: 3 })).toBe(scenarioKey({ ...SOLO, rules: 13 }));
+        expect(scenarioKey({ ...SOLO, rules: 13, raiders: 2 })).toBe("1 player (Solo) vs Swarm · Hold Out (Ruined Fort) · rules v13, 2 raiders");
         // The temperaments (§39.8) are on by default and unsaid; off is named.
         expect(scenarioKey({ ...SOLO, rules: 12, temperaments: "off" })).toBe("1 player (Solo) vs Swarm · Hold Out (Ruined Fort) · rules v12, temperaments off");
     });
@@ -148,9 +148,9 @@ describe("the balance harness's raid policy and stars (rules 13)", () => {
         await musterAll(game);
         const battle = battleOf(game);
         const raiders = raidersOf(battle, "p1");
-        expect(raiders).toHaveLength(2);
+        expect(raiders).toHaveLength(RAIDERS);
         const speeds = battle.fighters.filter(fighter => fighter.owner === "p1").map(fighter => movementOf(fighter, battle)).sort((a, b) => b - a);
-        expect(raiders.map(fighter => movementOf(fighter, battle))).toEqual(speeds.slice(0, 2));
+        expect(raiders.map(fighter => movementOf(fighter, battle))).toEqual(speeds.slice(0, RAIDERS));
         expect(raidersOf(battle, "p1", 1)).toEqual(raiders.slice(0, 1));
         expect(raidersOf(battle, "nobody")).toEqual([]);
     }, 30_000);

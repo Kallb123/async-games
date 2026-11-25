@@ -12,7 +12,7 @@
 //   npm run ra-balance -- --rules 12 --rally always       # under a rules version where the rally is a choice, the team always Rallies (default: --rally policy, §39.4)
 //   npm run ra-balance -- --rules 12 --temperaments off   # the Swarm's temperaments (§39.8) on or off in the planner (default: on, as in the game)
 //   npm run ra-balance -- --rules 13 --team-policy planner # where nests produce the enemy (rules 13), the team plays the planner alone, never raiding a nest (default: --team-policy raid, §7)
-//   npm run ra-balance -- --rules 13 --raiders 3          # how many of each player's characters raid (default: the fastest 2); the rest guard the Shrine
+//   npm run ra-balance -- --rules 13 --raiders 3          # how many of each player's characters raid (default: the fastest 3); the rest guard the Shrine
 //   npm run ra-balance -- --rules 12 --set RULES.WAVE_GROWTH_POINTS=25,CHARACTERS.broodQueen.hp=24 # override numbers in that version's catalogue, in every worker, before any battle
 //   npm run ra-balance -- --rules 13 --set RULES.SPAWN_THREAT=3,CHARACTERS.nest.hp=20,CHARACTERS.brute.threat=4,RULES.HOLD_OUT_DIFFICULTY.hard.nestHp=4
 //                                                         # (RULES.<KEY> for a numeric rule; RULES.HOLD_OUT_DIFFICULTY.<easy|normal|hard>.<spawnThreat|nestHp|shrineHp>;

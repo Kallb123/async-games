@@ -55,7 +55,7 @@ on:
         description: Where the nests produce the enemy (rules 13), how the team plays (blank or raid, or planner for the planner alone, which never walks to a nest)
         default: ''
       raiders:
-        description: Under the raid policy, how many of each player's characters raid the nests (blank for 2); the rest guard the Shrine
+        description: Under the raid policy, how many of each player's characters raid the nests (blank for 3); the rest guard the Shrine
         default: ''
       set:
         description: 'Numbers to override in the rules version being fought, PATH=NUMBER comma-separated: RULES.<KEY>, RULES.HOLD_OUT_DIFFICULTY.<difficulty>.<step> or CHARACTERS.<id>.<hp|threat|points> (as RULES.SPAWN_THREAT=3,CHARACTERS.nest.hp=20)'
