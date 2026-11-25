@@ -175,8 +175,9 @@ export interface IRealmArenaSpecificGameState {
     /**
      * Whether, at some point, every nest (§39.7) of the Swarm was down at once
      * with a wave still to land: set as the last one falls, and never cleared,
-     * though the nests regrow. It says whether nests stand, so it is sent only
-     * once the battle is over (`nestsCleared` on the response). Absent otherwise.
+     * though the nests regrow. Not sent to anyone: the response dropped it when
+     * version 13 was released, and only a version 12 battle still in progress at
+     * that release reads it, until it ends. Absent otherwise.
      */
     nestsCleared?: true;
     /**
@@ -667,7 +668,6 @@ export function gameStateToModel(
         ...(gs.phase === "battle" && nestsProduce(gs.coop?.mission, gs) ? { nestsLeft: warbandNests(gs.fighters, gs).filter(isStanding).length } : {}),
         ...(complete && gs.stars ? { stars: [...gs.stars] } : {}),
         // Whether nests stand is unseen in fog until the battle is over, so this waits for it too.
-        ...(complete && gs.nestsCleared ? { nestsCleared: true as const } : {}),
         ...(gs.coop?.mission === "holdOut" && gs.phase !== "muster" ? { enemiesDefeated: gs.fighters.filter(fighter => isWarband(fighter.owner) && fighter.hp <= 0 && !isStructure(fighter, gs)).length } : {}),
         ...(gs.coop?.difficulty ? { difficulty: gs.coop.difficulty } : {}),
         ...(gs.coop?.teamBlocks ? { teamBlocks: true as const } : {}),

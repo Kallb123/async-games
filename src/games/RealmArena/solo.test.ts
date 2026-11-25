@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { buildTimeline } from "@/utils/games/replay";
-import { REALM } from "./characters";
+import { FACTIONS } from "./characters";
 import { computeRealmArenaResultStats, formatRealmArenaResultStats, gameStateToModel, RealmArenaInvitationModel, type IRealmArenaGameData, type RealmArenaSettings } from "./RealmArenaModels";
 import { recordBattle } from "./recordBattle";
 import { RealmArenaUndo } from "./RealmArenaLogic";
@@ -49,12 +49,13 @@ describe("a solo battle's creation (§30.6)", () => {
         const invite = { turnTimer: "unlimited", coop: { enemy: "realm", mission: "holdOut", difficulty: "hard" } };
         const game = await createGame.call(invite, invite, ["a"]);
         expect(game.specificGameState.map).toBe("ruinedFort");
-        expect(game.specificGameState.coop).toEqual({ enemy: "realm", nextWarband: 0, mission: "holdOut", difficulty: "hard" });
+        // The enemy the (old) tab sent is ignored: Hold Out is fought against the Brood (`HOLD_OUT_ENEMY`).
+        expect(game.specificGameState.coop).toEqual({ enemy: "brood", nextWarband: 0, mission: "holdOut", difficulty: "hard" });
         expect(game.currentTurn).toBe("a");
         expect(game.turnTimer).toBe("unlimited");
         const setup = game.gameState.history.map(entry => entry.text);
         expect(setup).toContain("Setup: Hold Out on the Ruined Fort, over 15 battle rounds");
-        expect(setup).toContain(`Setup: the players fight together against ${REALM.enemyName}, a warband deployed opposite each of them`);
+        expect(setup).toContain(`Setup: the players fight together against ${FACTIONS.brood.enemyName}, a warband deployed opposite each of them`);
         expect(battleRounds(1)).toBe(battleRounds(2));
     });
 

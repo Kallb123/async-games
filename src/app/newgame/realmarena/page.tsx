@@ -45,20 +45,15 @@ const ENEMY_CHOICES: OptionChoice<Enemy>[] = [
 ];
 
 // What a co-op team sets out to do (§30.3): the keep's points race, or surviving the waves.
-// Hold Out's own text follows the current ruleset: the Brood and its nests once
-// version 13 is current (realm-arena-hold-out.md §5), waves until then.
+// Hold Out's own text is the Brood and its nests (realm-arena-hold-out.md §5).
 const MISSION_CHOICES: OptionChoice<Mission>[] = [
   { id: 'holdCentre', label: 'Hold the Centre', description: 'For up to three. Score points by controlling the keep and knocking enemies out.' },
-  { id: 'holdOut', label: 'Hold Out', description: nestsProduce('holdOut')
-    ? holdOutMissionDescription()
-    : 'Survive enemy waves, each bigger than the last, until the last round. Against the Swarm they come themed, with nests to burn out.' },
+  { id: 'holdOut', label: 'Hold Out', description: holdOutMissionDescription() },
 ];
 
 // Where Hold Out is fought (§30.9, §35): a battlefield built for it, or the line battle Hold the Centre is fought on.
 const BATTLEFIELD_CHOICES: OptionChoice<Battlefield>[] = [
-  { id: 'sackedFort', label: 'Sacked Fort', description: nestsProduce('holdOut')
-    ? 'For two to four. Start in the ruined keep in the middle, with the Brood closing in from all round the edges.'
-    : 'For two to four. Start in the ruined keep in the middle, with the enemy closing in, and landing its waves, all round the edges.' },
+  { id: 'sackedFort', label: 'Sacked Fort', description: 'For two to four. Start in the ruined keep in the middle, with the Brood closing in from all round the edges.' },
   { id: 'sunkenVillage', label: 'Sunken Village', description: 'For three or four. Start on the sunken green, with the enemy closing in through hedges and roofless cottages that hide it until it is close.' },
   { id: 'line', label: 'Gate Fort', description: 'For up to three. The Twin- or Three-Gate Fort, as in Hold the Centre: start along one edge, with the enemy opposite.' },
 ];

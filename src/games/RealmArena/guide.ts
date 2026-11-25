@@ -3,7 +3,7 @@ import { ABILITIES, CHARACTERS, COOP_PLAYERS, EFFECTS, FACTIONS, ITEMS, THROW_RA
 import { RANK_XP } from "./mastery";
 import { ruleValuesOf, rulesetOf, type RulesContext } from "./rulesets";
 import type { HoldOutDifficulty } from "./ruleValues";
-import { hatchClause, HOLD_OUT_STAR_INFO, nestsProduce, ACTION_POINTS, ARMOUR, ASSIST_DIVISOR, ATTACK_AP, CENTRE_POINTS, CENTRE_SCORES_FROM_ROUND, COVER_PENALTY, FLANK_BONUS, GRAZE_BAND, HIGH_GROUND_BONUS, HUNKER_AP, KNOCKOUT_DIVISOR, FAR_SHOT_DISTANCE, MELEE_ACCURACY, OVERWATCH_PENALTY, REACTION_COST, SIGHT_RANGE, TEAM_HP_FACTOR } from "./rules";
+import { hatchClause, HOLD_OUT_STAR_INFO, ACTION_POINTS, ARMOUR, ASSIST_DIVISOR, ATTACK_AP, CENTRE_POINTS, CENTRE_SCORES_FROM_ROUND, COVER_PENALTY, FLANK_BONUS, GRAZE_BAND, HIGH_GROUND_BONUS, HUNKER_AP, KNOCKOUT_DIVISOR, FAR_SHOT_DISTANCE, MELEE_ACCURACY, OVERWATCH_PENALTY, REACTION_COST, SIGHT_RANGE, TEAM_HP_FACTOR } from "./rules";
 
 // The how-to-play primer shown from the game-options menu, and the reference
 // text behind the guided tour (tutorial.ts), which takes the guide's place on
@@ -24,9 +24,6 @@ import { hatchClause, HOLD_OUT_STAR_INFO, nestsProduce, ACTION_POINTS, ARMOUR, A
 // section names a gate or a tower of one fort. The tunable numbers — costs,
 // penalties, scores, speeds — come from the rules themselves, so a rebalance
 // can't leave the guide behind.
-
-// The optional values of the current ruleset the Hold Out text states: present from version 12.
-const { WAVE_GROWTH_POINTS = 0, WAVE_CAP = 0, NEST_POINTS = 0 } = ruleValuesOf();
 
 const lowerFirst = (text: string): string => text.charAt(0).toLowerCase() + text.slice(1);
 
@@ -54,24 +51,18 @@ function difficultyWords(step: Readonly<HoldOutDifficulty> | undefined): string 
     return `${hatch ? `${hatch} and have` : "the nests have"} ${hp(step.nestHp)}, and the Shrine has ${hp(step.shrineHp)}`;
 }
 
-/** The ground Hold Out is fought on, told by what closes in on the team and by what comes at it through the village: the same sentences in every ruleset but for the foe's name. */
+/** The ground Hold Out is fought on, told by what closes in on the team and by what comes at it through the village. */
 function holdOutGround(closesIn: string, foe: string): string {
     return `Hold Out can also be fought on the Sacked Fort, where your team starts in the ruined keep in the middle and ${closesIn} from every edge — or, for three or four of you, on the Sunken Village, where you start on a green sunk below the village and ${foe} comes at you through lanes, hedges and roofless cottages. A hedge stands a full height, like a wall, so nobody climbs or sees through it from the same ground, but a fireball or a flask burns it away. A team of four plays only Hold Out, on the Sacked Fort or the Sunken Village; Hold the Centre and the gate forts seat up to three.`;
 }
 
-/** What a co-op team can be fighting: the same in every ruleset, after the sentence that opens it. */
+/** What a co-op team can be fighting in Hold the Centre, after the sentence that opens it. */
 const ENEMIES_TAIL = ` the Renegades — deserters from the Realm, fielding characters like yours — or the Swarm: more of them, each cheaper and weaker, whose acid corrodes whoever it hits, +${EFFECTS.corroded.hitBonus}% to hit them until a heal washes it off, and whose Bloaters burst among your squad, and burst again if you down them — or the Miners: fewer of them, each tougher, whose Sappers throw dynamite. If the host chose a random enemy, you won't know whom you're fighting until one of its characters is seen.`;
 
-/**
- * The co-op section: the Hold the Centre half is the same either way, and Hold Out's paragraph is
- * version 13's once that is the current ruleset, version 12's until then (PR 5 deletes the older).
- */
+/** The co-op section: Hold the Centre's half, then Hold Out's, told from `context`'s rules (none is the current ruleset). */
 export function coopText(context?: RulesContext): string {
-    const produce = nestsProduce("holdOut", context);
-    const intro = `If the host chose co-op, 2 to ${COOP_PLAYERS.max} of you fight as one team against warbands the game plays, one for each of you. On the gate forts, which seat up to three, each warband deploys opposite one of you, with the team along one edge and the enemy along the other. Solo is the same on your own: one warband opposite you on the Ruined Fort, which takes its turn straight after each of yours, and no turn timer. ${produce ? "In Hold the Centre each warband" : "Each warband"} musters by the difficulty the host chose: fewer points than each of you on Easy, as many on Normal, and more on Hard. You still take your own turns, and straight after each one a warband takes its turn, by the same rules as yours — unless the host chose to take turns in blocks, when each of you goes in turn and then every warband does, before the next round begins. Teammates are allies: you share what you see in fog, heal and raise each other's characters, and nobody's overwatch fires at a teammate — but a fireball or a flask still hits whoever is under it. In Hold the Centre, each of you scores as usual, and the team wins if all your points added together beat the enemy's; ties go first to the side with more left standing, then to the enemy holding the field. `;
-    return produce
-        ? `${intro}${brokenBroodText(context)} Hold the Centre is fought against${ENEMIES_TAIL}`
-        : `${intro}In Hold Out, a fresh wave lands at the start of rounds 4, 7, 10 and 13 (a team of two, three or four lasts 13 rounds in Hold Out, and Solo 15), wherever the warbands' deployment zones have room: against the Renegades and the Miners it replaces every fallen warband character and brings one more besides, so each wave leaves a warband a character stronger than the last. Against the Swarm the waves have a theme, each bought with points rather than a head count: the Rush's swarm of Skitterlings and Ravagers, the Bile's Spitters and Bloaters, the Brutes' Ravagers, and the Queen's mixed brood. Each wave has ${WAVE_GROWTH_POINTS} more points than the last, and never leaves a warband with more than ${WAVE_CAP} standing. The last three also bring an elite, bought first: the ${CHARACTERS.bileLobber.name}, which lobs corroding bile over its own side's heads; the ${CHARACTERS.carapaceBrute.name}, which takes 1 less from every blow; and the ${CHARACTERS.broodQueen.name}, which hatches Skitterlings beside her — down her first. Each Swarm warband also has nests near the edge of the map, from the start: ${CHARACTERS.nest.hp} HP each, anything that hurts a character hurts them, and they never move or fight. Every nest you destroy before a wave lands takes ${NEST_POINTS} points off that warband's next wave, and the scoreboard says how many it cost. The nests regrow, whole, as the wave lands, so burning them out is a decision before every wave. A Bloater downed by anything but its own burst bursts where it falls, so down them from a distance or leave them be. Your characters have ${Math.round((TEAM_HP_FACTOR - 1) * 100)}% more HP than usual in Hold Out, and its warbands muster a step smaller than the difficulty says. Against ${FACTIONS.realm.enemyName}, every hit on your characters does ${ARMOUR} less (never under 1), except burning — but not on a Miner of yours, which is tough enough without it. A wave heals nobody, but each one you survive earns your team a rally: as your next turn begins after one lands, before anything else, you choose one. Rally gives every standing character of yours half its HP back. Reinforce stands one downed character of yours up at half its HP on a free square of your deployment zone, ready to act at once — even a player whose whole squad is down gets this turn. Resupply hands every standing character of yours the item it mustered with, if it has used it. A choice with nothing to do is greyed out, and a turn that runs out of time takes Rally. The scoreboard says how many the next wave brings, and the round before it lands, the warbands' zones light up. ${holdOutGround("the warbands close in, and land their waves,", "the enemy")} Your team wins by having anyone still standing after the last round, and loses as soon as everyone is down. The enemy is${ENEMIES_TAIL}`;
+    const intro = `If the host chose co-op, 2 to ${COOP_PLAYERS.max} of you fight as one team against warbands the game plays, one for each of you. On the gate forts, which seat up to three, each warband deploys opposite one of you, with the team along one edge and the enemy along the other. Solo is the same on your own: one warband opposite you on the Ruined Fort, which takes its turn straight after each of yours, and no turn timer. In Hold the Centre each warband musters by the difficulty the host chose: fewer points than each of you on Easy, as many on Normal, and more on Hard. You still take your own turns, and straight after each one a warband takes its turn, by the same rules as yours — unless the host chose to take turns in blocks, when each of you goes in turn and then every warband does, before the next round begins. Teammates are allies: you share what you see in fog, heal and raise each other's characters, and nobody's overwatch fires at a teammate — but a fireball or a flask still hits whoever is under it. In Hold the Centre, each of you scores as usual, and the team wins if all your points added together beat the enemy's; ties go first to the side with more left standing, then to the enemy holding the field. `;
+    return `${intro}${brokenBroodText(context)} Hold the Centre is fought against${ENEMIES_TAIL}`;
 }
 
 export const guide: GameGuide = {

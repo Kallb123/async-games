@@ -2369,9 +2369,8 @@ export function wavePurchase(faction: Faction, budget: number, round: number, co
 /**
  * Whether a Hold Out battle's nests produce its enemy every round, rather than
  * waves landing (realm-arena-hold-out.md §5.1): from rules version 13. With no
- * `context`, whether the current ruleset's do: what the guide, the setup screen,
- * the tutorial and the achievements switch on, so version 13's copy waits for
- * its release (§6.1).
+ * `context`, whether the current ruleset's do, which the setup screen asks of the
+ * mission it is about to create.
  */
 export const nestsProduce = (mission: string | undefined, context?: RulesContext): boolean =>
     mission === "holdOut" && ruleValuesOf(context).SPAWN_THREAT !== undefined;

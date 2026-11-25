@@ -871,7 +871,7 @@ describe("Realm Arena's random co-op enemy", () => {
     });
 
     it("pins the viewerless response used to judge achievements", async () => {
-        const game = makeRealmArenaGame(["a", "b"], {}, { fog: true, size: "large", coop: { enemy: "realm", random: true, mission: "holdOut", difficulty: "hard" } });
+        const game = makeRealmArenaGame(["a", "b"], {}, { rulesVersion: 12, fog: true, size: "large", coop: { enemy: "realm", random: true, mission: "holdOut", difficulty: "hard" } });
         await realmArenaMusterAll(game);
 
         const hidden = realmArenaStateToModel(game.specificGameState, null, null);
@@ -922,13 +922,13 @@ describe("Realm Arena's Regicide and Scorched Earth read the finished view alone
         return game;
     };
 
-    it("sets nestsCleared when the last nest falls with a wave to come, and sends it only once the battle is over", async () => {
+    it("sets nestsCleared in a version 12 battle's state when the last nest falls with a wave to come, and never sends it", async () => {
         const game = await burnNests("all", () => 0);
         const gs = game.specificGameState;
         expect(gs.nestsCleared).toBe(true);
         for (const viewer of VIEWERS) {
             expect(realmArenaStateToModel(gs, viewer, null), `${viewer}`).not.toHaveProperty("nestsCleared");
-            expect(realmArenaStateToModel(gs, viewer, null, true).nestsCleared).toBe(true);
+            expect(realmArenaStateToModel(gs, viewer, null, true), `${viewer} complete`).not.toHaveProperty("nestsCleared");
         }
     });
 

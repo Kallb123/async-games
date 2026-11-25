@@ -114,8 +114,6 @@ describe("Realm Arena ruleset compatibility", () => {
         const { taunt: _before, ...rest } = before.ABILITIES, { taunt: _after, hatch: _hatch, carapace: _carapace, bile: _bile, ...restAfter } = after.ABILITIES;
         expect(restAfter).toEqual(rest);
         for (const id of ["OPTIONS", "ITEMS", "EFFECTS"] as const) expect(after[id]).toBe(before[id]);
-        // Released (§39.9): a battle created now is version 12.
-        expect(real.CURRENT_RULESET_VERSION).toBe(12);
     });
 
     it("gives the five Realm characters a loadout in v12 and changes nothing else of v11's (§40.1)", async () => {
@@ -136,7 +134,13 @@ describe("Realm Arena ruleset compatibility", () => {
         // No other character has a pool; the Scout's is the version before's.
         for (const [id, character] of Object.entries(after)) if (!(id in loadouts)) expect(character.loadout, id).toBeUndefined();
         for (const id of ["OPTIONS", "ITEMS", "EFFECTS"] as const) expect(real.rulesetFor(12)[id]).toBe(real.rulesetFor(11)[id]);
-        expect(real.CURRENT_RULESET_VERSION).toBe(12);
+    });
+
+    it("stamps a battle created now with version 13, the Brood's release, over the shipped version 12", async () => {
+        const real = await vi.importActual<typeof import("./rulesets")>("./rulesets");
+        expect(real.CURRENT_RULESET_VERSION).toBe(13);
+        expect(real.rulesetFor(real.CURRENT_RULESET_VERSION)).toBe(real.rulesetFor(13));
+        expect(real.rulesetFor(12)).not.toBe(real.rulesetFor(13));
     });
 
     it("makes the rally each player's choice in v12 and changes nothing else of v11's rules (§39.4)", async () => {
