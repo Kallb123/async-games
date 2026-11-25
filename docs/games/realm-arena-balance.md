@@ -651,6 +651,27 @@ three raiders, 24 battles a cell:
   Shrine, so the team is overrun with the Shrine nearly whole. That is also why
   the stars don't grade: Held and Unscathed come free with any win.
 
+**A cap per nest.** Production is already per nest (each standing nest adds
+its own threat), but a warband's cap, 16 minions, isn't: one nest keeps a horde
+of 16 topped up. `HORDE_CAP_PER_NEST`, which no catalogue sets, caps a warband's
+minions by its nests standing instead, so a nest destroyed takes its share of
+the cap with it. 24 battles a cell, three raiders:
+
+| Cap a nest | Solo | 2 players, Sacked Fort | 3 players, Sacked Fort | 4 players, Sacked Fort | 2 players, Twin-Gate | 3 players, Three-Gate |
+|---|---:|---:|---:|---:|---:|---:|
+| None (16 a warband, as committed) | 58% | 21% | 0% | 0% | 0% | 0% |
+| 8 (16 while both stand) | 75% | 21% | 0% | 0% | 0% | 4% |
+| 6 | 75% | 46% | 0% | 0% | 8% | 4% |
+| 4 | 92% | 50% | 0% | 0% | 17% | 0% |
+
+It helps Solo and two players and does nothing for three or four, who lose
+later (round 8–9 rather than 7–8) but still lose. Watched, a team of three on
+the Sacked Fort loses three quarters of its characters by round 3: the raiders
+take the near nests, along the edge they start by, while the three starting
+hordes there (each four minions and a Ravager) bring them down before any cap
+is reached, and every warband's other nest is on the far edge. The cap changes
+what a nest is worth, not that opening.
+
 **What's next** is the plan's to decide (`realm-arena-hold-out.md` §8.3).
 The race and its "every warband" condition come before the numbers: a warband's
 nests closer together on the Sacked Fort, the Brood's warbands drawn to the

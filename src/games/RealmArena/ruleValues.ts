@@ -93,6 +93,13 @@ export interface RealmArenaRuleValues {
     /** The most characters that aren't minions, elites among them, a horde warband stands at once (§4.4). Absent before version 13. */
     HORDE_REAL_CAP?: number;
     /**
+     * Where set, a horde warband's minion cap is this many for each nest it has
+     * standing, in place of `HORDE_CAP`: a nest destroyed takes its share of the
+     * cap with it, so the warband stops refilling until it's under the new one.
+     * An experiment for the balance harness's `--set`; no catalogue sets it.
+     */
+    HORDE_CAP_PER_NEST?: number;
+    /**
      * The threat each standing nest adds to its warband at the start of each of
      * its turns, to spend at once (realm-arena-hold-out.md §5.1), in Hold Out
      * against a horde: its nests produce the enemy every round, and no wave

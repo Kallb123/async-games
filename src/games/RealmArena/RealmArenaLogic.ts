@@ -1356,7 +1356,7 @@ function spawn(gs: IRealmArenaSpecificGameState, owner: string): void {
     const theme = spawnThemeOf(factionById(gs.coop?.enemy, gs), round, gs);
     if (nests.length === 0 || !theme) return;
     const banked = (gs.threat?.[owner] ?? 0) + nests.length * spawnThreatOf(round, gs);
-    const { bought, left } = hordeSpawn(theme, banked, hordeCountOf(gs, owner), gs);
+    const { bought, left } = hordeSpawn(theme, banked, hordeCountOf(gs, owner), gs, nests.length);
     const { CHARACTERS } = rulesetOf(gs);
     let unspent = left;
     bought.forEach((character, index) => {

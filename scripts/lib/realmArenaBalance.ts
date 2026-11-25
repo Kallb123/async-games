@@ -97,7 +97,7 @@ export interface BalanceScenario {
 }
 
 /** The optional numeric rule values (`RealmArenaRuleValues`): absent from older catalogues, but a rule the engine reads whenever it's there. */
-const OPTIONAL_NUMERIC_RULES = ["WAVE_GROWTH_POINTS", "WAVE_CAP", "NEST_POINTS"] as const satisfies readonly (keyof RealmArenaRuleValues)[];
+const OPTIONAL_NUMERIC_RULES = ["WAVE_GROWTH_POINTS", "WAVE_CAP", "NEST_POINTS", "HORDE_CAP_PER_NEST"] as const satisfies readonly (keyof RealmArenaRuleValues)[];
 
 /** The numbers of a character `--set` may change: its HP, and the threat and points it costs. */
 const CHARACTER_NUMBERS = ["hp", "threat", "points"] as const;

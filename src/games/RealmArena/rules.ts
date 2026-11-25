@@ -2457,11 +2457,13 @@ export function spawnThemeOf(faction: Faction, round: number, context: RulesCont
  * up for it — and passing over any its caps (`HORDE_CAP`, `HORDE_REAL_CAP`, with
  * `standing` already counted) leave no room for. What's `left` is banked, never
  * more than the dearest on the list costs: threat the caps leave nothing to spend
- * on is lost. No draw, so the same every time.
+ * on is lost. No draw, so the same every time. Given the warband's `nests`
+ * standing, a ruleset with `HORDE_CAP_PER_NEST` caps its minions by them instead.
  */
-export function hordeSpawn(theme: WaveTheme, threat: number, standing: { minions: number; others: number }, context: RulesContext): { bought: CharacterId[]; left: number } {
+export function hordeSpawn(theme: WaveTheme, threat: number, standing: { minions: number; others: number }, context: RulesContext, nests?: number): { bought: CharacterId[]; left: number } {
     const { CHARACTERS } = rulesetOf(context);
-    const { HORDE_CAP = Infinity, HORDE_REAL_CAP = Infinity } = ruleValuesOf(context);
+    const { HORDE_CAP: capOfWarband = Infinity, HORDE_REAL_CAP = Infinity, HORDE_CAP_PER_NEST } = ruleValuesOf(context);
+    const HORDE_CAP = HORDE_CAP_PER_NEST !== undefined && nests !== undefined ? HORDE_CAP_PER_NEST * nests : capOfWarband;
     let { minions, others } = standing;
     const room = (character: CharacterId) => CHARACTERS[character].minion ? minions < HORDE_CAP : others < HORDE_REAL_CAP;
     const bought: CharacterId[] = [];

@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 import { at, fieldOf } from "@/utils/games/battlefield/testFixtures";
 import { FACTION_IDS, factionById, factionOf, isFactionId, type CharacterId } from "./characters";
 import { warbandBudgetOf, waveOf } from "./RealmArenaLogic";
-import { rulesetFor, ruleValuesOf } from "./rulesets";
+import { overrideRulesetForExperiment, rulesetFor, ruleValuesOf } from "./rulesets";
 import { act, armourOf, check, damageTo, fixedRolls, hordeSpawn, isCombatant, spawnThemeOf, isMinion, newFighter, nextFighterId, startTurn, type BattleState, type Fighter } from "./rules";
 import { battleOf, makeGame, musterAll, warbandsOf } from "./testFixtures";
 
@@ -129,6 +129,22 @@ describe("what a horde buys (§4.2, §4.4)", () => {
         expect(left).toBe(0);
         expect(full.filter(id => CHARACTERS[id].minion)).toHaveLength(HORDE_CAP!);
         expect(full.filter(id => !CHARACTERS[id].minion)).toHaveLength(HORDE_REAL_CAP!);
+    });
+
+    it("caps its minions by its nests standing where a ruleset sets HORDE_CAP_PER_NEST, and by HORDE_CAP where none does", () => {
+        const theme = spawnThemeOf(BROOD, 13, V13)!;
+        const minions = (nests?: number) => hordeSpawn(theme, 200, { minions: 0, others: 0 }, V13, nests).bought.filter(id => CHARACTERS[id].minion).length;
+        expect(ruleValuesOf(V13).HORDE_CAP_PER_NEST).toBeUndefined();
+        expect(minions(1)).toBe(ruleValuesOf(V13).HORDE_CAP);
+        const base = rulesetFor(13);
+        overrideRulesetForExperiment(13, { ...base, RULES: { ...base.RULES, HORDE_CAP_PER_NEST: 5 } });
+        try {
+            expect([minions(2), minions(1), minions(0)]).toEqual([10, 5, 0]);
+            // Not told the nests (the starting horde), the warband's own cap stands.
+            expect(minions()).toBe(base.RULES.HORDE_CAP);
+        } finally {
+            overrideRulesetForExperiment(13, undefined);
+        }
     });
 
     it("lands no wave in a Hold Out against it: its nests produce it (§5.1)", async () => {
