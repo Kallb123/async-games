@@ -607,10 +607,10 @@ rounds") and breaks the Brood in one battle of 72.
   its own threat, and a warband with none adds nothing). It is not the Shrine:
   every loss in these runs is the team overrun, with the Shrine at 85% of its HP
   or more, and a Shrine of 30 HP a player (`--set RULES.SHRINE_HP=0,RULES.SHRINE_HP_PER_PLAYER=30`)
-  leaves every win rate where it was, 58%, 21%, 0% and 0%. Solo is also fought on
-  the Ruined Fort and the rest on the Sacked Fort (the harness keeps Solo to its
-  own map), so the map is not yet told apart from the team's size. Either way no
-  single value of these levers fits Solo and a team of four at once.
+  leaves every win rate where it was, 58%, 21%, 0% and 0%. Nor is it the team's
+  size alone: the map moves the rate as much (*Why the team loses*, below).
+  Either way no single value of these levers fits Solo and a team of four at
+  once.
 - **The stars don't grade.** A raiding team that wins breaks the Brood early
   with the Shrine nearly whole, so ★, ★★ and ★★★ come out within a few points of
   each other in every row (a nest of 10 HP: two players 83%, 83% and 79%). The
@@ -623,10 +623,41 @@ rounds") and breaks the Brood in one battle of 72.
   cliff may be the policy's. The planner getting an objective of its own (§7's
   second step) would tell the two apart.
 
-**What's next** is the plan's to decide (`realm-arena-hold-out.md` §8.3):
-the Brood's numbers scaled by the team's size (its starting horde above all,
-the strongest lever for three players), threat spent in a finer currency, and
-the planner raiding for itself. `BROKEN_TIDE_BY_ROUND` (10) needs no change
+**Why the team loses.** Two tools take the runs apart: `--layout` fights every
+team on one layout whatever its size, and `npm run ra-balance:watch` follows one
+battle a turn at a time, ending with where each of the team fell. As committed,
+three raiders, 24 battles a cell:
+
+| Battlefield | Solo | 2 players | 3 players | 4 players |
+|---|---:|---:|---:|---:|
+| Gate forts (Ruined, Twin-Gate, Three-Gate: every nest in one row along the far edge, 41 squares from the Shrine) | 58% | 0% | 0% | |
+| Sacked Fort for two (`--layout sackedFortTwo`) | 0% | 21% | | |
+| Sacked Fort (its layout for each size) | | 21% | 0% | 0% |
+
+- **It's a race at the nests, and it's close.** Raiders reach the nests in round
+  2 and must bring down a warband's two (30 HP) before its horde, at 10–16 by
+  round 3–4, brings them down. Solo on the Ruined Fort is won in round 3–4 or
+  lost with a nest on 1 HP. A race that tight flips on a few HP, which is the
+  all-or-nothing the slope check sees.
+- **More players is more races, all to be won.** The Brood breaks only when every
+  warband's nests are down, so a team of two must win two races, and once a
+  player's raiders fall their warband's horde is free to turn on the rest. On the gate forts that
+  takes two players from Solo's 58% to 0%.
+- **The Sacked Fort splits each warband's nests.** Its two stand on opposite
+  edges, 45–53 squares apart, with the Shrine between: once the first falls the
+  raiders cross the board, through the horde, to the second. Solo there wins
+  none.
+- **The Shrine isn't in it.** The Brood chases the team's characters, not the
+  Shrine, so the team is overrun with the Shrine nearly whole. That is also why
+  the stars don't grade: Held and Unscathed come free with any win.
+
+**What's next** is the plan's to decide (`realm-arena-hold-out.md` §8.3).
+The race and its "every warband" condition come before the numbers: a warband's
+nests closer together on the Sacked Fort, the Brood's warbands drawn to the
+Shrine as well as to the team, and the planner raiding for itself would each
+change what a lever measures. Then the Brood's numbers scaled by the team's size
+(its starting horde above all, the strongest lever for three players), and
+threat spent in a finer currency. `BROKEN_TIDE_BY_ROUND` (10) needs no change
 yet: where the team breaks the Brood it does so in round 4–8.
 
 ## How each lever was built

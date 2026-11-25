@@ -13,6 +13,7 @@
 //   npm run ra-balance -- --rules 12 --temperaments off   # the Swarm's temperaments (§39.8) on or off in the planner (default: on, as in the game)
 //   npm run ra-balance -- --rules 13 --team-policy planner # where nests produce the enemy (rules 13), the team plays the planner alone, never raiding a nest (default: --team-policy raid, §7)
 //   npm run ra-balance -- --rules 13 --raiders 3          # how many of each player's characters raid (default: the fastest 3); the rest guard the Shrine
+//   npm run ra-balance -- --rules 13 --players 1,2 --layout sackedFortTwo # every team on that one layout, whatever its size: Solo on the Sacked Fort
 //   npm run ra-balance -- --rules 12 --set RULES.WAVE_GROWTH_POINTS=25,CHARACTERS.broodQueen.hp=24 # override numbers in that version's catalogue, in every worker, before any battle
 //   npm run ra-balance -- --rules 13 --set RULES.SPAWN_THREAT=3,CHARACTERS.nest.hp=20,CHARACTERS.brute.threat=4,RULES.HOLD_OUT_DIFFICULTY.hard.nestHp=4
 //                                                         # (RULES.<KEY> for a numeric rule; RULES.HOLD_OUT_DIFFICULTY.<easy|normal|hard>.<spawnThreat|nestHp|shrineHp>;
@@ -47,6 +48,7 @@ import { parseArgs } from "node:util";
 import { COOP_PLAYERS, FACTION_IDS, fitsCoop, type BattleSize, type Difficulty, type FactionId } from "../src/games/RealmArena/characters";
 import { CURRENT_RULESET_VERSION, ruleValuesOf, rulesetFor } from "../src/games/RealmArena/rulesets";
 import { COOP_MAPS } from "../src/games/RealmArena/maps/holdOut";
+import { REALM_ARENA_MAPS, type RealmArenaMapId } from "../src/games/RealmArena/maps";
 import {
     formatReport, parseOverrides, RAIDERS, scenarioKey, simulateBattle, summariseAll,
     type BalanceScenario, type BattleSample, type CoopMapChoice, type Mission, type Planner, type RallyPolicy, type TeamPlanner, type TeamPolicy,
@@ -69,7 +71,7 @@ function oneOf<T extends string>(name: string, values: string[], allowed: readon
 }
 
 /** What the command line says to fight: each a comma-separated list but the runs and the first seed. */
-type MatrixArgs = Record<"runs" | "seed" | "players" | "teams" | "enemies" | "missions" | "maps" | "difficulties" | "sizes" | "fog", string> & { rules?: string; rally?: string; temperaments?: string; "team-policy"?: string; raiders?: string; set?: string };
+type MatrixArgs = Record<"runs" | "seed" | "players" | "teams" | "enemies" | "missions" | "maps" | "difficulties" | "sizes" | "fog", string> & { rules?: string; rally?: string; temperaments?: string; "team-policy"?: string; raiders?: string; layout?: string; set?: string };
 
 /**
  * The enemies a mission is fought against. Under rules with `HOLD_OUT_ENEMY`
@@ -114,13 +116,17 @@ function jobsFrom(args: MatrixArgs): Job[] {
     const raiders = args.raiders === undefined ? undefined : Number(args.raiders);
     if (raiders !== undefined && (!Number.isInteger(raiders) || raiders < 0)) throw new Error("--raiders must be a whole number of raiders, 0 or more");
 
+    // A layout of Hold Out's own, fought by every team in the run whatever its size, to tell the map apart from the team's size.
+    const layout = args.layout === undefined ? undefined : args.layout as RealmArenaMapId;
+    if (layout !== undefined && !Object.hasOwn(REALM_ARENA_MAPS, layout)) throw new Error(`--layout ${layout} is no battlefield: one of ${Object.keys(REALM_ARENA_MAPS).join(", ")}`);
+
     // Checked here against the catalogue being fought, so a typo fails before a battle does; named in the scenario when given.
     const set = args.set === undefined ? {} : parseOverrides(args.set, rules);
 
     const scenarios = new Map<string, BalanceScenario>();
     for (const mission of missions) for (const map of mission === "holdOut" ? maps : ["gate" as const])
         for (const team of teams) for (const enemy of enemiesFor(mission, enemies, rules)) for (const count of players) for (const difficulty of difficulties) for (const size of sizes) for (const fog of fogs) {
-            const scenario: BalanceScenario = { players: count, team, enemy, mission, map, difficulty, size, fog, ...(rules !== undefined ? { rules } : {}), ...(rally === "always" ? { rally } : {}), ...(temperaments === "off" ? { temperaments } : {}), ...(teamPolicy === "planner" ? { teamPolicy } : {}), ...(raiders !== undefined && raiders !== RAIDERS ? { raiders } : {}), ...(Object.keys(set).length > 0 ? { set } : {}) };
+            const scenario: BalanceScenario = { players: count, team, enemy, mission, map, difficulty, size, fog, ...(rules !== undefined ? { rules } : {}), ...(rally === "always" ? { rally } : {}), ...(temperaments === "off" ? { temperaments } : {}), ...(teamPolicy === "planner" ? { teamPolicy } : {}), ...(raiders !== undefined && raiders !== RAIDERS ? { raiders } : {}), ...(layout !== undefined ? { layout } : {}), ...(Object.keys(set).length > 0 ? { set } : {}) };
             // A team of four fits only Hold Out on a battlefield of its own (§37), and refused here rather than fought as a free-for-all.
             if (!fitsCoop(count, { mission, map: map === "gate" ? undefined : map })) {
                 throw new Error(`--players ${count} doesn't fit ${scenarioKey(scenario)}: a team of ${count} needs --missions holdOut with --maps sackedFort or sunkenVillage`);
@@ -252,6 +258,7 @@ async function main(): Promise<void> {
             temperaments: { type: "string" },
             "team-policy": { type: "string" },
             raiders: { type: "string" },
+            layout: { type: "string" },
             set: { type: "string" },
             workers: { type: "string", default: String(availableParallelism()) },
             shard: { type: "string" },

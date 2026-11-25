@@ -16,7 +16,7 @@
 import { nextAction, temperamentSwitch, turnMemo } from "../../src/games/RealmArena/ai";
 import { DIFFICULTY_NAMES, BATTLE_SIZE_NAMES, FACTIONS, type BattleSize, type Difficulty, type FactionId } from "../../src/games/RealmArena/characters";
 import type { RealmArenaSettings } from "../../src/games/RealmArena/RealmArenaModels";
-import { battlefieldById, mapFor, type CoopMap } from "../../src/games/RealmArena/maps";
+import { battlefieldById, mapFor, type CoopMap, type RealmArenaMapId } from "../../src/games/RealmArena/maps";
 import { CURRENT_RULESET_VERSION, overrideRulesetForExperiment, rulesetFor, type RealmArenaRuleset } from "../../src/games/RealmArena/rulesets";
 import type { RealmArenaRuleValues } from "../../src/games/RealmArena/ruleValues";
 import { battleRoundsOf, owesRally } from "../../src/games/RealmArena/RealmArenaLogic";
@@ -25,7 +25,7 @@ import {
     ACTION_POINTS, check, fighterById, HOLD_OUT_STAR_INFO, HOLD_OUT_STARS, isCombatant, isStanding, isWarband, maxHpOf, moveRules, movementOf, nestsProduce, reachOf, shrineOf, viewOf, warbandNests, waveArrives, weaponReaches,
     type Action, type BattleState, type Fighter, type HoldOutStar,
 } from "../../src/games/RealmArena/rules";
-import { actBy, battleOf, endTurnBy, makeGame, musterAll, play, seededRandomValues } from "../../src/games/RealmArena/testFixtures";
+import { actBy, battleOf, endTurnBy, makeGame, musterAll, play, seededRandomValues, type RealmArenaTestGame } from "../../src/games/RealmArena/testFixtures";
 import { costsFrom, pathTo } from "../../src/utils/games/battlefield/pathfinding";
 import { percentile as sortedPercentile } from "../../src/utils/performance";
 
@@ -76,6 +76,14 @@ export interface BalanceScenario {
      * number is named in it.
      */
     raiders?: number;
+    /**
+     * A battlefield to fight on in place of the one the host's pick gives a team
+     * of this size (`--layout`): a layout of Hold Out's built for another size of
+     * team, as Solo on the Sacked Fort for two (`sackedFortTwo`), to tell the map
+     * apart from the team's size. Its sites stand the warbands the team has, in
+     * order. Absent is the host's pick, and leaves the scenario's name as it was.
+     */
+    layout?: RealmArenaMapId;
     /**
      * Numbers overriding the catalogue's own (`--set`), by path, in path order:
      * `RULES.<KEY>`, `RULES.HOLD_OUT_DIFFICULTY.<difficulty>.<step>` or
@@ -315,12 +323,16 @@ export interface BattleSample {
     ms: number;
 }
 
+/** What `simulateBattle` shows a watcher after each player's turn: the game, whose turn it was, and the ids of the characters that raided in it. */
+export type BattleWatch = (game: RealmArenaTestGame, player: string, raiders: readonly number[]) => void;
+
 /** The name a scenario's samples are grouped under, and the report heads it with. */
 export function scenarioKey(s: BalanceScenario): string {
     const seats = s.players === 1 ? "1 player (Solo)" : `${s.players} players`;
     // A Realm team, as every scenario was before the team could choose, is left unsaid.
     const team = s.team === "realm" ? seats : `${seats} as ${factionName(s.team)}`;
-    const mission = s.mission === "holdOut" ? `Hold Out (${s.map === "gate" ? "gate fort" : battlefieldById(mapFor(s.players, true, s.map)).name})` : "Hold the Centre";
+    const field = s.layout ? `${battlefieldById(s.layout).name}, layout ${s.layout}` : s.map === "gate" ? "gate fort" : battlefieldById(mapFor(s.players, true, s.map)).name;
+    const mission = s.mission === "holdOut" ? `Hold Out (${field})` : "Hold the Centre";
     const extras = [
         s.difficulty !== "normal" ? DIFFICULTY_NAMES[s.difficulty] : undefined,
         s.size !== "normal" ? `${BATTLE_SIZE_NAMES[s.size]} battle` : undefined,
@@ -371,9 +383,12 @@ const seatsFor = (players: number) => Array.from({ length: players }, (_, k) => 
  * `seed`: each player's turn is the planner's actions for the team until it
  * has none worth taking, as a warband's is, then End turn — which plays the
  * warband that follows it. The team plays `team`'s planner if given, and this
- * checkout's otherwise; the warbands always play this checkout's.
+ * checkout's otherwise; the warbands always play this checkout's. `watch`,
+ * if given, is shown the game after each player's turn (its End turn and the
+ * warband's that follows) and once more at the end, with that turn's raiders:
+ * how a script follows one battle (`ra-balance:watch`).
  */
-export async function simulateBattle(scenario: BalanceScenario, seed: number, team?: TeamPlanner): Promise<BattleSample> {
+export async function simulateBattle(scenario: BalanceScenario, seed: number, team?: TeamPlanner, watch?: BattleWatch): Promise<BattleSample> {
     // The switch is the planner module's, so each worker (or a run in this process) sets its own before it plays.
     temperamentSwitch.on = scenario.temperaments !== "off";
     applyOverrides(scenario);
@@ -382,6 +397,8 @@ export async function simulateBattle(scenario: BalanceScenario, seed: number, te
     seedRolls(seed);
     const players = seatsFor(scenario.players);
     const game = makeGame(players, {}, settingsOf(scenario));
+    // The state takes nothing from its map but the id until the muster, which stands the zones, nests and Shrine from it.
+    if (scenario.layout) game.specificGameState.map = scenario.layout;
     await musterAll(game);
     const rounds = battleRoundsOf(game.specificGameState);
     const byRound: RoundCount[] = [];
@@ -423,9 +440,10 @@ export async function simulateBattle(scenario: BalanceScenario, seed: number, te
                 break;
             }
         }
-        if (game.complete) break;
+        if (game.complete) { watch?.(game, player, raiders); break; }
         const { outcome } = await play(game, endTurnBy(player));
         if (!outcome.validMove) throw new Error(`${scenarioKey(scenario)}, seed ${seed}: ${player}'s End turn was refused`);
+        watch?.(game, player, raiders);
         const roundAfter = game.specificGameState.roundsPlayed;
         if (roundAfter > roundBefore) {
             // Counted after the wave that lands as the next round begins, so a
