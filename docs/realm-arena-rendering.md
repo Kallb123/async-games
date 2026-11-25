@@ -151,6 +151,16 @@ container can run it as it stands.
     both while the battle is played and before the board draws, so no code in
     the game knows.
 
+  - `holdout-brood` is the Brood's full horde at rules version 13: every warband at
+    `HORDE_CAP` minions, 228 figures and a 37-part, three-warband round, 1.6 MB. §2.5.
+
+  The first four are pinned to the rules version they were drawn under, 7,
+  in `fixture.ts` (`rules`), and `holdout-brood` to 13, so a new current version
+  never changes what a name builds. Rebuilding the first four is not byte for byte,
+  though: the response has grown fields since (`maxAp`, `maxHp`, `enemiesDefeated`)
+  and the planner has moved, so a rebuild is a different battle. Leave the committed
+  JSON alone. `--only <name>` writes one fixture and `--out <dir>` writes it elsewhere.
+
   Generating them is reproducible: the rolls come from a seed, and the clock
   stands still, so the warbands' two-second planning guard never cuts a turn
   short on a busy machine. The same rules therefore write the same bytes.
@@ -290,7 +300,135 @@ on one outlier are much looser and need more runs before reading anything
 into them: the longest task, the largest frame gap, the JS heap, and anything
 in the short `pan` and `select` scenarios (±10–80%).
 
-### 2.5 Targets
+### 2.5 The Brood's full horde
+
+The Hold Out plan ([`games/realm-arena-hold-out.md`](./games/realm-arena-hold-out.md)
+§4.4) asked, before `HORDE_CAP` is set, whether the board still draws and still
+reads with every warband at the cap. Taken 2026-11-25 with the rules as the
+Hold Out branch had them (version 13 not yet current), in the same container as
+§2.4, one run each.
+
+**The fixture, `holdout-brood`.** A rules version 13 Hold Out on the Sacked
+Fort, large, hard, three players, written by `bench/realmarena/fixture.ts`
+(`npm run ra-bench:fixture -- --only holdout-brood`). The team only ends its
+turns for 13 rounds while the nests produce the Brood, with the team and
+the Shrine made ten times tougher meanwhile so the battle lasts, and put back
+to their own health before the board is taken. A team that does nothing still
+strikes some minions down, so no warband is ever quite at the cap on its own:
+what is short is made up beside its nests (`topUp`), and the fixture fails
+if any warband is not at `HORDE_CAP` minions then. The step is a whole round:
+each of the three players' End turns, each followed by the warband turn it hands
+on to (a `RealmArenaWarbandTurn` since command version 13, which the End turn's
+outcome no longer holds), told as the first player is sent them, with each
+turn's swarm moves and strikes as the parts the board plays. A real client plays
+these as three steps, one a turn; the bench plays them as one so that every
+warband's swarm is on the board.
+
+Three players rather than four. Three is the team the plan sizes the cap for
+("a team of three can face about 60 figures"), and the cap is per warband, so a
+fourth adds a fourth warband's worth, a third more of what is measured here
+rather than something new.
+
+| | `holdout` (rules 7) | `holdout-brood` (rules 13) |
+|---|---:|---:|
+| Figures in the response | 42 | 228 |
+| Standing, warband | 27 | 48 minions, 18 characters and elites, 6 nests |
+| Standing, team | 15 | 13 (and the Shrine) |
+| Downed, still in the response | 0 | 140 minions, 2 of the team |
+| Parts in the step | 15 | 37 (35 moves and strikes, 2 hand-offs) |
+| Warband turns in the step | 1 | 3 |
+| Fixture size | 113 KB | 1.6 MB |
+| Board elements | 3,102 | 4,429 |
+
+Each warband stands at 16 minions beside 5 to 7 real characters and elites: the
+four a warband musters, and the Brute, the Lobber and (for one warband) the
+Queen the schedule has brought by round 13. 140 downed minions is what 13 rounds of
+bursts and reactions leave, and each is a figure the board draws: the 48
+standing minions are a fifth of the 228 figures, so this is a heavier board than
+the cap alone gives, though a long game gets there. Its `before` is the
+board at the first player's turn, its `after` the round's end, with 26 minions
+standing, since the Bloaters burst.
+
+**Numbers.** `npm run ra-bench -- --fixture <name> --renderers svg,three
+--scenarios load,idle,enemy-turn,pan,select --runs 1`, so a single run
+each, and the usual caveats of §2.3 hold: the 3D board's WebGL is in software
+here, so read its CPU columns (script, style, paint), not its commit or GPU time.
+The whole `holdout-brood` run took 7.5 minutes (`holdout`'s, 3.3), mostly the enemy turn:
+two and a half minutes on the isometric board and three on the 3D one. Three medians
+and `wave` would be about 25 minutes a fixture.
+
+| | `holdout` svg | `holdout-brood` svg | `holdout` three | `holdout-brood` three |
+|---|---:|---:|---:|---:|
+| `load`: board drawn | 1.0s | 1.3s | 1.8s | 1.8s |
+| `load`: main thread busy | 1.2s | 1.6s | 3.3s | 4.6s |
+| `enemy-turn`: wall | 44.9s | 146.8s | 56.5s | 182.1s |
+| `enemy-turn`: parts | 15 | 37 | 15 | 37 |
+| `enemy-turn`: fps | 29.2 | 9.4 | 7.6 | 2.1 |
+| `enemy-turn`: frame gap p95 | 117ms | 517ms | 500ms | 1,267ms |
+| `enemy-turn`: long tasks (blocking) | 162 (7.4s) | 514 (39.8s) | 177 (42.5s) | 248 (165s) |
+| `enemy-turn`: longest task | 199ms | 572ms | 716ms | 2.5s |
+| `enemy-turn`: part overrun, mean | 663ms | 1,670ms | 1,412ms | 2,528ms |
+| `enemy-turn`: main thread busy | 36.2s | 77.4s | 53.1s | 181.2s |
+| · style | 10.7s | 19.6s | 0.1s | 0.3s |
+| · paint | 14.5s | 32.0s | 0.2s | 0.3s |
+| · script | 5.4s | 14.5s | 2.6s | 4.8s |
+| `enemy-turn`: raster, software | 24s | 230s | – | – |
+| `enemy-turn`: parts timed out | 0 | 0 | 0 | 0 |
+| `pan`: fps (long tasks) | 47.4 (13) | 7.9 (39) | 25.2 (18) | 3.6 (19) |
+| `select`: fps (long tasks) | 47.3 (15) | 27.9 (32) | 14.9 (18) | 1.7 (14) |
+| 3D: draw calls, triangles a frame | – | – | 35, 197k | 52, 641k |
+
+- **The horde draws, and finishes.** No page error, every one of the 37 parts
+  played, none timed out. The step is longer than the board is quick, though:
+  about 49s a warband turn on the throttled phone, against 45s for the one
+  warband turn of `holdout`. A part overran its own cues by 1.7s on average.
+- **Cost goes with what is on the board.** The isometric board has 43% more
+  elements and costs 2.1× the main thread over the enemy turn, with style and
+  paint 1.8× and 2.2× and the software raster 9.6×. It is 9.4 fps where
+  `holdout` was 29, and `pan` falls from 47 to 8, so the cap does cost frames
+  and no target of §2.6 (50 fps, no task over 100ms) is met by either board
+  here. The `pan` and `select` figures are a single short run and loose.
+- **The 3D board's cost is triangles, not elements.** Its DOM is 13 nodes
+  either way, but 641k triangles a frame (3.3×) takes it to 2.1 fps in
+  software; its CPU columns grow 1.4 to 2×. A real GPU is the only way to say
+  what that is on a phone.
+- **The harness had to be brought up to the page.** It drew every battle with
+  no `rulesVersion` and no nest squares, which the version 13 board needs to
+  name a Brood character. It now passes both, as the page does, and `holdout`'s
+  board has 3,102 elements rather than §2.4's 2,865 (the nests' squares).
+
+**Can a phone read it?** Screenshots at 390 by 844, device scale factor 1, from
+the bench's own page, in `bench-results/realmarena/shots/` (git ignores it):
+`brood-phone-fit.png`, `brood-phone-step-in.png` and
+`brood-phone-step-deeper.png` in the frame as the bench lays it out (280px
+tall), and `brood-phone-expanded-fit.png` and
+`brood-phone-expanded-step-in.png` with the frame's expand button pressed.
+
+| View | Verdict |
+|---|---|
+| Fit, in the 280px frame | No. The map is a 380px diamond, a figure is a 4px speck, and the team and the Brood are one smudge round the middle. Nothing to read but where the clutter is. |
+| Fit, expanded | Barely. The three warbands' nests show as small green pods at the board's rim, the Shrine as the tower in the middle, and the team as a blue cluster. A minion and a character aren't told apart. |
+| One step in (where the board opens) | Yes, for the middle. Some 40 figures fit, about 15px high. The Brood's spiders and the team's soldiers are different shapes, and HP bars are blue for the team, red for the Brood. A minion has no HP bar and is smaller, so the 5 to 7 characters and elites a warband stands (a bar, bigger art, a ring where selected) stand out of its 16, and an elite is a good deal bigger again. |
+| One step in, expanded | Good. The Shrine is the tower in the middle with the team round it, and the nearest warband's pile reads as separate figures. The nests are at the edge of the frame. |
+| Deeper step | Fully legible: legs, bars and pips, but a third of the middle only. |
+
+What a phone can't read is the whole board at once, which it couldn't before:
+at fit it has always been the map's shape. The horde is no harder to read than
+a warband of fewer, and the minions' missing HP bars make them quieter, not
+busier, than characters would be. The 140 downed figures on the ground do
+add noise at a nest, where the warband has been dying for rounds.
+
+**`HORDE_CAP` 16, from a rendering point of view.** It reads, and it draws. What
+it costs is the cost this document is about: the enemy turn on the isometric board falls from
+29 fps to 9, and no cap of 16 will make the horde cheaper to draw than the
+renderer does (§4). If the rendering work of §6.1 lands, 16 can stay; if it
+doesn't, the way to buy frames back is fewer figures, and the 140 downed
+minions are the cheapest of them, 61% of the figures: a downed minion that is
+drawn for a round and then gone would shrink the board a good deal without changing
+a rule. A lower cap saves a standing minion's cost and no more: the 48 standing
+are a fifth of the figures.
+
+### 2.6 Targets
 
 These are a suggestion, to be agreed, and each is read off the bench.
 

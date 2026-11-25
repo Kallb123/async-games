@@ -23,7 +23,7 @@ import type { Playback } from "@/games/RealmArena/components/RealmArenaBoard";
 import { ART_SHEETS } from "@/games/RealmArena/art";
 import type { IRealmArenaSpecificGameStateResponse, IRealmArenaStepOutcome, RealmArenaPartState } from "@/games/RealmArena/apiModels";
 import { battlefieldOf } from "@/games/RealmArena/maps";
-import { battleFrom, isStanding, warbandsFor, type Fighter } from "@/games/RealmArena/rules";
+import { armouredTeam, battleFrom, isStanding, warbandsFor, type Fighter } from "@/games/RealmArena/rules";
 import { coopColourOf, endOf, friendlySquares, partFollow, reviewParts, STEP_BEAT_MS, unseenSquares } from "@/games/RealmArena/ui";
 import { registerScaledSackedFort } from "./scaledMap";
 
@@ -116,7 +116,8 @@ export function BenchBoard({ fixture, Board }: { fixture: Fixture; Board: Board 
     const blastedKey = blasted.join(",");
     const field = useMemo(() => battlefieldOf(fixture.after.map, blastedKey ? blastedKey.split(",").map(Number) : [], fixture.after), [fixture.after, blastedKey]);
     const fog = fixture.after.fog;
-    const battle = battleFrom(field, { fighters, fog, clouds, seats, coop: true });
+    const { rulesVersion, nestSquares } = fixture.after;
+    const battle = battleFrom(field, { fighters, fog, clouds, seats, coop: true, rulesVersion, armoured: armouredTeam(fixture.after.mission, rulesVersion, fixture.after.enemy) });
     const unseen = useMemo(
         () => fog ? unseenSquares(battleFrom(field, { fighters, fog: true, seats, coop: true }), viewer) : null,
         [fog, field, fighters, seats, viewer],
@@ -136,6 +137,8 @@ export function BenchBoard({ fixture, Board }: { fixture: Fixture; Board: Board 
                         unseen={unseen}
                         clouds={clouds}
                         sides={battle.sides}
+                        rulesVersion={rulesVersion}
+                        nestSquares={nestSquares}
                         owners={[...seats, ...warbandsFor(seats)]}
                         waveDue={view.waveDue}
                         showCentre={false}
@@ -163,7 +166,7 @@ function setView(change: Partial<View>) {
 /** The viewer's own End turn coming back, played as the page plays it: a part at a time, each with its own focus, a beat between. */
 async function enemyTurn(fixture: Fixture, maxParts: number): Promise<PartTiming[]> {
     const { viewer, before, after, step } = fixture;
-    const parts = reviewParts(after.map, step, { fighters: before.fighters, blasted: before.blasted }, after.fighters)
+    const parts = reviewParts(after.map, step, { fighters: before.fighters, blasted: before.blasted }, after.fighters, { rulesVersion: after.rulesVersion })
         .filter(part => part.cues.length > 0)
         .slice(0, maxParts);
     const timings: PartTiming[] = [];

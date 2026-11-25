@@ -710,8 +710,10 @@ nests' are today.
 - **The harness's team has to raid.** Today the team's planner never walks to a
   nest (`realm-arena.md` §39.7), so it would never break the Brood and every
   battle would end at the round cap. Two steps:
-  - First, a scripted policy in the harness: each player's two fastest
+  - First, a scripted policy in the harness: each player's fastest
     characters raid the nearest standing nest, and the rest guard the Shrine.
+    Built in PR 5 with three raiders a player rather than the two first
+    proposed (§8.3).
   - Later, the team's planner gets an objective term of its own.
 - **Hand-offs.** Battles end at the round cap or before it, so a Hold Out is
   never longer than today's and often shorter. The harness reports the round
@@ -726,7 +728,7 @@ nests' are today.
 | 2 | The Brood: minions, threat, the swarm step, playback (§4) — **built** (§4.7) | Rules 13, unreleased |
 | 3 | Nests that produce, the Shrine, Mend, the rally's two triggers, the new ending and its bonus, Hold Out against the Brood only (§5) — **built** (§5.6) | Rules 13, unreleased |
 | 4 | Stars, the result, achievements, the guide and setup copy (§6) — **built** (§6.1) | Rules 13, unreleased |
-| 5 | The harness's raid policy and star report, a full-horde bench, balance, the database check, deleting version 12's branches, release, What's new (§7, §8.2) | Rules 13 released |
+| 5 | The harness's raid policy and star report, a full-horde bench, balance, the database check, deleting version 12's branches, release, What's new (§7, §8.2) — **built**, but the balance stopped at §7's slope check (§8.3) | Rules 13 current on its branch |
 
 PR 1 stands alone and ships first: it gives version 12's warbands their time back
 today. PRs 2–5 follow `realm-arena.md` §39.1's pattern. The catalogue
@@ -826,6 +828,77 @@ landed". It now names the rally the team earned wherever there is a Shrine
 - **Open question 2** (§8.1) can be answered now that PR 1 is live: search the
   production logs for "stopped short of time" (`playComputerTurns.ts`), the
   warning a runner logs when `after()` ran out before the warbands finished.
+
+### 8.3 What PR 5 settled
+
+- **The harness** (`scripts/lib/realmArenaBalance.ts`).
+  - *The raid policy* is `--team-policy raid`, the default where nests produce
+    the enemy: each player's `RAIDERS` fastest standing characters
+    (`raidersOf`, picked again every turn) attack the weakest nest their weapon
+    reaches, or walk to the square nearest the nearest nest (`raidAction`). The
+    rest are the planner's, which sees the raiders as having no AP. Two raiders,
+    as §7 proposed, die with a nest left, so the default is three (`--raiders`
+    names another number). `--team-policy planner` is the planner alone.
+  - *Stars in the report.* Each sample keeps its stars, whether and when the
+    Brood broke, the Shrine's HP and the nests left. The report adds a stars
+    table under rules where nests produce the enemy: ★, ★★ and ★★★ with their
+    intervals, each star's rate, the Brood broken and by which round, the
+    Shrine's HP at the end. A version-12 report reads as it did. The endings
+    tell "the Shrine fell" from "overrun".
+  - *One Brood scenario.* Under rules with `HOLD_OUT_ENEMY`, Hold Out is
+    fought once, "vs Brood"; `--enemies` is for Hold the Centre.
+  - *`--set`* also takes `CHARACTERS.<id>.threat`, `CHARACTERS.<id>.points` and
+    `RULES.HOLD_OUT_DIFFICULTY.<step>.<spawnThreat|nestHp|shrineHp>`.
+- **The balance stopped at the slope check** (§7,
+  [`realm-arena-balance.md`](./realm-arena-balance.md), *Rules version 13*).
+  With the values as PRs 2–4 proposed them the harness's team wins 58% Solo,
+  21% with two players and none with three or four. One step of `SPAWN_THREAT`
+  moves Solo by 42 points, and a nest 5 HP weaker moves two players by 62. Every
+  value tried leaves Solo near certain to win while three or four lose, or wins
+  nearly everything. The stars don't grade: a raiding win breaks the Brood
+  early with the Shrine whole, so ★ and ★★★ are within a few points. So no value
+  changed, `BROKEN_TIDE_BY_ROUND` stays 10 (the Brood breaks, where it does,
+  in round 4–8), and `HORDE_CAP` stays 16. Before §7's targets can be tuned,
+  the mission needs one of:
+  - the Brood's numbers scaled by the team's size, its starting horde above all
+    (threat 2 with a starting horde of 6 took three players from 0% to 96%);
+  - threat in a finer currency, so one step is a smaller share of a nest's spawn;
+  - the planner raiding for itself (§7's second step), to tell the policy's
+    part in the cliff from the rules'.
+- **Rendering with a full horde**: the bench's `holdout-brood` fixture
+  ([`realm-arena-rendering.md`](../realm-arena-rendering.md) §2.5) is a
+  three-player Sacked Fort with every warband at `HORDE_CAP` (48 minions
+  standing among 228 figures, 140 of them downed) and a whole round of the
+  Brood's turns as its step. Against `holdout`, one run each on a 4× throttled
+  phone, the isometric board's enemy turn costs 77s of main thread against 36s
+  and plays at 9 fps against 29; the 3D board, in software WebGL here, is worse
+  on both. Neither met §2.6's targets before the horde either. On a phone the
+  board reads at one step in, where it opens: the Brood's shapes and red bars
+  stand apart from the team's, and the characters from the minions; at fit it
+  doesn't, as it didn't before. `HORDE_CAP` stays 16 on readability. The frame
+  cost is a follow-up, and the cheaper lever is the downed minions (61% of the
+  figures), not the cap.
+- **Version 12's branches are gone.** The guide's co-op section, the setup
+  screen's Hold Out, Sacked Fort and difficulty lines, and the achievements
+  (`achievements`, no longer `achievementsFor`) are version 13's alone.
+  `nestsCleared` is off the response; the state field, its write and its replay
+  stay for a version-12 battle in progress at the release. Tests of version 12's
+  waves are pinned to `rulesVersion: 12`.
+- **The release** is `CURRENT_RULESET_VERSION` 13. No command version bump:
+  the command version has been 13 since PR 1, no command means anything
+  different, and an old tab's enemy for Hold Out is dropped by `holdOutEnemy`
+  (`RealmArenaModels.ts`) under `HOLD_OUT_ENEMY`.
+- **What's new** has its one line: the Brood, the nests, the Shrine and Mend,
+  the stars, *Three Stars* and *Three Stars on Hard*, and what *Broken Tide* and
+  *Scorched Earth* ask now.
+- **Still to do outside the code**, both needing production access:
+  - *The database check* (§6.1): nobody may hold `realmarena.broken-tide` or
+    `realmarena.scorched-earth` before they change in place. Count the rows
+    with `db.achievementunlocks.countDocuments({ achievementId: { $in:
+    ["realmarena.broken-tide", "realmarena.scorched-earth"] } })`, grouped by id
+    if any. Any holder means a new id for that achievement, not new criteria.
+  - *Open question 2* (§8.1): search the production logs for "stopped short of
+    time" (`playComputerTurns.ts`).
 
 ---
 
@@ -1097,3 +1170,4 @@ A `rulebook` pass checks this against `docs/achievements.md`.
 | 0.7 | PR 3 built (§5.6): nests that produce the Brood every round, the Shrine and Mend, the rally earned on a schedule and by breaking a warband, the new ending and its bonus (60 a round, not 50), and Hold Out against the Brood alone, all in rules version 13, unreleased. |
 | 0.8 | PR 4 built (§6.1): stars kept as a won Hold Out ends and sent once it's over, the difficulty's steps for the spawn, the nests and the Shrine, the nests left and the Shrine's HP on the scoreboard, the result by the horde's stages, *Three Stars* and *Three Stars on Hard*, *Broken Tide* and *Scorched Earth* for breaking the Brood, and the guide's, setup's and tutorial's copy, live once version 13 is current. |
 | 0.9 | PRs 1–4 checked against the plan before PR 5: the rally sheet no longer says a wave landed where there is a Shrine. PR 5's list spelt out (§8.2): the harness's star report and its one Brood scenario, a full-horde bench fixture, the database check, what of version 12 to delete and what to keep, and the runner's budget read from the logs. |
+| 1.0 | PR 5 built (§8.3): the harness's raid policy (three raiders a player), its star report and one Brood scenario, a wider `--set`, a full-horde bench fixture, version 12's copy branches deleted and `nestsCleared` off the response, version 13 current, and What's new. The balance stopped at §7's slope check: one step of a lever swings a team size by 40 to 90 points, and team size pulls the other way, so the values are unchanged and the mission needs scaling before it's tuned. |
