@@ -547,6 +547,84 @@ ships with 25.
   over fifteen rounds is the noisiest cell (27–72% across the growths, not in
   order), and it sits at about 40% on Normal either way.
 
+## Rules version 13: break the Brood, keep the Shrine
+
+The Hold Out plan's PR 5 ([`realm-arena-hold-out.md`](./realm-arena-hold-out.md)
+§7, §8.2) tunes version 13's Hold Out, against the Brood, to §7's targets: on
+Normal, a win in 70–85% of battles, two stars in 35–55%, three in 10–25%. It
+didn't get that far. §7's first check, that one step of `SPAWN_THREAT` moves
+the win rate by under 15 points, fails, and the values stay as PRs 2–4
+proposed them.
+
+**Method.** `npm run ra-balance -- --rules 13`: Hold Out on Normal, Normal size,
+no fog, the Ruined Fort for Solo and the Sacked Fort for two to four players,
+seeds 1–24 a cell (so a cell's 95% interval is about ±20 points, as in
+*Method* above). Version 13 makes every Hold Out the Brood's (`HOLD_OUT_ENEMY`),
+so each cell is fought once, "vs Brood". The levers are `--set` overrides of
+one commit. Four workers, about 1–3 s a battle.
+
+**The team's policy first.** The planner never walks to a nest (§7), so the
+harness's team raids (`--team-policy raid`, the default): each player's
+fastest characters walk to the nearest standing nest and attack it, and the
+rest are the planner's, guarding the Shrine. Team win rate, the values as
+committed:
+
+| Team policy | Solo | 2 players | 3 players |
+|---|---:|---:|---:|
+| The planner alone (`--team-policy planner`) | 29% | 58% | 4% |
+| 2 raiders a player, as §7 proposed | 8% | 13% | 4% |
+| **3 raiders** | **58%** | **21%** | **0%** |
+| 4 raiders | 63% | 33% | 0% |
+
+Two raiders reach the nests by round 3 or 4 and fall with one nest left, and
+the guards behind them are overrun before it goes. Three is the default now
+(`RAIDERS`); four does a little better again but leaves Solo one guard. The
+planner alone wins only by holding to the cap ("held the Shrine for all 15
+rounds") and breaks the Brood in one battle of 72.
+
+**The levers.** Team win rate with three raiders:
+
+| Values | Solo | 2 players | 3 players | 4 players |
+|---|---:|---:|---:|---:|
+| **As committed**: `SPAWN_THREAT` 3, a nest 15 HP, `STARTING_HORDE` 10 | **58%** | **21%** | **0%** | **0%** |
+| `SPAWN_THREAT` 2 | 100% | 33% | 0% | |
+| `SPAWN_THREAT` 2, `STARTING_HORDE` 6 | 100% | 96% | 96% | |
+| A nest 12 HP | 96% | 67% | 12% | |
+| A nest 10 HP | 100% | 83% | 17% | 4% |
+| A nest 10 HP, `SPAWN_THREAT` 4 | 100% | 63% | 4% | |
+
+**What it says.**
+
+- **The slope check fails.** One step of `SPAWN_THREAT`, 3 to 2, moves Solo
+  from 58% to 100%; 3 to 4 at a nest of 10 HP moves two players from 83% to
+  63%. A nest 5 HP weaker moves two players by 62 points. §7 calls that a
+  mission still behaving all or nothing, to be fixed before it's tuned.
+- **The team's size pulls the other way.** Every row but one has Solo near
+  certain to win and a team of three or four near certain to lose. The one that
+  doesn't, threat 2 with a starting horde of 6, wins nearly everything. Each
+  player brings a warband, and every one of its nests must fall to break the
+  Brood, so a bigger team has more nests to reach across the same Sacked Fort,
+  while a single nest left standing keeps the whole Brood coming. That is a
+  likely reason, not a measured one. Either way no single value of these levers
+  fits Solo and a team of four at once.
+- **The stars don't grade.** A raiding team that wins breaks the Brood early
+  with the Shrine nearly whole, so ★, ★★ and ★★★ come out within a few points of
+  each other in every row (a nest of 10 HP: two players 83%, 83% and 79%). The
+  planner alone shows the other end: its wins are Held, Unscathed in half of them
+  or more, and Broke the Brood once in 72 battles. Two and three stars only separate between
+  those two ways of playing.
+- **Read it with the harness's team in mind.** The raid is scripted, not
+  planned: raiders walk straight to the nearest nest whatever stands between,
+  and guards don't come to their aid. People will play better, and part of the
+  cliff may be the policy's. The planner getting an objective of its own (§7's
+  second step) would tell the two apart.
+
+**What's next** is the plan's to decide (`realm-arena-hold-out.md` §8.3):
+the Brood's numbers scaled by the team's size (its starting horde above all,
+the strongest lever for three players), threat spent in a finer currency, and
+the planner raiding for itself. `BROKEN_TIDE_BY_ROUND` (10) needs no change
+yet: where the team breaks the Brood it does so in round 4–8.
+
 ## How each lever was built
 
 For re-running: each was an environment switch in a scratch worktree.
