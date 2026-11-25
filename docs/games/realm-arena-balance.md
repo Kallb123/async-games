@@ -602,13 +602,15 @@ rounds") and breaks the Brood in one battle of 72.
 - **The team's size pulls the other way.** Every row but one has Solo near
   certain to win and a team of three or four near certain to lose. The one that
   doesn't, threat 2 with a starting horde of 6, wins nearly everything. Each
-  player brings a warband, and every one of its nests must fall to break the
-  Brood, so a bigger team has more nests to reach across the same Sacked Fort,
-  while every warband's horde marches on the one Shrine, whose HP grows by a
-  third of the solo Shrine's a player. (The Brood does slow as nests fall: each
-  standing nest adds its own threat, and a warband with none adds nothing.)
-  That is a likely reason, not a measured one. Either way no single value of these levers
-  fits Solo and a team of four at once.
+  player brings a warband, so a bigger team has more nests to reach across the
+  same Sacked Fort (though the Brood slows as they fall: each standing nest adds
+  its own threat, and a warband with none adds nothing). It is not the Shrine:
+  every loss in these runs is the team overrun, with the Shrine at 85% of its HP
+  or more, and a Shrine of 30 HP a player (`--set RULES.SHRINE_HP=0,RULES.SHRINE_HP_PER_PLAYER=30`)
+  leaves every win rate where it was, 58%, 21%, 0% and 0%. Solo is also fought on
+  the Ruined Fort and the rest on the Sacked Fort (the harness keeps Solo to its
+  own map), so the map is not yet told apart from the team's size. Either way no
+  single value of these levers fits Solo and a team of four at once.
 - **The stars don't grade.** A raiding team that wins breaks the Brood early
   with the Shrine nearly whole, so ★, ★★ and ★★★ come out within a few points of
   each other in every row (a nest of 10 HP: two players 83%, 83% and 79%). The
