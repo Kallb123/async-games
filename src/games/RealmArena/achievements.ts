@@ -20,6 +20,10 @@ import { andList, numberWord } from "@/utils/ui/text";
 /** The round by which Broken Tide wants the Brood broken (realm-arena-hold-out.md §6). */
 const BROKEN_TIDE_BY_ROUND = 10;
 
+/** Three Stars' wording: how many stars there are, and their names (realm-arena-hold-out.md §6). */
+const EVERY_STAR = `all ${numberWord(HOLD_OUT_STARS.length)} stars`;
+const STAR_NAMES = andList(HOLD_OUT_STARS.map(star => HOLD_OUT_STAR_INFO[star].name));
+
 function wholeTeamStanding(view: IRealmArenaSpecificGameStateResponse): boolean {
     const team = view.fighters.filter(fighter => !isWarband(fighter.owner));
     return team.length > 0 && team.every(isStanding);
@@ -179,35 +183,26 @@ export const achievements: GameAchievement<IRealmArenaSpecificGameStateResponse>
             check: (view, { outcome }) => wonHoldOut(view, outcome) && brokeTheBrood(view) && wholeTeamStanding(view),
         },
     },
-    ...starAchievements(),
+    {
+        id: "realmarena.three-stars",
+        title: "Three Stars",
+        icon: "🌟",
+        description: `Earn ${EVERY_STAR} in a battle of Hold Out: ${STAR_NAMES}.`,
+        criteria: {
+            kind: "match",
+            at: "end",
+            check: (view, { outcome }) => wonHoldOut(view, outcome) && earnedEveryStar(view),
+        },
+    },
+    {
+        id: "realmarena.three-stars-hard",
+        title: "Three Stars on Hard",
+        icon: "💫",
+        description: `Earn ${EVERY_STAR} in a battle of Hold Out on Hard.`,
+        criteria: {
+            kind: "match",
+            at: "end",
+            check: (view, { outcome }) => wonHoldOut(view, outcome) && view.difficulty === "hard" && earnedEveryStar(view),
+        },
+    },
 ];
-
-/** Three Stars and its Hard rung (realm-arena-hold-out.md §6). */
-function starAchievements(): GameAchievement<IRealmArenaSpecificGameStateResponse>[] {
-    const names = andList(HOLD_OUT_STARS.map(star => HOLD_OUT_STAR_INFO[star].name));
-    const every = `all ${numberWord(HOLD_OUT_STARS.length)} stars`;
-    return [
-        {
-            id: "realmarena.three-stars",
-            title: "Three Stars",
-            icon: "🌟",
-            description: `Earn ${every} in a battle of Hold Out: ${names}.`,
-            criteria: {
-                kind: "match",
-                at: "end",
-                check: (view, { outcome }) => wonHoldOut(view, outcome) && earnedEveryStar(view),
-            },
-        },
-        {
-            id: "realmarena.three-stars-hard",
-            title: "Three Stars on Hard",
-            icon: "💫",
-            description: `Earn ${every} in a battle of Hold Out on Hard.`,
-            criteria: {
-                kind: "match",
-                at: "end",
-                check: (view, { outcome }) => wonHoldOut(view, outcome) && view.difficulty === "hard" && earnedEveryStar(view),
-            },
-        },
-    ];
-}

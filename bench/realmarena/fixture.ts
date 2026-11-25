@@ -30,9 +30,9 @@ import { pathToFileURL } from "node:url";
 import { parseArgs } from "node:util";
 import { addFighter, actBy, battleOf, endTurnBy, makeGame, musterAll, play, playOne, type RealmArenaTestGame } from "@/games/RealmArena/testFixtures";
 import { freeSquares, hatchSquares, isMinion, isStanding, isStructure, maxHpOf, isWarband, lastWaveRound, spawnThemeOf, storedFighter } from "@/games/RealmArena/rules";
-import { battleRoundsOf, ENEMY_TURN_COMMAND_VERSION, owesRally } from "@/games/RealmArena/RealmArenaLogic";
+import { battleRoundsOf, ENEMY_TURN_COMMAND_VERSION, hordeCountOf, owesRally, standingNestsOf } from "@/games/RealmArena/RealmArenaLogic";
 import { defaultRally } from "@/games/RealmArena/rally";
-import { gameStateToModel, stepOutcomeToModel } from "@/games/RealmArena/RealmArenaModels";
+import { gameStateToModel, partStateOf, stepOutcomeToModel } from "@/games/RealmArena/RealmArenaModels";
 import type { IRealmArenaStepOutcome, IRealmArenaStepPart } from "@/games/RealmArena/apiModels";
 import type { RealmArenaSettings } from "@/games/RealmArena/RealmArenaModels";
 import { factionById } from "@/games/RealmArena/characters";
@@ -97,16 +97,8 @@ type Count = { minions: number; others: number };
 /** What each warband has standing: its minions, and its real characters and elites (its nests are structures, counted in neither). */
 function hordesOf(game: RealmArenaTestGame): [string, Count][] {
     const gs = game.specificGameState;
-    const counts = new Map<string, Count>();
-    for (const fighter of gs.fighters) {
-        if (!isWarband(fighter.owner) || !isStanding(fighter)) continue;
-        const count = counts.get(fighter.owner) ?? { minions: 0, others: 0 };
-        if (isStructure(fighter, gs)) continue;
-        if (isMinion(storedFighter(fighter), gs)) count.minions++;
-        else count.others++;
-        counts.set(fighter.owner, count);
-    }
-    return [...counts.entries()].sort(([a], [b]) => a.localeCompare(b));
+    const owners = [...new Set(gs.fighters.filter(fighter => isWarband(fighter.owner)).map(fighter => fighter.owner))].sort();
+    return owners.map(owner => [owner, hordeCountOf(gs, owner)]);
 }
 
 /**
@@ -124,7 +116,7 @@ function topUp(game: RealmArenaTestGame) {
     const minions = theme?.buys.filter(character => rulesetOf(gs).CHARACTERS[character].minion) ?? [];
     if (minions.length === 0) throw new Error("the Brood's theme buys no minion");
     for (const [owner, count] of hordesOf(game)) {
-        const nests = gs.fighters.filter(fighter => fighter.owner === owner && isStanding(fighter) && isStructure(fighter, gs));
+        const nests = standingNestsOf(gs, owner);
         for (let next = count.minions; next < HORDE_CAP; next++) {
             const battle = battleOf(game);
             const square = nests.flatMap(nest => hatchSquares(battle, nest)).find(one => freeSquares(battle, [one]).length > 0);
@@ -169,7 +161,7 @@ async function roundWithWarbands(game: RealmArenaTestGame, viewer: string): Prom
             // The turn after it is another warband's, or the next seat's End turn that this loop plays: either way the board goes on from here.
             const left = seat !== PLAYERS[PLAYERS.length - 1] || isComputerTurn(game) ? gameStateToModel(structuredClone(gs), viewer, null) : undefined;
             parts.push(...own.map((part, index) => left && index === own.length - 1 && !part.state
-                ? { ...part, state: { fighters: left.fighters, ghosts: left.ghosts, clouds: left.clouds, blasted: left.blasted, scores: left.scores, ...left.enemiesDefeated !== undefined ? { enemiesDefeated: left.enemiesDefeated } : {} } }
+                ? { ...part, state: partStateOf(left) }
                 : part));
         }
     }

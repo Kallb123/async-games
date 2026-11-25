@@ -158,7 +158,7 @@ function warbandSquad(gs: IRealmArenaSpecificGameState): readonly CharacterId[] 
 }
 
 /** What a warband of a horde stands now (realm-arena-hold-out.md §4.4): its minions and its others standing, hatchlings counted. */
-function hordeCountOf(gs: IRealmArenaSpecificGameState, owner: string): { minions: number; others: number } {
+export function hordeCountOf(gs: IRealmArenaSpecificGameState, owner: string): { minions: number; others: number } {
     const standing = gs.fighters.filter(fighter => fighter.owner === owner && isCombatant(fighter, gs));
     const minions = standing.filter(fighter => isMinion(fighter, gs)).length;
     return { minions, others: standing.length - minions };
@@ -1261,7 +1261,7 @@ function shrineFighter(gs: IRealmArenaSpecificGameState, fighters: readonly Figh
 }
 
 /** Warband `owner`'s nests still standing (§39.7), in id order. */
-const standingNestsOf = (gs: IRealmArenaSpecificGameState, owner: string): Fighter[] =>
+export const standingNestsOf = (gs: IRealmArenaSpecificGameState, owner: string): Fighter[] =>
     gs.fighters.filter(fighter => fighter.owner === owner && isStructure(fighter, gs) && isStanding(fighter)).sort((a, b) => a.id - b.id);
 
 /**

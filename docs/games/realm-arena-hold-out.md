@@ -887,7 +887,11 @@ landed". It now names the rally the team earned wherever there is a Shrine
 - **The release** is `CURRENT_RULESET_VERSION` 13. No command version bump:
   the command version has been 13 since PR 1, no command means anything
   different, and an old tab's enemy for Hold Out is dropped by `holdOutEnemy`
-  (`RealmArenaModels.ts`) under `HOLD_OUT_ENEMY`.
+  (`RealmArenaModels.ts`) under `HOLD_OUT_ENEMY`. It is built, not shipped:
+  §7 says a failed slope check is fixed before the mission is tuned, so the
+  branch merges only once the Brood is scaled by the team's size (or shipping
+  it untuned is decided and the reason written here) and the database check
+  below has come back empty.
 - **What's new** has its one line: the Brood, the nests, the Shrine and Mend,
   the stars, *Three Stars* and *Three Stars on Hard*, and what *Broken Tide* and
   *Scorched Earth* ask now.

@@ -175,9 +175,10 @@ export interface IRealmArenaSpecificGameState {
     /**
      * Whether, at some point, every nest (§39.7) of the Swarm was down at once
      * with a wave still to land: set as the last one falls, and never cleared,
-     * though the nests regrow. Not sent to anyone: the response dropped it when
-     * version 13 was released, and only a version 12 battle still in progress at
-     * that release reads it, until it ends. Absent otherwise.
+     * though the nests regrow. Sent to no one and read by nothing since version
+     * 13's release took it off the response (realm-arena-hold-out.md §8.2): a
+     * version 12 battle still in progress sets it, and the state keeps it so that
+     * battle's documents and undo round-trip as they were. Absent otherwise.
      */
     nestsCleared?: true;
     /**
@@ -631,6 +632,12 @@ RealmArenaGameDataSchema.methods.CreateDataResponse = async function(viewerId: s
  * same test RealmArenaUndo runs on itself: the stack's owner alone would still
  * say yes after an attack that pushed nothing (docs/undo.md §7).
  */
+/** What a part of a step leaves on the board, picked from the response the viewer is sent of it. */
+export function partStateOf(model: IRealmArenaSpecificGameStateResponse): RealmArenaPartState {
+    const { fighters, ghosts, clouds, blasted, scores, enemiesDefeated, enemy } = model;
+    return { fighters, ghosts, clouds, blasted, scores, ...(enemiesDefeated !== undefined ? { enemiesDefeated } : {}), ...enemy ? { enemy } : {} };
+}
+
 export function gameStateToModel(
     gs: IRealmArenaSpecificGameState,
     viewerId: string | null,
@@ -667,7 +674,6 @@ export function gameStateToModel(
         // `enemiesDefeated` is, though a nest can fall out of the team's sight (§6.1 records what that gives away in fog).
         ...(gs.phase === "battle" && nestsProduce(gs.coop?.mission, gs) ? { nestsLeft: warbandNests(gs.fighters, gs).filter(isStanding).length } : {}),
         ...(complete && gs.stars ? { stars: [...gs.stars] } : {}),
-        // Whether nests stand is unseen in fog until the battle is over, so this waits for it too.
         ...(gs.coop?.mission === "holdOut" && gs.phase !== "muster" ? { enemiesDefeated: gs.fighters.filter(fighter => isWarband(fighter.owner) && fighter.hp <= 0 && !isStructure(fighter, gs)).length } : {}),
         ...(gs.coop?.difficulty ? { difficulty: gs.coop.difficulty } : {}),
         ...(gs.coop?.teamBlocks ? { teamBlocks: true as const } : {}),
@@ -841,8 +847,7 @@ function partsOf(outcome: IRealmArenaOutcome, viewerId: string | null, gs: IReal
 
     const board = (after: RealmArenaBoard | undefined): RealmArenaPartState | undefined => {
         if (!after) return undefined;
-        const { fighters, ghosts, clouds, blasted, scores, enemiesDefeated, enemy: whom } = gameStateToModel({ ...gs, ...after, sightings: after.sightings, coop: after.coop }, viewerId, null, complete);
-        return { fighters, ghosts, clouds, blasted, scores, ...(enemiesDefeated !== undefined ? { enemiesDefeated } : {}), ...whom ? { enemy: whom } : {} };
+        return partStateOf(gameStateToModel({ ...gs, ...after, sightings: after.sightings, coop: after.coop }, viewerId, null, complete));
     };
     // Warbands taking turns in a block (§29.4) hand over to one another in a
     // part of their own, as the first is handed the player's End turn.

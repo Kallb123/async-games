@@ -35,6 +35,7 @@ const BATTLES = [
     { id: 'holdout-fog', label: 'Hold Out in fog', description: 'The same battle in fog of war: 31 figures in sight.', load: () => import('../../../../bench/realmarena/fixtures/holdout-fog.json').then(module => module.default) },
     { id: 'holdout-8k', label: 'Hold Out, 8k tiles', description: 'The same battle on a Sacked Fort grown to 8,464 tiles.', load: () => import('../../../../bench/realmarena/fixtures/holdout-8k.json').then(module => module.default) },
     { id: 'holdout-16k', label: 'Hold Out, 16k tiles', description: 'The same battle on a Sacked Fort grown to 16,384 tiles: a bigger game\'s scale.', load: () => import('../../../../bench/realmarena/fixtures/holdout-16k.json').then(module => module.default) },
+    { id: 'holdout-brood', label: 'Hold Out vs the Brood', description: '228 figures, every warband at the horde cap, and a whole round of the Brood\'s turns.', load: () => import('../../../../bench/realmarena/fixtures/holdout-brood.json').then(module => module.default) },
 ] as const;
 type Battle = typeof BATTLES[number]['id'];
 

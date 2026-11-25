@@ -440,14 +440,16 @@ export async function simulateBattle(scenario: BalanceScenario, seed: number, te
     const fighters = battleOf(game).fighters;
     const enemy = fighters.filter(fighter => isWarband(fighter.owner));
     const teamFighters = fighters.filter(fighter => !isWarband(fighter.owner));
-    const hold = nestsProduce(scenario.mission, game.specificGameState) ? holdOutRecord(game.specificGameState.stars, fighters, game.endDetail ?? "", game.specificGameState) : {};
+    const won = game.endReason === "teamwin";
+    const endedRound = Math.min(game.specificGameState.roundsPlayed + 1, rounds);
+    const hold = nestsProduce(scenario.mission, game.specificGameState) ? holdOutRecord(game.specificGameState.stars, fighters, game.specificGameState) : {};
     return {
         scenario: scenarioKey(scenario) + (team ? ` · team plays ${team.label}` : ""),
         ...(team ? { teamPlanner: team.label } : {}),
         seed,
-        won: game.endReason === "teamwin",
+        won,
         detail: game.endDetail ?? "",
-        endedRound: Math.min(game.specificGameState.roundsPlayed + 1, rounds),
+        endedRound,
         rounds,
         byRound,
         teamFielded,
@@ -456,21 +458,21 @@ export async function simulateBattle(scenario: BalanceScenario, seed: number, te
         enemyDowned: enemy.filter(fighter => !isStanding(fighter)).length,
         waves,
         ...hold,
+        // Breaking the Brood ends the battle on the spot, so the round it broke is the round it ended.
+        ...("broodBroken" in hold && hold.broodBroken && won ? { brokeRound: endedRound } : {}),
         ms: Math.round(performance.now() - started),
     };
 }
 
 /** How a Hold Out against nests that produce the enemy came out, as `BattleSample` keeps it. */
-function holdOutRecord(stars: readonly HoldOutStar[] | undefined, fighters: readonly Fighter[], detail: string, context: BattleState | Pick<BattleState, "rulesVersion">) {
+function holdOutRecord(stars: readonly HoldOutStar[] | undefined, fighters: readonly Fighter[], context: BattleState | Pick<BattleState, "rulesVersion">) {
     const nests = warbandNests(fighters, context);
     const shrine = shrineOf({ fighters: [...fighters] });
     const nestsLeft = nests.filter(isStanding).length;
     const broodBroken = nests.length > 0 && nestsLeft === 0;
-    const brokeRound = /^broke the Brood in round (\d+)/.exec(detail)?.[1];
     return {
         stars: [...stars ?? []],
         broodBroken,
-        ...(brokeRound ? { brokeRound: Number(brokeRound) } : {}),
         ...(shrine ? { shrineHp: Math.max(0, shrine.hp), shrineMax: maxHpOf(shrine, context) } : {}),
         nestsLeft,
     };
@@ -556,7 +558,7 @@ export function wilson(wins: number, n: number): { low: number; high: number } {
     return { low: Math.max(0, (centre - spread) / denominator), high: Math.min(1, (centre + spread) / denominator) };
 }
 
-const rateOf = (count: number, n: number): Rate => ({ rate: count / n, ...(({ low, high }) => ({ low, high }))(wilson(count, n)) });
+const rateOf = (count: number, n: number): Rate => ({ rate: count / n, ...wilson(count, n) });
 
 /** The Hold Out numbers of the samples that carry them; undefined when none does (a version-12 run). */
 function holdOutStats(samples: readonly BattleSample[]): HoldOutStats | undefined {

@@ -553,7 +553,8 @@ phone.
   *On screen* names the board drawn, and the button playing names the board
   it's playing on.
 - **Battle:** the bench's frozen Hold Out turn (2,916 tiles), the same battle
-  in fog, or on a Sacked Fort grown to 8,464 or 16,384 tiles.
+  in fog, or on a Sacked Fort grown to 8,464 or 16,384 tiles, or a rules 13
+  battle against the Brood with every warband at its horde cap.
 - **Play:** the enemy turn, turning the view, panning round, selecting, the
   wave due, or idle. Each is the bench's own scenario
   (`bench/realmarena/harness.tsx`), run exactly as `npm run ra-bench` runs it:

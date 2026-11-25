@@ -5,6 +5,8 @@ battles in rules version 9, using §34.10's proposed defaults for playtesting,
 sight with angles (§36) in rules version 10, co-op for a team of four in
 Hold Out (§37), and every Archer shot at 2 AP (§38) in rules version 11. Battles already created keep their original rules.
 Hold Out against the Swarm (§39) and the ability loadouts (§40) are released in rules version 12 (§39.9).
+Hold Out against the Brood, where nests produce the enemy and the team keeps a
+Shrine, is released in rules version 13 ([`realm-arena-hold-out.md`](./realm-arena-hold-out.md) §8.3).
 Earlier implementation
 notes and revision history describe the game before this overhaul wherever
 they conflict with §34.
@@ -3422,18 +3424,16 @@ first, written to `docs/achievements.md` §11's checklist: an
 | `realmarena.last-stand` | Last Stand | Win a battle of Hold Out | match, `end` |
 | `realmarena.lone-wolf` | Lone Wolf | Win a battle of Hold Out in Solo | match, `end` |
 | `realmarena.hold-the-keep` | Hold the Keep | Win a battle of Hold Out on the Sacked Fort | match, `end` |
-| `realmarena.broken-tide` | Broken Tide | Win a battle of Hold Out by downing the whole last wave before the last round is over | match, `end` |
+| `realmarena.broken-tide` | Broken Tide | Win a battle of Hold Out by breaking the Brood, bringing down every nest, by the end of round 10 | match, `end` |
 | `realmarena.unbroken` | Unbroken | Win a battle of Hold Out with every one of the team's characters standing at the end | match, `end` |
-| `realmarena.regicide` | Regicide | Win a battle of Hold Out in which a Brood Queen of the Swarm was downed (§39.5) | match, `end` |
-| `realmarena.scorched-earth` | Scorched Earth | Win a battle of Hold Out against the Swarm after destroying every nest at once, before a wave could grow them back (§39.7) | match, `end` |
+| `realmarena.regicide` | Regicide | Win a battle of Hold Out in which a Brood Queen was downed (§39.5) | match, `end` |
+| `realmarena.scorched-earth` | Scorched Earth | Win a battle of Hold Out by breaking the Brood with every one of the team's characters standing at the end | match, `end` |
 | `realmarena.three-stars` | Three Stars | Earn all three stars in a battle of Hold Out ([`realm-arena-hold-out.md`](./realm-arena-hold-out.md) §6) | match, `end` |
 | `realmarena.three-stars-hard` | Three Stars on Hard | Earn all three stars in a battle of Hold Out on Hard (hold-out §6) | match, `end` |
 
-From rules version 13's release, *Broken Tide* is breaking the Brood by the end
-of round 10 and *Scorched Earth* breaking it with every character of the team
-standing, and the two *Three Stars* rows join the catalogue
-([`realm-arena-hold-out.md`](./realm-arena-hold-out.md) §6, §6.1). Until then
-the catalogue reads as above, on the current ruleset as the guide does.
+The rows are rules version 13's criteria: *Broken Tide* and *Scorched Earth*
+kept their ids when the Brood replaced waves, and the two *Three Stars* rows
+joined them ([`realm-arena-hold-out.md`](./realm-arena-hold-out.md) §6, §6.1).
 
 The titles may change; the ids never do (§11). PR 5 adds *Against the Odds*
 (§30.5). The four Hold Out rungs after Last Stand came later, so the mission
@@ -5794,7 +5794,9 @@ the Knight beside her rather than trading blows with it.
   finished response. *Scorched Earth* can't be read from the end alone, since
   nests regrow with each wave: a `nestsCleared` flag is set on the state the
   moment no nest stands with a wave still to land, kept for good, and sent
-  only on the finished response. Both are pinned in `hiddenHands.test.ts`.
+  only on the finished response (sent to no one from rules version 13's
+  release, whose *Scorched Earth* reads the stars:
+  [`realm-arena-hold-out.md`](./realm-arena-hold-out.md) §8.3). Both are pinned in `hiddenHands.test.ts`.
 - **What's new**: one line, under Enhancements, naming the loadouts too.
 - **The crew.** `rulebook`, `caveman` and `croupier` ran; their findings are
   applied. `croupier` noted, for later, that an empty nest-only turn decides
@@ -6097,3 +6099,4 @@ Realm, its sibling in the same world.
 | 1.73 | §39.9 releases rules version 12 (§39, §40): `WAVE_GROWTH_POINTS` tuned from 15 to 25 by the balance harness (new `--set` overrides), the planner sped up twice with every choice unchanged so the Swarm's twelve-strong waves fit their turn, the guide, tutorial and setup screen tell the new rules, and two achievements, *Regicide* and *Scorched Earth* (with a `nestsCleared` flag sent only once a battle is over). |
 | 1.74 | Hold Out's design moves to its own document, [`realm-arena-hold-out.md`](./realm-arena-hold-out.md): a plan to rethink the mission (the enemy's turn in the background, the Brood as an enemy-only Swarm, nests that produce the enemy, a shrine to defend, stars), and §41, the parked plan for Hold Out to the last enemy with its prototype's numbers, which is now that document's §9. |
 | 1.75 | The warbands' turns in co-op are commands of their own from command version 13 (`RealmArenaWarbandTurn`), played by the server once the player's End turn is saved, with ten seconds to plan rather than two: [`realm-arena-hold-out.md`](./realm-arena-hold-out.md) §3 (§29.8). |
+| 1.76 | Rules version 13 is released: Hold Out against the Brood, its nests, the Shrine and the stars ([`realm-arena-hold-out.md`](./realm-arena-hold-out.md) §8.3). §30.4's rows read version 13's criteria, and `nestsCleared` (§39.9) is no longer sent to anyone. |

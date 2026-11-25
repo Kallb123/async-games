@@ -110,7 +110,7 @@ function jobsFrom(args: MatrixArgs): Job[] {
     // `raid` is the default and leaves the scenario's name as it was; `planner` is named in it.
     const teamPolicy = args["team-policy"] === undefined ? undefined : oneOf<TeamPolicy>("team-policy", [args["team-policy"]], ["raid", "planner"])[0];
 
-    // The default's 2 leaves the scenario's name as it was; any other number is named in it.
+    // `RAIDERS`, the default, leaves the scenario's name as it was; any other number is named in it.
     const raiders = args.raiders === undefined ? undefined : Number(args.raiders);
     if (raiders !== undefined && (!Number.isInteger(raiders) || raiders < 0)) throw new Error("--raiders must be a whole number of raiders, 0 or more");
 

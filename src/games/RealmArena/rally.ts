@@ -99,7 +99,7 @@ const resuppliable = (state: Pick<BattleState, "fighters">, seat: string): Fight
  * breaking a warband.
  */
 export function rallyReason(state: Pick<BattleState, "fighters">): string {
-    return shrineOf(state) ?"Your team has earned a rally." : "A fresh wave has landed.";
+    return shrineOf(state) ? "Your team has earned a rally." : "A fresh wave has landed.";
 }
 
 /**
